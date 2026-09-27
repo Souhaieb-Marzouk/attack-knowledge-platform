@@ -94,9 +94,6 @@
    * 6. Shared chrome - header + footer injection                       *
    * ------------------------------------------------------------------ */
   function githubUrl() {
-    /* Derive the repo link from the hosting URL - no hardcoded username.
-     * https://user.github.io/repo/ -> https://github.com/user/repo.
-     * Returns '' on localhost (button is then simply not rendered). */
     try {
       var u = new URL(SITE_BASE);
       if (u.hostname.endsWith('.github.io')) {
@@ -111,9 +108,6 @@
   function renderHeader() {
     var mount = $('#atk-header');
     if (!mount) {
-      /* No mount on a hand-made page that skipped the integration block:
-       * inject a default mount as the first child of <body> so the platform
-       * chrome still appears without touching the page's own markup. */
       mount = document.createElement('div');
       mount.id = 'atk-header';
       document.body.insertBefore(mount, document.body.firstChild);

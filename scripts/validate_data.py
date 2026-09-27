@@ -5,16 +5,18 @@ Run from the repo root:   python scripts/validate_data.py
 Exit codes: 0 = all checks passed, 1 = at least one failure.
 
 Checks
-  1. all five hand-maintained JSON files parse, plus the sigma index seed
-  2. tactics.json holds the 14 Enterprise tactics, orders 1..14, no dupes
-  3. no duplicate ids inside any data file
-  4. every technique tactic exists in tactics.json
-  5. status values are 'implemented' or 'planned'
-  6. implemented rows have a page; planned rows do not
-  7. page files exist on disk (warning only - pages land in Phase 4)
-  8. used_by / mitigates / uses / techniques cross-references resolve
-  9. sigma references point at real files on disk
- 10. sigma-index.json parses and its count matches its rules array
+ 1. all five hand-maintained JSON files parse, plus the sigma index
+ 2. tactics.json holds the 14 Enterprise tactics, orders 1..14, no dupes
+ 3. no duplicate ids inside any data file
+ 4. every technique tactic exists in tactics.json
+ 5. status values are 'implemented' or 'planned'
+ 6. implemented rows have a page; planned rows do not
+ 7. page files exist on disk (warning only - pages land in Phase 4)
+ 8. used_by / mitigates / uses / techniques cross-references resolve
+ 9. sigma references point at real files on disk
+10. sigma-index.json parses and its count matches its rules array
+11. fp-gallery.json (optional, Appendix F): parses, one group per rule
+    file, rule paths exist, entries carry name/scenario/evidence/tuning
 """
 import json
 import sys
@@ -69,12 +71,12 @@ def main():
         mitigations = load("mitigations.json")
         campaigns = load("campaigns.json")
         sigma_index = load("sigma-index.json")
-        ok("all five data files plus the sigma index seed parse as JSON")
+        ok("all five data files plus the sigma index parse as JSON")
     except (OSError, ValueError) as exc:
         print(f"  [FAIL] could not load data files: {exc}")
         return 1
 
-    print("Checking sigma index seed ...")
+    print("Checking sigma index ...")
     if not isinstance(sigma_index.get("rules"), list) or sigma_index.get("count") != len(sigma_index.get("rules", [])):
         fail("sigma-index.json: must hold a 'rules' array and a 'count' equal to its length")
     else:
@@ -139,6 +141,37 @@ def main():
         for ref in row.get("techniques", []):
             if ref not in tech_ids:
                 fail(f"{row.get('id', '?')}: techniques references unknown technique '{ref}'")
+
+    print("Checking false-positive gallery ...")
+    fp_path = DATA / "fp-gallery.json"
+    if not fp_path.exists():
+        print("  [SKIP] data/fp-gallery.json not present (optional - ships with the Appendix F tool)")
+    else:
+        try:
+            fp_gallery = json.loads(fp_path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            fail(f"fp-gallery.json: invalid JSON ({exc})")
+            fp_gallery = []
+        seen_rules = set()
+        for group in fp_gallery:
+            rule_file = group.get("rule", "")
+            if rule_file in seen_rules:
+                fail(f"fp-gallery.json: duplicate group for rule '{rule_file}'")
+            seen_rules.add(rule_file)
+            if not rule_file.startswith("sigma/rules/") or not rule_file.endswith(".yml"):
+                fail(f"fp-gallery.json: '{rule_file}' must be a sigma/rules/*.yml path")
+            if not (ROOT / rule_file).exists():
+                fail(f"fp-gallery.json: rule file missing on disk: '{rule_file}'")
+            entries = group.get("entries")
+            if not isinstance(entries, list) or not entries:
+                fail(f"fp-gallery.json: '{rule_file}' needs a non-empty 'entries' array")
+                continue
+            for entry in entries:
+                for field in ("name", "scenario", "evidence", "tuning"):
+                    if not entry.get(field):
+                        fail(f"fp-gallery.json: '{rule_file}' entry '{entry.get('name', '?')}' missing '{field}'")
+        if fp_gallery:
+            ok(f"fp-gallery.json: {len(fp_gallery)} rule group(s), all entries complete")
 
     implemented = sum(1 for r in techniques if r.get("status") == "implemented")
     print()
