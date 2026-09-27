@@ -4,7 +4,7 @@
   /* ------------------------------------------------------------------ *
    * 1. SITE BASE                                                       *
    * ------------------------------------------------------------------ */
-  var SITE_BASE = new URL('../../', document.currentScript.src).href;
+  var SITE_BASE = new URL('../../../', document.currentScript.src).href;
 
   /* ------------------------------------------------------------------ *
    * 2. Helpers                                                         *
@@ -218,13 +218,95 @@
    * 8. Mount renderers                                                 *
    * ------------------------------------------------------------------ */
 
-  /* ==== PHASE 3 PATCH - replace this whole function (renderMatrix) ==== */
+  function setCount(id, value) {
+    var node = document.getElementById(id);
+    if (node) node.textContent = String(value);
+  }
+
+  function renderLatest(techniques) {
+    var mount = $('#atk-latest');
+    if (!mount) return;
+    var rows = techniques
+      .filter(function (r) { return r.status === 'implemented' && r.page; })
+      .sort(function (a, b) { return String(b.updated || '').localeCompare(String(a.updated || '')); })
+      .slice(0, 3);
+    mount.innerHTML = rows.length
+      ? rows.map(function (r) {
+          return '<a class="atk-latest-item" href="' + esc(SITE_BASE + r.page) + '">' +
+                 '<span class="atk-latest-id">' + esc(r.id) + '</span>' + esc(r.name) + '</a>';
+        }).join('')
+      : '<span class="atk-latest-item is-none">No guides published yet.</span>';
+  }
+
   function renderMatrix() {
     var mount = $('#atk-matrix');
     if (!mount) return;
-    console.info('[platform] #atk-matrix found - renderMatrix() is implemented in Phase 3.');
+
+    Promise.all([getData('data/tactics.json'), getData('data/techniques.json')]).then(function (res) {
+      var tactics = res[0], techniques = res[1];
+      if (!tactics || !techniques) {
+        mount.innerHTML = '<p class="atk-hub-error">Matrix data unavailable right now.</p>';
+        return;
+      }
+
+      var ordered = tactics.slice().sort(function (a, b) { return a.order - b.order; });
+      var live = 0, planned = 0;
+      techniques.forEach(function (r) {
+        if (r.status === 'implemented') live += 1; else planned += 1;
+      });
+
+      setCount('atk-count-live', live);
+      setCount('atk-count-planned', planned);
+      setCount('atk-count-tactics', ordered.length);
+      getData('data/sigma-index.json').then(function (idx) {
+        setCount('atk-count-rules', idx && idx.count ? idx.count : 0);
+      });
+
+      var html =
+        '<div class="atk-matrix-legend">' +
+          '<span class="atk-legend-item"><span class="atk-swatch is-impl" role="img" aria-label="Live guide"></span>Live guide</span>' +
+          '<span class="atk-legend-item"><span class="atk-swatch is-planned" role="img" aria-label="Planned guide"></span>Planned</span>' +
+          '<span class="atk-legend-note">' + live + ' of ' + (live + planned) + ' guides live across ' + ordered.length + ' tactics</span>' +
+        '</div>' +
+        '<div class="atk-matrix-scroll">' +
+        '<div class="atk-matrix">';
+
+      ordered.forEach(function (t) {
+        var rows = techniques
+          .filter(function (r) { return r.tactic === t.id; })
+          .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+        html += '<div class="atk-col"><h3 class="atk-col-title" title="' + esc(t.name) + '">' + esc(t.name) + '</h3>';
+        rows.forEach(function (r) {
+          var isLive = r.status === 'implemented' && r.page;
+          var tip = esc(r.id + ' \u2014 ' + r.name + (isLive ? ' \u2014 Live guide' : ' \u2014 Guide in progress'));
+          html += isLive
+            ? '<button type="button" class="atk-tile is-impl" data-page="' + esc(SITE_BASE + r.page) + '" title="' + tip + '" aria-label="' + tip + '">' + esc(r.id) + '</button>'
+            : '<button type="button" class="atk-tile is-planned" title="' + tip + '" aria-label="' + tip + '">' + esc(r.id) + '</button>';
+        });
+        if (!rows.length) html += '<p class="atk-col-empty">\u2014</p>';
+        html += '</div>';
+      });
+
+      html += '</div></div>';
+      mount.innerHTML = html;
+
+      /* One delegated click handler survives innerHTML redraws. */
+      if (!mount.dataset.wired) {
+        mount.dataset.wired = '1';
+        mount.addEventListener('click', function (e) {
+          var tile = e.target.closest ? e.target.closest('.atk-tile') : null;
+          if (!tile) return;
+          if (tile.classList.contains('is-impl') && tile.dataset.page) {
+            window.location.href = tile.dataset.page;
+          } else {
+            toast('Guide in progress \u2014 Watch the repo on GitHub to hear when it lands.');
+          }
+        });
+      }
+
+      renderLatest(techniques);
+    });
   }
-  /* ==== END PHASE 3 PATCH ==== */
 
   /* ==== PHASE 4 PATCH - replace these four functions entirely ==== */
   function renderHub() {
