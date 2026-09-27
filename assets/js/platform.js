@@ -4,7 +4,7 @@
   /* ------------------------------------------------------------------ *
    * 1. SITE BASE                                                       *
    * ------------------------------------------------------------------ */
-  var SITE_BASE = new URL('../../../', document.currentScript.src).href;
+  var SITE_BASE = new URL('../../', document.currentScript.src).href;
 
   /* ------------------------------------------------------------------ *
    * 2. Helpers                                                         *
@@ -308,25 +308,248 @@
     });
   }
 
-  /* ==== PHASE 4 PATCH - replace these four functions entirely ==== */
+
+  /* Fill a mount if present; otherwise create one at a sensible default
+   * position. This is what makes the 4-line integration snippet enough
+   * for hand-made pages: no mount, no problem. */
+  function mountAt(selector, fallback) {
+    var mount = $(selector);
+    if (mount) return mount;
+    mount = document.createElement('div');
+    mount.id = selector.slice(1);
+    fallback(mount);
+    return mount;
+  }
+
   function renderHub() {
     var mount = $('[data-hub]');
     if (!mount) return;
-    console.info('[platform] hub mount found - renderHub() is implemented in Phase 4.');
+    var kind = mount.dataset.hub;
+    var grid = $('#atk-hub-grid');
+    var filter = $('#atk-hub-filter');
+    if (!grid) return;
+
+    var sources = {
+      techniques: 'data/techniques.json',
+      actors: 'data/actors.json',
+      mitigations: 'data/mitigations.json',
+      campaigns: 'data/campaigns.json'
+    };
+    if (!sources[kind]) {
+      console.warn('[platform] unknown hub kind: ' + kind);
+      return;
+    }
+
+    function emptyHtml() {
+      return '<p class="atk-hub-error">Data unavailable right now \u2014 try again in a moment.</p>';
+    }
+
+    function badge(live) {
+      return live
+        ? '<span class="atk-badge is-live" title="Hand-written guide is live">Live guide</span>'
+        : '<span class="atk-badge is-planned" title="Guide in progress">Planned</span>';
+    }
+
+    function techCard(r) {
+      var live = r.status === 'implemented' && r.page;
+      var ruleCount = (r.sigma || []).length;
+      var open = live ? '<a href="' + esc(SITE_BASE + r.page) + '">' : '';
+      var close = live ? '</a>' : '';
+      return '<article class="atk-card" id="' + esc(r.id) + '" data-filter="' + esc((r.id + ' ' + r.name).toLowerCase()) + '">' +
+        '<div class="atk-card-top"><span class="atk-card-id">' + esc(r.id) + '</span>' + badge(live) + '</div>' +
+        '<h3 class="atk-card-name">' + open + esc(r.name) + close + '</h3>' +
+        '<p class="atk-card-sum">' + esc(r.summary || '') + '</p>' +
+        (live && ruleCount ? '<p class="atk-card-meta">Linked Sigma rules: ' + ruleCount + '</p>' : '') +
+        '</article>';
+    }
+
+    function entityCard(kindName, r) {
+      var live = r.status === 'implemented' && r.page;
+      var sub = kindName === 'campaigns'
+        ? String(r.year || '')
+        : (r.aliases || []).join(' \u00b7 ');
+      var extra = kindName === 'mitigations' ? 'Type: ' + esc(r.type || '—') : '';
+      var label = r.id + ' ' + r.name + ' ' + (r.aliases || []).join(' ');
+      return '<article class="atk-card" id="' + esc(r.id) + '" data-filter="' + esc(label.toLowerCase()) + '">' +
+        '<div class="atk-card-top"><span class="atk-card-id">' + esc(r.id) + '</span>' + badge(live) + '</div>' +
+        '<h3 class="atk-card-name">' + esc(r.name) + '</h3>' +
+        (sub ? '<p class="atk-card-alias">' + esc(sub) + '</p>' : '') +
+        '<p class="atk-card-sum">' + esc(r.summary || '') + '</p>' +
+        (extra ? '<p class="atk-card-meta">' + extra + '</p>' : '') +
+        '</article>';
+    }
+
+    function wireFilter() {
+      if (!filter || filter.dataset.wired) return;
+      filter.dataset.wired = '1';
+      filter.addEventListener('input', function () {
+        var q = filter.value.trim().toLowerCase();
+        $$('.atk-card', grid).forEach(function (card) {
+          card.classList.toggle('is-hidden', !!q && card.dataset.filter.indexOf(q) === -1);
+        });
+        $$('.atk-hub-group', grid).forEach(function (g) {
+          var visible = $$('.atk-card', g).filter(function (c) { return !c.classList.contains('is-hidden'); }).length;
+          g.classList.toggle('is-hidden', visible === 0);
+        });
+      });
+    }
+
+    if (kind === 'techniques') {
+      Promise.all([getData('data/tactics.json'), getData(sources[kind])]).then(function (res) {
+        var tactics = res[0] || [], techniques = res[1];
+        if (!techniques) { grid.innerHTML = emptyHtml(); return; }
+        var html = '';
+        tactics.slice().sort(function (a, b) { return a.order - b.order; }).forEach(function (t) {
+          var rows = techniques
+            .filter(function (r) { return r.tactic === t.id; })
+            .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+          html += '<section class="atk-hub-group" id="' + esc(t.id) + '">' +
+            '<h2 class="atk-hub-group-title">' + esc(t.name) +
+            '<span class="atk-hub-group-count">' + rows.length + '</span></h2>' +
+            '<div class="atk-grid">' + rows.map(techCard).join('') + '</div></section>';
+        });
+        grid.innerHTML = html;
+        wireFilter();
+      });
+    } else {
+      getData(sources[kind]).then(function (rows) {
+        if (!rows) { grid.innerHTML = emptyHtml(); return; }
+        grid.innerHTML = '<div class="atk-grid">' +
+          rows.map(function (r) { return entityCard(kind, r); }).join('') + '</div>';
+        wireFilter();
+      });
+    }
   }
+
   function renderBreadcrumbs(techId) {
-    if (!$('#atk-breadcrumbs') && !techId) return;
-    console.info('[platform] breadcrumb mount found - renderBreadcrumbs() is implemented in Phase 4.');
+    var mount = mountAt('#atk-breadcrumbs', function (node) {
+      var header = $('#atk-header');
+      if (header && header.parentNode) {
+        header.parentNode.insertBefore(node, header.nextSibling);
+      } else {
+        document.body.insertBefore(node, document.body.firstChild);
+      }
+    });
+    Promise.all([getData('data/tactics.json'), getData('data/techniques.json')]).then(function (res) {
+      var tactics = res[0] || [], techniques = res[1];
+      if (!techniques) return;
+      var row = techniques.filter(function (r) { return r.id === techId; })[0];
+      if (!row) { console.warn('[platform] technique ' + techId + ' not found in techniques.json'); return; }
+      var tactic = tactics.filter(function (t) { return t.id === row.tactic; })[0];
+      var tacticName = tactic ? tactic.name : row.tactic;
+      mount.innerHTML =
+        '<nav class="atk-breadcrumbs" aria-label="Breadcrumb">' +
+          '<a href="' + SITE_BASE + '">Home</a><span class="atk-crumb-sep" aria-hidden="true">\u203a</span>' +
+          '<a href="' + SITE_BASE + 'techniques/#' + esc(row.tactic) + '">' + esc(tacticName) + '</a><span class="atk-crumb-sep" aria-hidden="true">\u203a</span>' +
+          '<strong aria-current="page">' + esc(row.id) + ' \u2014 ' + esc(row.name) + '</strong>' +
+        '</nav>';
+    });
   }
+
   function renderCrosslinks(techId) {
-    if (!$('#atk-relations') && !techId) return;
-    console.info('[platform] relations mount found - renderCrosslinks() is implemented in Phase 4.');
+    var mount = mountAt('#atk-relations', function (node) {
+      var main = $('main') || document.body;
+      main.appendChild(node);
+    });
+    Promise.all([
+      getData('data/techniques.json'),
+      getData('data/actors.json'),
+      getData('data/mitigations.json')
+    ]).then(function (res) {
+      var techniques = res[0], actors = res[1] || [], mitigations = res[2] || [];
+      if (!techniques) return;
+      var row = techniques.filter(function (r) { return r.id === techId; })[0];
+      if (!row) { console.warn('[platform] technique ' + techId + ' not found for crosslinks'); return; }
+
+      var usedBy = (row.used_by || []).map(function (id) {
+        return actors.filter(function (a) { return a.id === id; })[0] || { id: id, name: id, status: 'planned' };
+      });
+      var mitigatedBy = (row.mitigated_by || []).map(function (id) {
+        return mitigations.filter(function (m) { return m.id === id; })[0] || { id: id, name: id, status: 'planned' };
+      });
+      var rules = row.sigma || [];
+
+      function entityChip(entry, hubPath) {
+        if (entry.status === 'implemented') {
+          return '<a class="atk-chip is-live" href="' + SITE_BASE + hubPath + '#' + esc(entry.id) + '">' +
+                 esc(entry.id) + ' \u2014 ' + esc(entry.name) + '</a>';
+        }
+        return '<span class="atk-chip is-planned" title="Planned \u2014 page in progress">' +
+               esc(entry.id) + ' \u2014 ' + esc(entry.name) + '</span>';
+      }
+
+      function ruleChip(file) {
+        var label = file.split('/').pop().replace(/\.yml$/, '')
+          .replace(/^[t]\d{4}(?:\.\d{3})?-/i, '').replace(/-/g, ' ');
+        label = label.charAt(0).toUpperCase() + label.slice(1);
+        return '<a class="atk-chip is-rule" href="' + SITE_BASE + 'tools/sigma.html#' + esc(file) + '" title="' + esc(file) + '">' +
+               esc(label) + '</a>';
+      }
+
+      function group(title, count, inner) {
+        return '<div class="atk-rel-group">' +
+          '<h3 class="atk-rel-title">' + esc(title) +
+          (count ? ' <span class="atk-rel-count">(' + count + ')</span>' : '') + '</h3>' +
+          '<div class="atk-chips">' + inner + '</div></div>';
+      }
+
+      var usedHtml = usedBy.length
+        ? usedBy.map(function (a) { return entityChip(a, 'actors/'); }).join('')
+        : '<span class="atk-chip is-none">None linked yet</span>';
+      var mitigatedHtml = mitigatedBy.length
+        ? mitigatedBy.map(function (m) { return entityChip(m, 'mitigations/'); }).join('')
+        : '<span class="atk-chip is-none">None linked yet</span>';
+      var detectedHtml = rules.length
+        ? rules.map(ruleChip).join('')
+        : '<span class="atk-chip is-none">No Sigma rules linked yet</span>';
+
+      mount.innerHTML =
+        '<section class="atk-relations" aria-label="Relations">' +
+        group('Used by', usedBy.length, usedHtml) +
+        group('Mitigated by', mitigatedBy.length, mitigatedHtml) +
+        group('Detected by', rules.length, detectedHtml) +
+        '</section>';
+    });
   }
+
   function renderPrevNext(techId) {
-    if (!$('#atk-prevnext') && !techId) return;
-    console.info('[platform] prevnext mount found - renderPrevNext() is implemented in Phase 4.');
+    var mount = mountAt('#atk-prevnext', function (node) {
+      var main = $('main') || document.body;
+      main.appendChild(node);
+    });
+    Promise.all([getData('data/tactics.json'), getData('data/techniques.json')]).then(function (res) {
+      var tactics = res[0] || [], techniques = res[1];
+      if (!techniques) return;
+      var row = techniques.filter(function (r) { return r.id === techId; })[0];
+      if (!row) return;
+      var tactic = tactics.filter(function (t) { return t.id === row.tactic; })[0];
+      var tacticName = tactic ? tactic.name : row.tactic;
+      var chain = techniques
+        .filter(function (r) { return r.tactic === row.tactic; })
+        .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+      var i = chain.indexOf(row);
+
+      function nav(r, dir, fallbackText) {
+        if (!r) {
+          return '<span class="atk-pn-link is-disabled" aria-disabled="true">' +
+                 '<span class="atk-pn-dir">' + dir + '</span>' +
+                 '<span class="atk-pn-name">' + esc(fallbackText) + '</span></span>';
+        }
+        var href = (r.status === 'implemented' && r.page)
+          ? SITE_BASE + r.page
+          : SITE_BASE + 'techniques/#' + esc(r.tactic);
+        return '<a class="atk-pn-link" href="' + esc(href) + '">' +
+               '<span class="atk-pn-dir">' + dir + '</span>' +
+               '<span class="atk-pn-name">' + esc(r.id) + ' \u2014 ' + esc(r.name) + '</span></a>';
+      }
+
+      mount.innerHTML =
+        '<nav class="atk-prevnext" aria-label="Adjacent techniques in this tactic">' +
+        nav(chain[i - 1], 'Previous', 'Start of the ' + tacticName + ' chain') +
+        nav(chain[i + 1], 'Next', 'End of the ' + tacticName + ' chain') +
+        '</nav>';
+    });
   }
-  /* ==== END PHASE 4 PATCH ==== */
 
   /* ------------------------------------------------------------------ *
    * 9. Boot                                                            *
