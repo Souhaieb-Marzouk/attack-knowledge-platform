@@ -1,0 +1,69 @@
+name: Sigma Rule Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sigma/**'
+      - 'tests/**'
+      - 'data/**'
+      - 'scripts/**'
+      - '.github/workflows/sigma-validate.yml'
+  pull_request:
+    paths:
+      - 'sigma/**'
+      - 'tests/**'
+      - 'data/**'
+      - 'scripts/**'
+      - '.github/workflows/sigma-validate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Sigma toolchain (pinned for reproducibility)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements-sigma.txt ]; then
+            pip install -r requirements-sigma.txt
+          else
+            pip install sigma-cli pySigma-backend-splunk pyyaml
+            pip freeze | grep -iE 'sigma|yaml' > requirements-sigma.txt
+          fi
+
+      - name: Validate data layer (JSON integrity)
+        run: python scripts/validate_data.py
+
+      - name: Check internal links
+        run: python scripts/check_links.py
+
+      - name: Run Sigma test suite (positive + negative)
+        run: python tests/test_sigma.py
+
+      - name: Rebuild sigma index
+        run: python scripts/build_sigma_index.py
+
+      - name: Commit regenerated index (main pushes only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/sigma-index.json requirements-sigma.txt
+          if git diff --cached --quiet; then
+            echo "Index already up to date"
+          else
+            git commit -m "ci: regenerate sigma index [skip ci]"
+            git push
+          fi
