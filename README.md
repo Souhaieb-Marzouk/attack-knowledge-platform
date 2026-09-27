@@ -9,7 +9,10 @@
 
 **Live site:** https://souhaieb-marzouk.github.io/attack-knowledge-platform/
 
-![Coverage matrix](assets/img/screens/social.png)
+![Coverage matrix](assets/img/screens/matrix-dark.png)
+![Coverage matrix](assets/img/screens/matrix-light.png)
+![Coverage matrix](assets/img/screens/search.png)
+![Coverage matrix](assets/img/screens/sigma-library.png)
 
 *The 14-tactic coverage matrix on the home page — live guides filled, planned outlined.*
 
