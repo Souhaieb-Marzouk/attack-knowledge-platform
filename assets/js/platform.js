@@ -157,7 +157,7 @@
     }
     mount.innerHTML =
       '<footer class="atk-footer"><div class="atk-footer-in">' +
-        '<p class="atk-footer-note"><span class="atk-footer-update"></span>Unofficial educational project - content is the author\'s own analysis.</p>' +
+        '<p class="atk-footer-note"><span class="atk-footer-update"></span>Unofficial Educational Project - content is the author\'s own analysis.</p>' +
         '<p class="atk-footer-attr">MITRE ATT&amp;CK<span class="atk-reg">\u00ae</span> is a registered trademark of The MITRE Corporation. ' +
         'Technique identifiers reference the public MITRE ATT&amp;CK knowledge base and are used with attribution.</p>' +
       '</div></footer>';
