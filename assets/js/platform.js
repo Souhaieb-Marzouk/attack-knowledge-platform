@@ -293,7 +293,7 @@
           if (tile.classList.contains('is-impl') && tile.dataset.page) {
             window.location.href = tile.dataset.page;
           } else {
-            toast('Guide in progress \u2014 Watch the repo on GitHub to hear when it lands.');
+            toast('Guide in progress - Watch the repo on GitHub to hear when it lands.');
           }
         });
       }
