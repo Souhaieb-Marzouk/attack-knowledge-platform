@@ -90,7 +90,7 @@ def main():
 
     print("Checking tactics ...")
     orders = sorted(t.get("order", 0) for t in tactics)
-    if len(tactics) == 15 and orders == list(range(1, 15)):
+    if len(tactics) == 15 and orders == list(range(1, 16)):
         ok("15 Enterprise tactics, orders 1..15")
     else:
         fail(f"tactics.json must hold exactly 15 tactics with orders 1..15 (found {len(tactics)}, orders {orders})")
