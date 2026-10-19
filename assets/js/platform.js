@@ -242,17 +242,24 @@
   }
 
   function renderMatrix() {
-    var mount = $('#atk-matrix');
+    var mount = $('#atk-explorer');
     if (!mount) return;
 
-    Promise.all([getData('data/tactics.json'), getData('data/techniques.json')]).then(function (res) {
-      var tactics = res[0], techniques = res[1];
+    Promise.all([
+      getData('data/tactics.json'),
+      getData('data/techniques.json'),
+      getData('data/sigma-index.json')
+    ]).then(function (res) {
+      var tactics = res[0], techniques = res[1], sigmaIndex = res[2] || {};
       if (!tactics || !techniques) {
-        mount.innerHTML = '<p class="atk-hub-error">Matrix data unavailable right now.</p>';
+        mount.innerHTML = '<p class="atk-hub-error">Explorer data unavailable right now.</p>';
         return;
       }
 
       var ordered = tactics.slice().sort(function (a, b) { return a.order - b.order; });
+      var techById = {};
+      techniques.forEach(function (r) { techById[r.id] = r; });
+
       var live = 0, planned = 0, coveredTactics = {};
       techniques.forEach(function (r) {
         if (r.status === 'implemented') {
@@ -263,77 +270,378 @@
         }
       });
       var tacticCoverage = Object.keys(coveredTactics).length;
+      var ruleCount = sigmaIndex && sigmaIndex.count != null ? sigmaIndex.count : 0;
 
       setCount('atk-count-live', live);
       setCount('atk-count-planned', planned);
+      setCount('atk-count-rules', ruleCount);
       setCount('atk-count-tactics', tacticCoverage);
-      getData('data/sigma-index.json').then(function (idx) {
-        setCount('atk-count-rules', idx && idx.count ? idx.count : 0);
-      });
 
       var mode = 'live';
       try {
-        var saved = localStorage.getItem('atk-matrix-mode');
-        if (saved === 'all' || saved === 'live') mode = saved;
+        var savedMode = localStorage.getItem('atk-explorer-mode');
+        if (savedMode === 'live' || savedMode === 'all') mode = savedMode;
       } catch (e) { /* private mode */ }
 
-      function draw() {
-        var html =
-          '<div class="atk-matrix-controls" role="group" aria-label="Matrix scope">' +
-            '<button type="button" class="atk-mode-btn' + (mode === 'live' ? ' is-on' : '') + '" data-matrix-mode="live" aria-pressed="' + (mode === 'live') + '">Live guides (' + live + ')</button>' +
-            '<button type="button" class="atk-mode-btn' + (mode === 'all' ? ' is-on' : '') + '" data-matrix-mode="all" aria-pressed="' + (mode === 'all') + '">Full catalogue (' + (live + planned) + ')</button>' +
-            '<span class="atk-mode-note">' + (mode === 'live' ? 'Only implemented guides are shown. Switch to the full catalogue to see the roadmap.' : 'Every ATT&CK technique in the data layer, including planned guides.') + '</span>' +
-          '</div>' +
-          '<div class="atk-matrix-legend">' +
-            '<span class="atk-legend-item"><span class="atk-swatch is-impl" role="img" aria-label="Live guide"></span>Live guide</span>' +
-            '<span class="atk-legend-item"><span class="atk-swatch is-planned" role="img" aria-label="Planned guide"></span>Planned</span>' +
-            '<span class="atk-legend-note">' + live + ' of ' + (live + planned) + ' guides live across ' + tacticCoverage + ' of ' + ordered.length + ' tactics</span>' +
-          '</div>' +
-          '<div class="atk-matrix-scroll">' +
-          '<div class="atk-matrix">';
+      var state = { tactic: null, technique: null };
 
-        ordered.forEach(function (t) {
-          var all = techniques
-            .filter(function (r) { return r.tactic === t.id; })
-            .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
-          var liveRows = all.filter(function (r) { return r.status === 'implemented' && r.page; });
-          var rows = mode === 'live' ? liveRows : all;
-          html += '<div class="atk-col"><h3 class="atk-col-title" title="' + esc(t.name) + '">' + esc(t.name) +
-                  '<span class="atk-col-count">' + liveRows.length + ' / ' + all.length + '</span></h3>';
-          rows.forEach(function (r) {
-            var isLive = r.status === 'implemented' && r.page;
-            var tip = esc(r.id + ' \u2014 ' + r.name + (isLive ? ' \u2014 Live guide' : ' \u2014 Guide in progress'));
-            html += isLive
-              ? '<button type="button" class="atk-tile is-impl" data-page="' + esc(SITE_BASE + r.page) + '" title="' + tip + '" aria-label="' + tip + '">' + esc(r.id) + '</button>'
-              : '<button type="button" class="atk-tile is-planned" title="' + tip + '" aria-label="' + tip + '">' + esc(r.id) + '</button>';
-          });
-          if (!rows.length) html += '<p class="atk-col-empty">No live guide yet</p>';
-          html += '</div>';
+      function readHash() {
+        var params = {};
+        var raw = String(window.location.hash || '').replace(/^#/, '');
+        raw.split('&').forEach(function (part) {
+          var eq = part.indexOf('=');
+          if (eq > 0) params[decodeURIComponent(part.slice(0, eq))] = decodeURIComponent(part.slice(eq + 1));
         });
-
-        html += '</div></div>';
-        mount.innerHTML = html;
+        state.tactic = null;
+        state.technique = null;
+        if (params.tactic && ordered.some(function (t) { return t.id === params.tactic; })) {
+          state.tactic = params.tactic;
+        } else {
+          return;
+        }
+        var tech = params.technique ? techById[params.technique] : null;
+        if (tech && tech.tactic === state.tactic && !parentId(tech.id)) {
+          state.technique = tech.id;
+        }
       }
 
+      function syncHash() {
+        var parts = [];
+        if (state.tactic) parts.push('tactic=' + encodeURIComponent(state.tactic));
+        if (state.technique) parts.push('technique=' + encodeURIComponent(state.technique));
+        var next = parts.length ? '#' + parts.join('&') : '';
+        try {
+          if (window.location.hash !== next) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search + next);
+          }
+        } catch (e) { /* file:// or restricted history */ }
+      }
+
+      function isLive(row) {
+        return row.status === 'implemented' && !!row.page;
+      }
+
+      function byId(a, b) {
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      }
+
+      function parentId(id) {
+        var dot = id.lastIndexOf('.');
+        return dot === -1 ? null : id.slice(0, dot);
+      }
+
+      function childrenOf(id) {
+        return techniques.filter(function (r) {
+          return parentId(r.id) === id;
+        }).sort(byId);
+      }
+
+      function rootsFor(tactic) {
+        return techniques.filter(function (r) {
+          var parent = parentId(r.id);
+          return r.tactic === tactic && (!parent || !techById[parent]);
+        }).sort(byId);
+      }
+
+      function rowsForTactic(tactic) {
+        return techniques.filter(function (r) { return r.tactic === tactic; });
+      }
+
+      function liveChildren(id) {
+        return childrenOf(id).filter(isLive);
+      }
+
+      function visibleRoot(row) {
+        return mode === 'all' || isLive(row) || liveChildren(row.id).length > 0;
+      }
+
+      function visibleChildren(id) {
+        return childrenOf(id).filter(function (r) {
+          return mode === 'all' || isLive(r);
+        });
+      }
+
+      function badgeFor(row) {
+        if (isLive(row)) return '<span class="atk-badge is-live">Live</span>';
+        var n = liveChildren(row.id).length;
+        if (n) return '<span class="atk-badge is-planned">' + n + ' live sub</span>';
+        return '<span class="atk-badge is-planned">Planned</span>';
+      }
+
+      function metaFor(row, withChildren) {
+        var bits = [];
+        if (row.sigma && row.sigma.length) bits.push(row.sigma.length + ' rules');
+        if (withChildren) {
+          var n = childrenOf(row.id).length;
+          if (n) bits.push(n + ' sub-techniques');
+        }
+        return bits.join(' \u00b7 ');
+      }
+
+      function tacticButton(t) {
+        var all = rowsForTactic(t.id);
+        var liveRows = all.filter(isLive);
+        var selected = state.tactic === t.id;
+        return '<button type="button" class="atk-explorer-node atk-node-tactic' +
+          (selected ? ' is-selected' : '') + '" data-tactic="' + esc(t.id) + '" aria-pressed="' + selected + '">' +
+          '<span class="atk-node-step">' + String(t.order).padStart(2, '0') + '</span>' +
+          '<span class="atk-node-body">' +
+            '<span class="atk-node-name">' + esc(t.name) + '</span>' +
+            '<span class="atk-node-meta">' + liveRows.length + ' live \u00b7 ' + all.length + ' tracked</span>' +
+          '</span>' +
+          '<span class="atk-node-arrow" aria-hidden="true">\u203a</span>' +
+        '</button>';
+      }
+
+      function techniqueButton(row) {
+        var selected = state.technique === row.id;
+        return '<button type="button" class="atk-explorer-node atk-node-tech' +
+          (selected ? ' is-selected' : '') + '" data-technique="' + esc(row.id) + '" aria-pressed="' + selected + '">' +
+          '<span class="atk-node-body">' +
+            '<span class="atk-node-id">' + esc(row.id) + '</span>' +
+            '<span class="atk-node-name">' + esc(row.name) + '</span>' +
+            '<span class="atk-node-meta">' + esc(metaFor(row, true)) + '</span>' +
+          '</span>' +
+          '<span class="atk-node-tail">' + badgeFor(row) + '</span>' +
+        '</button>';
+      }
+
+      function subtechNode(row) {
+        var body = '<span class="atk-node-body">' +
+          '<span class="atk-node-id">' + esc(row.id) + '</span>' +
+          '<span class="atk-node-name">' + esc(row.name) + '</span>' +
+          '<span class="atk-node-meta">' + esc(metaFor(row, false)) + '</span>' +
+        '</span>';
+        if (isLive(row)) {
+          return '<a class="atk-explorer-node atk-node-sub is-live" href="' + esc(SITE_BASE + row.page) + '">' +
+            body + '<span class="atk-node-tail"><span class="atk-node-open">Open \u2192</span></span></a>';
+        }
+        return '<div class="atk-explorer-node atk-node-sub is-planned">' +
+          body + '<span class="atk-node-tail"><span class="atk-badge is-planned">Planned</span></span></div>';
+      }
+
+      function welcomeHtml() {
+        return '<div class="atk-explorer-welcome">' +
+          '<svg class="atk-spider-mark" viewBox="0 0 120 120" aria-hidden="true">' +
+            '<g fill="none" stroke="currentColor" stroke-width="1.3" opacity=".55">' +
+              '<path d="M60 10v100M10 60h100M24 24l72 72M96 24 24 96"/>' +
+              '<circle cx="60" cy="10" r="3"/><circle cx="110" cy="60" r="3"/><circle cx="60" cy="110" r="3"/><circle cx="10" cy="60" r="3"/>' +
+              '<circle cx="24" cy="24" r="3"/><circle cx="96" cy="24" r="3"/><circle cx="24" cy="96" r="3"/><circle cx="96" cy="96" r="3"/>' +
+            '</g>' +
+            '<circle cx="60" cy="60" r="9" fill="currentColor"/>' +
+          '</svg>' +
+          '<h3>Start with a tactic</h3>' +
+          '<p>Pick one of the 15 ATT&amp;CK tactics. Its techniques open in the middle. Choose a technique to see its sub-techniques on the right. Opening a new branch collapses the old one.</p>' +
+          '<p class="atk-explorer-steps"><span>1 tactic</span><span>2 technique</span><span>3 sub-technique</span></p>' +
+        '</div>';
+      }
+
+      function drawWeb() {
+        var web = $('.atk-explorer-web', mount);
+        var grid = $('.atk-explorer-grid', mount);
+        if (!web || !grid) return;
+
+        var gridRect = grid.getBoundingClientRect();
+        web.setAttribute('viewBox', '0 0 ' + Math.max(1, gridRect.width) + ' ' + Math.max(1, gridRect.height));
+        web.innerHTML = '';
+
+        if (window.matchMedia && window.matchMedia('(max-width: 960px)').matches) return;
+
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        function edge(el, side) {
+          var r = el.getBoundingClientRect();
+          return {
+            x: (side === 'right' ? r.right : r.left) - gridRect.left,
+            y: r.top - gridRect.top + r.height / 2
+          };
+        }
+
+        function link(a, b) {
+          var d = 'M' + a.x.toFixed(1) + ' ' + a.y.toFixed(1) +
+                  ' C' + (a.x + 34).toFixed(1) + ' ' + a.y.toFixed(1) +
+                  ', ' + (b.x - 34).toFixed(1) + ' ' + b.y.toFixed(1) +
+                  ', ' + b.x.toFixed(1) + ' ' + b.y.toFixed(1);
+          var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          path.setAttribute('class', 'atk-web-line');
+          path.setAttribute('d', d);
+          web.appendChild(path);
+          if (!reduce) {
+            try {
+              var length = path.getTotalLength();
+              path.style.strokeDasharray = String(length);
+              path.style.strokeDashoffset = String(length);
+              window.requestAnimationFrame(function () {
+                window.requestAnimationFrame(function () { path.style.strokeDashoffset = '0'; });
+              });
+            } catch (e) { /* older SVG engines */ }
+          }
+          [a, b].forEach(function (p) {
+            var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', p.x.toFixed(1));
+            dot.setAttribute('cy', p.y.toFixed(1));
+            dot.setAttribute('r', '2.4');
+            dot.setAttribute('class', 'atk-web-dot');
+            web.appendChild(dot);
+          });
+        }
+
+        var tacticEl = state.tactic ? $('[data-tactic="' + state.tactic + '"]', mount) : null;
+        var techEl = state.technique ? $('[data-technique="' + state.technique + '"]', mount) : null;
+        var techHead = $('.atk-explorer-col.is-techniques .atk-explorer-colhead', mount);
+        var subHead = $('.atk-explorer-col.is-subtechs .atk-explorer-colhead', mount);
+        if (tacticEl && techHead) link(edge(tacticEl, 'right'), edge(techHead, 'left'));
+        if (techEl && subHead) link(edge(techEl, 'right'), edge(subHead, 'left'));
+      }
+
+      function focusAfterDraw(selector) {
+        if (!selector) return;
+        window.requestAnimationFrame(function () {
+          var el = $(selector, mount);
+          if (el && el.focus) {
+            try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+          }
+        });
+      }
+
+      function draw(focusSelector) {
+        var tacticRows = state.tactic ? rowsForTactic(state.tactic) : [];
+        var roots = state.tactic ? rootsFor(state.tactic).filter(visibleRoot) : [];
+        var children = state.technique ? visibleChildren(state.technique) : [];
+        var selectedTech = state.technique ? techById[state.technique] : null;
+
+        var tacticHtml = ordered.map(tacticButton).join('');
+        var techniqueHtml;
+        if (!state.tactic) {
+          techniqueHtml = welcomeHtml();
+        } else if (!roots.length) {
+          techniqueHtml = '<div class="atk-explorer-empty">' +
+            '<span class="atk-empty-mark" aria-hidden="true">\u25cc</span>' +
+            '<h3>No live guide in this tactic yet</h3>' +
+            '<p>' + esc((ordered.filter(function (t) { return t.id === state.tactic; })[0] || {}).name || 'This tactic') +
+            ' has ' + tacticRows.length + ' tracked technique' + (tacticRows.length === 1 ? '' : 's') + ', but none has a published guide.</p>' +
+            '<div class="atk-explorer-actions">' +
+              '<button type="button" class="atk-btn atk-btn-ghost" data-explorer-mode="all">Browse the full catalogue</button>' +
+              '<a class="atk-btn atk-btn-ghost" href="' + SITE_BASE + 'techniques/">Open techniques hub</a>' +
+            '</div></div>';
+        } else {
+          techniqueHtml = roots.map(techniqueButton).join('');
+        }
+
+        var subHtml;
+        if (!selectedTech) {
+          subHtml = '<div class="atk-explorer-hint"><span class="atk-empty-mark" aria-hidden="true">\u25cc</span>' +
+            '<p>Pick a technique in the middle column to reveal its sub-techniques.</p></div>';
+        } else if (children.length) {
+          var parentLink = isLive(selectedTech)
+            ? '<a class="atk-explorer-parent-link" href="' + esc(SITE_BASE + selectedTech.page) + '">Open parent guide \u2192</a>'
+            : '<span class="atk-explorer-parent-link is-muted">Parent guide planned</span>';
+          subHtml = '<div class="atk-explorer-parent">' +
+            '<span class="atk-parent-id">' + esc(selectedTech.id) + '</span>' +
+            '<span class="atk-parent-name">' + esc(selectedTech.name) + '</span>' +
+            parentLink + '</div>' + children.map(subtechNode).join('');
+        } else {
+          var leafLink = isLive(selectedTech)
+            ? '<a class="atk-btn atk-btn-primary" href="' + esc(SITE_BASE + selectedTech.page) + '">Open the full guide \u2192</a>'
+            : (mode === 'live'
+              ? '<button type="button" class="atk-btn atk-btn-ghost" data-explorer-mode="all">Show planned techniques</button>'
+              : '<a class="atk-btn atk-btn-ghost" href="' + SITE_BASE + 'techniques/">Browse the techniques hub</a>');
+          var plannedChildren = childrenOf(selectedTech.id).length;
+          subHtml = '<div class="atk-explorer-leaf">' +
+            '<span class="atk-leaf-id">' + esc(selectedTech.id) + '</span>' +
+            '<h3>' + esc(selectedTech.name) + '</h3>' +
+            '<p>' + (plannedChildren
+              ? 'This technique has ' + plannedChildren + ' sub-technique' + (plannedChildren === 1 ? '' : 's') + ', but none is live yet.'
+              : 'This is a leaf technique: there are no sub-techniques to drill into.') + '</p>' +
+            (isLive(selectedTech) ? '<p class="atk-leaf-sum">' + esc(selectedTech.summary || '') + '</p>' : '') +
+            '<div class="atk-explorer-actions">' + leafLink +
+              '<a class="atk-btn atk-btn-ghost" href="' + SITE_BASE + 'techniques/">Techniques hub</a></div>' +
+          '</div>';
+        }
+
+        mount.innerHTML =
+          '<div class="atk-explorer" role="region" aria-label="ATT&amp;CK Explorer">' +
+          '<div class="atk-explorer-head">' +
+            '<p class="atk-explorer-kicker">Interactive knowledge map \u00b7 tactic \u2192 technique \u2192 sub-technique</p>' +
+            '<div class="atk-explorer-modes" role="group" aria-label="Explorer scope">' +
+              '<button type="button" class="atk-mode-btn' + (mode === 'live' ? ' is-on' : '') + '" data-explorer-mode="live" aria-pressed="' + (mode === 'live') + '">Live guides (' + live + ')</button>' +
+              '<button type="button" class="atk-mode-btn' + (mode === 'all' ? ' is-on' : '') + '" data-explorer-mode="all" aria-pressed="' + (mode === 'all') + '">Full catalogue (' + (live + planned) + ')</button>' +
+            '</div>' +
+          '</div>' +
+          '<div class="atk-explorer-grid">' +
+            '<svg class="atk-explorer-web" aria-hidden="true" focusable="false"></svg>' +
+            '<section class="atk-explorer-col is-tactics" aria-labelledby="atk-explorer-tactics-title">' +
+              '<div class="atk-explorer-colhead"><span class="atk-step">1</span><h3 id="atk-explorer-tactics-title">Tactic</h3><span class="atk-col-total">' + ordered.length + '</span></div>' +
+              '<div class="atk-explorer-list atk-explorer-tactics" role="group" aria-label="Tactics">' + tacticHtml + '</div>' +
+            '</section>' +
+            '<section class="atk-explorer-col is-techniques" aria-labelledby="atk-explorer-techniques-title" aria-live="polite">' +
+              '<div class="atk-explorer-colhead"><span class="atk-step">2</span><h3 id="atk-explorer-techniques-title">Technique</h3><span class="atk-col-total">' + (state.tactic ? roots.length : '\u2014') + '</span></div>' +
+              '<div class="atk-explorer-list">' + techniqueHtml + '</div>' +
+            '</section>' +
+            '<section class="atk-explorer-col is-subtechs" aria-labelledby="atk-explorer-subtechs-title" aria-live="polite">' +
+              '<div class="atk-explorer-colhead"><span class="atk-step">3</span><h3 id="atk-explorer-subtechs-title">Sub-technique</h3><span class="atk-col-total">' + (state.technique ? children.length : '\u2014') + '</span></div>' +
+              '<div class="atk-explorer-list">' + subHtml + '</div>' +
+            '</section>' +
+          '</div>' +
+          '<div class="atk-explorer-foot">' +
+            '<span><b>' + live + '</b> live guides</span>' +
+            '<span><b>' + (live + planned) + '</b> catalogue rows</span>' +
+            '<span><b>' + ruleCount + '</b> log-tested Sigma rules</span>' +
+            '<span>' + tacticCoverage + ' of ' + ordered.length + ' tactics covered</span>' +
+          '</div></div>';
+
+        window.requestAnimationFrame(drawWeb);
+        syncHash();
+        focusAfterDraw(focusSelector);
+      }
+
+      readHash();
       draw();
 
       if (!mount.dataset.wired) {
         mount.dataset.wired = '1';
         mount.addEventListener('click', function (e) {
-          var modeBtn = e.target.closest ? e.target.closest('[data-matrix-mode]') : null;
+          var modeBtn = e.target.closest ? e.target.closest('[data-explorer-mode]') : null;
           if (modeBtn) {
-            mode = modeBtn.dataset.matrixMode;
-            try { localStorage.setItem('atk-matrix-mode', mode); } catch (err) { /* private mode */ }
-            draw();
+            mode = modeBtn.dataset.explorerMode;
+            try { localStorage.setItem('atk-explorer-mode', mode); } catch (err) { /* private mode */ }
+            state.technique = null;
+            if (mode === 'live' && state.tactic) {
+              var liveRoots = rootsFor(state.tactic).filter(visibleRoot);
+              if (!liveRoots.length) state.tactic = null;
+            }
+            draw('[data-explorer-mode="' + mode + '"]');
             return;
           }
-          var tile = e.target.closest ? e.target.closest('.atk-tile') : null;
-          if (!tile) return;
-          if (tile.classList.contains('is-impl') && tile.dataset.page) {
-            window.location.href = tile.dataset.page;
-          } else {
-            toast('Guide in progress - Watch the repo on GitHub to hear when it lands.');
+
+          var tacticBtn = e.target.closest ? e.target.closest('[data-tactic]') : null;
+          if (tacticBtn) {
+            var t = tacticBtn.dataset.tactic;
+            state.tactic = state.tactic === t ? null : t;
+            state.technique = null;
+            draw(state.tactic ? '[data-tactic="' + t + '"]' : null);
+            return;
           }
+
+          var techBtn = e.target.closest ? e.target.closest('[data-technique]') : null;
+          if (techBtn) {
+            var id = techBtn.dataset.technique;
+            state.technique = state.technique === id ? null : id;
+            draw('[data-technique="' + id + '"]');
+            return;
+          }
+        });
+
+        var redrawTimer = null;
+        function queueWebRedraw() {
+          window.clearTimeout(redrawTimer);
+          redrawTimer = window.setTimeout(drawWeb, 80);
+        }
+        window.addEventListener('resize', queueWebRedraw);
+        mount.addEventListener('scroll', queueWebRedraw, true);
+        window.addEventListener('hashchange', function () {
+          readHash();
+          draw();
         });
       }
 

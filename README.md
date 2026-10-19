@@ -9,19 +9,19 @@
 > CI-validated Sigma rules, and a log test for every rule.
 
 **Live site:** https://souhaieb-marzouk.github.io/attack-knowledge-platform/
-**Release:** [v1.1 — 20 guides, 141 log-tested Sigma rules](https://github.com/Souhaieb-Marzouk/attack-knowledge-platform/releases/tag/v1.1)
+**Release:** [v1.2 — 20 guides, 141 log-tested Sigma rules, new ATT&CK Explorer](https://github.com/Souhaieb-Marzouk/attack-knowledge-platform/releases/tag/v1.2)
 
-![Coverage matrix](assets/img/screens/matrix-dark.png)
+![ATT&CK Explorer](assets/img/screens/matrix-dark.png)
 
-*The home page coverage matrix. Live guides are filled; the full ATT&CK
-catalogue is one toggle away.*
+*The ATT&CK Explorer on the home page. Start with a tactic, open a technique,
+and its sub-techniques fan out. Only one branch is open at a time.*
 
 ## What is this?
 
 An unofficial, educational knowledge base for MITRE ATT&CK®. Every live guide
 explains a technique from both sides: how an attacker uses it, and how a
 defender sees it in logs. The platform adds the parts a static page cannot:
-a 15-tactic coverage matrix, hub pages, global search, cross-links, a Sigma
+a 15-tactic ATT&CK Explorer, hub pages, global search, cross-links, a Sigma
 rule library, and a detection-as-code pipeline that validates every rule and
 runs it against positive and negative log fixtures.
 
@@ -45,8 +45,9 @@ Actions; both are free for public repositories.
 - **Ctrl+K global search** across techniques, actors, mitigations, campaigns
   and Sigma rules. Inverted index, ranked results, full keyboard navigation,
   and live guides ranked above catalogue rows.
-- **ATT&CK matrix heatmap** with 15 tactic columns and a live/full-catalogue
-  toggle, so the roadmap never buries the 20 guides that are ready to read.
+- **ATT&CK Explorer**: tactic → technique → sub-technique drill-down with
+  animated connector lines and a live/full-catalogue toggle, so the roadmap
+  never buries the 20 guides that are ready to read.
 - **Cross-linked guides** with breadcrumbs, relations (used by / mitigated by /
   detected by) and prev/next within the tactic.
 - **Sigma Rule Library** with level, logsource, tactics, linked technique,
@@ -65,7 +66,7 @@ Plus three supporting tools:
 ## How it works
 
 ```
-data/*.json ──► platform.js ──► home matrix, hubs, breadcrumbs, relations
+data/*.json ──► platform.js ──► home explorer, hubs, breadcrumbs, relations
      │                 │
      │                 └─► search.js (inverted index, Ctrl+K)
      │
@@ -79,7 +80,7 @@ tests/sigma_cases/*.jsonl ◄── generate_fixtures.py ────┘
 ```
 
 Every technique links through its row in `data/techniques.json`; no page path
-is hard-coded in the renderer. The same data drives the matrix, hubs, search,
+is hard-coded in the renderer. The same data drives the explorer, hubs, search,
 prev/next and the coverage page.
 
 ## Quality gates
@@ -109,7 +110,7 @@ rebuilds `data/sigma-index.json` and commits it back to `main` with
 ## Repository map
 
 ```
-├── index.html                     # home + live/all matrix
+├── index.html                     # home + ATT&CK Explorer
 ├── 404.html                       # search-first 404
 ├── techniques/                    # 20 guides + hub + _template.html
 ├── actors/ mitigations/ campaigns/# relationship hubs

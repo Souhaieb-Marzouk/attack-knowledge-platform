@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.2 — 2026-10-19
+
+### Changed
+
+- Replaced the flat 597-tile coverage matrix with a three-stage ATT&CK Explorer:
+  tactic → technique → sub-technique, one branch open at a time.
+- Added deep links (`#tactic=...&technique=...`), animated connector lines,
+  focus preservation, keyboard-accessible buttons and mobile stacking.
+- Updated the home page, README, screenshots and resume story around the new
+  explorer.
+
 ## v1.1 — 2026-10-19
 
 ### Added
@@ -13,8 +24,8 @@
   site-consistency gate.
 - `docs/sigma-rule-guide.html`: standalone Sigma authoring and testing guide.
 - `CONTRIBUTING.md`, `RESUME.md`, issue forms and a PR template.
-- Live/full-catalogue toggles for the matrix and techniques hub.
-- Social preview card and refreshed matrix screenshots.
+- Live/full-catalogue toggles for the explorer and techniques hub.
+- Social preview card and refreshed screenshots.
 
 ### Changed
 

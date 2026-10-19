@@ -9,7 +9,7 @@ the measured value changes.
 - Built and operate a public MITRE ATT&CK knowledge platform (GitHub Pages,
   vanilla HTML/CSS/JS, zero runtime dependencies) with **20 hand-written
   technique deep-dives**, a **597-technique / 15-tactic catalogue**, and a
-  JSON data layer that drives the matrix, hubs, search and prev/next.
+  JSON data layer that drives the explorer, hubs, search and prev/next.
 - Authored and validated **141 Sigma rules** with a detection-as-code CI gate:
   `sigma check`, Splunk conversion, **141 positive and 141 negative JSONL log
   fixtures**, four deliberately broken negative rules, and an auto-generated
@@ -18,7 +18,7 @@ the measured value changes.
   M365, Okta, Zeek, pfSense, Apache and BIND events; documented per-rule
   threshold metadata for the SIEM layer.
 - Built cross-linked navigation (breadcrumbs, used-by/mitigated-by/detected-by
-  chips, prev/next) and a live/full-catalogue coverage matrix, so a reader can
+  chips, prev/next) and a live/full-catalogue ATT&CK Explorer, so a reader can
   walk the attack chain by clicks.
 
 ## SOC / Threat Intel flavor
@@ -114,7 +114,8 @@ they became a wall of planned tiles.
 **Task:** Keep the full catalogue while making the 20 live guides the first
 thing a visitor sees.
 
-**Action:** Added a live/full-catalogue toggle to the matrix and the hub,
+**Action:** Replaced the 597-tile matrix with a three-stage tactic → technique →
+sub-technique explorer, added a live/full-catalogue toggle to the explorer and the hub,
 defaulted to live, preserved the choice in `localStorage`, and ranked live
 guides above planned rows in search.
 
