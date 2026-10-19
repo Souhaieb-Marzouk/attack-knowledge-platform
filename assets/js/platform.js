@@ -43,11 +43,20 @@
   var THEME_KEY = 'atk-theme';
 
   function currentTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    var root = document.documentElement;
+    var body = document.body;
+    var value = root.getAttribute('data-theme') ||
+                (body && body.getAttribute('data-theme')) ||
+                'light';
+    return value === 'dark' ? 'dark' : 'light';
   }
 
   function applyTheme(theme, persist) {
     document.documentElement.setAttribute('data-theme', theme);
+    /* Some hand-written guides theme a body[data-theme] selector. Keeping
+     * the attribute on both elements makes the shared toggle work for every
+     * generation of guide without touching the guide's CSS. */
+    if (document.body) document.body.setAttribute('data-theme', theme);
     if (persist) {
       try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* private mode */ }
     }
@@ -244,50 +253,80 @@
       }
 
       var ordered = tactics.slice().sort(function (a, b) { return a.order - b.order; });
-      var live = 0, planned = 0;
+      var live = 0, planned = 0, coveredTactics = {};
       techniques.forEach(function (r) {
-        if (r.status === 'implemented') live += 1; else planned += 1;
+        if (r.status === 'implemented') {
+          live += 1;
+          coveredTactics[r.tactic] = true;
+        } else {
+          planned += 1;
+        }
       });
+      var tacticCoverage = Object.keys(coveredTactics).length;
 
       setCount('atk-count-live', live);
       setCount('atk-count-planned', planned);
-      setCount('atk-count-tactics', ordered.length);
+      setCount('atk-count-tactics', tacticCoverage);
       getData('data/sigma-index.json').then(function (idx) {
         setCount('atk-count-rules', idx && idx.count ? idx.count : 0);
       });
 
-      var html =
-        '<div class="atk-matrix-legend">' +
-          '<span class="atk-legend-item"><span class="atk-swatch is-impl" role="img" aria-label="Live guide"></span>Live guide</span>' +
-          '<span class="atk-legend-item"><span class="atk-swatch is-planned" role="img" aria-label="Planned guide"></span>Planned</span>' +
-          '<span class="atk-legend-note">' + live + ' of ' + (live + planned) + ' guides live across ' + ordered.length + ' tactics</span>' +
-        '</div>' +
-        '<div class="atk-matrix-scroll">' +
-        '<div class="atk-matrix">';
+      var mode = 'live';
+      try {
+        var saved = localStorage.getItem('atk-matrix-mode');
+        if (saved === 'all' || saved === 'live') mode = saved;
+      } catch (e) { /* private mode */ }
 
-      ordered.forEach(function (t) {
-        var rows = techniques
-          .filter(function (r) { return r.tactic === t.id; })
-          .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
-        html += '<div class="atk-col"><h3 class="atk-col-title" title="' + esc(t.name) + '">' + esc(t.name) + '</h3>';
-        rows.forEach(function (r) {
-          var isLive = r.status === 'implemented' && r.page;
-          var tip = esc(r.id + ' \u2014 ' + r.name + (isLive ? ' \u2014 Live guide' : ' \u2014 Guide in progress'));
-          html += isLive
-            ? '<button type="button" class="atk-tile is-impl" data-page="' + esc(SITE_BASE + r.page) + '" title="' + tip + '" aria-label="' + tip + '">' + esc(r.id) + '</button>'
-            : '<button type="button" class="atk-tile is-planned" title="' + tip + '" aria-label="' + tip + '">' + esc(r.id) + '</button>';
+      function draw() {
+        var html =
+          '<div class="atk-matrix-controls" role="group" aria-label="Matrix scope">' +
+            '<button type="button" class="atk-mode-btn' + (mode === 'live' ? ' is-on' : '') + '" data-matrix-mode="live" aria-pressed="' + (mode === 'live') + '">Live guides (' + live + ')</button>' +
+            '<button type="button" class="atk-mode-btn' + (mode === 'all' ? ' is-on' : '') + '" data-matrix-mode="all" aria-pressed="' + (mode === 'all') + '">Full catalogue (' + (live + planned) + ')</button>' +
+            '<span class="atk-mode-note">' + (mode === 'live' ? 'Only implemented guides are shown. Switch to the full catalogue to see the roadmap.' : 'Every ATT&CK technique in the data layer, including planned guides.') + '</span>' +
+          '</div>' +
+          '<div class="atk-matrix-legend">' +
+            '<span class="atk-legend-item"><span class="atk-swatch is-impl" role="img" aria-label="Live guide"></span>Live guide</span>' +
+            '<span class="atk-legend-item"><span class="atk-swatch is-planned" role="img" aria-label="Planned guide"></span>Planned</span>' +
+            '<span class="atk-legend-note">' + live + ' of ' + (live + planned) + ' guides live across ' + tacticCoverage + ' of ' + ordered.length + ' tactics</span>' +
+          '</div>' +
+          '<div class="atk-matrix-scroll">' +
+          '<div class="atk-matrix">';
+
+        ordered.forEach(function (t) {
+          var all = techniques
+            .filter(function (r) { return r.tactic === t.id; })
+            .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+          var liveRows = all.filter(function (r) { return r.status === 'implemented' && r.page; });
+          var rows = mode === 'live' ? liveRows : all;
+          html += '<div class="atk-col"><h3 class="atk-col-title" title="' + esc(t.name) + '">' + esc(t.name) +
+                  '<span class="atk-col-count">' + liveRows.length + ' / ' + all.length + '</span></h3>';
+          rows.forEach(function (r) {
+            var isLive = r.status === 'implemented' && r.page;
+            var tip = esc(r.id + ' \u2014 ' + r.name + (isLive ? ' \u2014 Live guide' : ' \u2014 Guide in progress'));
+            html += isLive
+              ? '<button type="button" class="atk-tile is-impl" data-page="' + esc(SITE_BASE + r.page) + '" title="' + tip + '" aria-label="' + tip + '">' + esc(r.id) + '</button>'
+              : '<button type="button" class="atk-tile is-planned" title="' + tip + '" aria-label="' + tip + '">' + esc(r.id) + '</button>';
+          });
+          if (!rows.length) html += '<p class="atk-col-empty">No live guide yet</p>';
+          html += '</div>';
         });
-        if (!rows.length) html += '<p class="atk-col-empty">\u2014</p>';
-        html += '</div>';
-      });
 
-      html += '</div></div>';
-      mount.innerHTML = html;
+        html += '</div></div>';
+        mount.innerHTML = html;
+      }
 
-      /* One delegated click handler survives innerHTML redraws. */
+      draw();
+
       if (!mount.dataset.wired) {
         mount.dataset.wired = '1';
         mount.addEventListener('click', function (e) {
+          var modeBtn = e.target.closest ? e.target.closest('[data-matrix-mode]') : null;
+          if (modeBtn) {
+            mode = modeBtn.dataset.matrixMode;
+            try { localStorage.setItem('atk-matrix-mode', mode); } catch (err) { /* private mode */ }
+            draw();
+            return;
+          }
           var tile = e.target.closest ? e.target.closest('.atk-tile') : null;
           if (!tile) return;
           if (tile.classList.contains('is-impl') && tile.dataset.page) {
@@ -357,19 +396,39 @@
         '</article>';
     }
 
-    function entityCard(kindName, r) {
+    function entityCard(kindName, r, techById) {
       var live = r.status === 'implemented' && r.page;
       var sub = kindName === 'campaigns'
         ? String(r.year || '')
         : (r.aliases || []).join(' \u00b7 ');
-      var extra = kindName === 'mitigations' ? 'Type: ' + esc(r.type || '—') : '';
-      var label = r.id + ' ' + r.name + ' ' + (r.aliases || []).join(' ');
+      var extra = kindName === 'mitigations' ? 'Type: ' + esc(r.type || '\u2014') : '';
+      var refs = kindName === 'actors' ? (r.uses || [])
+        : kindName === 'mitigations' ? (r.mitigates || [])
+        : (r.techniques || []);
+      var chips = refs.slice(0, 6).map(function (id) {
+        var row = techById[id];
+        var label = row ? (id + ' \u00b7 ' + row.name) : id;
+        var href = row && row.status === 'implemented' && row.page
+          ? SITE_BASE + row.page
+          : SITE_BASE + 'techniques/#' + id;
+        return '<a class="atk-chip ' + (row && row.status === 'implemented' ? 'is-live' : 'is-planned') +
+          '" href="' + esc(href) + '" title="' + esc(label) + '">' + esc(id) + '</a>';
+      }).join('');
+      var more = refs.length > 6 ? '<span class="atk-chip is-none">+' + (refs.length - 6) + ' more</span>' : '';
+      var label = r.id + ' ' + r.name + ' ' + (r.aliases || []).join(' ') + ' ' + refs.join(' ');
+      var relationLabel = kindName === 'actors' ? 'Techniques'
+        : kindName === 'mitigations' ? 'Mitigates' : 'Techniques';
+      var open = live ? '<a href="' + esc(SITE_BASE + r.page) + '">' : '';
+      var close = live ? '</a>' : '';
       return '<article class="atk-card" id="' + esc(r.id) + '" data-filter="' + esc(label.toLowerCase()) + '">' +
         '<div class="atk-card-top"><span class="atk-card-id">' + esc(r.id) + '</span>' + badge(live) + '</div>' +
-        '<h3 class="atk-card-name">' + esc(r.name) + '</h3>' +
+        '<h3 class="atk-card-name">' + open + esc(r.name) + close + '</h3>' +
         (sub ? '<p class="atk-card-alias">' + esc(sub) + '</p>' : '') +
         '<p class="atk-card-sum">' + esc(r.summary || '') + '</p>' +
         (extra ? '<p class="atk-card-meta">' + extra + '</p>' : '') +
+        (refs.length
+          ? '<p class="atk-card-meta">' + relationLabel + ': ' + refs.length + '</p><div class="atk-chips">' + chips + more + '</div>'
+          : '<p class="atk-card-meta">No linked techniques yet.</p>') +
         '</article>';
     }
 
@@ -392,24 +451,55 @@
       Promise.all([getData('data/tactics.json'), getData(sources[kind])]).then(function (res) {
         var tactics = res[0] || [], techniques = res[1];
         if (!techniques) { grid.innerHTML = emptyHtml(); return; }
-        var html = '';
-        tactics.slice().sort(function (a, b) { return a.order - b.order; }).forEach(function (t) {
-          var rows = techniques
-            .filter(function (r) { return r.tactic === t.id; })
-            .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
-          html += '<section class="atk-hub-group" id="' + esc(t.id) + '">' +
-            '<h2 class="atk-hub-group-title">' + esc(t.name) +
-            '<span class="atk-hub-group-count">' + rows.length + '</span></h2>' +
-            '<div class="atk-grid">' + rows.map(techCard).join('') + '</div></section>';
-        });
-        grid.innerHTML = html;
-        wireFilter();
+        var mode = 'live';
+        try {
+          var saved = localStorage.getItem('atk-hub-mode');
+          if (saved === 'live' || saved === 'all') mode = saved;
+        } catch (e) { /* private mode */ }
+        var liveCount = techniques.filter(function (r) { return r.status === 'implemented'; }).length;
+
+        function draw() {
+          var html =
+            '<div class="atk-hub-controls" role="group" aria-label="Technique catalogue scope">' +
+              '<button type="button" class="atk-mode-btn' + (mode === 'live' ? ' is-on' : '') + '" data-hub-mode="live" aria-pressed="' + (mode === 'live') + '">Live guides (' + liveCount + ')</button>' +
+              '<button type="button" class="atk-mode-btn' + (mode === 'all' ? ' is-on' : '') + '" data-hub-mode="all" aria-pressed="' + (mode === 'all') + '">Full catalogue (' + techniques.length + ')</button>' +
+              '<span class="atk-mode-note">' + (mode === 'live' ? 'Planned techniques stay in the data layer and search; switch to the full catalogue to browse them.' : 'The complete ATT&CK catalogue. Live guides are filled; planned rows are roadmapped.') + '</span>' +
+            '</div>';
+          tactics.slice().sort(function (a, b) { return a.order - b.order; }).forEach(function (t) {
+            var all = techniques
+              .filter(function (r) { return r.tactic === t.id; })
+              .sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+            var visible = mode === 'live' ? all.filter(function (r) { return r.status === 'implemented'; }) : all;
+            if (!visible.length) return;
+            html += '<section class="atk-hub-group" id="' + esc(t.id) + '">' +
+              '<h2 class="atk-hub-group-title">' + esc(t.name) +
+              '<span class="atk-hub-group-count">' + visible.length + ' / ' + all.length + '</span></h2>' +
+              '<div class="atk-grid">' + visible.map(techCard).join('') + '</div></section>';
+          });
+          grid.innerHTML = html;
+          wireFilter();
+        }
+
+        draw();
+        if (!grid.dataset.hubWired) {
+          grid.dataset.hubWired = '1';
+          grid.addEventListener('click', function (e) {
+            var modeBtn = e.target.closest ? e.target.closest('[data-hub-mode]') : null;
+            if (!modeBtn) return;
+            mode = modeBtn.dataset.hubMode;
+            try { localStorage.setItem('atk-hub-mode', mode); } catch (err) { /* private mode */ }
+            draw();
+          });
+        }
       });
     } else {
-      getData(sources[kind]).then(function (rows) {
+      Promise.all([getData(sources[kind]), getData('data/techniques.json')]).then(function (res) {
+        var rows = res[0], techniques = res[1] || [];
         if (!rows) { grid.innerHTML = emptyHtml(); return; }
+        var techById = {};
+        techniques.forEach(function (r) { techById[r.id] = r; });
         grid.innerHTML = '<div class="atk-grid">' +
-          rows.map(function (r) { return entityCard(kind, r); }).join('') + '</div>';
+          rows.map(function (r) { return entityCard(kind, r, techById); }).join('') + '</div>';
         wireFilter();
       });
     }
@@ -464,12 +554,12 @@
       var rules = row.sigma || [];
 
       function entityChip(entry, hubPath) {
-        if (entry.status === 'implemented') {
-          return '<a class="atk-chip is-live" href="' + SITE_BASE + hubPath + '#' + esc(entry.id) + '">' +
-                 esc(entry.id) + ' \u2014 ' + esc(entry.name) + '</a>';
-        }
-        return '<span class="atk-chip is-planned" title="Planned \u2014 page in progress">' +
-               esc(entry.id) + ' \u2014 ' + esc(entry.name) + '</span>';
+        var live = entry.status === 'implemented';
+        var href = (live && entry.page) ? SITE_BASE + entry.page : SITE_BASE + hubPath + '#' + esc(entry.id);
+        return '<a class="atk-chip ' + (live ? 'is-live' : 'is-planned') + '" ' +
+               'href="' + href + '" ' +
+               'title="' + (live ? 'Open the reference entry' : 'Reference entry - full dossier planned') + '">' +
+               esc(entry.id) + ' \u2014 ' + esc(entry.name) + '</a>';
       }
 
       function ruleChip(file) {
@@ -550,7 +640,6 @@
    * ------------------------------------------------------------------ */
   function boot() {
     renderHeader();
-    renderFooter();
     initShortcuts();
     renderMatrix();
     renderHub();
@@ -561,6 +650,9 @@
       renderCrosslinks(techId);
       renderPrevNext(techId);
     }
+    /* Footer is deliberately last: the relations/prev-next fallbacks append
+     * into <main> (or <body>) and must never land below the footer. */
+    renderFooter();
     /* Smart 404: <body data-atk-auto-search> opens search on load and
      * prefills any T-pattern found in the dead URL. */
     if (document.body.dataset.atkAutoSearch) {

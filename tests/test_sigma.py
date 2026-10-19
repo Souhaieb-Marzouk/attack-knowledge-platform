@@ -1,28 +1,39 @@
 #!/usr/bin/env python3
 """Detection-as-Code test gate for the Sigma rule library.
 
-Positive tests: every rule in sigma/rules/ must PASS `sigma check`
-                AND convert cleanly with `sigma convert -t splunk -p splunk_windows`.
-Negative tests: every rule in tests/sigma/negative/ must FAIL `sigma check`
-                (current pySigma also reports undefined conditions in `check`
-                as condition errors; the convert stage stays in the loop as
-                defense in depth).
+Three layers, all required for every rule in sigma/rules/:
+
+1. schema      - `sigma check` accepts the rule
+2. conversion  - `sigma convert -t splunk -p splunk_windows` produces output
+3. log tests   - the rule matches its positive JSONL and does not match its
+                 negative JSONL, using tests/sigma_match.py
+
+The four deliberately broken rules in tests/sigma/negative/ must still be
+REJECTED by `sigma check` (proving the gate actually gates). Aggregate rules
+use tests/sigma_cases/thresholds.json, because modern Sigma cannot express the
+old `selection | count() by ...` pipe syntax.
 
 Exit codes: 0 = all tests passed, 1 = at least one failure.
-Usage:      python tests/test_sigma.py        (requires: pip install sigma-cli pySigma-backend-splunk)
+Local usage: activate .venv first (see sigma/README.md), then
+             python tests/test_sigma.py
 """
+import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sigma_match import evaluate_case  # noqa: E402
+
 RULES_DIR = Path("sigma/rules")
 NEGATIVE_DIR = Path("tests/sigma/negative")
+CASES_DIR = Path("tests/sigma_cases")
+THRESHOLDS = json.loads((CASES_DIR / "thresholds.json").read_text(encoding="utf-8")) \
+    if (CASES_DIR / "thresholds.json").exists() else {}
 
-# Conversion target. pySigma-backend-splunk requires an explicit processing
-# pipeline for conversion; `splunk_windows` ships with the backend itself and
-# matches this library's Windows process_creation rules. If you ever add
-# rules for other platforms, extend this (see `sigma list pipelines splunk`).
 CONVERT_ARGS = ["-t", "splunk", "-p", "splunk_windows"]
 
 SIGMA = shutil.which("sigma")
@@ -39,6 +50,12 @@ def list_rules(directory):
     return sorted(p for p in directory.rglob("*.yml") if p.is_file())
 
 
+def read_jsonl(path):
+    if not path.is_file():
+        return None
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
 def main():
     failures = []
     positives = list_rules(RULES_DIR)
@@ -47,19 +64,52 @@ def main():
     if not positives:
         failures.append("No rules found in sigma/rules/ - add at least one rule.")
 
-    print(f"POSITIVE tests: {len(positives)} rule(s) must validate AND convert")
+    print(f"POSITIVE tests: {len(positives)} rule(s) must validate, convert and pass log fixtures")
+    # Fast path: one batch call. If either batch fails, fall back to per-rule
+    # calls so the output names the exact rule that broke.
+    batch_check = run([SIGMA, "check", RULES_DIR.as_posix()])
+    batch_convert = run([SIGMA, "convert"] + CONVERT_ARGS + [RULES_DIR.as_posix()])
+    batch_ok = (batch_check.returncode == 0 and batch_convert.returncode == 0
+                and bool(batch_convert.stdout.strip()))
+    if not batch_ok:
+        print("  [INFO] batch validation failed; re-checking rules individually for the exact error")
+
     for rule in positives:
-        chk = run([SIGMA, "check", rule.as_posix()])
-        if chk.returncode != 0:
-            failures.append(f"CHECK FAILED (should pass): {rule.as_posix()}\n{chk.stdout}{chk.stderr}")
-            print(f"  [FAIL] {rule.name} (check)")
+        rel = rule.as_posix()
+        label = rule.name
+
+        if not batch_ok:
+            chk = run([SIGMA, "check", rel])
+            if chk.returncode != 0:
+                failures.append(f"CHECK FAILED (should pass): {rel}\n{chk.stdout}{chk.stderr}")
+                print(f"  [FAIL] {label} (check)")
+                continue
+            conv = run([SIGMA, "convert"] + CONVERT_ARGS + [rel])
+            if conv.returncode != 0 or not conv.stdout.strip():
+                failures.append(f"CONVERT FAILED (should succeed): {rel}\n{conv.stdout}{conv.stderr}")
+                print(f"  [FAIL] {label} (convert)")
+                continue
+
+        case_dir = CASES_DIR / rule.stem
+        pos = read_jsonl(case_dir / "positive.jsonl")
+        neg = read_jsonl(case_dir / "negative.jsonl")
+        if pos is None or neg is None:
+            failures.append(f"MISSING LOG FIXTURES for {rel}: expected {case_dir}/positive.jsonl and negative.jsonl")
+            print(f"  [FAIL] {label} (missing log fixtures)")
             continue
-        conv = run([SIGMA, "convert"] + CONVERT_ARGS + [rule.as_posix()])
-        if conv.returncode != 0 or not conv.stdout.strip():
-            failures.append(f"CONVERT FAILED (should succeed): {rule.as_posix()}\n{conv.stdout}{conv.stderr}")
-            print(f"  [FAIL] {rule.name} (convert)")
+
+        doc = yaml.safe_load(rule.read_text(encoding="utf-8"))
+        threshold = THRESHOLDS.get(rel)
+        pos_ok, pos_detail = evaluate_case(doc, pos, threshold)
+        neg_ok, neg_detail = evaluate_case(doc, neg, threshold)
+        if not pos_ok:
+            failures.append(f"POSITIVE LOG DID NOT MATCH: {rel}\n{pos_detail}")
+            print(f"  [FAIL] {label} (positive log)")
+        elif neg_ok:
+            failures.append(f"NEGATIVE LOG MATCHED: {rel}\n{neg_detail}")
+            print(f"  [FAIL] {label} (negative log matched)")
         else:
-            print(f"  [PASS] {rule.name}")
+            print(f"  [PASS] {label} (schema + convert + positive/negative logs)")
 
     print(f"NEGATIVE tests: {len(negatives)} broken rule(s) must be REJECTED by the gate")
     for rule in negatives:
@@ -67,9 +117,6 @@ def main():
         if chk.returncode != 0:
             print(f"  [PASS] {rule.name} (rejected by sigma check, as expected)")
             continue
-        # Defense in depth: if `check` ever lets a broken rule through
-        # (e.g. a future pySigma relaxes condition validation), conversion
-        # must still fail - otherwise the gate is not a gate.
         conv = run([SIGMA, "convert"] + CONVERT_ARGS + [rule.as_posix()])
         if conv.returncode != 0 or not conv.stdout.strip():
             print(f"  [PASS] {rule.name} (rejected at convert stage, as expected)")
@@ -84,7 +131,7 @@ def main():
             print("----")
             print(failure)
         return 1
-    print(f"RESULT: all tests passed ({len(positives)} positive, {len(negatives)} negative).")
+    print(f"RESULT: all tests passed ({len(positives)} positive with log fixtures, {len(negatives)} negative).")
     return 0
 
 

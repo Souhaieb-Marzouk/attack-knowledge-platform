@@ -126,6 +126,7 @@
         '<div class="atk-card-top"><h3 class="atk-card-name">' + esc(r.title) + '</h3>' +
         '<span class="atk-badge ' + levelClass + '">' + esc(String(r.level || '').toUpperCase() || 'LEVEL?') + '</span></div>' +
         '<p class="atk-sigma-meta"><span class="atk-badge ' + (r.status === 'stable' ? 'is-live' : 'is-planned') + '">' + esc(r.status || '') + '</span>' +
+        (r.log_tested ? '<span class="atk-badge is-live" title="Positive and negative JSONL log cases pass">Log-tested</span>' : '') +
         '<code class="atk-sigma-id">' + esc(r.id) + '</code></p>' +
         '<p class="atk-card-sum">' + esc(r.description || '') + '</p>' +
         '<p class="atk-sigma-meta"><span class="atk-sigma-ls">' +

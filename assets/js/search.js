@@ -10,6 +10,8 @@
  *   alias/keyword hit        30   (actor aliases live in the subtitle)
  *   title substring          25
  *   text substring           10   (id + title + summary + keywords blob)
+ *   implemented guide         40   (live guides outrank planned catalog rows)
+ *   numeric ID match          80   ("1566" matches T1566 and T1566.001)
  */
 (function () {
   'use strict';
@@ -69,6 +71,7 @@
             subtitle: r.summary || '',
             url: (r.status === 'implemented' && r.page) ? r.page : 'techniques/#' + r.id,
             planned: r.status !== 'implemented',
+            implemented: r.status === 'implemented',
             isAlias: false,
             updated: r.updated || ''
           }, r.id + ' ' + r.name + ' ' + (r.summary || '') + ' ' + (r.platforms || []).join(' '));
@@ -79,8 +82,9 @@
           addDoc({
             type: 'Actor', id: r.id, title: r.name,
             subtitle: (r.aliases || []).join(' \u00b7 '),
-            url: 'actors/#' + r.id,
+            url: (r.status === 'implemented' && r.page) ? r.page : 'actors/#' + r.id,
             planned: r.status !== 'implemented',
+            implemented: false,
             isAlias: true,
             updated: r.updated || ''
           }, r.id + ' ' + r.name + ' ' + (r.aliases || []).join(' ') + ' ' + (r.summary || '') + ' ' + (r.uses || []).join(' '));
@@ -93,6 +97,7 @@
             subtitle: r.summary || '',
             url: 'mitigations/#' + r.id,
             planned: r.status !== 'implemented',
+            implemented: r.status === 'implemented',
             isAlias: false,
             updated: r.updated || ''
           }, r.id + ' ' + r.name + ' ' + (r.type || '') + ' ' + (r.summary || ''));
@@ -105,6 +110,7 @@
             subtitle: String(r.year || ''),
             url: 'campaigns/#' + r.id,
             planned: r.status !== 'implemented',
+            implemented: r.status === 'implemented',
             isAlias: false,
             updated: r.updated || ''
           }, r.id + ' ' + r.name + ' ' + (r.summary || ''));
@@ -117,6 +123,7 @@
             subtitle: (r.level || '') + ' \u00b7 ' + ((r.logsource && r.logsource.product) || ''),
             url: 'tools/sigma.html#' + r.file,
             planned: false,
+            implemented: false,
             isAlias: false,
             updated: r.date || ''
           }, r.title + ' ' + r.id + ' ' + r.file + ' ' + (r.techniques || []).join(' '));
@@ -165,6 +172,17 @@
     if (doc.isAlias && subl.indexOf(q) !== -1) s += 30;
     if (titlel.indexOf(q) > 0) s += 25;
     if (doc.blob.indexOf(q) !== -1) s += 10;
+
+    /* A bare numeric query ("1566", "1003.001") is how analysts actually
+     * search. Compare it against the digits of the ID so a partial ID does
+     * not depend on whether the user typed the leading T. */
+    if (/^\d{3,4}(?:\.\d{3})?$/.test(q)) {
+      var qd = q.replace(/\./g, '');
+      var idd = idl.replace(/^t/, '').replace(/\./g, '');
+      if (idd === qd) s += 80;
+      else if (idd.indexOf(qd) === 0) s += 50;
+      else if (idd.indexOf(qd) !== -1) s += 30;
+    }
     return s;
   }
 
@@ -173,6 +191,7 @@
     if (!(tokens.length === 1 && tokens[0] === ql)) {
       tokens.forEach(function (t) { total += scorePhrase(doc, t); });
     }
+    if (doc.implemented) total += 40;
     return total;
   }
 

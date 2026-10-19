@@ -69,6 +69,8 @@
 
     var total = techniques.length;
     var pct = total ? Math.round((totalCovered / total) * 100) : 0;
+    var liveRows = techniques.filter(function (r) { return r.status === 'implemented'; });
+    var liveCovered = liveRows.filter(function (r) { return covered[r.id]; }).length;
 
     /* ---- summary card: animated ring + the formula in plain words ---- */
     var summary = $('#atk-cov-summary');
@@ -85,6 +87,7 @@
         '</div>' +
         '<div class="atk-cov-stats">' +
           '<p><b>' + totalCovered + ' of ' + total + '</b> tracked techniques have at least one CI-validated rule.</p>' +
+          '<p><b>' + liveCovered + ' of ' + liveRows.length + '</b> live guides have a library rule (the rest are guide-only detections waiting to be extracted).</p>' +
           '<p><b>' + rules.length + '</b> rules in the library \u00b7 index built <b>' + esc(built || 'n/a') + '</b> UTC</p>' +
           '<p class="atk-cov-note">Coverage formula: a technique counts as covered when a rule in <code>data/sigma-index.json</code> tags it, or its <code>sigma</code> array links a rule in the index. Planned techniques can be covered \u2014 the rule often exists before the guide does.</p>' +
         '</div>';

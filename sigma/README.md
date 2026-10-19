@@ -1,73 +1,105 @@
 # Sigma rules
 
 Detection-as-code rules for the knowledge base. Every rule in
-`sigma/rules/` is validated by CI (Phase 7) before it can land on
-`main`, and is browsable on the
-[Sigma Rule Library](../tools/sigma.html) page.
+`sigma/rules/` is validated by CI and is browsable in the
+[Sigma Rule Library](../tools/sigma.html). Every rule also has a positive and
+a negative JSONL log fixture under `tests/sigma_cases/`.
+
+**Current library: 141 rules, 141 positive cases, 141 negative cases.**
 
 ## Style guide
 
-- **Filename pattern:** `t{technique-id-lowercase}-{slug}.yml`
-  — e.g. `t1566.001-outlook-child-process.yml`. Always `.yml`,
-  never `.yaml` (the CI globs and the index builder assume `.yml`).
-- **Required fields:** `title`, `id` (a real UUID v4 — `sigma check`
-  rejects malformed UUIDs), `status` (`stable` | `test` — the spec value is
-  `test`, singular; `testing` is rejected by pySigma), `description`,
-  `references` (must include the attack.mitre.org technique URL), `author`,
-  `date` (ISO `YYYY-MM-DD`), `tags` (at least one `attack.tXXXXXX`
-  technique tag), `logsource`, `detection`, `falsepositives`, `level`.
-- **One rule = at least one technique tag.** A rule that maps to no
-  technique does not belong in this library.
-- **Tactic tag spelling:** dashes, not underscores — `attack.initial-access`,
-  `attack.privilege-escalation`, `attack.command-and-control`. Current
-  pySigma validators flag underscore spellings (`attack.initial_access`) as
-  `InvalidATTACKTagIssue`; single-word tactics (`attack.execution`) are
-  unaffected either way.
-- **Level policy:** `high` for near-certain malicious behavior,
-  `medium` for suspicious-but-confirmed-able, `low` for behavioral
-  context worth logging.
+- **Filename:** `t{technique-id-lowercase}-{slug}.yml` — for example
+  `t1566.001-outlook-child-process.yml`. Always `.yml`, never `.yaml`.
+- **Required fields:** `title`, `id` (UUID v4), `status` (`stable` | `test`),
+  `description`, `references` (must include the attack.mitre.org technique
+  URL), `author`, `date` (ISO `YYYY-MM-DD`), `tags` (at least one
+  `attack.tXXXXXX` technique tag), `logsource`, `detection`, `falsepositives`,
+  `level`.
+- **Tactic tags use dashes:** `attack.initial-access`,
+  `attack.privilege-escalation`, `attack.command-and-control`.
+- **One rule = at least one technique tag.** The library map is generated from
+  those tags and from the technique row's `sigma` array.
+- **Level policy:** `high` for near-certain malicious behavior, `medium` for
+  suspicious-but-confirmable, `low` for behavioral context worth logging.
 
-## Testing policy
+## The three-layer test gate
 
-Every rule must pass the CI gate before merge (`.github/workflows/
-sigma-validate.yml`):
+`tests/test_sigma.py` runs for every rule:
 
-- **Positive tests:** every rule in `sigma/rules/` must pass
-  `sigma check` AND convert cleanly with
-  `sigma convert -t splunk -p splunk_windows` (the pipeline ships with
-  the backend; it is pinned in `CONVERT_ARGS` in `tests/test_sigma.py`).
-- **Negative tests:** every intentionally-broken rule in
-  `tests/sigma/negative/` must be REJECTED by the gate — this proves
-  the gate actually gates.
-- **Data integrity + internal links:** `scripts/validate_data.py` and
-  `scripts/check_links.py` run in the same CI job (Phase 7).
+1. **Schema** — `sigma check` accepts the rule.
+2. **Conversion** — `sigma convert -t splunk -p splunk_windows` produces output.
+3. **Logs** — `tests/sigma_match.py` evaluates the rule against:
+   - `tests/sigma_cases/<rule-stem>/positive.jsonl` — must match at least one event;
+   - `tests/sigma_cases/<rule-stem>/negative.jsonl` — must match no event.
 
-Free local fallback (no CI needed):
+The four deliberately broken rules in `tests/sigma/negative/` must still be
+rejected, proving the gate is not a rubber stamp.
 
+### Aggregate rules
+
+Modern Sigma cannot validate the old
+`selection | count() by field > N` pipe syntax. The library keeps the portable
+event-level rule and moves the threshold to
+`tests/sigma_cases/thresholds.json`:
+
+```json
+{
+  "sigma/rules/t1590.004-horizontal-sweep-across-external-range.yml": {
+    "kind": "count",
+    "field": "",
+    "group_by": ["src_ip"],
+    "operator": ">",
+    "value": 25,
+    "timespan": "5m",
+    "original_condition": "selection | count(distinct dst_ip) by src_ip > 25"
+  }
+}
 ```
-# Windows (PowerShell):
-py -m venv .venv
+
+The rule description says the threshold belongs in the SIEM; the log harness
+counts the fixture events and applies the comparison. This is the same split a
+real detection team uses: Sigma for the event, SIEM for the aggregation.
+
+### Fixture shape
+
+```jsonl
+{"@timestamp":"2026-10-19T08:30:00Z","Channel":"Security","EventID":4688,"Image":"C:\\Windows\\System32\\cmd.exe","CommandLine":"cmd.exe /c whoami","ParentImage":"C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE"}
+```
+
+Fixtures are realistic event shapes (Sysmon, Windows Security, auditd/auth,
+CloudTrail, Entra ID, M365, Okta, Zeek, pfSense, Apache, BIND), not production
+captures. Replace or extend them with exports from your own lab; the harness is
+schema-agnostic JSONL.
+
+## Generate or refresh fixtures
+
+The generator is deterministic and safe to re-run. It derives a matching event
+from each rule's selection fields, then mutates the negative case so it cannot
+match:
+
+```powershell
+py tests/sigma_cases/generate_fixtures.py
+```
+
+Then run the gate:
+
+```powershell
 .venv\Scripts\activate
-# macOS / Linux:
-python3 -m venv .venv
-source .venv/bin/activate
-# then, on either OS:
 pip install sigma-cli pySigma-backend-splunk pyyaml
 python tests/test_sigma.py
+python scripts/build_sigma_index.py
 ```
 
 ## How the library page and index are generated
 
-`scripts/build_sigma_index.py` reads every `sigma/rules/*.yml` and
-writes `data/sigma-index.json` (metadata only — title, id, level,
-status, logsource, tactics, techniques, author, date). CI regenerates
-and commits the index on every push that touches `sigma/**` or
-`tests/**`; locally, run the script by hand. Never hand-edit
-`data/sigma-index.json`.
+`scripts/build_sigma_index.py` reads every `sigma/rules/*.yml` and writes
+`data/sigma-index.json` (metadata only — title, id, level, status, logsource,
+tactics, techniques, author, date). CI regenerates and commits the index on
+every push that changes a rule; never hand-edit it.
 
 ## Attribution
 
-MITRE ATT&CK® is a registered trademark of The MITRE Corporation.
-This project is unofficial and educational; technique identifiers
-reference the public MITRE ATT&CK knowledge base and are used with
-attribution.
+MITRE ATT&CK® is a registered trademark of The MITRE Corporation. This project
+is unofficial and educational; technique identifiers reference the public MITRE
+ATT&CK knowledge base and are used with attribution. See [`NOTICE`](../NOTICE).

@@ -1,0 +1,42 @@
+# Changelog
+
+## v1.1 — 2026-10-19
+
+### Added
+
+- 136 Sigma rules extracted from the hand-written guides (141 total).
+- A positive and a negative JSONL log fixture for every rule (282 cases).
+- `tests/sigma_match.py`, a dependency-free evaluator for the supported Sigma
+  subset, including count/sum/near threshold metadata.
+- `tests/sigma_cases/generate_fixtures.py` and per-rule case folders.
+- `scripts/check_site.py`: sitemap, README/assets, placeholder and
+  site-consistency gate.
+- `docs/sigma-rule-guide.html`: standalone Sigma authoring and testing guide.
+- `CONTRIBUTING.md`, `RESUME.md`, issue forms and a PR template.
+- Live/full-catalogue toggles for the matrix and techniques hub.
+- Social preview card and refreshed matrix screenshots.
+
+### Changed
+
+- 582 empty placeholder HTML pages removed; planned rows no longer carry a
+  `page`.
+- 20 real guides (two hidden parent guides promoted), 15 tactics, and
+  597 catalogue rows.
+- Strict validator: case-exact paths, non-empty integrated pages, planned rows
+  without a page.
+- CI runs on every push/PR, not only Sigma/data paths.
+- Global search ranks live guides above planned rows and understands bare
+  numeric IDs.
+- Theme handling unified on `atk-theme`; all guides load `platform.js` and
+  declare `data-technique`.
+- `v1.0` release notes replaced by this changelog; repository metadata points
+  at the live site.
+
+### Fixed
+
+- 19 latent data-path case mismatches (T1566/T1590/T1134 families).
+- `404.html` canonical placeholder; sitemap missing guide URLs; missing
+  `social.png`; README screenshot path.
+- T1134.001 browser-extension CSP and `example.com` metadata.
+- T1566.001 relations/prev-next placement below the footer.
+- Broken “full-rule viewer” claim on the tools page.

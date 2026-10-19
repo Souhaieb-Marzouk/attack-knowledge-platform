@@ -23,6 +23,8 @@ def main():
         with path.open(encoding="utf-8") as fh:
             rule = yaml.safe_load(fh)
         tags = rule.get("tags") or []
+        stem = path.stem
+        case_dir = Path("tests/sigma_cases") / stem
         entries.append({
             "file": path.as_posix(),
             "id": rule.get("id", ""),
@@ -38,6 +40,8 @@ def main():
             "techniques": technique_ids(tags),
             "author": rule.get("author", ""),
             "date": str(rule.get("date", "")),
+            "log_tested": (case_dir / "positive.jsonl").is_file() and (case_dir / "negative.jsonl").is_file(),
+            "cases": f"tests/sigma_cases/{stem}" if case_dir.is_dir() else "",
         })
     OUT.parent.mkdir(parents=True, exist_ok=True)
     payload = {
