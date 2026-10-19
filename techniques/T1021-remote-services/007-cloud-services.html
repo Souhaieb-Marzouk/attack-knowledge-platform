@@ -284,50 +284,335 @@ ul.check li b{color:var(--txt)}
 <style id="atk-page-layout">@media (min-width:961px){#toc{top:62px!important;height:calc(100vh - 62px)}.toc{top:62px!important;bottom:0!important}}</style>
 </head>
 <body>
-<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
 <link rel="stylesheet" href="../../assets/css/platform.css">
 <div id="atk-header" data-technique="T1021.007"></div>
 <script src="../../assets/js/platform.js" defer></script>
-<!-- ==== /PLATFORM INTEGRATION ==== -->
+<div id="pbar"></div><noscript><div style="padding:12px 20px;background:#fbbf24;color:#111;font-weight:700;text-align:center">JavaScript is off. The animated simulation and interactive tools will not run, but all text content is still readable.</div></noscript><div class="hero" id="home"><div class="in"><span class="kicker">MITRE ATT&amp;CK · Lateral Movement · Beginner Friendly Guide</span><h1><span class="grad">T1021.007</span> — Cloud Services <span class="grad">as Remote Doors</span></h1><p class="lede">Cloud services let one computer manage another through the cloud provider's own internet doors. An attacker with <strong>stolen cloud credentials</strong> can run commands on your virtual machines, read your storage, and mint new keys — without ever logging into an operating system. No VPN, no SSH key, no open port.</p><div class="chips" aria-label="Technique metadata"><span class="chip">Technique ID: <b>T1021.007</b></span><span class="chip">Tactic: <b>Lateral Movement</b></span><span class="chip">Platforms: <b>IaaS, Identity Provider, Office Suite, SaaS</b></span><span class="chip">Sub-techniques: <b>0</b></span><span class="chip">Source: <b>attack.mitre.org/techniques/T1021/007/</b></span><span class="chip">Version: <b>v2.0</b></span></div><div class="facts"><div class="fact"><div class="k">In one sentence</div><div class="v">Adversaries may log into accessible cloud services within a compromised environment using Valid Accounts that are synchronized with or federated to on-premises user identities. The adversary may then perform management actions or access cloud-hosted resources as the logged-on user.</div></div><div class="fact"><div class="k">Who this is for</div><div class="v">SOC analysts, detection engineers, students, and anyone who wants a clear reference.</div></div><div class="fact"><div class="k">What you get</div><div class="v">Animated simulation, red and blue team views, detection engineering, a case study, mitigations and a response checklist.</div></div><div class="fact"><div class="k">Reading level</div><div class="v">CEFR B1 English. Short sentences; every technical term is explained.</div></div></div></div></div><div class="wrap"><aside class="toc" id="sidebarToc" aria-label="Table of contents"><div class="ttl">Contents</div><a href="#overview">1 · Overview: What this technique is</a><a href="#simulation">2 · Animated Attack Simulation</a><a href="#redteam">3 · Red Team Perspective</a><a href="#blueteam">4 · Blue Team / SOC Perspective</a><a href="#detection">5 · Detection Engineering Deep Dive</a><a href="#dd-regulation-mapping" class="sub">5.1 · Regulation Mapping</a><a href="#dd-threat-intelligence" class="sub">5.2 · Threat Intelligence</a><a href="#dd-threats-ranking-categorization" class="sub">5.3 · Threats Ranking &amp; Categorization</a><a href="#dd-logs-patterns" class="sub">5.4 · Logs &amp; Patterns</a><a href="#dd-sigma-detection-rules" class="sub">5.5 · Sigma Detection Rules</a><a href="#dd-quick-reference-key-events-at-a-glance" class="sub">5.6 · Quick Reference — Key Events at a Glance</a><a href="#scenario">6 · Real-World Scenario: The Retailer Without a VPN</a><a href="#mitigation">7 · Mitigation &amp; Defense</a><a href="#practices">8 · Common Mistakes &amp; Best Practices</a></aside><main><section class="sec" id="overview"><div class="sechead"><span class="secnum">1</span><h2>Overview: What this technique is</h2><style id="atk-guide-design">
+/* ============ DESIGN TOKENS ============ */
+:root{
+  --bg:#0b0f1a; --bg2:#0e1424; --card:#121a2e; --card2:#172138; --elev:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border2:#2f4066;
+  --acc:#4f8cff; --acc2:#22d3ee; --vio:#a78bfa; --ok:#34d399; --warn:#fbbf24;
+  --high:#fb923c; --crit:#f87171; --low:#4ade80;
+  --codebg:#0a0e17; --codehead:#101728;
+  --shadow:0 10px 30px rgba(2,6,18,.45);
+  --r:14px; --rs:9px;
+  --sim-bg:#080d1b; --sim-grid:#131d36; --sim-zone:rgba(79,140,255,.05);
+  --sim-text:#dce6f7; --sim-muted:#8ea1c4; --sim-line:#26355a;
+  --sim-att:#f87171; --sim-vic:#60a5fa; --sim-cloud:#b195f5; --sim-soc:#34d399;
+  --sim-pkt:#ffd166; --sim-ok:#34d399; --sim-danger:#f87171;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --bg2:#eef2fa; --card:#ffffff; --card2:#f5f8ff; --elev:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border2:#c2d0ea;
+  --acc:#2f6fe4; --acc2:#0891b2; --vio:#7c5ce0; --ok:#0d9e6e; --warn:#b45309;
+  --high:#c2410c; --crit:#dc2626; --low:#15803d;
+  --shadow:0 8px 24px rgba(23,36,64,.10);
+}
+/* ============ BASE ============ */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font); font-size:16.5px; line-height:1.68;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+::selection{background:rgba(79,140,255,.35)}
+img,canvas{max-width:100%}
+a{color:var(--acc); text-decoration:none; border-bottom:1px dotted rgba(79,140,255,.5)}
+a:hover{border-bottom-style:solid}
+h1,h2,h3,h4{line-height:1.25; margin:0 0 .5em}
+h2{font-size:clamp(1.5rem,2.6vw,2.05rem); letter-spacing:-.015em}
+h3{font-size:clamp(1.15rem,2vw,1.4rem); margin-top:1.6em}
+h4{font-size:1.05rem; margin-top:1.2em; color:var(--text)}
+p{margin:.6em 0}
+strong{color:var(--text); font-weight:650}
+code{font-family:var(--mono); font-size:.86em; background:var(--elev); border:1px solid var(--border); border-radius:6px; padding:.1em .4em; color:var(--acc2); word-break:break-word}
+ul,ol{padding-left:1.35em; margin:.55em 0}
+li{margin:.32em 0}
+li::marker{color:var(--acc)}
+section{scroll-margin-top:86px}
+.small{font-size:.88rem; color:var(--muted)}
+.hr{border:0; border-top:1px solid var(--border); margin:2.4rem 0}
+/* ============ PROGRESS + HEADER ============ */
+#pbar{position:fixed; top:0; left:0; height:3px; width:0; background:linear-gradient(90deg,var(--acc),var(--acc2)); z-index:1000; transition:width .08s linear}
+header.top{
+  position:sticky; top:0; z-index:900; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  background:color-mix(in srgb, var(--bg) 78%, transparent);
+  border-bottom:1px solid var(--border);
+}
+.topin{max-width:1280px; margin:0 auto; display:flex; align-items:center; gap:18px; padding:10px 22px}
+.logo{display:flex; align-items:center; gap:11px; font-weight:700; white-space:nowrap}
+.logo .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#0d1428,#16224a);display:grid;place-items:center;border:1px solid var(--border2)}
+.logo .mark svg{width:20px;height:20px}
+.logo small{display:block; font-weight:500; color:var(--muted); font-size:.72rem; line-height:1.1}
+nav.tnav{display:flex; gap:4px; margin-left:auto; overflow-x:auto; scrollbar-width:none}
+nav.tnav::-webkit-scrollbar{display:none}
+nav.tnav a{border:0; color:var(--muted); font-size:.86rem; padding:7px 11px; border-radius:8px; white-space:nowrap; font-weight:550}
+nav.tnav a:hover{color:var(--text); background:var(--elev)}
+nav.tnav a.act{color:var(--acc); background:color-mix(in srgb,var(--acc) 12%, transparent)}
+.tbtns{display:flex; gap:8px; align-items:center}
+.ibtn{
+  display:inline-flex; align-items:center; justify-content:center; gap:7px;
+  border:1px solid var(--border2); background:var(--card); color:var(--text);
+  border-radius:9px; padding:7px 11px; font-size:.84rem; font-weight:600; cursor:pointer; font-family:var(--font);
+}
+.ibtn:hover{border-color:var(--acc); color:var(--acc)}
+#tocFab{display:none; position:fixed; right:18px; bottom:18px; z-index:950; border-radius:50%; width:52px; height:52px; box-shadow:var(--shadow)}
+#backTop{display:none; position:fixed; right:18px; bottom:82px; z-index:950; border-radius:50%; width:44px; height:44px}
+/* ============ HERO ============ */
+.hero{
+  position:relative; overflow:hidden;
+  background:
+    radial-gradient(900px 420px at 12% -10%, rgba(79,140,255,.16), transparent 60%),
+    radial-gradient(800px 400px at 88% 0%, rgba(167,139,250,.14), transparent 55%),
+    radial-gradient(600px 380px at 55% 115%, rgba(34,211,238,.10), transparent 60%),
+    var(--bg);
+  border-bottom:1px solid var(--border);
+}
+.hero .in{max-width:1280px; margin:0 auto; padding:56px 22px 42px; position:relative}
+.kicker{display:inline-flex; align-items:center; gap:9px; font-size:.8rem; letter-spacing:.14em; text-transform:uppercase; color:var(--acc2); font-weight:700; border:1px solid rgba(34,211,238,.35); padding:6px 13px; border-radius:99px; background:rgba(34,211,238,.07)}
+.hero h1{font-size:clamp(1.9rem,4.4vw,3.1rem); margin:18px 0 10px; letter-spacing:-.02em}
+.hero h1 .grad{background:linear-gradient(90deg,var(--acc),var(--acc2) 55%,var(--vio)); -webkit-background-clip:text; background-clip:text; color:transparent}
+.hero .lede{max-width:62ch; color:var(--muted); font-size:1.06rem}
+.chips{display:flex; flex-wrap:wrap; gap:9px; margin-top:20px}
+.chip{font-size:.82rem; font-weight:600; color:var(--text); background:var(--card); border:1px solid var(--border2); padding:7px 13px; border-radius:99px}
+.chip b{color:var(--acc2); font-weight:700}
+.facts{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:14px; margin-top:30px}
+.fact{background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:16px 18px}
+.fact .k{font-size:.76rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700}
+.fact .v{margin-top:6px; font-weight:650; font-size:.97rem; line-height:1.45}
+/* ============ LAYOUT ============ */
+body > .wrap{max-width:1280px; margin:0 auto; display:grid; grid-template-columns:252px minmax(0,1fr); gap:38px; padding:34px 22px 20px}
+aside.toc{position:sticky; top:78px; align-self:start; max-height:calc(100vh - 100px); overflow:auto; padding-right:6px; scrollbar-width:thin}
+aside.toc .ttl{font-size:.74rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:6px 0 10px 12px}
+aside.toc a{display:block; border:0; border-left:2px solid transparent; color:var(--muted); font-size:.885rem; padding:7px 12px; border-radius:0 8px 8px 0; font-weight:550; line-height:1.35}
+aside.toc a:hover{color:var(--text); background:var(--card)}
+aside.toc a.act{color:var(--acc); border-left-color:var(--acc); background:color-mix(in srgb,var(--acc) 9%, transparent)}
+aside.toc a.sub{padding-left:26px; font-size:.83rem}
+main{min-width:0}
+/* ============ SECTIONS + CARDS ============ */
+.sec{margin:0 0 56px}
+.sechead{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:6px}
+.secnum{font-family:var(--mono); font-size:.85rem; font-weight:700; color:var(--acc2); border:1px solid rgba(34,211,238,.4); border-radius:8px; padding:3px 9px; background:rgba(34,211,238,.07)}
+.card{background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:22px 24px; margin:16px 0; box-shadow:var(--shadow)}
+.card h3:first-child,.card h4:first-child{margin-top:0}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin:16px 0}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin:16px 0}
+.chk{list-style:none; padding-left:4px}
+.chk li::before{content:"¹3 a0"; color:var(--ok); font-weight:800}
+.mut{color:var(--muted)}
+/* ============ CALLOUTS ============ */
+.note,.tip,.warn,.danger{border-radius:var(--rs); padding:14px 18px; margin:16px 0; border:1px solid; position:relative; font-size:.95rem}
+.note{border-color:rgba(79,140,255,.4); background:rgba(79,140,255,.07)}
+.tip{border-color:rgba(52,211,153,.4); background:rgba(52,211,153,.07)}
+.warn{border-color:rgba(251,191,36,.45); background:rgba(251,191,36,.07)}
+.danger{border-color:rgba(248,113,113,.45); background:rgba(248,113,113,.07)}
+.note b:first-child,.tip b:first-child,.warn b:first-child,.danger b:first-child{display:inline-block; margin-bottom:2px}
+.note b:first-child{color:var(--acc)} .tip b:first-child{color:var(--ok)}
+.warn b:first-child{color:var(--warn)} .danger b:first-child{color:var(--crit)}
+/* ============ TABLES ============ */
+.tblwrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--r); margin:16px 0; background:var(--card)}
+table.tbl{width:100%; border-collapse:collapse; font-size:.92rem; min-width:640px}
+.tbl th{position:sticky; top:0; background:var(--card2); text-align:left; padding:12px 14px; font-size:.78rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); border-bottom:1px solid var(--border2); white-space:nowrap}
+.tbl td{padding:12px 14px; border-bottom:1px solid var(--border); vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr:hover td{background:color-mix(in srgb,var(--acc) 4%, transparent)}
+/* ============ BADGES ============ */
+.b{display:inline-block; font-size:.74rem; font-weight:800; padding:3px 10px; border-radius:99px; letter-spacing:.03em; white-space:nowrap}
+.b-crit{background:rgba(239,68,68,.14); color:var(--crit); border:1px solid rgba(239,68,68,.45)}
+.b-high{background:rgba(251,146,60,.13); color:var(--high); border:1px solid rgba(251,146,60,.45)}
+.b-med{background:rgba(251,191,36,.12); color:var(--warn); border:1px solid rgba(251,191,36,.45)}
+.b-low{background:rgba(74,222,128,.12); color:var(--low); border:1px solid rgba(74,222,128,.45)}
+.b-acc{background:rgba(79,140,255,.12); color:var(--acc); border:1px solid rgba(79,140,255,.4)}
+.b-vio{background:rgba(167,139,250,.12); color:var(--vio); border:1px solid rgba(167,139,250,.4)}
+.b-cy{background:rgba(34,211,238,.1); color:var(--acc2); border:1px solid rgba(34,211,238,.35)}
+/* ============ CODE ============ */
+.codewrap{border:1px solid var(--border); border-radius:var(--rs); overflow:hidden; margin:14px 0; background:var(--codebg)}
+.codehead{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 14px; background:var(--codehead); border-bottom:1px solid #1c2740}
+.codehead .lang{font-family:var(--mono); font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#7d8db0}
+.copybtn{font-family:var(--font); font-size:.76rem; font-weight:700; color:#9db1d8; background:#182345; border:1px solid #27365c; border-radius:7px; padding:4px 11px; cursor:pointer}
+.copybtn:hover{color:#fff; border-color:var(--acc)}
+pre.code{margin:0; padding:15px 17px; overflow-x:auto; font-family:var(--mono); font-size:.855rem; line-height:1.62; color:#dbe4f5; tab-size:4}
+pre.code .c{color:#7c8aa5; font-style:italic}
+pre.code .k{color:#79b8ff}
+pre.code .s{color:#9ecbff}
+pre.code .n{color:#f2cc60}
+pre.code .f{color:#d2a8ff}
+pre.code .v{color:#7ee787}
+pre.code .p{color:#56d4dd}
+/* ============ SIMULATION ============ */
+.simshell{background:var(--card); border:1px solid var(--border2); border-radius:var(--r); overflow:hidden; margin:18px 0; box-shadow:var(--shadow)}
+.simbar{display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--card2)}
+.simbar .sp{flex:1}
+.spd{font-family:var(--font); font-size:.84rem; font-weight:600; color:var(--text); background:var(--elev); border:1px solid var(--border2); border-radius:8px; padding:7px 9px}
+#simTime{font-family:var(--mono); font-size:.8rem; color:var(--muted)}
+.simstage{position:relative; background:var(--sim-bg)}
+#simCanvas{display:block; width:100%; height:520px}
+#simTip{position:absolute; pointer-events:none; opacity:0; transform:translate(-50%,-108%); background:#111a30; color:#dce6f7; border:1px solid #2b3a63; padding:9px 12px; border-radius:9px; font-size:.8rem; max-width:240px; line-height:1.45; box-shadow:0 8px 22px rgba(0,0,0,.5); transition:opacity .12s; z-index:5}
+.stepchips{display:flex; flex-wrap:wrap; gap:7px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--card)}
+.schip{font-family:var(--font); font-size:.78rem; font-weight:650; color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:99px; padding:5px 12px; cursor:pointer}
+.schip:hover{color:var(--text); border-color:var(--acc)}
+.schip.act{color:#0b1020; background:var(--acc); border-color:var(--acc)}
+html[data-theme="light"] .schip.act{color:#fff}
+.simcap{padding:18px 20px 20px; background:var(--card2)}
+.simcap h4{margin:0 0 6px; font-size:1.02rem; color:var(--acc2)}
+.simcap p{margin:0 0 8px}
+.simcap .hint{font-size:.85rem; color:var(--muted); border-left:3px solid var(--vio); padding-left:11px}
+.story{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin:18px 0}
+.story .st{background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:16px 18px}
+.story .st .n{font-family:var(--mono); font-weight:800; color:var(--acc); font-size:.85rem}
+.story .st h4{margin:6px 0 5px; font-size:.98rem}
+.story .st p{font-size:.88rem; margin:.3em 0; color:var(--muted)}
+.story .st .dn{font-size:.8rem; color:var(--acc2); border-top:1px dashed var(--border2); margin-top:9px; padding-top:8px}
+/* ============ MISC BLOCKS ============ */
+details{border:1px solid var(--border); border-radius:var(--rs); background:var(--card); margin:12px 0; overflow:hidden}
+details summary{cursor:pointer; padding:13px 18px; font-weight:650; list-style:none; display:flex; align-items:center; gap:10px}
+details summary::before{content:"+"; font-family:var(--mono); font-weight:800; color:var(--acc); transition:transform .15s}
+details[open] summary::before{transform:rotate(45deg)}
+details summary:hover{background:var(--card2)}
+details .dbody{padding:4px 20px 18px}
+.kv{display:grid; grid-template-columns:170px 1fr; gap:8px 18px; font-size:.93rem}
+.kv .k{color:var(--muted); font-weight:600}
+.layers{display:grid; gap:14px; margin:16px 0}
+.layer{display:grid; grid-template-columns:44px 1fr; gap:16px; background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:18px 20px}
+.layer .ico{width:44px; height:44px; border-radius:11px; display:grid; place-items:center; font-family:var(--mono); font-weight:800; font-size:.95rem; color:var(--acc2); background:rgba(34,211,238,.08); border:1px solid rgba(34,211,238,.3)}
+.layer h4{margin:0 0 6px}
+.runbook{counter-reset:rb; list-style:none; padding:0; margin:14px 0}
+.runbook li{counter-increment:rb; position:relative; padding:12px 16px 12px 56px; background:var(--card); border:1px solid var(--border); border-radius:var(--rs); margin:9px 0}
+.runbook li::before{content:counter(rb,decimal-leading-zero); position:absolute; left:14px; top:12px; font-family:var(--mono); font-weight:800; font-size:.95rem; color:var(--acc2); border:1px solid rgba(34,211,238,.35); border-radius:8px; padding:1px 7px; background:rgba(34,211,238,.06)}
+.runbook li b{display:block; margin-bottom:2px}
+.runbook li{font-size:.93rem; color:var(--muted)}
+.runbook li b{color:var(--text); font-size:.96rem}
+.gloss{display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:12px; margin:14px 0}
+.gloss .g{background:var(--card); border:1px solid var(--border); border-radius:var(--rs); padding:13px 16px; font-size:.9rem}
+.gloss .g b{color:var(--acc2); display:block; margin-bottom:3px; font-size:.92rem}
+.timeline{list-style:none; margin:16px 0; padding:0; border-left:2px solid var(--border2); margin-left:8px}
+.timeline li{position:relative; margin:0 0 18px; padding:0 0 0 26px}
+.timeline li::before{content:""; position:absolute; left:-7px; top:7px; width:12px; height:12px; border-radius:50%; background:var(--acc); border:2px solid var(--bg); box-shadow:0 0 0 2px rgba(79,140,255,.35)}
+.timeline .tdate{font-family:var(--mono); font-size:.8rem; font-weight:700; color:var(--acc2)}
+.process{display:flex; flex-wrap:wrap; gap:10px; margin:16px 0}
+.process .pp{flex:1 1 150px; background:var(--card); border:1px solid var(--border); border-radius:var(--rs); padding:13px 15px; font-size:.88rem; position:relative}
+.process .pp .pn{font-family:var(--mono); font-weight:800; color:var(--vio); font-size:.8rem}
+.process .pp b{display:block; margin:2px 0 3px; font-size:.93rem}
+.process .pp .mut{font-size:.82rem}
+footer.foot{border-top:1px solid var(--border); margin-top:30px; background:var(--bg2)}
+footer.foot .in{max-width:1280px; margin:0 auto; padding:34px 22px 46px; color:var(--muted); font-size:.88rem}
+footer.foot .cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:22px}
+.tocoverlay{position:fixed; inset:0; z-index:960; background:rgba(4,8,18,.66); backdrop-filter:blur(4px); display:none}
+.tocoverlay.open{display:block}
+.tocoverlay .panel{position:absolute; right:14px; bottom:82px; width:min(320px, calc(100vw - 28px)); max-height:70vh; overflow:auto; background:var(--card); border:1px solid var(--border2); border-radius:var(--r); padding:14px; box-shadow:var(--shadow)}
+.tocoverlay a{display:block; border:0; padding:9px 12px; border-radius:9px; color:var(--text); font-weight:550; font-size:.92rem}
+.tocoverlay a:hover{background:var(--elev)}
+/* ============ RESPONSIVE ============ */
+@media (max-width:1040px){
+  .wrap{grid-template-columns:1fr; gap:0}
+  aside.toc{display:none}
+  #tocFab{display:inline-flex}
+  nav.tnav{display:none}
+  .kv{grid-template-columns:1fr}
+  #simCanvas{height:430px}
+}
+@media (max-width:640px){
+  body{font-size:15.5px}
+  .hero .in{padding:40px 18px 32px}
+  #simCanvas{height:380px}
+  .topin{padding:9px 14px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001s !important; transition-duration:.001s !important}
+}
+@media print{
+  header.top,aside.toc,#tocFab,#backTop,#pbar,.simbar,.stepchips{display:none !important}
+  .wrap{grid-template-columns:1fr}
+  body{background:#fff; color:#000}
+}
 
-
-<aside id="toc" aria-label="Table of contents"></aside>
-<div id="tocToggle" role="button" tabindex="0" aria-label="Open navigation"></div>
-<div id="tocBackdrop"></div>
-<main class="wrap">
-
-<section class="hero">
-  <div class="hero-badges">
-    <span class="chip">Guide version <b>2.0</b></span>
-    <a class="chip chip-id" href="https://attack.mitre.org/techniques/T1021/007/" target="_blank" rel="noopener">MITRE ATT&amp;CK T1021.007</a>
-    <span class="chip">Tactic: <b>Lateral Movement</b></span>
-    <span class="chip">Platforms: <b>IaaS, Identity Provider, Office Suite, SaaS</b></span>
-    <span class="chip">Reaches: <b>Linux, Windows, macOS</b></span>
-    <span class="chip">Beginner friendly</span>
-    <span class="chip">For defenders &amp; students</span>
-  </div>
-  <h1>Cloud Services <span class="grad">as Remote Doors</span></h1>
-  <p class="lead">Cloud services let one computer manage another through the cloud provider's own internet doors. An attacker with <strong>stolen cloud credentials</strong> can run commands on your virtual machines, read your storage, and mint new keys — without ever logging into an operating system. No VPN, no SSH key, no open port.</p>
-  <p class="hero-meta">Written for beginners, SOC analysts, and detection engineers. Every example here is for learning and defense only. This guide shows the attack steps, the cloud logs the attack leaves behind, and how to catch it.</p>
-  <div class="stats">
-    <div class="stat"><div class="sv">No VPN. No SSH key.</div><div class="sk">All an attacker needs is one valid cloud identity</div></div>
-    <div class="stat"><div class="sv">One API call = remote exec</div><div class="sk">SSM Run Command runs shell commands on VMs</div></div>
-    <div class="stat"><div class="sv">CloudTrail / Azure / GCP logs</div><div class="sk">The main witnesses — they always write a line</div></div>
-    <div class="stat"><div class="sv">Console + CLI + SSM</div><div class="sk">Three doors: web console, command line, agent channel</div></div>
-    <div class="stat"><div class="sv">Detection: easy IF you watch the cloud</div><div class="sk">Silent if you only read logs inside the VM</div></div>
-  </div>
-</section>
-
-<section class="sec" id="simulation" data-num="1" data-toc="Animated Attack Simulation">
-  <div class="sec-head">
-    <div class="sec-num">1</div>
-    <div>
-      <h2>Animated Attack Simulation</h2>
-      <p class="sec-sub">Watch how stolen cloud keys turn into full remote access — and see the log lines each step creates.</p>
-    </div>
-  </div>
-
-  <p>In this story, an attacker buys a set of cloud access keys that password-stealing malware lifted from a developer laptop. The keys belong to a CI (continuous integration) user that builds and ships software. The attacker never breaks into any computer. They talk only to the cloud's management API, and the cloud politely passes their commands to the machines inside.</p>
+/* ============================================================
+   CROSS-GENERATION COMPATIBILITY LAYER
+   The canonical T1528 design is applied to older guides by
+   remapping their token names and resetting their page layouts.
+   ============================================================ */
+:root,
+html[data-theme="light"]{
+  --accent:var(--acc);
+  --accent-2:var(--acc2);
+  --accent2:var(--acc2);
+  --accent-soft:color-mix(in srgb,var(--acc) 14%,transparent);
+  --accent2-soft:color-mix(in srgb,var(--acc2) 14%,transparent);
+  --accent-border:color-mix(in srgb,var(--acc) 45%,transparent);
+  --txt:var(--text); --ink:var(--text); --body:var(--text); --strong:var(--text); --em:var(--text);
+  --soft:var(--muted); --mut:var(--muted); --mut2:var(--muted); --muted2:var(--muted); --lead:var(--muted); --faint:var(--muted);
+  --line:var(--border); --line2:var(--border2); --border-soft:var(--border);
+  --panel:var(--card); --panel2:var(--card2); --surface:var(--card); --surface2:var(--card2);
+  --bg-alt:var(--bg2); --card-2:var(--card2);
+  --brand:var(--acc); --brand-dark:var(--acc); --brand-soft:color-mix(in srgb,var(--acc) 14%,transparent);
+  --navy:var(--text); --navy-soft:var(--border2);
+  --red:var(--crit); --green:var(--ok); --amber:var(--warn); --purple:var(--vio); --cyan:var(--acc2); --info:var(--acc);
+  --code-bg:var(--codebg); --code-ink:var(--text); --code-text:var(--text); --code-border:var(--border);
+  --code-inline:var(--acc2); --code-inline-bg:var(--elev); --code-inline-fg:var(--acc2);
+  --th-bg:var(--card2); --th-fg:var(--muted); --td-border:var(--border);
+  --btn-bg:var(--card); --btn-border:var(--border2); --btn-fg:var(--text); --btn-hover:var(--elev); --btn-hover-border:var(--acc);
+  --toc-bg:var(--bg); --toggle-bg:var(--card); --hero-grid:transparent; --stat-bg:var(--card); --chip-bg:var(--card);
+  --scroll:var(--border2); --scroll-hover:var(--muted); --overlay:rgba(4,8,18,.66);
+  --radius:var(--r); --radius-sm:var(--rs); --sans:var(--font);
+  --high-soft:color-mix(in srgb,var(--high) 14%,transparent);
+  --crit-soft:color-mix(in srgb,var(--crit) 14%,transparent);
+  --warn-soft:color-mix(in srgb,var(--warn) 14%,transparent);
+  --ok-soft:color-mix(in srgb,var(--ok) 14%,transparent);
+}
+/* shell resets that beat the old per-page layouts */
+body > body > .wrap{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:252px minmax(0,1fr);gap:38px;padding:34px 22px 20px}
+body main,.body main,body .main{margin:0!important;padding:0!important;max-width:none!important;min-width:0;background:transparent}
+body main.wrap{margin-left:0!important}
+body .hero{position:relative;overflow:hidden;background:radial-gradient(900px 420px at 12% -10%,rgba(79,140,255,.16),transparent 60%),radial-gradient(800px 400px at 88% 0%,rgba(167,139,250,.14),transparent 55%),radial-gradient(600px 380px at 55% 115%,rgba(34,211,238,.10),transparent 60%),var(--bg);border-bottom:1px solid var(--border);padding:0;margin:0}
+body .hero .in{max-width:1280px;margin:0 auto;padding:56px 22px 42px;position:relative}
+body .hero h1{font-size:clamp(1.9rem,4.4vw,3.1rem);margin:18px 0 10px;letter-spacing:-.02em;line-height:1.25}
+body .hero .lede{max-width:62ch;color:var(--muted);font-size:1.06rem}
+body .hero h1,body .hero h1 *{color:var(--text)!important}
+body .hero h1 .grad{color:transparent!important}
+body .hero .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px}
+body .hero .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px;margin-top:30px}
+body main .sec{margin:0 0 56px}
+body main h2,body main h3,body main h4{color:var(--text)}
+body main .sechead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+body main .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px 24px;margin:16px 0;box-shadow:var(--shadow)}
+body main .tblwrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r);margin:16px 0;background:var(--card)}
+body main table.tbl{width:100%;border-collapse:collapse;font-size:.92rem;min-width:640px}
+body main .codewrap{border:1px solid var(--border);border-radius:var(--rs);overflow:hidden;margin:14px 0;background:var(--codebg)}
+body main pre{border:1px solid var(--border);border-radius:var(--rs);background:var(--codebg);color:#dbe4f5;padding:15px 17px;overflow:auto;font-family:var(--mono);font-size:.855rem;line-height:1.62}
+body main pre code{background:none;border:0;padding:0;color:inherit}
+body #sidebarToc,body aside.toc,body .toc{position:sticky;top:78px;left:auto;right:auto;bottom:auto;width:auto;max-height:calc(100vh - 100px);overflow:auto;padding:0 6px 0 0;background:transparent;border:0;z-index:auto;transition:none}
+body #tocToggle,body #tocBackdrop,body #toc-overlay,body .toc-band,body .title-band,body #toc-toggle{display:none!important}
+body .tocoverlay{display:none}
+body .tocoverlay.open{display:block}
+body .tocoverlay .panel{position:absolute;right:14px;bottom:82px;width:min(320px,calc(100vw - 28px));max-height:70vh;overflow:auto;background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:14px;box-shadow:var(--shadow)}
+body .tocoverlay .panel a{display:block;border:0;padding:9px 12px;border-radius:9px;color:var(--text);font-weight:550;font-size:.92rem;text-decoration:none}
+body .tocoverlay .panel a:hover{background:var(--elev)}
+body .callout{border-radius:var(--rs);padding:14px 18px;margin:16px 0;border:1px solid var(--border);background:var(--card)}
+body .callout.danger,body .callout.warn,body .callout.note,body .callout.tip{background:var(--card)}
+body .badge{display:inline-block;font-size:.74rem;font-weight:800;padding:3px 10px;border-radius:99px;letter-spacing:.03em;white-space:nowrap}
+body .b-crit{background:rgba(239,68,68,.14);color:var(--crit);border:1px solid rgba(239,68,68,.45)}
+body .b-high{background:rgba(251,146,60,.13);color:var(--high);border:1px solid rgba(251,146,60,.45)}
+body .b-med{background:rgba(251,191,36,.12);color:var(--warn);border:1px solid rgba(251,191,36,.45)}
+body .b-low{background:rgba(74,222,128,.12);color:var(--low);border:1px solid rgba(74,222,128,.45)}
+body .b-acc{background:rgba(79,140,255,.12);color:var(--acc);border:1px solid rgba(79,140,255,.4)}
+body .b-vio{background:rgba(167,139,250,.12);color:var(--vio);border:1px solid rgba(167,139,250,.4)}
+body .b-cy{background:rgba(34,211,238,.1);color:var(--acc2);border:1px solid rgba(34,211,238,.35)}
+body .mut{color:var(--muted)}
+@media (max-width:1040px){
+  body > body > .wrap{grid-template-columns:1fr;gap:0}
+  body #sidebarToc,body aside.toc,body .toc{display:none}
+  #tocFab{display:inline-flex}
+}
+@media (max-width:640px){
+  body{font-size:15.5px}
+  body .hero .in{padding:40px 18px 32px}
+}
+</style></div><p class="mut">Cloud services let one computer manage another through the cloud provider's own internet doors. An attacker with stolen cloud credentials can run commands on your virtual machines, read your storage, and mint new keys — without ever logging into an operating system. No VPN, no SSH key, no open port.</p><div class="card"><h3>In one sentence</h3><p>Adversaries may log into accessible cloud services within a compromised environment using Valid Accounts that are synchronized with or federated to on-premises user identities. The adversary may then perform management actions or access cloud-hosted resources as the logged-on user.</p></div><div class="card"><h3>Technique quick facts</h3><p class="small">Written for beginners, SOC analysts, and detection engineers. Every example here is for learning and defense only. This guide shows the attack steps, the cloud logs the attack leaves behind, and how to catch it.</p><div class="fact"><div class="k">All an attacker needs is one valid cloud identity</div><div class="v">No VPN. No SSH key.</div></div><div class="fact"><div class="k">SSM Run Command runs shell commands on VMs</div><div class="v">One API call = remote exec</div></div><div class="fact"><div class="k">The main witnesses — they always write a line</div><div class="v">CloudTrail / Azure / GCP logs</div></div><div class="fact"><div class="k">Three doors: web console, command line, agent channel</div><div class="v">Console + CLI + SSM</div></div><div class="fact"><div class="k">Silent if you only read logs inside the VM</div><div class="v">Detection: easy IF you watch the cloud</div></div></div></section><section class="sec" id="simulation"><div class="sechead"><span class="secnum">2</span><h2>Animated Attack Simulation</h2></div><p class="mut">Watch how stolen cloud keys turn into full remote access — and see the log lines each step creates.</p><p>In this story, an attacker buys a set of cloud access keys that password-stealing malware lifted from a developer laptop. The keys belong to a CI (continuous integration) user that builds and ships software. The attacker never breaks into any computer. They talk only to the cloud's management API, and the cloud politely passes their commands to the machines inside.</p>
 
   <div class="sim-mount" data-sim-cfg="sim1-cfg">
     <div class="canvas-holder"><canvas aria-label="Animated attack simulation: cloud services abuse"></canvas></div>
@@ -345,18 +630,7 @@ ul.check li b{color:var(--txt)}
   </div>
 
   <div class="note"><b>Is this real malware?</b> No. The animation uses fake commands on an invented account. It teaches the <em>pattern</em> of the attack, not how to build real attacks. Everything here is for blue-team training.</div>
-</section>
-
-<section class="sec" id="redteam" data-num="2" data-toc="Red Team Perspective">
-  <div class="sec-head">
-    <div class="sec-num">2</div>
-    <div>
-      <h2>Red Team Perspective</h2>
-      <p class="sec-sub">Why attackers use the cloud's own management services to reach your VMs — and what they need to do it.</p>
-    </div>
-  </div>
-
-  <p class="muted">This section explains the attacker's view. Knowing how attackers work is the first step to stopping them. Everything here is public knowledge, written for defenders and students.</p>
+</section><section class="sec" id="redteam"><div class="sechead"><span class="secnum">3</span><h2>Red Team Perspective</h2></div><p class="mut">Why attackers use the cloud's own management services to reach your VMs — and what they need to do it.</p><p class="muted">This section explains the attacker's view. Knowing how attackers work is the first step to stopping them. Everything here is public knowledge, written for defenders and students.</p>
 
   <div class="danger"><b>Ethics first:</b> You must never test cloud accounts you do not own or do not have written permission to test. Using stolen credentials is a crime, even "just to look". Red teams work inside their own lab accounts, under strict written rules, with spending alarms switched on.</div>
 
@@ -449,18 +723,7 @@ aws ssm send-command \
   </table></div>
 
   <div class="tip"><b>Red team note (noise):</b> There is no "quiet" cloud attack — only accounts nobody watches. Every single call writes a CloudTrail line: who, from which IP, with which key, doing what. The attacker's only hope is that the log exists but nobody reads it. That hope is sadly realistic: many companies pay for the trail and never alert on it.</div>
-</section>
-
-<section class="sec" id="blueteam" data-num="3" data-toc="Blue Team / SOC Perspective">
-  <div class="sec-head">
-    <div class="sec-num">3</div>
-    <div>
-      <h2>Blue Team / SOC Perspective</h2>
-      <p class="sec-sub">What cloud-service abuse looks like to defenders, where the evidence lives, and what to do first.</p>
-    </div>
-  </div>
-
-  <p class="muted">The SOC (Security Operations Center) is the team that watches alerts and logs all day. For cloud attacks, the rules of the game change: the best evidence is not on the machines — it is in the cloud's own record of every API call. In the attack chain this technique sits in the middle: the attacker already holds a cloud identity, and the data theft or damage usually comes next.</p>
+</section><section class="sec" id="blueteam"><div class="sechead"><span class="secnum">4</span><h2>Blue Team / SOC Perspective</h2></div><p class="mut">What cloud-service abuse looks like to defenders, where the evidence lives, and what to do first.</p><p class="muted">The SOC (Security Operations Center) is the team that watches alerts and logs all day. For cloud attacks, the rules of the game change: the best evidence is not on the machines — it is in the cloud's own record of every API call. In the attack chain this technique sits in the middle: the attacker already holds a cloud identity, and the data theft or damage usually comes next.</p>
 
   <h3 class="sub">Why the VM is the wrong place to look</h3>
   <p>AWS Systems Manager (SSM) Run Command leaves exactly <strong>one API line</strong> in CloudTrail, plus a small agent job on the machine. The VM records no SSH login, no Windows logon, no failed password. A team that only reads host logs will see an agent completing a task and nothing else. This is the single biggest blind spot in cloud detection: the logs that matter most live one level above the machines.</p>
@@ -518,20 +781,9 @@ aws ssm send-command \
   </div>
 
   <div class="note"><b>SaaS counts too.</b> The same idea applies to Microsoft 365 and Google Workspace: admin consoles and admin CLIs are doors to company data. The log names differ (Unified Audit Log, Workspace Admin audit), but the "watch the control plane, not the host" rule is identical.</div>
-</section>
+</section><section class="sec" id="detection"><div class="sechead"><span class="secnum">5</span><h2>Detection Engineering Deep Dive</h2></div><p class="mut">Regulations, threat intelligence, ranked threats, real log samples, and ready-to-use Sigma rules.</p><p>This is the working section. It maps the technique to regulations. It shows who abuses cloud services in the real world. It ranks the concrete threats. And it turns each threat into a log pattern and a detection rule. Everything is written so you can copy it into your SIEM and tune it.</p>
 
-<section class="sec" id="detection" data-num="4" data-toc="Detection Engineering Deep Dive">
-  <div class="sec-head">
-    <div class="sec-num">4</div>
-    <div>
-      <h2>Detection Engineering Deep Dive</h2>
-      <p class="sec-sub">Regulations, threat intelligence, ranked threats, real log samples, and ready-to-use Sigma rules.</p>
-    </div>
-  </div>
-
-  <p>This is the working section. It maps the technique to regulations. It shows who abuses cloud services in the real world. It ranks the concrete threats. And it turns each threat into a log pattern and a detection rule. Everything is written so you can copy it into your SIEM and tune it.</p>
-
-  <h3 class="sub">Regulation Mapping</h3>
+  <h3 class="sub" id="dd-regulation-mapping">Regulation Mapping</h3>
   <p>Cloud-service abuse is not only a technical problem. Several regulations demand exactly what this attack defeats: controlled access, monitoring, and fast notification. Here is how they connect.</p>
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Regulation</th><th>Control / Article</th><th>What it asks for</th><th>How this technique relates</th></tr></thead>
@@ -545,7 +797,7 @@ aws ssm send-command \
     </tbody>
   </table></div>
 
-  <h3 class="sub">Threat Intelligence</h3>
+  <h3 class="sub" id="dd-threat-intelligence">Threat Intelligence</h3>
   <p>Threat intelligence (CTI) answers one question for this technique: <strong>who does this, and how?</strong> The workflow has three steps. <strong>Collect</strong> from sources that cover cloud attacks. <strong>Analyze</strong> by mapping reports to ATT&amp;CK and asking "which of our identities could do this?". <strong>Apply</strong> by turning each report into a hunting question or a Sigma rule, then tune it with your baseline.</p>
   <div class="card tight">
     <h4>Sources that actually cover this technique</h4>
@@ -583,7 +835,7 @@ aws ssm send-command \
     </ul>
   </div>
 
-  <h3 class="sub">Threats Ranking &amp; Categorization</h3>
+  <h3 class="sub" id="dd-threats-ranking-categorization">Threats Ranking &amp; Categorization</h3>
   <p>Eight concrete threats cover this technique, ordered from most to least dangerous. Each one gets its own log-pattern block below.</p>
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Threat</th><th>Severity</th><th>Platforms</th><th>Short description</th></tr></thead>
@@ -599,7 +851,7 @@ aws ssm send-command \
     </tbody>
   </table></div>
 
-  <h3 class="sub">Logs &amp; Patterns</h3>
+  <h3 class="sub" id="dd-logs-patterns">Logs &amp; Patterns</h3>
   <p>Each block below shows the logs to use, a realistic sample, and what to look for. Samples are AWS CloudTrail JSON — the same shape applies to Azure Activity Log and GCP Audit Logs.</p>
 
   <h4 class="mini">Threat 1 — Remote execution via SSM by an abused identity</h4>
@@ -802,7 +1054,7 @@ aws ssm send-command \
     <li>Never "fix" alert fatigue by disabling a cloud rule; scope it instead (filter the ARN, keep the detection).</li>
   </ul>
 
-  <h3 class="sub">Sigma Detection Rules</h3>
+  <h3 class="sub" id="dd-sigma-detection-rules">Sigma Detection Rules</h3>
   <p>Sigma is a free, open format for writing detection rules once and running them in any SIEM. Each rule below matches one threat from the ranking. Under every rule you find the matching Splunk SPL query. SPL (Search Processing Language) is the search language used in Splunk. Adjust the index names to your own environment.</p>
 
   <h4 class="mini">Rule 1 — SSM SendCommand by an unusual principal</h4>
@@ -1105,7 +1357,7 @@ level: medium</code></pre></div>
 | where distinct_calls &gt;= 50
 | sort - distinct_calls</code></pre></div>
 
-  <h3 class="sub">Quick Reference — Key Events at a Glance</h3>
+  <h3 class="sub" id="dd-quick-reference-key-events-at-a-glance">Quick Reference — Key Events at a Glance</h3>
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Event / API call</th><th>What it means</th><th>Where defenders see it</th><th>Unusual level</th></tr></thead>
     <tbody>
@@ -1118,18 +1370,7 @@ level: medium</code></pre></div>
       <tr><td>GuardDuty <code>InstanceCredentialExfiltration</code></td><td>VM role keys used from outside AWS</td><td>GuardDuty findings</td><td><span class="sev sev-critical">Critical</span> — treat as incident</td></tr>
     </tbody>
   </table></div>
-</section>
-
-<section class="sec" id="scenario" data-num="5" data-toc="Real-World Scenario">
-  <div class="sec-head">
-    <div class="sec-num">5</div>
-    <div>
-      <h2>Real-World Scenario: The Retailer Without a VPN</h2>
-      <p class="sec-sub">A realistic composite built from two documented campaigns — cloud identities were the only door the attackers needed.</p>
-    </div>
-  </div>
-
-  <div class="note"><b>Anchored in real reporting:</b> This story is a realistic composite. It combines two documented campaigns. The first is <strong>Scattered Spider (UNC3944)</strong>: the 2023–2024 wave of help-desk social engineering, MFA fatigue, and console abuse. It hit MGM and Caesars; see CISA advisory AA23-320A. The second is the <strong>2024 Snowflake credential campaign (UNC5537)</strong>. There, stolen identities led straight to mass data theft. Company names and numbers below are invented, but every step matches how these campaigns actually worked.</div>
+</section><section class="sec" id="scenario"><div class="sechead"><span class="secnum">6</span><h2>Real-World Scenario: The Retailer Without a VPN</h2></div><p class="mut">A realistic composite built from two documented campaigns — cloud identities were the only door the attackers needed.</p><div class="note"><b>Anchored in real reporting:</b> This story is a realistic composite. It combines two documented campaigns. The first is <strong>Scattered Spider (UNC3944)</strong>: the 2023–2024 wave of help-desk social engineering, MFA fatigue, and console abuse. It hit MGM and Caesars; see CISA advisory AA23-320A. The second is the <strong>2024 Snowflake credential campaign (UNC5537)</strong>. There, stolen identities led straight to mass data theft. Company names and numbers below are invented, but every step matches how these campaigns actually worked.</div>
 
   <p>Nordvind Retail runs 400 stores and an online shop. Years ago, the cloud team proudly closed every SSH port and VPN tunnel: "we administer everything through the cloud console now". Identity became the only thing standing between the internet and 2.4 million customer records. In September, a criminal crew decided to test that idea.</p>
 
@@ -1229,18 +1470,7 @@ level: medium</code></pre></div>
       <li><strong>The regulator clock on the board:</strong> the 72-hour deadline was visible to everyone, which kept legal and technical work in step.</li>
     </ul>
   </div>
-</section>
-
-<section class="sec" id="mitigation" data-num="6" data-toc="Mitigation &amp; Defense">
-  <div class="sec-head">
-    <div class="sec-num">6</div>
-    <div>
-      <h2>Mitigation &amp; Defense</h2>
-      <p class="sec-sub">Layered controls that make cloud doors useless to thieves — ordered by what stops the most.</p>
-    </div>
-  </div>
-
-  <p>You cannot switch these services off — your admins and pipelines need them. The goal is to make each door narrow, short-lived, watched, and wired to a guardrail. Work down this table from the top; the first three rows alone would have stopped the Nordvind story.</p>
+</section><section class="sec" id="mitigation"><div class="sechead"><span class="secnum">7</span><h2>Mitigation &amp; Defense</h2></div><p class="mut">Layered controls that make cloud doors useless to thieves — ordered by what stops the most.</p><p>You cannot switch these services off — your admins and pipelines need them. The goal is to make each door narrow, short-lived, watched, and wired to a guardrail. Work down this table from the top; the first three rows alone would have stopped the Nordvind story.</p>
 
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Action</th><th>Stops what</th><th>Effort</th></tr></thead>
@@ -1313,18 +1543,7 @@ aws cloudtrail start-logging --name org-trail</code></pre></div>
       <li>Once a month, open the account's "recent activity" or security page and read what happened. Ten minutes, once a month.</li>
     </ul>
   </div>
-</section>
-
-<section class="sec" id="practices" data-num="7" data-toc="Common Mistakes &amp; Best Practices">
-  <div class="sec-head">
-    <div class="sec-num">7</div>
-    <div>
-      <h2>Common Mistakes &amp; Best Practices</h2>
-      <p class="sec-sub">Ten traps teams fall into with cloud remote services — and the fix for each.</p>
-    </div>
-  </div>
-
-  <div class="tblwrap"><table class="tbl">
+</section><section class="sec" id="practices"><div class="sechead"><span class="secnum">8</span><h2>Common Mistakes &amp; Best Practices</h2></div><p class="mut">Ten traps teams fall into with cloud remote services — and the fix for each.</p><div class="tblwrap"><table class="tbl">
     <thead><tr><th>Mistake</th><th>What happens</th><th>The fix</th></tr></thead>
     <tbody>
       <tr><td>Treating cloud security as the provider's job</td><td>Teams assume Amazon "handles security" and skip their own controls. The provider secures the platform; <em>your</em> identities, permissions, and data are yours.</td><td>Read the shared-responsibility model once per year, and audit the "customer" column, not the provider's.</td></tr>
@@ -1355,13 +1574,42 @@ aws cloudtrail start-logging --name org-trail</code></pre></div>
   </ul>
 
   <div class="tip"><b>Final thought:</b> Cloud services did not remove the old doors — they added better ones. SSH and RDP leave logins; cloud APIs leave only management lines. Watch the control plane the way you once watched port 22, and this whole technique collapses into a handful of high-quality alerts.</div>
-</section>
-
-
-<div id="atk-relations"></div>
-<div id="atk-prevnext"></div>
-</main>
-<script>
+</section></main></div><button class="ibtn" id="tocFab" type="button" aria-label="Open table of contents">Contents</button><button class="ibtn" id="backTop" type="button" aria-label="Back to top">↑</button><div class="tocoverlay" id="tocOverlay"><div class="panel"><div class="ttl">Contents</div><div id="tocPanel"><a href="#overview">1 · Overview: What this technique is</a><a href="#simulation">2 · Animated Attack Simulation</a><a href="#redteam">3 · Red Team Perspective</a><a href="#blueteam">4 · Blue Team / SOC Perspective</a><a href="#detection">5 · Detection Engineering Deep Dive</a><a href="#dd-regulation-mapping">5.1 · Regulation Mapping</a><a href="#dd-threat-intelligence">5.2 · Threat Intelligence</a><a href="#dd-threats-ranking-categorization">5.3 · Threats Ranking &amp; Categorization</a><a href="#dd-logs-patterns">5.4 · Logs &amp; Patterns</a><a href="#dd-sigma-detection-rules">5.5 · Sigma Detection Rules</a><a href="#dd-quick-reference-key-events-at-a-glance">5.6 · Quick Reference — Key Events at a Glance</a><a href="#scenario">6 · Real-World Scenario: The Retailer Without a VPN</a><a href="#mitigation">7 · Mitigation &amp; Defense</a><a href="#practices">8 · Common Mistakes &amp; Best Practices</a></div></div></div><div id="toc" hidden></div><div id="tocToggle" hidden></div><div id="tocBackdrop" hidden></div><div id="toc-overlay" hidden></div><script>
+(function(){
+  "use strict";
+  var bar = document.getElementById("pbar");
+  var toc = document.getElementById("sidebarToc");
+  var links = toc ? Array.prototype.slice.call(toc.querySelectorAll("a")) : [];
+  var targets = links.map(function(a){ return document.querySelector(a.getAttribute("href")); });
+  function onScroll(){
+    if(bar){
+      var h = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.width = (h > 0 ? Math.min(100, window.scrollY / h * 100) : 0) + "%";
+    }
+    var y = window.scrollY + 120, active = 0;
+    targets.forEach(function(t, i){ if(t && t.offsetTop <= y) active = i; });
+    links.forEach(function(a, i){ a.classList.toggle("act", i === active); });
+  }
+  window.addEventListener("scroll", onScroll, {passive:true});
+  window.addEventListener("resize", onScroll);
+  onScroll();
+  var fab = document.getElementById("tocFab"), overlay = document.getElementById("tocOverlay"), back = document.getElementById("backTop");
+  if(fab && overlay){ fab.addEventListener("click", function(){ overlay.classList.toggle("open"); }); overlay.addEventListener("click", function(e){ if(e.target === overlay || e.target.tagName === "A") overlay.classList.remove("open"); }); }
+  if(back){ back.addEventListener("click", function(){ window.scrollTo({top:0, behavior:"smooth"}); }); }
+  document.querySelectorAll(".copybtn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var box = btn.closest(".codewrap") || btn.parentElement.parentElement;
+      var pre = box ? box.querySelector("pre") : null;
+      if(!pre) return;
+      var ta = document.createElement("textarea"); ta.value = pre.innerText; ta.style.position = "fixed"; ta.style.left = "-9999px"; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand("copy"); } catch(e){}
+      document.body.removeChild(ta);
+      if(!ok && navigator.clipboard) navigator.clipboard.writeText(pre.innerText).catch(function(){});
+      var old = btn.textContent; btn.textContent = ok ? "Copied" : "Copy"; setTimeout(function(){ btn.textContent = old; }, 1200);
+    });
+  });
+})();
+</script><script>
 /* ============================================================
    MITRE ATT&CK Detection Guide — Shared JS
    TOC builder, scrollspy, mobile nav, syntax highlighter,

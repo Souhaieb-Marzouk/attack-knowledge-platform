@@ -284,64 +284,341 @@ ul.check li b{color:var(--txt)}
 <style id="atk-page-layout">@media (min-width:961px){#toc{top:62px!important;height:calc(100vh - 62px)}.toc{top:62px!important;bottom:0!important}}</style>
 </head>
 <body>
-<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
 <link rel="stylesheet" href="../../assets/css/platform.css">
 <div id="atk-header" data-technique="T1021.006"></div>
 <script src="../../assets/js/platform.js" defer></script>
-<!-- ==== /PLATFORM INTEGRATION ==== -->
+<div id="pbar"></div><noscript><div style="padding:12px 20px;background:#fbbf24;color:#111;font-weight:700;text-align:center">JavaScript is off. The animated simulation and interactive tools will not run, but all text content is still readable.</div></noscript><div class="hero" id="home"><div class="in"><span class="kicker">MITRE ATT&amp;CK · Lateral Movement · Beginner Friendly Guide</span><h1><span class="grad">T1021.006</span> — Windows Remote Management <span class="grad">(WinRM)</span></h1><p class="lede">WinRM is the built-in remote management service of Windows. PowerShell Remoting runs on top of it, so an admin can run commands on another computer without a screen, a window, or any extra software. An attacker with one stolen admin password can use the same trusted channel to command many servers at once.</p><div class="chips" aria-label="Technique metadata"><span class="chip">Technique ID: <b>T1021.006</b></span><span class="chip">Tactic: <b>Lateral Movement</b></span><span class="chip">Platforms: <b>Windows</b></span><span class="chip">Sub-techniques: <b>0</b></span><span class="chip">Source: <b>attack.mitre.org/techniques/T1021/006/</b></span><span class="chip">Version: <b>v2.0</b></span></div><div class="facts"><div class="fact"><div class="k">In one sentence</div><div class="v">Adversaries may use Valid Accounts to interact with remote systems using Windows Remote Management (WinRM). The adversary may then perform actions as the logged-on user.</div></div><div class="fact"><div class="k">Who this is for</div><div class="v">SOC analysts, detection engineers, students, and anyone who wants a clear reference.</div></div><div class="fact"><div class="k">What you get</div><div class="v">Animated simulation, red and blue team views, detection engineering, a case study, mitigations and a response checklist.</div></div><div class="fact"><div class="k">Reading level</div><div class="v">CEFR B1 English. Short sentences; every technical term is explained.</div></div></div></div></div><div class="wrap"><aside class="toc" id="sidebarToc" aria-label="Table of contents"><div class="ttl">Contents</div><a href="#overview">1 · Overview: What this technique is</a><a href="#simulation">2 · Animated Attack Simulation</a><a href="#redteam">3 · Red Team Perspective</a><a href="#blueteam">4 · Blue Team / SOC Perspective</a><a href="#detection">5 · Detection Engineering Deep Dive</a><a href="#dd-regulation-mapping" class="sub">5.1 · Regulation Mapping</a><a href="#dd-threat-intelligence" class="sub">5.2 · Threat Intelligence</a><a href="#dd-where-cti-teams-get-their-data" class="sub">5.3 · Where CTI teams get their data</a><a href="#dd-hunting-hypotheses" class="sub">5.4 · Hunting hypotheses</a><a href="#dd-threats-ranking-categorization" class="sub">5.5 · Threats Ranking &amp; Categorization</a><a href="#dd-logs-patterns" class="sub">5.6 · Logs &amp; Patterns</a><a href="#dd-sigma-detection-rules" class="sub">5.7 · Sigma Detection Rules</a><a href="#dd-quick-reference" class="sub">5.8 · Quick Reference</a><a href="#scenario">6 · Real-World Scenario</a><a href="#mitigation">7 · Mitigation &amp; Defense</a><a href="#practices">8 · Common Mistakes &amp; Best Practices</a></aside><main><section class="sec" id="overview"><div class="sechead"><span class="secnum">1</span><h2>Overview: What this technique is</h2><style id="atk-guide-design">
+/* ============ DESIGN TOKENS ============ */
+:root{
+  --bg:#0b0f1a; --bg2:#0e1424; --card:#121a2e; --card2:#172138; --elev:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border2:#2f4066;
+  --acc:#4f8cff; --acc2:#22d3ee; --vio:#a78bfa; --ok:#34d399; --warn:#fbbf24;
+  --high:#fb923c; --crit:#f87171; --low:#4ade80;
+  --codebg:#0a0e17; --codehead:#101728;
+  --shadow:0 10px 30px rgba(2,6,18,.45);
+  --r:14px; --rs:9px;
+  --sim-bg:#080d1b; --sim-grid:#131d36; --sim-zone:rgba(79,140,255,.05);
+  --sim-text:#dce6f7; --sim-muted:#8ea1c4; --sim-line:#26355a;
+  --sim-att:#f87171; --sim-vic:#60a5fa; --sim-cloud:#b195f5; --sim-soc:#34d399;
+  --sim-pkt:#ffd166; --sim-ok:#34d399; --sim-danger:#f87171;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --bg2:#eef2fa; --card:#ffffff; --card2:#f5f8ff; --elev:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border2:#c2d0ea;
+  --acc:#2f6fe4; --acc2:#0891b2; --vio:#7c5ce0; --ok:#0d9e6e; --warn:#b45309;
+  --high:#c2410c; --crit:#dc2626; --low:#15803d;
+  --shadow:0 8px 24px rgba(23,36,64,.10);
+}
+/* ============ BASE ============ */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font); font-size:16.5px; line-height:1.68;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+::selection{background:rgba(79,140,255,.35)}
+img,canvas{max-width:100%}
+a{color:var(--acc); text-decoration:none; border-bottom:1px dotted rgba(79,140,255,.5)}
+a:hover{border-bottom-style:solid}
+h1,h2,h3,h4{line-height:1.25; margin:0 0 .5em}
+h2{font-size:clamp(1.5rem,2.6vw,2.05rem); letter-spacing:-.015em}
+h3{font-size:clamp(1.15rem,2vw,1.4rem); margin-top:1.6em}
+h4{font-size:1.05rem; margin-top:1.2em; color:var(--text)}
+p{margin:.6em 0}
+strong{color:var(--text); font-weight:650}
+code{font-family:var(--mono); font-size:.86em; background:var(--elev); border:1px solid var(--border); border-radius:6px; padding:.1em .4em; color:var(--acc2); word-break:break-word}
+ul,ol{padding-left:1.35em; margin:.55em 0}
+li{margin:.32em 0}
+li::marker{color:var(--acc)}
+section{scroll-margin-top:86px}
+.small{font-size:.88rem; color:var(--muted)}
+.hr{border:0; border-top:1px solid var(--border); margin:2.4rem 0}
+/* ============ PROGRESS + HEADER ============ */
+#pbar{position:fixed; top:0; left:0; height:3px; width:0; background:linear-gradient(90deg,var(--acc),var(--acc2)); z-index:1000; transition:width .08s linear}
+header.top{
+  position:sticky; top:0; z-index:900; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  background:color-mix(in srgb, var(--bg) 78%, transparent);
+  border-bottom:1px solid var(--border);
+}
+.topin{max-width:1280px; margin:0 auto; display:flex; align-items:center; gap:18px; padding:10px 22px}
+.logo{display:flex; align-items:center; gap:11px; font-weight:700; white-space:nowrap}
+.logo .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#0d1428,#16224a);display:grid;place-items:center;border:1px solid var(--border2)}
+.logo .mark svg{width:20px;height:20px}
+.logo small{display:block; font-weight:500; color:var(--muted); font-size:.72rem; line-height:1.1}
+nav.tnav{display:flex; gap:4px; margin-left:auto; overflow-x:auto; scrollbar-width:none}
+nav.tnav::-webkit-scrollbar{display:none}
+nav.tnav a{border:0; color:var(--muted); font-size:.86rem; padding:7px 11px; border-radius:8px; white-space:nowrap; font-weight:550}
+nav.tnav a:hover{color:var(--text); background:var(--elev)}
+nav.tnav a.act{color:var(--acc); background:color-mix(in srgb,var(--acc) 12%, transparent)}
+.tbtns{display:flex; gap:8px; align-items:center}
+.ibtn{
+  display:inline-flex; align-items:center; justify-content:center; gap:7px;
+  border:1px solid var(--border2); background:var(--card); color:var(--text);
+  border-radius:9px; padding:7px 11px; font-size:.84rem; font-weight:600; cursor:pointer; font-family:var(--font);
+}
+.ibtn:hover{border-color:var(--acc); color:var(--acc)}
+#tocFab{display:none; position:fixed; right:18px; bottom:18px; z-index:950; border-radius:50%; width:52px; height:52px; box-shadow:var(--shadow)}
+#backTop{display:none; position:fixed; right:18px; bottom:82px; z-index:950; border-radius:50%; width:44px; height:44px}
+/* ============ HERO ============ */
+.hero{
+  position:relative; overflow:hidden;
+  background:
+    radial-gradient(900px 420px at 12% -10%, rgba(79,140,255,.16), transparent 60%),
+    radial-gradient(800px 400px at 88% 0%, rgba(167,139,250,.14), transparent 55%),
+    radial-gradient(600px 380px at 55% 115%, rgba(34,211,238,.10), transparent 60%),
+    var(--bg);
+  border-bottom:1px solid var(--border);
+}
+.hero .in{max-width:1280px; margin:0 auto; padding:56px 22px 42px; position:relative}
+.kicker{display:inline-flex; align-items:center; gap:9px; font-size:.8rem; letter-spacing:.14em; text-transform:uppercase; color:var(--acc2); font-weight:700; border:1px solid rgba(34,211,238,.35); padding:6px 13px; border-radius:99px; background:rgba(34,211,238,.07)}
+.hero h1{font-size:clamp(1.9rem,4.4vw,3.1rem); margin:18px 0 10px; letter-spacing:-.02em}
+.hero h1 .grad{background:linear-gradient(90deg,var(--acc),var(--acc2) 55%,var(--vio)); -webkit-background-clip:text; background-clip:text; color:transparent}
+.hero .lede{max-width:62ch; color:var(--muted); font-size:1.06rem}
+.chips{display:flex; flex-wrap:wrap; gap:9px; margin-top:20px}
+.chip{font-size:.82rem; font-weight:600; color:var(--text); background:var(--card); border:1px solid var(--border2); padding:7px 13px; border-radius:99px}
+.chip b{color:var(--acc2); font-weight:700}
+.facts{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:14px; margin-top:30px}
+.fact{background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:16px 18px}
+.fact .k{font-size:.76rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700}
+.fact .v{margin-top:6px; font-weight:650; font-size:.97rem; line-height:1.45}
+/* ============ LAYOUT ============ */
+body > .wrap{max-width:1280px; margin:0 auto; display:grid; grid-template-columns:252px minmax(0,1fr); gap:38px; padding:34px 22px 20px}
+aside.toc{position:sticky; top:78px; align-self:start; max-height:calc(100vh - 100px); overflow:auto; padding-right:6px; scrollbar-width:thin}
+aside.toc .ttl{font-size:.74rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:6px 0 10px 12px}
+aside.toc a{display:block; border:0; border-left:2px solid transparent; color:var(--muted); font-size:.885rem; padding:7px 12px; border-radius:0 8px 8px 0; font-weight:550; line-height:1.35}
+aside.toc a:hover{color:var(--text); background:var(--card)}
+aside.toc a.act{color:var(--acc); border-left-color:var(--acc); background:color-mix(in srgb,var(--acc) 9%, transparent)}
+aside.toc a.sub{padding-left:26px; font-size:.83rem}
+main{min-width:0}
+/* ============ SECTIONS + CARDS ============ */
+.sec{margin:0 0 56px}
+.sechead{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:6px}
+.secnum{font-family:var(--mono); font-size:.85rem; font-weight:700; color:var(--acc2); border:1px solid rgba(34,211,238,.4); border-radius:8px; padding:3px 9px; background:rgba(34,211,238,.07)}
+.card{background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:22px 24px; margin:16px 0; box-shadow:var(--shadow)}
+.card h3:first-child,.card h4:first-child{margin-top:0}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin:16px 0}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin:16px 0}
+.chk{list-style:none; padding-left:4px}
+.chk li::before{content:"¹3 a0"; color:var(--ok); font-weight:800}
+.mut{color:var(--muted)}
+/* ============ CALLOUTS ============ */
+.note,.tip,.warn,.danger{border-radius:var(--rs); padding:14px 18px; margin:16px 0; border:1px solid; position:relative; font-size:.95rem}
+.note{border-color:rgba(79,140,255,.4); background:rgba(79,140,255,.07)}
+.tip{border-color:rgba(52,211,153,.4); background:rgba(52,211,153,.07)}
+.warn{border-color:rgba(251,191,36,.45); background:rgba(251,191,36,.07)}
+.danger{border-color:rgba(248,113,113,.45); background:rgba(248,113,113,.07)}
+.note b:first-child,.tip b:first-child,.warn b:first-child,.danger b:first-child{display:inline-block; margin-bottom:2px}
+.note b:first-child{color:var(--acc)} .tip b:first-child{color:var(--ok)}
+.warn b:first-child{color:var(--warn)} .danger b:first-child{color:var(--crit)}
+/* ============ TABLES ============ */
+.tblwrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--r); margin:16px 0; background:var(--card)}
+table.tbl{width:100%; border-collapse:collapse; font-size:.92rem; min-width:640px}
+.tbl th{position:sticky; top:0; background:var(--card2); text-align:left; padding:12px 14px; font-size:.78rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); border-bottom:1px solid var(--border2); white-space:nowrap}
+.tbl td{padding:12px 14px; border-bottom:1px solid var(--border); vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr:hover td{background:color-mix(in srgb,var(--acc) 4%, transparent)}
+/* ============ BADGES ============ */
+.b{display:inline-block; font-size:.74rem; font-weight:800; padding:3px 10px; border-radius:99px; letter-spacing:.03em; white-space:nowrap}
+.b-crit{background:rgba(239,68,68,.14); color:var(--crit); border:1px solid rgba(239,68,68,.45)}
+.b-high{background:rgba(251,146,60,.13); color:var(--high); border:1px solid rgba(251,146,60,.45)}
+.b-med{background:rgba(251,191,36,.12); color:var(--warn); border:1px solid rgba(251,191,36,.45)}
+.b-low{background:rgba(74,222,128,.12); color:var(--low); border:1px solid rgba(74,222,128,.45)}
+.b-acc{background:rgba(79,140,255,.12); color:var(--acc); border:1px solid rgba(79,140,255,.4)}
+.b-vio{background:rgba(167,139,250,.12); color:var(--vio); border:1px solid rgba(167,139,250,.4)}
+.b-cy{background:rgba(34,211,238,.1); color:var(--acc2); border:1px solid rgba(34,211,238,.35)}
+/* ============ CODE ============ */
+.codewrap{border:1px solid var(--border); border-radius:var(--rs); overflow:hidden; margin:14px 0; background:var(--codebg)}
+.codehead{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 14px; background:var(--codehead); border-bottom:1px solid #1c2740}
+.codehead .lang{font-family:var(--mono); font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#7d8db0}
+.copybtn{font-family:var(--font); font-size:.76rem; font-weight:700; color:#9db1d8; background:#182345; border:1px solid #27365c; border-radius:7px; padding:4px 11px; cursor:pointer}
+.copybtn:hover{color:#fff; border-color:var(--acc)}
+pre.code{margin:0; padding:15px 17px; overflow-x:auto; font-family:var(--mono); font-size:.855rem; line-height:1.62; color:#dbe4f5; tab-size:4}
+pre.code .c{color:#7c8aa5; font-style:italic}
+pre.code .k{color:#79b8ff}
+pre.code .s{color:#9ecbff}
+pre.code .n{color:#f2cc60}
+pre.code .f{color:#d2a8ff}
+pre.code .v{color:#7ee787}
+pre.code .p{color:#56d4dd}
+/* ============ SIMULATION ============ */
+.simshell{background:var(--card); border:1px solid var(--border2); border-radius:var(--r); overflow:hidden; margin:18px 0; box-shadow:var(--shadow)}
+.simbar{display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--card2)}
+.simbar .sp{flex:1}
+.spd{font-family:var(--font); font-size:.84rem; font-weight:600; color:var(--text); background:var(--elev); border:1px solid var(--border2); border-radius:8px; padding:7px 9px}
+#simTime{font-family:var(--mono); font-size:.8rem; color:var(--muted)}
+.simstage{position:relative; background:var(--sim-bg)}
+#simCanvas{display:block; width:100%; height:520px}
+#simTip{position:absolute; pointer-events:none; opacity:0; transform:translate(-50%,-108%); background:#111a30; color:#dce6f7; border:1px solid #2b3a63; padding:9px 12px; border-radius:9px; font-size:.8rem; max-width:240px; line-height:1.45; box-shadow:0 8px 22px rgba(0,0,0,.5); transition:opacity .12s; z-index:5}
+.stepchips{display:flex; flex-wrap:wrap; gap:7px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--card)}
+.schip{font-family:var(--font); font-size:.78rem; font-weight:650; color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:99px; padding:5px 12px; cursor:pointer}
+.schip:hover{color:var(--text); border-color:var(--acc)}
+.schip.act{color:#0b1020; background:var(--acc); border-color:var(--acc)}
+html[data-theme="light"] .schip.act{color:#fff}
+.simcap{padding:18px 20px 20px; background:var(--card2)}
+.simcap h4{margin:0 0 6px; font-size:1.02rem; color:var(--acc2)}
+.simcap p{margin:0 0 8px}
+.simcap .hint{font-size:.85rem; color:var(--muted); border-left:3px solid var(--vio); padding-left:11px}
+.story{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin:18px 0}
+.story .st{background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:16px 18px}
+.story .st .n{font-family:var(--mono); font-weight:800; color:var(--acc); font-size:.85rem}
+.story .st h4{margin:6px 0 5px; font-size:.98rem}
+.story .st p{font-size:.88rem; margin:.3em 0; color:var(--muted)}
+.story .st .dn{font-size:.8rem; color:var(--acc2); border-top:1px dashed var(--border2); margin-top:9px; padding-top:8px}
+/* ============ MISC BLOCKS ============ */
+details{border:1px solid var(--border); border-radius:var(--rs); background:var(--card); margin:12px 0; overflow:hidden}
+details summary{cursor:pointer; padding:13px 18px; font-weight:650; list-style:none; display:flex; align-items:center; gap:10px}
+details summary::before{content:"+"; font-family:var(--mono); font-weight:800; color:var(--acc); transition:transform .15s}
+details[open] summary::before{transform:rotate(45deg)}
+details summary:hover{background:var(--card2)}
+details .dbody{padding:4px 20px 18px}
+.kv{display:grid; grid-template-columns:170px 1fr; gap:8px 18px; font-size:.93rem}
+.kv .k{color:var(--muted); font-weight:600}
+.layers{display:grid; gap:14px; margin:16px 0}
+.layer{display:grid; grid-template-columns:44px 1fr; gap:16px; background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:18px 20px}
+.layer .ico{width:44px; height:44px; border-radius:11px; display:grid; place-items:center; font-family:var(--mono); font-weight:800; font-size:.95rem; color:var(--acc2); background:rgba(34,211,238,.08); border:1px solid rgba(34,211,238,.3)}
+.layer h4{margin:0 0 6px}
+.runbook{counter-reset:rb; list-style:none; padding:0; margin:14px 0}
+.runbook li{counter-increment:rb; position:relative; padding:12px 16px 12px 56px; background:var(--card); border:1px solid var(--border); border-radius:var(--rs); margin:9px 0}
+.runbook li::before{content:counter(rb,decimal-leading-zero); position:absolute; left:14px; top:12px; font-family:var(--mono); font-weight:800; font-size:.95rem; color:var(--acc2); border:1px solid rgba(34,211,238,.35); border-radius:8px; padding:1px 7px; background:rgba(34,211,238,.06)}
+.runbook li b{display:block; margin-bottom:2px}
+.runbook li{font-size:.93rem; color:var(--muted)}
+.runbook li b{color:var(--text); font-size:.96rem}
+.gloss{display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:12px; margin:14px 0}
+.gloss .g{background:var(--card); border:1px solid var(--border); border-radius:var(--rs); padding:13px 16px; font-size:.9rem}
+.gloss .g b{color:var(--acc2); display:block; margin-bottom:3px; font-size:.92rem}
+.timeline{list-style:none; margin:16px 0; padding:0; border-left:2px solid var(--border2); margin-left:8px}
+.timeline li{position:relative; margin:0 0 18px; padding:0 0 0 26px}
+.timeline li::before{content:""; position:absolute; left:-7px; top:7px; width:12px; height:12px; border-radius:50%; background:var(--acc); border:2px solid var(--bg); box-shadow:0 0 0 2px rgba(79,140,255,.35)}
+.timeline .tdate{font-family:var(--mono); font-size:.8rem; font-weight:700; color:var(--acc2)}
+.process{display:flex; flex-wrap:wrap; gap:10px; margin:16px 0}
+.process .pp{flex:1 1 150px; background:var(--card); border:1px solid var(--border); border-radius:var(--rs); padding:13px 15px; font-size:.88rem; position:relative}
+.process .pp .pn{font-family:var(--mono); font-weight:800; color:var(--vio); font-size:.8rem}
+.process .pp b{display:block; margin:2px 0 3px; font-size:.93rem}
+.process .pp .mut{font-size:.82rem}
+footer.foot{border-top:1px solid var(--border); margin-top:30px; background:var(--bg2)}
+footer.foot .in{max-width:1280px; margin:0 auto; padding:34px 22px 46px; color:var(--muted); font-size:.88rem}
+footer.foot .cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:22px}
+.tocoverlay{position:fixed; inset:0; z-index:960; background:rgba(4,8,18,.66); backdrop-filter:blur(4px); display:none}
+.tocoverlay.open{display:block}
+.tocoverlay .panel{position:absolute; right:14px; bottom:82px; width:min(320px, calc(100vw - 28px)); max-height:70vh; overflow:auto; background:var(--card); border:1px solid var(--border2); border-radius:var(--r); padding:14px; box-shadow:var(--shadow)}
+.tocoverlay a{display:block; border:0; padding:9px 12px; border-radius:9px; color:var(--text); font-weight:550; font-size:.92rem}
+.tocoverlay a:hover{background:var(--elev)}
+/* ============ RESPONSIVE ============ */
+@media (max-width:1040px){
+  .wrap{grid-template-columns:1fr; gap:0}
+  aside.toc{display:none}
+  #tocFab{display:inline-flex}
+  nav.tnav{display:none}
+  .kv{grid-template-columns:1fr}
+  #simCanvas{height:430px}
+}
+@media (max-width:640px){
+  body{font-size:15.5px}
+  .hero .in{padding:40px 18px 32px}
+  #simCanvas{height:380px}
+  .topin{padding:9px 14px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001s !important; transition-duration:.001s !important}
+}
+@media print{
+  header.top,aside.toc,#tocFab,#backTop,#pbar,.simbar,.stepchips{display:none !important}
+  .wrap{grid-template-columns:1fr}
+  body{background:#fff; color:#000}
+}
 
-
-<aside id="toc" aria-label="Table of contents"></aside>
-<div id="tocToggle" role="button" tabindex="0" aria-label="Open navigation"></div>
-<div id="tocBackdrop"></div>
-<main class="wrap">
-
-<section class="hero">
-  <div class="hero-badges">
-    <span class="chip">Guide version <b>2.0</b></span>
-    <a class="chip chip-id" href="https://attack.mitre.org/techniques/T1021/006/" target="_blank" rel="noopener">MITRE ATT&amp;CK T1021.006</a>
-    <span class="chip">Tactic: <b>Lateral Movement</b></span>
-    <span class="chip">Platform: <b>Windows</b></span>
-    <span class="chip">Beginner friendly</span>
-    <span class="chip">For defenders &amp; students</span>
-  </div>
-  <h1>Windows Remote Management <span class="grad">(WinRM)</span></h1>
-  <p class="lead">WinRM is the built-in remote management service of Windows. PowerShell Remoting runs on top of it, so an admin can run commands on another computer without a screen, a window, or any extra software. An attacker with one stolen admin password can use the same trusted channel to command many servers at once.</p>
-  <p class="hero-meta">Written for beginners, SOC analysts, and detection engineers. Every example here is for learning and defense only. This guide shows the attack steps, the logs the attack leaves behind, and how to catch it.</p>
-  <div class="stats">
-    <div class="stat"><div class="sv">TCP 5985 / 5986</div><div class="sk">WinRM ports - plain HTTP, and HTTPS wrapped in TLS</div></div>
-    <div class="stat"><div class="sv">PowerShell Remoting</div><div class="sk">Rides on WinRM - the attacker's favorite way in</div></div>
-    <div class="stat"><div class="sv">wsmprovhost.exe</div><div class="sk">The tell - the process that hosts every remote command</div></div>
-    <div class="stat"><div class="sv">Type 3</div><div class="sk">Network logon type that WinRM sessions create in event 4624</div></div>
-    <div class="stat"><div class="sv">Easy to spot</div><div class="sk">Once Sysmon and PowerShell script logs are collected.</div></div>
-  </div>
-</section>
-
-<section class="sec" id="simulation" data-num="1" data-toc="Animated Attack Simulation">
-  <div class="sec-head">
-    <div class="sec-num">1</div>
-    <div>
-      <h2>Animated Attack Simulation</h2>
-      <p class="sec-sub">Watch a stolen domain admin password turn into remote control of three servers - no malware files, no RDP window.</p>
-    </div>
-  </div>
-  <p>This animation replays a classic WinRM attack end to end. The attacker starts on one owned workstation, WS-A, after stealing the password of a domain admin. From there they use PowerShell Remoting, which rides on WinRM, to probe servers, open remote shells, dump credentials, and create a backdoor account. Watch the "Security telemetry" panel on the right. Every hostile step fires at least one log event that defenders can collect.</p>
+/* ============================================================
+   CROSS-GENERATION COMPATIBILITY LAYER
+   The canonical T1528 design is applied to older guides by
+   remapping their token names and resetting their page layouts.
+   ============================================================ */
+:root,
+html[data-theme="light"]{
+  --accent:var(--acc);
+  --accent-2:var(--acc2);
+  --accent2:var(--acc2);
+  --accent-soft:color-mix(in srgb,var(--acc) 14%,transparent);
+  --accent2-soft:color-mix(in srgb,var(--acc2) 14%,transparent);
+  --accent-border:color-mix(in srgb,var(--acc) 45%,transparent);
+  --txt:var(--text); --ink:var(--text); --body:var(--text); --strong:var(--text); --em:var(--text);
+  --soft:var(--muted); --mut:var(--muted); --mut2:var(--muted); --muted2:var(--muted); --lead:var(--muted); --faint:var(--muted);
+  --line:var(--border); --line2:var(--border2); --border-soft:var(--border);
+  --panel:var(--card); --panel2:var(--card2); --surface:var(--card); --surface2:var(--card2);
+  --bg-alt:var(--bg2); --card-2:var(--card2);
+  --brand:var(--acc); --brand-dark:var(--acc); --brand-soft:color-mix(in srgb,var(--acc) 14%,transparent);
+  --navy:var(--text); --navy-soft:var(--border2);
+  --red:var(--crit); --green:var(--ok); --amber:var(--warn); --purple:var(--vio); --cyan:var(--acc2); --info:var(--acc);
+  --code-bg:var(--codebg); --code-ink:var(--text); --code-text:var(--text); --code-border:var(--border);
+  --code-inline:var(--acc2); --code-inline-bg:var(--elev); --code-inline-fg:var(--acc2);
+  --th-bg:var(--card2); --th-fg:var(--muted); --td-border:var(--border);
+  --btn-bg:var(--card); --btn-border:var(--border2); --btn-fg:var(--text); --btn-hover:var(--elev); --btn-hover-border:var(--acc);
+  --toc-bg:var(--bg); --toggle-bg:var(--card); --hero-grid:transparent; --stat-bg:var(--card); --chip-bg:var(--card);
+  --scroll:var(--border2); --scroll-hover:var(--muted); --overlay:rgba(4,8,18,.66);
+  --radius:var(--r); --radius-sm:var(--rs); --sans:var(--font);
+  --high-soft:color-mix(in srgb,var(--high) 14%,transparent);
+  --crit-soft:color-mix(in srgb,var(--crit) 14%,transparent);
+  --warn-soft:color-mix(in srgb,var(--warn) 14%,transparent);
+  --ok-soft:color-mix(in srgb,var(--ok) 14%,transparent);
+}
+/* shell resets that beat the old per-page layouts */
+body > body > .wrap{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:252px minmax(0,1fr);gap:38px;padding:34px 22px 20px}
+body main,.body main,body .main{margin:0!important;padding:0!important;max-width:none!important;min-width:0;background:transparent}
+body main.wrap{margin-left:0!important}
+body .hero{position:relative;overflow:hidden;background:radial-gradient(900px 420px at 12% -10%,rgba(79,140,255,.16),transparent 60%),radial-gradient(800px 400px at 88% 0%,rgba(167,139,250,.14),transparent 55%),radial-gradient(600px 380px at 55% 115%,rgba(34,211,238,.10),transparent 60%),var(--bg);border-bottom:1px solid var(--border);padding:0;margin:0}
+body .hero .in{max-width:1280px;margin:0 auto;padding:56px 22px 42px;position:relative}
+body .hero h1{font-size:clamp(1.9rem,4.4vw,3.1rem);margin:18px 0 10px;letter-spacing:-.02em;line-height:1.25}
+body .hero .lede{max-width:62ch;color:var(--muted);font-size:1.06rem}
+body .hero h1,body .hero h1 *{color:var(--text)!important}
+body .hero h1 .grad{color:transparent!important}
+body .hero .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px}
+body .hero .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px;margin-top:30px}
+body main .sec{margin:0 0 56px}
+body main h2,body main h3,body main h4{color:var(--text)}
+body main .sechead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+body main .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px 24px;margin:16px 0;box-shadow:var(--shadow)}
+body main .tblwrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r);margin:16px 0;background:var(--card)}
+body main table.tbl{width:100%;border-collapse:collapse;font-size:.92rem;min-width:640px}
+body main .codewrap{border:1px solid var(--border);border-radius:var(--rs);overflow:hidden;margin:14px 0;background:var(--codebg)}
+body main pre{border:1px solid var(--border);border-radius:var(--rs);background:var(--codebg);color:#dbe4f5;padding:15px 17px;overflow:auto;font-family:var(--mono);font-size:.855rem;line-height:1.62}
+body main pre code{background:none;border:0;padding:0;color:inherit}
+body #sidebarToc,body aside.toc,body .toc{position:sticky;top:78px;left:auto;right:auto;bottom:auto;width:auto;max-height:calc(100vh - 100px);overflow:auto;padding:0 6px 0 0;background:transparent;border:0;z-index:auto;transition:none}
+body #tocToggle,body #tocBackdrop,body #toc-overlay,body .toc-band,body .title-band,body #toc-toggle{display:none!important}
+body .tocoverlay{display:none}
+body .tocoverlay.open{display:block}
+body .tocoverlay .panel{position:absolute;right:14px;bottom:82px;width:min(320px,calc(100vw - 28px));max-height:70vh;overflow:auto;background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:14px;box-shadow:var(--shadow)}
+body .tocoverlay .panel a{display:block;border:0;padding:9px 12px;border-radius:9px;color:var(--text);font-weight:550;font-size:.92rem;text-decoration:none}
+body .tocoverlay .panel a:hover{background:var(--elev)}
+body .callout{border-radius:var(--rs);padding:14px 18px;margin:16px 0;border:1px solid var(--border);background:var(--card)}
+body .callout.danger,body .callout.warn,body .callout.note,body .callout.tip{background:var(--card)}
+body .badge{display:inline-block;font-size:.74rem;font-weight:800;padding:3px 10px;border-radius:99px;letter-spacing:.03em;white-space:nowrap}
+body .b-crit{background:rgba(239,68,68,.14);color:var(--crit);border:1px solid rgba(239,68,68,.45)}
+body .b-high{background:rgba(251,146,60,.13);color:var(--high);border:1px solid rgba(251,146,60,.45)}
+body .b-med{background:rgba(251,191,36,.12);color:var(--warn);border:1px solid rgba(251,191,36,.45)}
+body .b-low{background:rgba(74,222,128,.12);color:var(--low);border:1px solid rgba(74,222,128,.45)}
+body .b-acc{background:rgba(79,140,255,.12);color:var(--acc);border:1px solid rgba(79,140,255,.4)}
+body .b-vio{background:rgba(167,139,250,.12);color:var(--vio);border:1px solid rgba(167,139,250,.4)}
+body .b-cy{background:rgba(34,211,238,.1);color:var(--acc2);border:1px solid rgba(34,211,238,.35)}
+body .mut{color:var(--muted)}
+@media (max-width:1040px){
+  body > body > .wrap{grid-template-columns:1fr;gap:0}
+  body #sidebarToc,body aside.toc,body .toc{display:none}
+  #tocFab{display:inline-flex}
+}
+@media (max-width:640px){
+  body{font-size:15.5px}
+  body .hero .in{padding:40px 18px 32px}
+}
+</style></div><p class="mut">WinRM is the built-in remote management service of Windows. PowerShell Remoting runs on top of it, so an admin can run commands on another computer without a screen, a window, or any extra software. An attacker with one stolen admin password can use the same trusted channel to command many servers at once.</p><div class="card"><h3>In one sentence</h3><p>Adversaries may use Valid Accounts to interact with remote systems using Windows Remote Management (WinRM). The adversary may then perform actions as the logged-on user.</p></div><div class="card"><h3>Technique quick facts</h3><p class="small">Written for beginners, SOC analysts, and detection engineers. Every example here is for learning and defense only. This guide shows the attack steps, the logs the attack leaves behind, and how to catch it.</p><div class="fact"><div class="k">WinRM ports - plain HTTP, and HTTPS wrapped in TLS</div><div class="v">TCP 5985 / 5986</div></div><div class="fact"><div class="k">Rides on WinRM - the attacker's favorite way in</div><div class="v">PowerShell Remoting</div></div><div class="fact"><div class="k">The tell - the process that hosts every remote command</div><div class="v">wsmprovhost.exe</div></div><div class="fact"><div class="k">Network logon type that WinRM sessions create in event 4624</div><div class="v">Type 3</div></div><div class="fact"><div class="k">Once Sysmon and PowerShell script logs are collected.</div><div class="v">Easy to spot</div></div></div></section><section class="sec" id="simulation"><div class="sechead"><span class="secnum">2</span><h2>Animated Attack Simulation</h2></div><p class="mut">Watch a stolen domain admin password turn into remote control of three servers - no malware files, no RDP window.</p><p>This animation replays a classic WinRM attack end to end. The attacker starts on one owned workstation, WS-A, after stealing the password of a domain admin. From there they use PowerShell Remoting, which rides on WinRM, to probe servers, open remote shells, dump credentials, and create a backdoor account. Watch the "Security telemetry" panel on the right. Every hostile step fires at least one log event that defenders can collect.</p>
   <div class="sim-mount" data-sim-cfg="sim1-cfg">
     <div class="canvas-holder"><canvas aria-label="Animated attack simulation"></canvas></div>
   </div>
   <div class="note"><b>What to watch for:</b> The key moment is step 3. The moment a remote PowerShell session opens, the target server spawns <code>wsmprovhost.exe</code>. That process, plus a Type 3 logon from an unusual source, is the strongest single sign of WinRM lateral movement. Statuses stick: once a server turns red it stays red until defenders contain it in the last step.</div>
   <div class="tip"><b>Tip:</b> Use the step chips to jump around, and the speed selector to slow the story down. Steps 4 and 5 show the real power of this technique: one command, many servers, in seconds.</div>
-</section>
-
-<section class="sec" id="redteam" data-num="2" data-toc="Red Team Perspective">
-  <div class="sec-head">
-    <div class="sec-num">2</div>
-    <div>
-      <h2>Red Team Perspective</h2>
-      <p class="sec-sub">Why WinRM is the quietest way to command a Windows server fleet.</p>
-    </div>
-  </div>
-  <p>Attackers do not always need exploits. On a Windows network, the admin tools are already installed on every machine. WinRM turns those tools into a remote channel, and PowerShell turns that channel into a shell. This section explains the technique from the attacker's side so you can understand what it looks like on yours.</p>
+</section><section class="sec" id="redteam"><div class="sechead"><span class="secnum">3</span><h2>Red Team Perspective</h2></div><p class="mut">Why WinRM is the quietest way to command a Windows server fleet.</p><p>Attackers do not always need exploits. On a Windows network, the admin tools are already installed on every machine. WinRM turns those tools into a remote channel, and PowerShell turns that channel into a shell. This section explains the technique from the attacker's side so you can understand what it looks like on yours.</p>
 
   <div class="card">
     <h3>What WinRM is</h3>
@@ -429,17 +706,7 @@ evil-winrm -i 10.1.20.62 -u admin_mike -p 'Autumn2026!'
     <div class="warn"><b>Watch out (OPSEC and noise):</b> On a target without logging, this attack is very quiet. There is no disk write, no window, and no new account at first. But on a target that collects logs, it is loud in a different way. Every session creates a 4624 Type 3 event, a wsmprovhost.exe process, and a 4104 script block with the full command text. Red teams should assume the command text is captured.</div>
     <div class="danger"><b>Ethics:</b> Only run these commands against systems you own or have written permission to test. Using stolen credentials against systems you do not own is a crime in most countries, even if you call it a test. Build a small lab with two virtual machines instead. Real defenders learn from safe labs just as well.</div>
   </div>
-</section>
-
-<section class="sec" id="blueteam" data-num="3" data-toc="Blue Team / SOC Perspective">
-  <div class="sec-head">
-    <div class="sec-num">3</div>
-    <div>
-      <h2>Blue Team / SOC Perspective</h2>
-      <p class="sec-sub">A quiet channel that still leaves a loud trail - if you collect the right logs.</p>
-    </div>
-  </div>
-  <p>From the defender's chair, a WinRM attack is a chain of small, boring-looking events that add up to something serious. Each step below is a normal admin action. That is exactly why a single event proves nothing, but the pattern proves a lot. Your job is to collect all the pieces and look at them together.</p>
+</section><section class="sec" id="blueteam"><div class="sechead"><span class="secnum">4</span><h2>Blue Team / SOC Perspective</h2></div><p class="mut">A quiet channel that still leaves a loud trail - if you collect the right logs.</p><p>From the defender's chair, a WinRM attack is a chain of small, boring-looking events that add up to something serious. Each step below is a normal admin action. That is exactly why a single event proves nothing, but the pattern proves a lot. Your job is to collect all the pieces and look at them together.</p>
 
   <div class="card">
     <h3>The artifact story, step by step</h3>
@@ -506,19 +773,9 @@ Stop-Process -Name wsmprovhost -Force
       <li>Firewall or NetFlow: internal TCP 5985/5986 sessions that do not start from the management subnet.</li>
     </ul>
   </div>
-</section>
+</section><section class="sec" id="detection"><div class="sechead"><span class="secnum">5</span><h2>Detection Engineering Deep Dive</h2></div><p class="mut">From rules and standards to log samples, Sigma rules, and runnable Splunk SPL.</p><p>This is the working section. It maps the technique to regulations, ties it to real threat actors, ranks the concrete threats, shows real log samples, and finishes with seven Sigma rules. Each rule has a matching Splunk SPL query you can run after adjusting index names. Everything here follows one idea: WinRM attacks are made of normal admin events, so detect the pattern, not the single event.</p>
 
-<section class="sec" id="detection" data-num="4" data-toc="Detection Engineering Deep Dive">
-  <div class="sec-head">
-    <div class="sec-num">4</div>
-    <div>
-      <h2>Detection Engineering Deep Dive</h2>
-      <p class="sec-sub">From rules and standards to log samples, Sigma rules, and runnable Splunk SPL.</p>
-    </div>
-  </div>
-  <p>This is the working section. It maps the technique to regulations, ties it to real threat actors, ranks the concrete threats, shows real log samples, and finishes with seven Sigma rules. Each rule has a matching Splunk SPL query you can run after adjusting index names. Everything here follows one idea: WinRM attacks are made of normal admin events, so detect the pattern, not the single event.</p>
-
-  <h3 class="sub">Regulation Mapping</h3>
+  <h3 class="sub" id="dd-regulation-mapping">Regulation Mapping</h3>
   <p>Compliance rules do not mention WinRM by name. They ask for the controls that make this attack hard and visible. Use this table when auditors ask why you monitor PowerShell remoting.</p>
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Regulation</th><th>Control / Article</th><th>What it asks for</th><th>How this technique relates</th></tr></thead>
@@ -532,10 +789,10 @@ Stop-Process -Name wsmprovhost -Force
     </tbody>
   </table></div>
 
-  <h3 class="sub">Threat Intelligence</h3>
+  <h3 class="sub" id="dd-threat-intelligence">Threat Intelligence</h3>
   <p>Threat intelligence (CTI) turns reports about attackers into detections you can run. The workflow has three steps. <b>Collect</b>: pull reports and indicators from sources you trust. <b>Analyze</b>: extract the behavior - which tools, which protocols, which events - and match it to ATT&amp;CK techniques like T1021.006. <b>Apply</b>: turn that behavior into the Sigma rules, hunts, and hardening steps in this guide. Behavior outlives indicators: an attacker can change an IP address in seconds, but the way they move through a network changes slowly.</p>
   <div class="card">
-    <h3>Where CTI teams get their data</h3>
+    <h3 id="dd-where-cti-teams-get-their-data">Where CTI teams get their data</h3>
     <ul>
       <li><b>MITRE ATT&amp;CK</b> - the technique page for T1021.006 lists groups and tools that use WinRM.</li>
       <li><b>CISA and national CERT advisories</b> - free reports with real attack details.</li>
@@ -562,7 +819,7 @@ Stop-Process -Name wsmprovhost -Force
   </table></div>
   <div class="note"><b>Provenance:</b> The rows above are exactly the procedure examples MITRE lists on the T1021.006 page today. MITRE does not list years on the technique page, so the table uses ATT&amp;CK IDs instead. Public reporting links more groups to WinRM, including other ransomware crews. Treat those extra names as leads to verify, not as facts from this page.</div>
   <div class="card">
-    <h3>Hunting hypotheses</h3>
+    <h3 id="dd-hunting-hypotheses">Hunting hypotheses</h3>
     <p>A hunting hypothesis is a question you ask your logs before any alert exists. Try these three against your own data:</p>
     <ul>
       <li><b>Remoting where nobody remotes:</b> wsmprovhost.exe running on machines that have no admin purpose - SQL servers, HR apps, print servers. Someone is using a trusted channel to reach them.</li>
@@ -571,7 +828,7 @@ Stop-Process -Name wsmprovhost -Force
     </ul>
   </div>
 
-  <h3 class="sub">Threats Ranking &amp; Categorization</h3>
+  <h3 class="sub" id="dd-threats-ranking-categorization">Threats Ranking &amp; Categorization</h3>
   <p>Not every WinRM event is an attack, and not every attack is equal. This ranking orders the concrete threats this technique creates, from the worst to the quietest. The log patterns for each threat follow in the next part.</p>
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Threat</th><th>Severity</th><th>Platforms</th><th>Short description</th></tr></thead>
@@ -587,7 +844,7 @@ Stop-Process -Name wsmprovhost -Force
     </tbody>
   </table></div>
 
-  <h3 class="sub">Logs &amp; Patterns</h3>
+  <h3 class="sub" id="dd-logs-patterns">Logs &amp; Patterns</h3>
   <p>Each threat above gets its own log pattern below. The samples are realistic Windows event XML and text. In your SIEM they arrive through the Windows event channel or Sysmon. Every sample ends with a short list of what to look for.</p>
 
   <h4 class="mini">Threat 1 - Domain-wide remote execution with a stolen domain admin account</h4>
@@ -834,7 +1091,7 @@ Path:</code></pre></div>
     <li>Review the allow list each quarter, or it becomes the attack path itself.</li>
   </ul>
 
-  <h3 class="sub">Sigma Detection Rules</h3>
+  <h3 class="sub" id="dd-sigma-detection-rules">Sigma Detection Rules</h3>
   <p>Sigma is a free, open format for writing detection rules once and running them in any SIEM. Each rule below matches one threat from the ranking. Under every rule you find the matching Splunk SPL query. SPL (Search Processing Language) is the search language used in Splunk. Adjust the index names to your own environment before you run them.</p>
 
   <h4 class="mini">Rule 1 - WinRM remote PowerShell session on a non-jump host</h4>
@@ -1150,7 +1407,7 @@ level: medium</code></pre></div>
 | where blocks &gt;= 3
 | sort - blocks</code></pre></div>
 
-  <h3 class="sub">Quick Reference</h3>
+  <h3 class="sub" id="dd-quick-reference">Quick Reference</h3>
   <p>Keep this table next to your keyboard. It maps the ports, processes, and event IDs of this technique to what they mean.</p>
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Signal</th><th>What it is</th><th>Why it matters</th></tr></thead>
@@ -1169,17 +1426,7 @@ level: medium</code></pre></div>
       <tr><td>1102</td><td>Audit log cleared</td><td>The attacker erasing the trail - page on sight.</td></tr>
     </tbody>
   </table></div>
-</section>
-
-<section class="sec" id="scenario" data-num="5" data-toc="Real-World Scenario">
-  <div class="sec-head">
-    <div class="sec-num">5</div>
-    <div>
-      <h2>Real-World Scenario</h2>
-      <p class="sec-sub">Twelve servers in four minutes - a night in the SOC.</p>
-    </div>
-  </div>
-  <p>This story is a realistic composite. The attack steps follow the official ATT&amp;CK record for this technique. Wizard Spider, the group behind the Conti ransomware operation, has used WinRM to move laterally through victim networks. APT29 used WinRM via PowerShell during the SolarWinds Compromise. The company, the people, and the dates are invented. The attack steps are not.</p>
+</section><section class="sec" id="scenario"><div class="sechead"><span class="secnum">6</span><h2>Real-World Scenario</h2></div><p class="mut">Twelve servers in four minutes - a night in the SOC.</p><p>This story is a realistic composite. The attack steps follow the official ATT&amp;CK record for this technique. Wizard Spider, the group behind the Conti ransomware operation, has used WinRM to move laterally through victim networks. APT29 used WinRM via PowerShell during the SolarWinds Compromise. The company, the people, and the dates are invented. The attack steps are not.</p>
 
   <div class="note"><b>Setting:</b> A mid-size company runs a Windows estate with about 40 servers. WinRM is enabled on all of them, as it is on most Windows Server estates. PowerShell Remoting works from any machine to any server. There is one problem: tiering. Domain admins sometimes work from their normal laptops, so the admin tier leaks into the workstation network.</div>
 
@@ -1279,17 +1526,7 @@ level: medium</code></pre></div>
       <li><b>One written containment decision log</b> captured who approved each isolation and reset, which later made the report and the insurance claim easy.</li>
     </ul>
   </div>
-</section>
-
-<section class="sec" id="mitigation" data-num="6" data-toc="Mitigation &amp; Defense">
-  <div class="sec-head">
-    <div class="sec-num">6</div>
-    <div>
-      <h2>Mitigation &amp; Defense</h2>
-      <p class="sec-sub">Make WinRM a narrow, logged, tiered service instead of an open door.</p>
-    </div>
-  </div>
-  <p>You do not have to break WinRM. Admins and automation genuinely need it. The goal is to shrink it: fewer machines listen, fewer machines may connect, every session is logged, and every session is checked against rules. The table below orders the work by what it stops.</p>
+</section><section class="sec" id="mitigation"><div class="sechead"><span class="secnum">7</span><h2>Mitigation &amp; Defense</h2></div><p class="mut">Make WinRM a narrow, logged, tiered service instead of an open door.</p><p>You do not have to break WinRM. Admins and automation genuinely need it. The goal is to shrink it: fewer machines listen, fewer machines may connect, every session is logged, and every session is checked against rules. The table below orders the work by what it stops.</p>
 
   <div class="note"><b>Official MITRE mitigations:</b> The ATT&amp;CK page for T1021.006 lists three mitigations. <b>M1042 - Disable or Remove Feature or Program:</b> disable the WinRM service where nothing needs it. <b>M1030 - Network Segmentation:</b> where WinRM must stay, lock critical zones behind their own WinRM infrastructure and host firewall rules that only allow management hosts. <b>M1026 - Privileged Account Management:</b> use separate WinRM accounts and permissions for those zones. The priority table below puts these three into practice.</div>
 
@@ -1366,17 +1603,7 @@ net stop winrm &amp;&amp; net start winrm
 <pre><code data-lang="cmd">winrm enumerate winrm/config/listener</code></pre></div>
     <p>If the command reports no listener, or fails because the WinRM service is stopped, you are in the default safe state. If a listener answers on your home PC and you did not create one, remove it and scan for malware. Keep Windows Update on, because the service is patched through the same channel as everything else.</p>
   </div>
-</section>
-
-<section class="sec" id="practices" data-num="7" data-toc="Common Mistakes &amp; Best Practices">
-  <div class="sec-head">
-    <div class="sec-num">7</div>
-    <div>
-      <h2>Common Mistakes &amp; Best Practices</h2>
-      <p class="sec-sub">Nine traps detection teams fall into with WinRM - and the way out of each one.</p>
-    </div>
-  </div>
-  <p>Most WinRM detection failures are not exotic. They are the same handful of mistakes, repeated across teams. Read the table before you write your first rule, and it will save you a week of tuning.</p>
+</section><section class="sec" id="practices"><div class="sechead"><span class="secnum">8</span><h2>Common Mistakes &amp; Best Practices</h2></div><p class="mut">Nine traps detection teams fall into with WinRM - and the way out of each one.</p><p>Most WinRM detection failures are not exotic. They are the same handful of mistakes, repeated across teams. Read the table before you write your first rule, and it will save you a week of tuning.</p>
 
   <div class="card">
     <h3>Common mistakes and their fixes</h3>
@@ -1411,14 +1638,42 @@ net stop winrm &amp;&amp; net start winrm
     </ul>
     <div class="note"><b>Remember:</b> WinRM attacks are built entirely from normal admin actions. Your advantage is not a magic signature. It is collection, baselining, and correlation - knowing what normal looks like, and paging when the shape breaks.</div>
   </div>
-</section>
-
-
-<div id="atk-relations"></div>
-<div id="atk-prevnext"></div>
-</main>
-
-<script>
+</section></main></div><button class="ibtn" id="tocFab" type="button" aria-label="Open table of contents">Contents</button><button class="ibtn" id="backTop" type="button" aria-label="Back to top">↑</button><div class="tocoverlay" id="tocOverlay"><div class="panel"><div class="ttl">Contents</div><div id="tocPanel"><a href="#overview">1 · Overview: What this technique is</a><a href="#simulation">2 · Animated Attack Simulation</a><a href="#redteam">3 · Red Team Perspective</a><a href="#blueteam">4 · Blue Team / SOC Perspective</a><a href="#detection">5 · Detection Engineering Deep Dive</a><a href="#dd-regulation-mapping">5.1 · Regulation Mapping</a><a href="#dd-threat-intelligence">5.2 · Threat Intelligence</a><a href="#dd-where-cti-teams-get-their-data">5.3 · Where CTI teams get their data</a><a href="#dd-hunting-hypotheses">5.4 · Hunting hypotheses</a><a href="#dd-threats-ranking-categorization">5.5 · Threats Ranking &amp; Categorization</a><a href="#dd-logs-patterns">5.6 · Logs &amp; Patterns</a><a href="#dd-sigma-detection-rules">5.7 · Sigma Detection Rules</a><a href="#dd-quick-reference">5.8 · Quick Reference</a><a href="#scenario">6 · Real-World Scenario</a><a href="#mitigation">7 · Mitigation &amp; Defense</a><a href="#practices">8 · Common Mistakes &amp; Best Practices</a></div></div></div><div id="toc" hidden></div><div id="tocToggle" hidden></div><div id="tocBackdrop" hidden></div><div id="toc-overlay" hidden></div><script>
+(function(){
+  "use strict";
+  var bar = document.getElementById("pbar");
+  var toc = document.getElementById("sidebarToc");
+  var links = toc ? Array.prototype.slice.call(toc.querySelectorAll("a")) : [];
+  var targets = links.map(function(a){ return document.querySelector(a.getAttribute("href")); });
+  function onScroll(){
+    if(bar){
+      var h = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.width = (h > 0 ? Math.min(100, window.scrollY / h * 100) : 0) + "%";
+    }
+    var y = window.scrollY + 120, active = 0;
+    targets.forEach(function(t, i){ if(t && t.offsetTop <= y) active = i; });
+    links.forEach(function(a, i){ a.classList.toggle("act", i === active); });
+  }
+  window.addEventListener("scroll", onScroll, {passive:true});
+  window.addEventListener("resize", onScroll);
+  onScroll();
+  var fab = document.getElementById("tocFab"), overlay = document.getElementById("tocOverlay"), back = document.getElementById("backTop");
+  if(fab && overlay){ fab.addEventListener("click", function(){ overlay.classList.toggle("open"); }); overlay.addEventListener("click", function(e){ if(e.target === overlay || e.target.tagName === "A") overlay.classList.remove("open"); }); }
+  if(back){ back.addEventListener("click", function(){ window.scrollTo({top:0, behavior:"smooth"}); }); }
+  document.querySelectorAll(".copybtn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var box = btn.closest(".codewrap") || btn.parentElement.parentElement;
+      var pre = box ? box.querySelector("pre") : null;
+      if(!pre) return;
+      var ta = document.createElement("textarea"); ta.value = pre.innerText; ta.style.position = "fixed"; ta.style.left = "-9999px"; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand("copy"); } catch(e){}
+      document.body.removeChild(ta);
+      if(!ok && navigator.clipboard) navigator.clipboard.writeText(pre.innerText).catch(function(){});
+      var old = btn.textContent; btn.textContent = ok ? "Copied" : "Copy"; setTimeout(function(){ btn.textContent = old; }, 1200);
+    });
+  });
+})();
+</script><script>
 /* ============================================================
    MITRE ATT&CK Detection Guide — Shared JS
    TOC builder, scrollspy, mobile nav, syntax highlighter,

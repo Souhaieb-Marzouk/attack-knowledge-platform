@@ -284,49 +284,335 @@ ul.check li b{color:var(--txt)}
 <style id="atk-page-layout">@media (min-width:961px){#toc{top:62px!important;height:calc(100vh - 62px)}.toc{top:62px!important;bottom:0!important}}</style>
 </head>
 <body>
-<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
 <link rel="stylesheet" href="../assets/css/platform.css">
 <div id="atk-header" data-technique="T1021"></div>
 <script src="../assets/js/platform.js" defer></script>
-<!-- ==== /PLATFORM INTEGRATION ==== -->
+<div id="pbar"></div><noscript><div style="padding:12px 20px;background:#fbbf24;color:#111;font-weight:700;text-align:center">JavaScript is off. The animated simulation and interactive tools will not run, but all text content is still readable.</div></noscript><div class="hero" id="home"><div class="in"><span class="kicker">MITRE ATT&amp;CK · Lateral Movement · Beginner Friendly Guide</span><h1><span class="grad">T1021</span> — Remote Services <span class="grad">(the full menu)</span></h1><p class="lede">T1021 is the <strong>parent technique</strong> for remote services. These are built-in tools such as RDP, SMB, SSH, and WinRM. They let one computer <strong>work on another computer over the network</strong>. That includes ESXi (VMware hypervisor software that runs virtual machines) and IaaS (cloud infrastructure), not only desktops. Attackers use them to move sideways inside a network — a step called <strong>lateral movement</strong>. This guide covers all eight sub-techniques in one place, so you can defend the whole menu, not just one dish.</p><div class="chips" aria-label="Technique metadata"><span class="chip">Technique ID: <b>T1021</b></span><span class="chip">Tactic: <b>Lateral Movement</b></span><span class="chip">Platforms: <b>Windows, Linux, IaaS, ESXi, macOS</b></span><span class="chip">Sub-techniques: <b>8</b></span><span class="chip">Source: <b>attack.mitre.org/techniques/T1021/</b></span><span class="chip">Version: <b>v2.0</b></span></div><div class="facts"><div class="fact"><div class="k">In one sentence</div><div class="v">Adversaries may use Valid Accounts to log into a service that accepts remote connections, such as telnet, SSH, and VNC. The adversary may then perform actions as the logged-on user.</div></div><div class="fact"><div class="k">Who this is for</div><div class="v">SOC analysts, detection engineers, students, and anyone who wants a clear reference.</div></div><div class="fact"><div class="k">What you get</div><div class="v">Animated simulation, red and blue team views, detection engineering, a case study, mitigations and a response checklist.</div></div><div class="fact"><div class="k">Reading level</div><div class="v">CEFR B1 English. Short sentences; every technical term is explained.</div></div></div></div></div><div class="wrap"><aside class="toc" id="sidebarToc" aria-label="Table of contents"><div class="ttl">Contents</div><a href="#overview">1 · Overview: What this technique is</a><a href="#simulation">2 · Animated Attack Simulation</a><a href="#redteam">3 · Red Team Perspective</a><a href="#blueteam">4 · Blue Team / SOC Perspective</a><a href="#detection">5 · Detection Engineering Deep Dive</a><a href="#dd-regulation-mapping" class="sub">5.1 · Regulation Mapping</a><a href="#dd-threat-intelligence" class="sub">5.2 · Threat Intelligence</a><a href="#dd-threats-ranking-categorization" class="sub">5.3 · Threats Ranking &amp; Categorization</a><a href="#dd-logs-patterns" class="sub">5.4 · Logs &amp; Patterns</a><a href="#dd-sigma-detection-rules" class="sub">5.5 · Sigma Detection Rules</a><a href="#scenario">6 · Real-World Scenario</a><a href="#mitigation">7 · Mitigation &amp; Defense</a><a href="#practices">8 · Common Mistakes &amp; Best Practices</a></aside><main><section class="sec" id="overview"><div class="sechead"><span class="secnum">1</span><h2>Overview: What this technique is</h2><style id="atk-guide-design">
+/* ============ DESIGN TOKENS ============ */
+:root{
+  --bg:#0b0f1a; --bg2:#0e1424; --card:#121a2e; --card2:#172138; --elev:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border2:#2f4066;
+  --acc:#4f8cff; --acc2:#22d3ee; --vio:#a78bfa; --ok:#34d399; --warn:#fbbf24;
+  --high:#fb923c; --crit:#f87171; --low:#4ade80;
+  --codebg:#0a0e17; --codehead:#101728;
+  --shadow:0 10px 30px rgba(2,6,18,.45);
+  --r:14px; --rs:9px;
+  --sim-bg:#080d1b; --sim-grid:#131d36; --sim-zone:rgba(79,140,255,.05);
+  --sim-text:#dce6f7; --sim-muted:#8ea1c4; --sim-line:#26355a;
+  --sim-att:#f87171; --sim-vic:#60a5fa; --sim-cloud:#b195f5; --sim-soc:#34d399;
+  --sim-pkt:#ffd166; --sim-ok:#34d399; --sim-danger:#f87171;
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --bg2:#eef2fa; --card:#ffffff; --card2:#f5f8ff; --elev:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border2:#c2d0ea;
+  --acc:#2f6fe4; --acc2:#0891b2; --vio:#7c5ce0; --ok:#0d9e6e; --warn:#b45309;
+  --high:#c2410c; --crit:#dc2626; --low:#15803d;
+  --shadow:0 8px 24px rgba(23,36,64,.10);
+}
+/* ============ BASE ============ */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font); font-size:16.5px; line-height:1.68;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+::selection{background:rgba(79,140,255,.35)}
+img,canvas{max-width:100%}
+a{color:var(--acc); text-decoration:none; border-bottom:1px dotted rgba(79,140,255,.5)}
+a:hover{border-bottom-style:solid}
+h1,h2,h3,h4{line-height:1.25; margin:0 0 .5em}
+h2{font-size:clamp(1.5rem,2.6vw,2.05rem); letter-spacing:-.015em}
+h3{font-size:clamp(1.15rem,2vw,1.4rem); margin-top:1.6em}
+h4{font-size:1.05rem; margin-top:1.2em; color:var(--text)}
+p{margin:.6em 0}
+strong{color:var(--text); font-weight:650}
+code{font-family:var(--mono); font-size:.86em; background:var(--elev); border:1px solid var(--border); border-radius:6px; padding:.1em .4em; color:var(--acc2); word-break:break-word}
+ul,ol{padding-left:1.35em; margin:.55em 0}
+li{margin:.32em 0}
+li::marker{color:var(--acc)}
+section{scroll-margin-top:86px}
+.small{font-size:.88rem; color:var(--muted)}
+.hr{border:0; border-top:1px solid var(--border); margin:2.4rem 0}
+/* ============ PROGRESS + HEADER ============ */
+#pbar{position:fixed; top:0; left:0; height:3px; width:0; background:linear-gradient(90deg,var(--acc),var(--acc2)); z-index:1000; transition:width .08s linear}
+header.top{
+  position:sticky; top:0; z-index:900; backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px);
+  background:color-mix(in srgb, var(--bg) 78%, transparent);
+  border-bottom:1px solid var(--border);
+}
+.topin{max-width:1280px; margin:0 auto; display:flex; align-items:center; gap:18px; padding:10px 22px}
+.logo{display:flex; align-items:center; gap:11px; font-weight:700; white-space:nowrap}
+.logo .mark{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#0d1428,#16224a);display:grid;place-items:center;border:1px solid var(--border2)}
+.logo .mark svg{width:20px;height:20px}
+.logo small{display:block; font-weight:500; color:var(--muted); font-size:.72rem; line-height:1.1}
+nav.tnav{display:flex; gap:4px; margin-left:auto; overflow-x:auto; scrollbar-width:none}
+nav.tnav::-webkit-scrollbar{display:none}
+nav.tnav a{border:0; color:var(--muted); font-size:.86rem; padding:7px 11px; border-radius:8px; white-space:nowrap; font-weight:550}
+nav.tnav a:hover{color:var(--text); background:var(--elev)}
+nav.tnav a.act{color:var(--acc); background:color-mix(in srgb,var(--acc) 12%, transparent)}
+.tbtns{display:flex; gap:8px; align-items:center}
+.ibtn{
+  display:inline-flex; align-items:center; justify-content:center; gap:7px;
+  border:1px solid var(--border2); background:var(--card); color:var(--text);
+  border-radius:9px; padding:7px 11px; font-size:.84rem; font-weight:600; cursor:pointer; font-family:var(--font);
+}
+.ibtn:hover{border-color:var(--acc); color:var(--acc)}
+#tocFab{display:none; position:fixed; right:18px; bottom:18px; z-index:950; border-radius:50%; width:52px; height:52px; box-shadow:var(--shadow)}
+#backTop{display:none; position:fixed; right:18px; bottom:82px; z-index:950; border-radius:50%; width:44px; height:44px}
+/* ============ HERO ============ */
+.hero{
+  position:relative; overflow:hidden;
+  background:
+    radial-gradient(900px 420px at 12% -10%, rgba(79,140,255,.16), transparent 60%),
+    radial-gradient(800px 400px at 88% 0%, rgba(167,139,250,.14), transparent 55%),
+    radial-gradient(600px 380px at 55% 115%, rgba(34,211,238,.10), transparent 60%),
+    var(--bg);
+  border-bottom:1px solid var(--border);
+}
+.hero .in{max-width:1280px; margin:0 auto; padding:56px 22px 42px; position:relative}
+.kicker{display:inline-flex; align-items:center; gap:9px; font-size:.8rem; letter-spacing:.14em; text-transform:uppercase; color:var(--acc2); font-weight:700; border:1px solid rgba(34,211,238,.35); padding:6px 13px; border-radius:99px; background:rgba(34,211,238,.07)}
+.hero h1{font-size:clamp(1.9rem,4.4vw,3.1rem); margin:18px 0 10px; letter-spacing:-.02em}
+.hero h1 .grad{background:linear-gradient(90deg,var(--acc),var(--acc2) 55%,var(--vio)); -webkit-background-clip:text; background-clip:text; color:transparent}
+.hero .lede{max-width:62ch; color:var(--muted); font-size:1.06rem}
+.chips{display:flex; flex-wrap:wrap; gap:9px; margin-top:20px}
+.chip{font-size:.82rem; font-weight:600; color:var(--text); background:var(--card); border:1px solid var(--border2); padding:7px 13px; border-radius:99px}
+.chip b{color:var(--acc2); font-weight:700}
+.facts{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:14px; margin-top:30px}
+.fact{background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:16px 18px}
+.fact .k{font-size:.76rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); font-weight:700}
+.fact .v{margin-top:6px; font-weight:650; font-size:.97rem; line-height:1.45}
+/* ============ LAYOUT ============ */
+body > .wrap{max-width:1280px; margin:0 auto; display:grid; grid-template-columns:252px minmax(0,1fr); gap:38px; padding:34px 22px 20px}
+aside.toc{position:sticky; top:78px; align-self:start; max-height:calc(100vh - 100px); overflow:auto; padding-right:6px; scrollbar-width:thin}
+aside.toc .ttl{font-size:.74rem; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:800; margin:6px 0 10px 12px}
+aside.toc a{display:block; border:0; border-left:2px solid transparent; color:var(--muted); font-size:.885rem; padding:7px 12px; border-radius:0 8px 8px 0; font-weight:550; line-height:1.35}
+aside.toc a:hover{color:var(--text); background:var(--card)}
+aside.toc a.act{color:var(--acc); border-left-color:var(--acc); background:color-mix(in srgb,var(--acc) 9%, transparent)}
+aside.toc a.sub{padding-left:26px; font-size:.83rem}
+main{min-width:0}
+/* ============ SECTIONS + CARDS ============ */
+.sec{margin:0 0 56px}
+.sechead{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:6px}
+.secnum{font-family:var(--mono); font-size:.85rem; font-weight:700; color:var(--acc2); border:1px solid rgba(34,211,238,.4); border-radius:8px; padding:3px 9px; background:rgba(34,211,238,.07)}
+.card{background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:22px 24px; margin:16px 0; box-shadow:var(--shadow)}
+.card h3:first-child,.card h4:first-child{margin-top:0}
+.grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; margin:16px 0}
+.grid3{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin:16px 0}
+.chk{list-style:none; padding-left:4px}
+.chk li::before{content:"¹3 a0"; color:var(--ok); font-weight:800}
+.mut{color:var(--muted)}
+/* ============ CALLOUTS ============ */
+.note,.tip,.warn,.danger{border-radius:var(--rs); padding:14px 18px; margin:16px 0; border:1px solid; position:relative; font-size:.95rem}
+.note{border-color:rgba(79,140,255,.4); background:rgba(79,140,255,.07)}
+.tip{border-color:rgba(52,211,153,.4); background:rgba(52,211,153,.07)}
+.warn{border-color:rgba(251,191,36,.45); background:rgba(251,191,36,.07)}
+.danger{border-color:rgba(248,113,113,.45); background:rgba(248,113,113,.07)}
+.note b:first-child,.tip b:first-child,.warn b:first-child,.danger b:first-child{display:inline-block; margin-bottom:2px}
+.note b:first-child{color:var(--acc)} .tip b:first-child{color:var(--ok)}
+.warn b:first-child{color:var(--warn)} .danger b:first-child{color:var(--crit)}
+/* ============ TABLES ============ */
+.tblwrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--r); margin:16px 0; background:var(--card)}
+table.tbl{width:100%; border-collapse:collapse; font-size:.92rem; min-width:640px}
+.tbl th{position:sticky; top:0; background:var(--card2); text-align:left; padding:12px 14px; font-size:.78rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); border-bottom:1px solid var(--border2); white-space:nowrap}
+.tbl td{padding:12px 14px; border-bottom:1px solid var(--border); vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr:hover td{background:color-mix(in srgb,var(--acc) 4%, transparent)}
+/* ============ BADGES ============ */
+.b{display:inline-block; font-size:.74rem; font-weight:800; padding:3px 10px; border-radius:99px; letter-spacing:.03em; white-space:nowrap}
+.b-crit{background:rgba(239,68,68,.14); color:var(--crit); border:1px solid rgba(239,68,68,.45)}
+.b-high{background:rgba(251,146,60,.13); color:var(--high); border:1px solid rgba(251,146,60,.45)}
+.b-med{background:rgba(251,191,36,.12); color:var(--warn); border:1px solid rgba(251,191,36,.45)}
+.b-low{background:rgba(74,222,128,.12); color:var(--low); border:1px solid rgba(74,222,128,.45)}
+.b-acc{background:rgba(79,140,255,.12); color:var(--acc); border:1px solid rgba(79,140,255,.4)}
+.b-vio{background:rgba(167,139,250,.12); color:var(--vio); border:1px solid rgba(167,139,250,.4)}
+.b-cy{background:rgba(34,211,238,.1); color:var(--acc2); border:1px solid rgba(34,211,238,.35)}
+/* ============ CODE ============ */
+.codewrap{border:1px solid var(--border); border-radius:var(--rs); overflow:hidden; margin:14px 0; background:var(--codebg)}
+.codehead{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 14px; background:var(--codehead); border-bottom:1px solid #1c2740}
+.codehead .lang{font-family:var(--mono); font-size:.74rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#7d8db0}
+.copybtn{font-family:var(--font); font-size:.76rem; font-weight:700; color:#9db1d8; background:#182345; border:1px solid #27365c; border-radius:7px; padding:4px 11px; cursor:pointer}
+.copybtn:hover{color:#fff; border-color:var(--acc)}
+pre.code{margin:0; padding:15px 17px; overflow-x:auto; font-family:var(--mono); font-size:.855rem; line-height:1.62; color:#dbe4f5; tab-size:4}
+pre.code .c{color:#7c8aa5; font-style:italic}
+pre.code .k{color:#79b8ff}
+pre.code .s{color:#9ecbff}
+pre.code .n{color:#f2cc60}
+pre.code .f{color:#d2a8ff}
+pre.code .v{color:#7ee787}
+pre.code .p{color:#56d4dd}
+/* ============ SIMULATION ============ */
+.simshell{background:var(--card); border:1px solid var(--border2); border-radius:var(--r); overflow:hidden; margin:18px 0; box-shadow:var(--shadow)}
+.simbar{display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--card2)}
+.simbar .sp{flex:1}
+.spd{font-family:var(--font); font-size:.84rem; font-weight:600; color:var(--text); background:var(--elev); border:1px solid var(--border2); border-radius:8px; padding:7px 9px}
+#simTime{font-family:var(--mono); font-size:.8rem; color:var(--muted)}
+.simstage{position:relative; background:var(--sim-bg)}
+#simCanvas{display:block; width:100%; height:520px}
+#simTip{position:absolute; pointer-events:none; opacity:0; transform:translate(-50%,-108%); background:#111a30; color:#dce6f7; border:1px solid #2b3a63; padding:9px 12px; border-radius:9px; font-size:.8rem; max-width:240px; line-height:1.45; box-shadow:0 8px 22px rgba(0,0,0,.5); transition:opacity .12s; z-index:5}
+.stepchips{display:flex; flex-wrap:wrap; gap:7px; padding:12px 16px; border-bottom:1px solid var(--border); background:var(--card)}
+.schip{font-family:var(--font); font-size:.78rem; font-weight:650; color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:99px; padding:5px 12px; cursor:pointer}
+.schip:hover{color:var(--text); border-color:var(--acc)}
+.schip.act{color:#0b1020; background:var(--acc); border-color:var(--acc)}
+html[data-theme="light"] .schip.act{color:#fff}
+.simcap{padding:18px 20px 20px; background:var(--card2)}
+.simcap h4{margin:0 0 6px; font-size:1.02rem; color:var(--acc2)}
+.simcap p{margin:0 0 8px}
+.simcap .hint{font-size:.85rem; color:var(--muted); border-left:3px solid var(--vio); padding-left:11px}
+.story{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin:18px 0}
+.story .st{background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:16px 18px}
+.story .st .n{font-family:var(--mono); font-weight:800; color:var(--acc); font-size:.85rem}
+.story .st h4{margin:6px 0 5px; font-size:.98rem}
+.story .st p{font-size:.88rem; margin:.3em 0; color:var(--muted)}
+.story .st .dn{font-size:.8rem; color:var(--acc2); border-top:1px dashed var(--border2); margin-top:9px; padding-top:8px}
+/* ============ MISC BLOCKS ============ */
+details{border:1px solid var(--border); border-radius:var(--rs); background:var(--card); margin:12px 0; overflow:hidden}
+details summary{cursor:pointer; padding:13px 18px; font-weight:650; list-style:none; display:flex; align-items:center; gap:10px}
+details summary::before{content:"+"; font-family:var(--mono); font-weight:800; color:var(--acc); transition:transform .15s}
+details[open] summary::before{transform:rotate(45deg)}
+details summary:hover{background:var(--card2)}
+details .dbody{padding:4px 20px 18px}
+.kv{display:grid; grid-template-columns:170px 1fr; gap:8px 18px; font-size:.93rem}
+.kv .k{color:var(--muted); font-weight:600}
+.layers{display:grid; gap:14px; margin:16px 0}
+.layer{display:grid; grid-template-columns:44px 1fr; gap:16px; background:var(--card); border:1px solid var(--border); border-radius:var(--r); padding:18px 20px}
+.layer .ico{width:44px; height:44px; border-radius:11px; display:grid; place-items:center; font-family:var(--mono); font-weight:800; font-size:.95rem; color:var(--acc2); background:rgba(34,211,238,.08); border:1px solid rgba(34,211,238,.3)}
+.layer h4{margin:0 0 6px}
+.runbook{counter-reset:rb; list-style:none; padding:0; margin:14px 0}
+.runbook li{counter-increment:rb; position:relative; padding:12px 16px 12px 56px; background:var(--card); border:1px solid var(--border); border-radius:var(--rs); margin:9px 0}
+.runbook li::before{content:counter(rb,decimal-leading-zero); position:absolute; left:14px; top:12px; font-family:var(--mono); font-weight:800; font-size:.95rem; color:var(--acc2); border:1px solid rgba(34,211,238,.35); border-radius:8px; padding:1px 7px; background:rgba(34,211,238,.06)}
+.runbook li b{display:block; margin-bottom:2px}
+.runbook li{font-size:.93rem; color:var(--muted)}
+.runbook li b{color:var(--text); font-size:.96rem}
+.gloss{display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:12px; margin:14px 0}
+.gloss .g{background:var(--card); border:1px solid var(--border); border-radius:var(--rs); padding:13px 16px; font-size:.9rem}
+.gloss .g b{color:var(--acc2); display:block; margin-bottom:3px; font-size:.92rem}
+.timeline{list-style:none; margin:16px 0; padding:0; border-left:2px solid var(--border2); margin-left:8px}
+.timeline li{position:relative; margin:0 0 18px; padding:0 0 0 26px}
+.timeline li::before{content:""; position:absolute; left:-7px; top:7px; width:12px; height:12px; border-radius:50%; background:var(--acc); border:2px solid var(--bg); box-shadow:0 0 0 2px rgba(79,140,255,.35)}
+.timeline .tdate{font-family:var(--mono); font-size:.8rem; font-weight:700; color:var(--acc2)}
+.process{display:flex; flex-wrap:wrap; gap:10px; margin:16px 0}
+.process .pp{flex:1 1 150px; background:var(--card); border:1px solid var(--border); border-radius:var(--rs); padding:13px 15px; font-size:.88rem; position:relative}
+.process .pp .pn{font-family:var(--mono); font-weight:800; color:var(--vio); font-size:.8rem}
+.process .pp b{display:block; margin:2px 0 3px; font-size:.93rem}
+.process .pp .mut{font-size:.82rem}
+footer.foot{border-top:1px solid var(--border); margin-top:30px; background:var(--bg2)}
+footer.foot .in{max-width:1280px; margin:0 auto; padding:34px 22px 46px; color:var(--muted); font-size:.88rem}
+footer.foot .cols{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:22px}
+.tocoverlay{position:fixed; inset:0; z-index:960; background:rgba(4,8,18,.66); backdrop-filter:blur(4px); display:none}
+.tocoverlay.open{display:block}
+.tocoverlay .panel{position:absolute; right:14px; bottom:82px; width:min(320px, calc(100vw - 28px)); max-height:70vh; overflow:auto; background:var(--card); border:1px solid var(--border2); border-radius:var(--r); padding:14px; box-shadow:var(--shadow)}
+.tocoverlay a{display:block; border:0; padding:9px 12px; border-radius:9px; color:var(--text); font-weight:550; font-size:.92rem}
+.tocoverlay a:hover{background:var(--elev)}
+/* ============ RESPONSIVE ============ */
+@media (max-width:1040px){
+  .wrap{grid-template-columns:1fr; gap:0}
+  aside.toc{display:none}
+  #tocFab{display:inline-flex}
+  nav.tnav{display:none}
+  .kv{grid-template-columns:1fr}
+  #simCanvas{height:430px}
+}
+@media (max-width:640px){
+  body{font-size:15.5px}
+  .hero .in{padding:40px 18px 32px}
+  #simCanvas{height:380px}
+  .topin{padding:9px 14px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001s !important; transition-duration:.001s !important}
+}
+@media print{
+  header.top,aside.toc,#tocFab,#backTop,#pbar,.simbar,.stepchips{display:none !important}
+  .wrap{grid-template-columns:1fr}
+  body{background:#fff; color:#000}
+}
 
-<aside id="toc" aria-label="Table of contents"></aside>
-<div id="tocToggle" role="button" tabindex="0" aria-label="Open navigation"></div>
-<div id="tocBackdrop"></div>
-<main class="wrap">
-
-<section class="hero">
-  <div class="hero-badges">
-    <span class="chip">Guide version <b>2.0</b></span>
-    <a class="chip chip-id" href="https://attack.mitre.org/techniques/T1021/" target="_blank" rel="noopener">MITRE ATT&amp;CK T1021</a>
-    <span class="chip">Tactic: <b>Lateral Movement</b></span>
-    <span class="chip">Platforms: <b>Windows, Linux, macOS, ESXi, IaaS, Cloud</b></span>
-    <span class="chip">Parent technique: <b>8 sub-techniques</b></span>
-    <span class="chip">Beginner friendly</span>
-    <span class="chip">For defenders &amp; students</span>
-  </div>
-  <h1>Remote Services <span class="grad">(the full menu)</span></h1>
-  <p class="lead">T1021 is the <strong>parent technique</strong> for remote services. These are built-in tools such as RDP, SMB, SSH, and WinRM. They let one computer <strong>work on another computer over the network</strong>. That includes ESXi (VMware hypervisor software that runs virtual machines) and IaaS (cloud infrastructure), not only desktops. Attackers use them to move sideways inside a network — a step called <strong>lateral movement</strong>. This guide covers all eight sub-techniques in one place, so you can defend the whole menu, not just one dish.</p>
-  <p class="hero-meta">Written for beginners, SOC analysts, and detection engineers. Every example here is for learning and defense only. This guide shows the attack steps, the logs the attack leaves behind, and how to catch it.</p>
-  <div class="stats">
-    <div class="stat"><div class="sv">8 sub-techniques</div><div class="sk">RDP, SMB, DCOM, SSH, VNC, WinRM, cloud services, direct cloud VM connections.</div></div>
-    <div class="stat"><div class="sv">22/445/3389/5985/5900</div><div class="sk">The ports most remote services use.</div></div>
-    <div class="stat"><div class="sv">Valid credentials</div><div class="sk">What attackers need before this technique works.</div></div>
-    <div class="stat"><div class="sv">Normal admin work</div><div class="sk">How the activity looks in logs — that is the problem.</div></div>
-    <div class="stat"><div class="sv">Moderate</div><div class="sk">Detection difficulty — doable with the right rules.</div></div>
-  </div>
-</section>
-
-<section class="sec" id="simulation" data-num="1" data-toc="Animated Attack Simulation">
-  <div class="sec-head">
-    <div class="sec-num">1</div>
-    <div>
-      <h2>Animated Attack Simulation</h2>
-      <p class="sec-sub">Watch one attacker tour the whole remote-service menu — SMB, WinRM, and SSH — and see the logs each step creates.</p>
-    </div>
-  </div>
-
-  <p>In this story, the attacker already owns one workstation. A fake Excel attachment gave them a foothold — an initial way in — and a memory-reading tool gave them usernames and passwords. Now they look around the network and pick remote services to reach more machines. They take the file server over SMB, the domain controller over WinRM, and the Linux web server over SSH.</p>
+/* ============================================================
+   CROSS-GENERATION COMPATIBILITY LAYER
+   The canonical T1528 design is applied to older guides by
+   remapping their token names and resetting their page layouts.
+   ============================================================ */
+:root,
+html[data-theme="light"]{
+  --accent:var(--acc);
+  --accent-2:var(--acc2);
+  --accent2:var(--acc2);
+  --accent-soft:color-mix(in srgb,var(--acc) 14%,transparent);
+  --accent2-soft:color-mix(in srgb,var(--acc2) 14%,transparent);
+  --accent-border:color-mix(in srgb,var(--acc) 45%,transparent);
+  --txt:var(--text); --ink:var(--text); --body:var(--text); --strong:var(--text); --em:var(--text);
+  --soft:var(--muted); --mut:var(--muted); --mut2:var(--muted); --muted2:var(--muted); --lead:var(--muted); --faint:var(--muted);
+  --line:var(--border); --line2:var(--border2); --border-soft:var(--border);
+  --panel:var(--card); --panel2:var(--card2); --surface:var(--card); --surface2:var(--card2);
+  --bg-alt:var(--bg2); --card-2:var(--card2);
+  --brand:var(--acc); --brand-dark:var(--acc); --brand-soft:color-mix(in srgb,var(--acc) 14%,transparent);
+  --navy:var(--text); --navy-soft:var(--border2);
+  --red:var(--crit); --green:var(--ok); --amber:var(--warn); --purple:var(--vio); --cyan:var(--acc2); --info:var(--acc);
+  --code-bg:var(--codebg); --code-ink:var(--text); --code-text:var(--text); --code-border:var(--border);
+  --code-inline:var(--acc2); --code-inline-bg:var(--elev); --code-inline-fg:var(--acc2);
+  --th-bg:var(--card2); --th-fg:var(--muted); --td-border:var(--border);
+  --btn-bg:var(--card); --btn-border:var(--border2); --btn-fg:var(--text); --btn-hover:var(--elev); --btn-hover-border:var(--acc);
+  --toc-bg:var(--bg); --toggle-bg:var(--card); --hero-grid:transparent; --stat-bg:var(--card); --chip-bg:var(--card);
+  --scroll:var(--border2); --scroll-hover:var(--muted); --overlay:rgba(4,8,18,.66);
+  --radius:var(--r); --radius-sm:var(--rs); --sans:var(--font);
+  --high-soft:color-mix(in srgb,var(--high) 14%,transparent);
+  --crit-soft:color-mix(in srgb,var(--crit) 14%,transparent);
+  --warn-soft:color-mix(in srgb,var(--warn) 14%,transparent);
+  --ok-soft:color-mix(in srgb,var(--ok) 14%,transparent);
+}
+/* shell resets that beat the old per-page layouts */
+body > body > .wrap{max-width:1280px;margin:0 auto;display:grid;grid-template-columns:252px minmax(0,1fr);gap:38px;padding:34px 22px 20px}
+body main,.body main,body .main{margin:0!important;padding:0!important;max-width:none!important;min-width:0;background:transparent}
+body main.wrap{margin-left:0!important}
+body .hero{position:relative;overflow:hidden;background:radial-gradient(900px 420px at 12% -10%,rgba(79,140,255,.16),transparent 60%),radial-gradient(800px 400px at 88% 0%,rgba(167,139,250,.14),transparent 55%),radial-gradient(600px 380px at 55% 115%,rgba(34,211,238,.10),transparent 60%),var(--bg);border-bottom:1px solid var(--border);padding:0;margin:0}
+body .hero .in{max-width:1280px;margin:0 auto;padding:56px 22px 42px;position:relative}
+body .hero h1{font-size:clamp(1.9rem,4.4vw,3.1rem);margin:18px 0 10px;letter-spacing:-.02em;line-height:1.25}
+body .hero .lede{max-width:62ch;color:var(--muted);font-size:1.06rem}
+body .hero h1,body .hero h1 *{color:var(--text)!important}
+body .hero h1 .grad{color:transparent!important}
+body .hero .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:20px}
+body .hero .facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:14px;margin-top:30px}
+body main .sec{margin:0 0 56px}
+body main h2,body main h3,body main h4{color:var(--text)}
+body main .sechead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+body main .card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px 24px;margin:16px 0;box-shadow:var(--shadow)}
+body main .tblwrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r);margin:16px 0;background:var(--card)}
+body main table.tbl{width:100%;border-collapse:collapse;font-size:.92rem;min-width:640px}
+body main .codewrap{border:1px solid var(--border);border-radius:var(--rs);overflow:hidden;margin:14px 0;background:var(--codebg)}
+body main pre{border:1px solid var(--border);border-radius:var(--rs);background:var(--codebg);color:#dbe4f5;padding:15px 17px;overflow:auto;font-family:var(--mono);font-size:.855rem;line-height:1.62}
+body main pre code{background:none;border:0;padding:0;color:inherit}
+body #sidebarToc,body aside.toc,body .toc{position:sticky;top:78px;left:auto;right:auto;bottom:auto;width:auto;max-height:calc(100vh - 100px);overflow:auto;padding:0 6px 0 0;background:transparent;border:0;z-index:auto;transition:none}
+body #tocToggle,body #tocBackdrop,body #toc-overlay,body .toc-band,body .title-band,body #toc-toggle{display:none!important}
+body .tocoverlay{display:none}
+body .tocoverlay.open{display:block}
+body .tocoverlay .panel{position:absolute;right:14px;bottom:82px;width:min(320px,calc(100vw - 28px));max-height:70vh;overflow:auto;background:var(--card);border:1px solid var(--border2);border-radius:var(--r);padding:14px;box-shadow:var(--shadow)}
+body .tocoverlay .panel a{display:block;border:0;padding:9px 12px;border-radius:9px;color:var(--text);font-weight:550;font-size:.92rem;text-decoration:none}
+body .tocoverlay .panel a:hover{background:var(--elev)}
+body .callout{border-radius:var(--rs);padding:14px 18px;margin:16px 0;border:1px solid var(--border);background:var(--card)}
+body .callout.danger,body .callout.warn,body .callout.note,body .callout.tip{background:var(--card)}
+body .badge{display:inline-block;font-size:.74rem;font-weight:800;padding:3px 10px;border-radius:99px;letter-spacing:.03em;white-space:nowrap}
+body .b-crit{background:rgba(239,68,68,.14);color:var(--crit);border:1px solid rgba(239,68,68,.45)}
+body .b-high{background:rgba(251,146,60,.13);color:var(--high);border:1px solid rgba(251,146,60,.45)}
+body .b-med{background:rgba(251,191,36,.12);color:var(--warn);border:1px solid rgba(251,191,36,.45)}
+body .b-low{background:rgba(74,222,128,.12);color:var(--low);border:1px solid rgba(74,222,128,.45)}
+body .b-acc{background:rgba(79,140,255,.12);color:var(--acc);border:1px solid rgba(79,140,255,.4)}
+body .b-vio{background:rgba(167,139,250,.12);color:var(--vio);border:1px solid rgba(167,139,250,.4)}
+body .b-cy{background:rgba(34,211,238,.1);color:var(--acc2);border:1px solid rgba(34,211,238,.35)}
+body .mut{color:var(--muted)}
+@media (max-width:1040px){
+  body > body > .wrap{grid-template-columns:1fr;gap:0}
+  body #sidebarToc,body aside.toc,body .toc{display:none}
+  #tocFab{display:inline-flex}
+}
+@media (max-width:640px){
+  body{font-size:15.5px}
+  body .hero .in{padding:40px 18px 32px}
+}
+</style></div><p class="mut">T1021 is the parent technique for remote services. These are built-in tools such as RDP, SMB, SSH, and WinRM. They let one computer work on another computer over the network. That includes ESXi (VMware hypervisor software that runs virtual machines) and IaaS (cloud infrastructure), not only desktops. Attackers use them to move sideways inside a network — a step called lateral movement. This guide covers all eight sub-techniques in one place, so you can defend the whole menu, not just one dish.</p><div class="card"><h3>In one sentence</h3><p>Adversaries may use Valid Accounts to log into a service that accepts remote connections, such as telnet, SSH, and VNC. The adversary may then perform actions as the logged-on user.</p></div><div class="card"><h3>Technique quick facts</h3><p class="small">Written for beginners, SOC analysts, and detection engineers. Every example here is for learning and defense only. This guide shows the attack steps, the logs the attack leaves behind, and how to catch it.</p><div class="fact"><div class="k">RDP, SMB, DCOM, SSH, VNC, WinRM, cloud services, direct cloud VM connections.</div><div class="v">8 sub-techniques</div></div><div class="fact"><div class="k">The ports most remote services use.</div><div class="v">22/445/3389/5985/5900</div></div><div class="fact"><div class="k">What attackers need before this technique works.</div><div class="v">Valid credentials</div></div><div class="fact"><div class="k">How the activity looks in logs — that is the problem.</div><div class="v">Normal admin work</div></div><div class="fact"><div class="k">Detection difficulty — doable with the right rules.</div><div class="v">Moderate</div></div></div></section><section class="sec" id="simulation"><div class="sechead"><span class="secnum">2</span><h2>Animated Attack Simulation</h2></div><p class="mut">Watch one attacker tour the whole remote-service menu — SMB, WinRM, and SSH — and see the logs each step creates.</p><p>In this story, the attacker already owns one workstation. A fake Excel attachment gave them a foothold — an initial way in — and a memory-reading tool gave them usernames and passwords. Now they look around the network and pick remote services to reach more machines. They take the file server over SMB, the domain controller over WinRM, and the Linux web server over SSH.</p>
 
   <div class="sim-mount" data-sim-cfg="sim1-cfg">
     <div class="canvas-holder"><canvas aria-label="Animated attack simulation: lateral movement with remote services"></canvas></div>
@@ -344,18 +630,7 @@ ul.check li b{color:var(--txt)}
   </div>
 
   <div class="note"><b>Is this real malware?</b> No. The animation uses fake commands on an invented small network (addresses like <code>10.1.20.x</code> and <code>203.0.113.x</code> are reserved for teaching). It teaches the <em>pattern</em> of the attack, not how to build real attacks. Everything here is for blue-team training.</div>
-</section>
-
-<section class="sec" id="redteam" data-num="2" data-toc="Red Team Perspective">
-  <div class="sec-head">
-    <div class="sec-num">2</div>
-    <div>
-      <h2>Red Team Perspective</h2>
-      <p class="sec-sub">Why attackers move sideways with the network's own tools, and which of the eight doors they pick.</p>
-    </div>
-  </div>
-
-  <p><strong>Remote services</strong> are features that come with the operating system. They let one computer open a shell, a screen, or a file share on another computer over the network. For example, SSH (Secure Shell) is a tool that opens a text-only command window on a Linux machine from somewhere else. Attackers do not need to break anything to use them. If they have valid <strong>credentials</strong>, the service just lets them in. Credentials mean a working username and password, a password hash, an SSH key, or a cloud token. The login looks exactly like real admin work.</p>
+</section><section class="sec" id="redteam"><div class="sechead"><span class="secnum">3</span><h2>Red Team Perspective</h2></div><p class="mut">Why attackers move sideways with the network's own tools, and which of the eight doors they pick.</p><p><strong>Remote services</strong> are features that come with the operating system. They let one computer open a shell, a screen, or a file share on another computer over the network. For example, SSH (Secure Shell) is a tool that opens a text-only command window on a Linux machine from somewhere else. Attackers do not need to break anything to use them. If they have valid <strong>credentials</strong>, the service just lets them in. Credentials mean a working username and password, a password hash, an SSH key, or a cloud token. The login looks exactly like real admin work.</p>
   <p>That is the whole appeal. An exploit (a software bug used to break in) can crash the target, gets patched, and looks strange in logs. A remote service login looks like normal work. Security teams call this style <strong>living off the land</strong>: using built-in, legitimate tools instead of attack software. Once inside, attackers use these services for four jobs: running commands on new machines, copying files, stealing more credentials, and reaching the next hop toward valuable data.</p>
 
   <h3 class="sub">The menu — all eight sub-techniques</h3>
@@ -433,18 +708,7 @@ netstat -ano        # Windows: list listening ports</code></pre></div>
   <div class="warn"><b>Watch out (OPSEC and noise):</b> remote-service attacks are quiet but not silent. Every use writes logs: share connections, service installs, new processes, SSH logins. Attackers slow down, spread actions over hours, and reuse normal admin tools so their activity mixes with real administration. For a defender, the good news is simple: with every service monitored, <em>each door creates evidence</em>.</div>
 
   <div class="danger"><b>Ethics:</b> Using remote services to enter systems you do not own — even with default passwords — is illegal in most countries. Red teams and students may only test systems they own, or systems they have <strong>written permission</strong> to test, inside an agreed scope and time window. Everything in this guide is written for building defenses, not for attacking.</div>
-</section>
-
-<section class="sec" id="blueteam" data-num="3" data-toc="Blue Team / SOC Perspective">
-  <div class="sec-head">
-    <div class="sec-num">3</div>
-    <div>
-      <h2>Blue Team / SOC Perspective</h2>
-      <p class="sec-sub">What lateral movement looks like from inside the SOC, and why one rule for one service is never enough.</p>
-    </div>
-  </div>
-
-  <p>The SOC (Security Operations Center) is the team that watches alerts and logs all day. For T1021 the job has a special difficulty: <strong>remote services are supposed to be used</strong>. Real administrators log in with RDP, WinRM, and SSH every day. The attacker is doing the same things as an admin — connecting, copying files, running commands — from the wrong machine, at the wrong time, with the wrong account. Detection is therefore less about one magic event and more about <strong>context</strong>: who, from where, to how many machines, in how long. In the attack chain, T1021 sits in the middle. Attackers use it after their first way in, and before they steal data or run ransomware. Catching it here breaks the whole chain.</p>
+</section><section class="sec" id="blueteam"><div class="sechead"><span class="secnum">4</span><h2>Blue Team / SOC Perspective</h2></div><p class="mut">What lateral movement looks like from inside the SOC, and why one rule for one service is never enough.</p><p>The SOC (Security Operations Center) is the team that watches alerts and logs all day. For T1021 the job has a special difficulty: <strong>remote services are supposed to be used</strong>. Real administrators log in with RDP, WinRM, and SSH every day. The attacker is doing the same things as an admin — connecting, copying files, running commands — from the wrong machine, at the wrong time, with the wrong account. Detection is therefore less about one magic event and more about <strong>context</strong>: who, from where, to how many machines, in how long. In the attack chain, T1021 sits in the middle. Attackers use it after their first way in, and before they steal data or run ransomware. Catching it here breaks the whole chain.</p>
 
   <h3 class="sub">Why watching a single service fails</h3>
   <div class="split">
@@ -507,20 +771,9 @@ netstat -ano        # Windows: list listening ports</code></pre></div>
   </div>
 
   <div class="note"><b>First response ideas:</b> if an alert fires, do not close the session first — evidence lives in memory. Record the source IP, account, and target, then pull the surrounding hour of logs for all three. Disable the account, isolate the source machine at the switch or EDR level, and treat every host it touched as suspect. Section 4 gives you the exact queries.</div>
-</section>
+</section><section class="sec" id="detection"><div class="sechead"><span class="secnum">5</span><h2>Detection Engineering Deep Dive</h2></div><p class="mut">The complete work of a detection engineer for this technique: mapping, intel, ranking, log samples, Sigma rules, and Splunk queries.</p><p class="muted">A detection engineer turns threats into working alerts. This section walks through the full job. You map the technique to rules and regulations. You study the actors who use it. Then you rank the threats, read real log samples, and write Sigma rules plus Splunk queries. Because T1021 is a parent technique, every rule here is written to catch <em>several</em> services at once — that is the big-picture mindset this guide is about.</p>
 
-<section class="sec" id="detection" data-num="4" data-toc="Detection Engineering Deep Dive">
-  <div class="sec-head">
-    <div class="sec-num">4</div>
-    <div>
-      <h2>Detection Engineering Deep Dive</h2>
-      <p class="sec-sub">The complete work of a detection engineer for this technique: mapping, intel, ranking, log samples, Sigma rules, and Splunk queries.</p>
-    </div>
-  </div>
-
-  <p class="muted">A detection engineer turns threats into working alerts. This section walks through the full job. You map the technique to rules and regulations. You study the actors who use it. Then you rank the threats, read real log samples, and write Sigma rules plus Splunk queries. Because T1021 is a parent technique, every rule here is written to catch <em>several</em> services at once — that is the big-picture mindset this guide is about.</p>
-
-  <h3 class="sub">Regulation Mapping</h3>
+  <h3 class="sub" id="dd-regulation-mapping">Regulation Mapping</h3>
   <p>Rules like GDPR or PCI DSS do not say "detect remote services". They say "protect data" and "monitor access". Attackers moving sideways with stolen credentials break exactly those requirements, so auditors will ask how you detect and control this. Use this table when someone asks <em>why</em> this detection work is required:</p>
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Regulation</th><th>Control / Article</th><th>What it asks for</th><th>How T1021 relates</th></tr></thead>
@@ -540,7 +793,7 @@ netstat -ano        # Windows: list listening ports</code></pre></div>
     </tbody>
   </table></div>
 
-  <h3 class="sub">Threat Intelligence</h3>
+  <h3 class="sub" id="dd-threat-intelligence">Threat Intelligence</h3>
   <p>Threat intelligence (often shortened to CTI) means learning about attackers before they hit you, and using that knowledge to build better defenses. For T1021 the picture is broad: nearly every major intrusion of the last decade used at least one remote service to move sideways. Here is how a detection engineer works with that knowledge, step by step:</p>
   <div class="card tight">
     <ul>
@@ -576,7 +829,7 @@ netstat -ano        # Windows: list listening ports</code></pre></div>
     </ul>
   </div>
 
-  <h3 class="sub">Threats Ranking &amp; Categorization</h3>
+  <h3 class="sub" id="dd-threats-ranking-categorization">Threats Ranking &amp; Categorization</h3>
   <p>Not every remote-service problem carries the same weight. Rank threats by severity (how much damage they can do) and category (where they happen). This ranking drives which rules you build first.</p>
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Threat</th><th>Severity</th><th>Platforms</th><th>Short description</th></tr></thead>
@@ -592,7 +845,7 @@ netstat -ano        # Windows: list listening ports</code></pre></div>
     </tbody>
   </table></div>
 
-  <h3 class="sub">Logs &amp; Patterns</h3>
+  <h3 class="sub" id="dd-logs-patterns">Logs &amp; Patterns</h3>
   <p>Now the practical part. For each threat from the ranking, here are the logs to use. Each block shows a realistic sample of the log entry, plus the pattern to search for. All samples use fake names and reserved test addresses (like <code>203.0.113.x</code> and <code>10.1.20.x</code>). The XML entries are shown escaped for the web page; in your logs the angle brackets are real.</p>
 
   <h4 class="mini">1. Multi-service ransomware propagation chain</h4>
@@ -799,7 +1052,7 @@ Sep 12 02:31:02 web01 sshd[20189]: Accepted publickey for deploy from 10.1.20.24
     </ul>
   </div>
 
-  <h3 class="sub">Sigma Detection Rules</h3>
+  <h3 class="sub" id="dd-sigma-detection-rules">Sigma Detection Rules</h3>
   <p>Sigma is a free, open format for writing detection rules once and running them in any SIEM. Each rule below matches one threat from the ranking, and because T1021 is a parent technique, most rules are written to catch <em>several</em> services at once. Under every rule you find the matching Splunk SPL query. SPL (Search Processing Language) is the search language used in Splunk. Adjust the index names to your own environment.</p>
 
   <h4 class="mini">Rule 1 — One source using many remote services</h4>
@@ -1134,18 +1387,7 @@ level: medium</code></pre></div>
       <tr><td><code>ConsoleLogin</code> / <code>StartSession</code></td><td>Cloud (CloudTrail etc.)</td><td>Cloud console and direct VM session access — check <code>MFAUsed</code>.</td></tr>
     </tbody>
   </table></div>
-</section>
-
-<section class="sec" id="scenario" data-num="5" data-toc="Real-World Scenario">
-  <div class="sec-head">
-    <div class="sec-num">5</div>
-    <div>
-      <h2>Real-World Scenario</h2>
-      <p class="sec-sub">Ireland's Health Service Executive vs. Conti, 2021 — a real, documented case of lateral movement at national scale.</p>
-    </div>
-  </div>
-
-  <p>This is a real incident, not a composite. In March 2021, attackers entered the network of Ireland's Health Service Executive (HSE) — the national health service — through a phishing email. They then spent roughly eight weeks moving sideways with remote services and stolen credentials before launching Conti ransomware on 13 May 2021. More than 80% of the IT infrastructure was encrypted, and hospital appointments were canceled across the whole country. The Irish National Cyber Security Centre (NCSC) published a detailed incident report in December 2021. It describes the attacker path step by step. That makes this case perfect for learning.</p>
+</section><section class="sec" id="scenario"><div class="sechead"><span class="secnum">6</span><h2>Real-World Scenario</h2></div><p class="mut">Ireland's Health Service Executive vs. Conti, 2021 — a real, documented case of lateral movement at national scale.</p><p>This is a real incident, not a composite. In March 2021, attackers entered the network of Ireland's Health Service Executive (HSE) — the national health service — through a phishing email. They then spent roughly eight weeks moving sideways with remote services and stolen credentials before launching Conti ransomware on 13 May 2021. More than 80% of the IT infrastructure was encrypted, and hospital appointments were canceled across the whole country. The Irish National Cyber Security Centre (NCSC) published a detailed incident report in December 2021. It describes the attacker path step by step. That makes this case perfect for learning.</p>
 
   <div class="stats">
     <div class="stat"><div class="sv">~8 weeks</div><div class="sk">Lateral movement before the ransomware ran.</div></div>
@@ -1229,18 +1471,7 @@ level: medium</code></pre></div>
   <div class="tip"><b>Communication lessons:</b> the HSE held daily public briefings during the emergency, in plain language, saying what worked, what did not, and what to expect next. A national coordination structure — the HSE, the NCSC, the health department, and law enforcement — met on a fixed rhythm, so decisions did not wait for luck. Clinicians got short, practical instructions (which systems are down, use paper for X). The lesson for any team: agree the update rhythm, the audience list, and the simple-word rule <em>before</em> the incident, and publish even when the news is bad. Trust is a containment tool too.</div>
 
   <p class="muted">Read the source: the Irish NCSC incident report (December 2021) is public at <a href="https://www.ncsc.gov.ie/" target="_blank" rel="noopener">ncsc.gov.ie</a>, and the HSE published its own independent cyber incident review on <a href="https://www.hse.ie/" target="_blank" rel="noopener">hse.ie</a>. Both are worth a full read — they match the patterns in this guide almost line by line.</p>
-</section>
-
-<section class="sec" id="mitigation" data-num="6" data-toc="Mitigation &amp; Defense">
-  <div class="sec-head">
-    <div class="sec-num">6</div>
-    <div>
-      <h2>Mitigation &amp; Defense</h2>
-      <p class="sec-sub">Closing doors, shrinking the menu, and watching what stays open — in priority order.</p>
-    </div>
-  </div>
-
-  <p>You cannot remove every remote service — administrators need them. The goal is a smaller, safer menu: each service reachable only from approved places, only with strong authentication, and every use logged. The table below is ordered by what to do first. <strong>Effort</strong> means people-time, not money only.</p>
+</section><section class="sec" id="mitigation"><div class="sechead"><span class="secnum">7</span><h2>Mitigation &amp; Defense</h2></div><p class="mut">Closing doors, shrinking the menu, and watching what stays open — in priority order.</p><p>You cannot remove every remote service — administrators need them. The goal is a smaller, safer menu: each service reachable only from approved places, only with strong authentication, and every use logged. The table below is ordered by what to do first. <strong>Effort</strong> means people-time, not money only.</p>
 
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Action</th><th>Stops what</th><th>Effort</th></tr></thead>
@@ -1311,18 +1542,7 @@ Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol</code></pre></div>
     <span class="fstep"><b>4.</b> Respond: isolate and reset</span>
   </div>
   <div class="note"><b>Why this matters:</b> each layer shrinks the attacker's menu. The HSE case shows the cost of a full menu with no watch. The best networks are not the ones with zero remote services — they are the ones where every remote service is intentional, guarded, and logged.</div>
-</section>
-
-<section class="sec" id="practices" data-num="7" data-toc="Common Mistakes &amp; Best Practices">
-  <div class="sec-head">
-    <div class="sec-num">7</div>
-    <div>
-      <h2>Common Mistakes &amp; Best Practices</h2>
-      <p class="sec-sub">The traps teams fall into with remote-service detection — and the habits that avoid them.</p>
-    </div>
-  </div>
-
-  <p>Most failed detections of T1021 come from process problems, not tool problems. The logs were there; the team just watched one door, tuned the wrong number, or never tested the rule. Check your own setup against this table honestly:</p>
+</section><section class="sec" id="practices"><div class="sechead"><span class="secnum">8</span><h2>Common Mistakes &amp; Best Practices</h2></div><p class="mut">The traps teams fall into with remote-service detection — and the habits that avoid them.</p><p>Most failed detections of T1021 come from process problems, not tool problems. The logs were there; the team just watched one door, tuned the wrong number, or never tested the rule. Check your own setup against this table honestly:</p>
 
   <div class="tblwrap"><table class="tbl">
     <thead><tr><th>Mistake</th><th>What goes wrong</th><th>The fix</th></tr></thead>
@@ -1356,14 +1576,42 @@ Get-WindowsOptionalFeature -Online -FeatureName SMB1Protocol</code></pre></div>
   </div>
 
   <div class="tip"><b>Final thought:</b> T1021 is not one attack — it is a menu. Defenders who watch the whole menu turn the attacker's greatest strength into a weakness. Their rules count sources, services, and servers together. Even an admin cannot touch four servers in nine minutes without a very good reason.</div>
-</section>
-
-
-<div id="atk-relations"></div>
-<div id="atk-prevnext"></div>
-</main>
-
-<script>
+</section></main></div><button class="ibtn" id="tocFab" type="button" aria-label="Open table of contents">Contents</button><button class="ibtn" id="backTop" type="button" aria-label="Back to top">↑</button><div class="tocoverlay" id="tocOverlay"><div class="panel"><div class="ttl">Contents</div><div id="tocPanel"><a href="#overview">1 · Overview: What this technique is</a><a href="#simulation">2 · Animated Attack Simulation</a><a href="#redteam">3 · Red Team Perspective</a><a href="#blueteam">4 · Blue Team / SOC Perspective</a><a href="#detection">5 · Detection Engineering Deep Dive</a><a href="#dd-regulation-mapping">5.1 · Regulation Mapping</a><a href="#dd-threat-intelligence">5.2 · Threat Intelligence</a><a href="#dd-threats-ranking-categorization">5.3 · Threats Ranking &amp; Categorization</a><a href="#dd-logs-patterns">5.4 · Logs &amp; Patterns</a><a href="#dd-sigma-detection-rules">5.5 · Sigma Detection Rules</a><a href="#scenario">6 · Real-World Scenario</a><a href="#mitigation">7 · Mitigation &amp; Defense</a><a href="#practices">8 · Common Mistakes &amp; Best Practices</a></div></div></div><div id="toc" hidden></div><div id="tocToggle" hidden></div><div id="tocBackdrop" hidden></div><div id="toc-overlay" hidden></div><script>
+(function(){
+  "use strict";
+  var bar = document.getElementById("pbar");
+  var toc = document.getElementById("sidebarToc");
+  var links = toc ? Array.prototype.slice.call(toc.querySelectorAll("a")) : [];
+  var targets = links.map(function(a){ return document.querySelector(a.getAttribute("href")); });
+  function onScroll(){
+    if(bar){
+      var h = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.width = (h > 0 ? Math.min(100, window.scrollY / h * 100) : 0) + "%";
+    }
+    var y = window.scrollY + 120, active = 0;
+    targets.forEach(function(t, i){ if(t && t.offsetTop <= y) active = i; });
+    links.forEach(function(a, i){ a.classList.toggle("act", i === active); });
+  }
+  window.addEventListener("scroll", onScroll, {passive:true});
+  window.addEventListener("resize", onScroll);
+  onScroll();
+  var fab = document.getElementById("tocFab"), overlay = document.getElementById("tocOverlay"), back = document.getElementById("backTop");
+  if(fab && overlay){ fab.addEventListener("click", function(){ overlay.classList.toggle("open"); }); overlay.addEventListener("click", function(e){ if(e.target === overlay || e.target.tagName === "A") overlay.classList.remove("open"); }); }
+  if(back){ back.addEventListener("click", function(){ window.scrollTo({top:0, behavior:"smooth"}); }); }
+  document.querySelectorAll(".copybtn").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var box = btn.closest(".codewrap") || btn.parentElement.parentElement;
+      var pre = box ? box.querySelector("pre") : null;
+      if(!pre) return;
+      var ta = document.createElement("textarea"); ta.value = pre.innerText; ta.style.position = "fixed"; ta.style.left = "-9999px"; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand("copy"); } catch(e){}
+      document.body.removeChild(ta);
+      if(!ok && navigator.clipboard) navigator.clipboard.writeText(pre.innerText).catch(function(){});
+      var old = btn.textContent; btn.textContent = ok ? "Copied" : "Copy"; setTimeout(function(){ btn.textContent = old; }, 1200);
+    });
+  });
+})();
+</script><script>
 /* ============================================================
    MITRE ATT&CK Detection Guide — Shared JS
    TOC builder, scrollspy, mobile nav, syntax highlighter,
