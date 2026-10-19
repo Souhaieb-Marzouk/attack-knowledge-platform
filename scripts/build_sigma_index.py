@@ -44,8 +44,18 @@ def main():
             "cases": f"tests/sigma_cases/{stem}" if case_dir.is_dir() else "",
         })
     OUT.parent.mkdir(parents=True, exist_ok=True)
+    # Keep the previous timestamp when the rule metadata did not change. This
+    # prevents CI from creating an empty "[skip ci]" index commit on every run.
+    generated = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if OUT.exists():
+        try:
+            previous = json.loads(OUT.read_text(encoding="utf-8"))
+            if previous.get("rules") == entries and previous.get("generated"):
+                generated = previous["generated"]
+        except (OSError, ValueError):
+            pass
     payload = {
-        "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generated": generated,
         "count": len(entries),
         "rules": entries,
     }
