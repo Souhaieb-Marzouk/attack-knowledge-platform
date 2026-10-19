@@ -9,6 +9,7 @@
 > CI-validated Sigma rules, and a log test for every rule.
 
 **Live site:** https://souhaieb-marzouk.github.io/attack-knowledge-platform/
+**Release:** [v1.1 — 20 guides, 141 log-tested Sigma rules](https://github.com/Souhaieb-Marzouk/attack-knowledge-platform/releases/tag/v1.1)
 
 ![Coverage matrix](assets/img/screens/matrix-dark.png)
 
