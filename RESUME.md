@@ -7,11 +7,11 @@ the measured value changes.
 ## Detection Engineer flavor (primary)
 
 - Built and operate a public MITRE ATT&CK knowledge platform (GitHub Pages,
-  vanilla HTML/CSS/JS, zero runtime dependencies) with **57 hand-written
+  vanilla HTML/CSS/JS, zero runtime dependencies) with **76 hand-written
   technique deep-dives**, a **597-technique / 15-tactic catalogue**, and a
   JSON data layer that drives the explorer, hubs, search and prev/next.
-- Authored and validated **178 Sigma rules** with a detection-as-code CI gate:
-  `sigma check`, Splunk conversion, **178 positive and 178 negative JSONL log
+- Authored and validated **197 Sigma rules** with a detection-as-code CI gate:
+  `sigma check`, Splunk conversion, **197 positive and 197 negative JSONL log
   fixtures**, four deliberately broken negative rules, and an auto-generated
   rule index committed back to `main`.
 - Modeled realistic Windows Security/Sysmon, auditd/auth, CloudTrail, Entra ID,
@@ -25,7 +25,7 @@ the measured value changes.
 
 - Created beginner-friendly (CEFR B1) technique guides covering attacker
   tradecraft, detection opportunities and response, including a real-world
-  case study for each of 57 techniques.
+  case study for each of 76 techniques.
 - Linked **180 threat actors, 44 mitigations and 59 campaigns** into the
   technique graph; actor and mitigation cards expose the techniques they use
   or counter.
@@ -44,7 +44,7 @@ the measured value changes.
   non-empty/integrated page checks, link checking, sitemap/README/asset
   consistency, and a generated Sigma index — all on free GitHub Actions for a
   public repository.
-- Migrated a 582-empty-page scaffold into 57 real guides with a single
+- Migrated a 582-empty-page scaffold into 76 real guides with a single
   integration contract, a live/full-catalogue UI toggle, and a documented
   contribution workflow.
 
@@ -52,23 +52,23 @@ the measured value changes.
 
 | Metric | Value |
 |---|---|
-| Live guides | 57 |
+| Live guides | 76 |
 | ATT&CK techniques tracked | 597 |
 | Tactics | 15 |
 | Live tactics | 6 |
-| Sigma rules | 178 |
-| Positive log cases | 178 |
-| Negative log cases | 178 |
+| Sigma rules | 197 |
+| Positive log cases | 197 |
+| Negative log cases | 197 |
 | Deliberately broken negative rules | 4 |
-| Techniques covered by the library | 92 / 597 (15.4%) |
-| Live guides with a library rule | 57 / 57 |
+| Techniques covered by the library | 111 / 597 (18.6%) |
+| Live guides with a library rule | 76 / 76 |
 | Actors / mitigations / campaigns | 180 / 44 / 59 |
 
 ## 30-second pitch
 
 "I built a public MITRE ATT&CK knowledge platform that explains, in plain
 English, how an attacker uses a technique and exactly how a defender sees it
-in logs. It has 57 full guides, a 597-technique catalogue, 178 Sigma rules with
+in logs. It has 76 full guides, a 597-technique catalogue, 197 Sigma rules with
 positive and negative log tests, and a detection-as-code gate that runs on
 every push. MITRE tells you what a technique is; this site shows what it looks
 like on an analyst's screen."
@@ -88,7 +88,7 @@ throwing away the full ATT&CK catalogue.
 added case-exact path validation, non-empty/integrated page checks, and a
 site-consistency gate; then promoted two previously hidden parent guides.
 
-**Result:** 20 real guides at that stage (57 today), zero empty HTML, and a validator that fails on the
+**Result:** 20 real guides at that stage (76 today), zero empty HTML, and a validator that fails on the
 bugs that used to pass silently.
 
 ### 2 — Turning page-only rules into a tested library
@@ -103,7 +103,7 @@ duplicates, converted deprecated count pipes into base-event rules plus
 threshold metadata, generated realistic positive/negative JSONL fixtures, and
 wrote a dependency-free Sigma evaluator for the CI gate.
 
-**Result:** 178 rules, 356 log cases, 0 schema failures, 0 conversion failures,
+**Result:** 197 rules, 394 log cases, 0 schema failures, 0 conversion failures,
 and a rule library that now feeds coverage and cross-links.
 
 ### 3 — Keeping the platform usable at 597 techniques

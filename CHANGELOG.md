@@ -4,27 +4,28 @@
 
 ### Added
 
-- 37 new technique guides covering T1584, T1589, T1591, T1593, T1595, T1596,
-  T1597 and T1598, including 29 sub-techniques.
-- 37 new Sigma rules extracted from the new detection sections, with 37
-  positive and 37 negative log fixtures.
+- 56 new technique guides covering T1584, T1585, T1586, T1587, T1589, T1591,
+  T1593, T1594, T1595, T1596, T1597, T1598 and T1681–T1683, including 41
+  sub-techniques.
+- 56 new Sigma rules extracted from the new detection sections, with 56
+  positive and 56 negative log fixtures.
 - Canonical URLs for every newly added guide.
 - The new guides are wired into the technique catalogue, sitemap, search,
   hub pages and ATT&CK Explorer.
-- Rebuilt `data/sigma-index.json` to 178 rules and updated library statistics.
+- Rebuilt `data/sigma-index.json` to 197 rules and updated library statistics.
 
 ### Changed
 
-- Set all 178 Sigma rules to author `Souhaieb Marzouk`, status
+- Set all 197 Sigma rules to author `Souhaieb Marzouk`, status
   `experimental`, and practical descriptions and tuning notes.
 - Normalized every rule description to one physical YAML line.
 
 ### Fixed
 
-- Renamed the new sub-technique pages to `00N-Name.html` and updated the
-  catalogue, sitemap, canonical URLs and internal links.
+- Renamed the earlier batch of new sub-technique pages to `00N-Name.html` and
+  updated the catalogue, sitemap, canonical URLs and internal links.
 - Replaced legacy `*-v2.0.html` internal links with the real page paths.
-- Updated README live-guide counts from 20 to 57.
+- Updated README live-guide counts from 20 to 76.
 
 ## v1.2 — 2026-10-19
 
