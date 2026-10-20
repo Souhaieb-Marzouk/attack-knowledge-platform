@@ -5,11 +5,11 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 > **The bridge between attack.mitre.org and a junior analyst's first Monday.**
-> 20 hand-written technique deep-dives, 597 tracked ATT&CK techniques, 141
+> 57 hand-written technique deep-dives, 597 tracked ATT&CK techniques, 141
 > CI-validated Sigma rules, and a log test for every rule.
 
 **Live site:** https://souhaieb-marzouk.github.io/attack-knowledge-platform/
-**Release:** [v1.2 — 20 guides, 141 log-tested Sigma rules, new ATT&CK Explorer](https://github.com/Souhaieb-Marzouk/attack-knowledge-platform/releases/tag/v1.2)
+**Release:** [v1.2 — ATT&CK Explorer + 141 log-tested Sigma rules](https://github.com/Souhaieb-Marzouk/attack-knowledge-platform/releases/tag/v1.2); the 37 newest guides are on `main`.
 
 ![ATT&CK Explorer](assets/img/screens/matrix-dark.png)
 
@@ -33,7 +33,7 @@ Actions; both are free for public repositories.
 
 | Area | Today |
 |---|---|
-| Live technique guides | **20** hand-written deep-dives (red view, blue view, detection engineering, case study, mitigations, mistakes) |
+| Live technique guides | **57** hand-written deep-dives (red view, blue view, detection engineering, case study, mitigations, mistakes) |
 | ATT&CK catalogue | **597** techniques across **15** tactics (the current Stealth / Defense Impairment model) |
 | Threat intelligence data | **180** actors, **44** mitigations, **59** campaigns |
 | Sigma library | **141** rules, every one passing `sigma check` + Splunk conversion |
@@ -47,7 +47,7 @@ Actions; both are free for public repositories.
   and live guides ranked above catalogue rows.
 - **ATT&CK Explorer**: tactic → technique → sub-technique drill-down with
   animated connector lines and a live/full-catalogue toggle, so the roadmap
-  never buries the 20 guides that are ready to read.
+  never buries the 57 guides that are ready to read.
 - **Cross-linked guides** with breadcrumbs, relations (used by / mitigated by /
   detected by) and prev/next within the tactic.
 - **Sigma Rule Library** with level, logsource, tactics, linked technique,
@@ -112,7 +112,7 @@ rebuilds `data/sigma-index.json` and commits it back to `main` with
 ```
 ├── index.html                     # home + ATT&CK Explorer
 ├── 404.html                       # search-first 404
-├── techniques/                    # 20 guides + hub + _template.html
+├── techniques/                    # 57 guides + hub + _template.html
 ├── actors/ mitigations/ campaigns/# relationship hubs
 ├── tools/                         # sigma library, coverage, false positives
 ├── docs/sigma-rule-guide.html     # standalone authoring/testing handbook

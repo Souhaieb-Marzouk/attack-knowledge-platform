@@ -1,0 +1,1797 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1597.002 — Purchase Technical Data | MITRE ATT&amp;CK Detection Guide</title>
+<meta name="description" content="Beginner-friendly detection engineering guide for MITRE ATT&amp;CK sub-technique T1597.002 (Purchase Technical Data): how adversaries buy passive DNS, WHOIS history, and certificate data to map a victim's attack surface, what defenders can see, Sigma rules, Splunk SPL, mitigation, and response. Version 2.0, audited and corrected.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1597-Search-Closed-Sources/002-Purchase-Technical-Data.html">
+<!-- Detection Engineering Guide v2.0 — rebuilt 2026-10-20 after full audit: Sigma/SPL correctness and equivalence fixes (incl. removal of a dangling filter selection), platform detection surfaces, tools cards, B1 English pass. -->
+<script>
+(function(){try{var t=localStorage.getItem("atk-theme");if(!t){t=window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+</script>
+<style>
+/* ============================================================
+   ATT&CK Detection Guide — shared design system
+   Self-contained; uses CSS custom properties only.
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg:#0b0f1a;--surface:#121a2e;--surface-2:#172138;--elevated:#1a2542;
+  --text:#e7edf8;--muted:#9aa8c0;--border:#24314e;--border-strong:#2f4066;
+  --accent:#4f8cff;--accent-2:#22d3ee;--violet:#a78bfa;--success:#34d399;
+  --warning:#fbbf24;--danger:#f87171;--high:#fb923c;--low:#4ade80;
+  --shadow:0 10px 30px rgba(3,8,20,.38);
+  --radius:14px;--radius-sm:9px;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --code-bg:#0a101f;--code-text:#d7e3f7;
+  --maxw:1280px;--sidebar-w:260px;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc;--surface:#ffffff;--surface-2:#f5f8ff;--elevated:#e9eefa;
+  --text:#182238;--muted:#5a6a85;--border:#d9e2f2;--border-strong:#c2d0ea;
+  --accent:#2f6fe4;--accent-2:#0891b2;--violet:#7c5ce0;--success:#0d9e6e;
+  --warning:#b45309;--danger:#dc2626;--high:#c2410c;--low:#15803d;
+  --shadow:0 10px 30px rgba(23,34,56,.10);
+  --code-bg:#101a30;--code-text:#d7e3f7;
+}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+  font-size:16.5px;line-height:1.66;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+}
+[hidden]{display:none!important}
+img,canvas,svg{max-width:100%}
+p{overflow-wrap:break-word}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent);color:#fff}
+.skip-link{position:absolute;left:-9999px;top:0;background:var(--accent);color:#fff;padding:10px 16px;border-radius:0 0 10px 0;z-index:1000;font-weight:600}
+.skip-link:focus{left:0}
+
+/* ---------- progress bar ---------- */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:3px;background:transparent;z-index:900;pointer-events:none}
+.progress-bar>div{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .1s linear}
+
+/* ---------- hero ---------- */
+.hero{position:relative;padding:56px 20px 40px;border-bottom:1px solid var(--border);
+  background:
+    radial-gradient(1000px 400px at 85% -10%,color-mix(in srgb,var(--accent) 14%,transparent),transparent 70%),
+    radial-gradient(700px 300px at 10% 110%,color-mix(in srgb,var(--violet) 10%,transparent),transparent 70%);
+}
+.hero-inner{max-width:var(--maxw);margin:0 auto}
+.kicker{margin:0 0 14px;font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-2)}
+.page-title{margin:0 0 16px;font-size:clamp(1.85rem,4.2vw,2.7rem);line-height:1.12;font-weight:800;letter-spacing:-.02em;max-width:22ch}
+.accent-word{color:var(--accent)}
+.tech-id{display:inline-block;vertical-align:middle;margin-left:14px;padding:4px 12px;border-radius:10px;
+  font-family:var(--mono);font-size:.52em;font-weight:700;letter-spacing:.04em;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid var(--border-strong)}
+.hero-intro{margin:0 0 20px;max-width:68ch;color:var(--muted);font-size:1.04rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px;padding:0;list-style:none}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:600;
+  font-family:var(--mono);color:var(--muted);background:var(--surface);border:1px solid var(--border)}
+.chip.chip-accent{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--accent-2)}
+.keyfacts{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kf{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;
+  box-shadow:var(--shadow);display:flex;flex-direction:column;gap:3px;min-width:0}
+.kf-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.kf-value{font-size:1.06rem;font-weight:750;line-height:1.25}
+.kf-note{font-size:12.5px;color:var(--muted);line-height:1.45}
+
+/* ---------- layout ---------- */
+.layout{max-width:var(--maxw);margin:0 auto;padding:36px 20px 80px;
+  display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr);gap:38px;align-items:start}
+.toc-side{position:sticky;top:22px;max-height:calc(100vh - 44px);overflow-y:auto;padding-right:4px}
+.toc{font-size:13.5px}
+.toc-title{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.toc ul{list-style:none;margin:0;padding:0}
+.toc>ul>li{margin-bottom:2px}
+.toc a{display:flex;gap:9px;align-items:baseline;padding:6px 10px;border-radius:8px;color:var(--muted);line-height:1.35}
+.toc a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc a .toc-num{font-family:var(--mono);font-size:11.5px;color:var(--accent);min-width:20px;font-weight:700}
+.toc a.active{color:var(--text);background:color-mix(in srgb,var(--accent) 13%,transparent);
+  box-shadow:inset 2px 0 0 var(--accent)}
+.toc .toc-sub{margin:1px 0 6px;padding-left:14px;border-left:1px solid var(--border)}
+.toc .toc-sub a{padding:4px 10px;font-size:12.5px}
+.toc .toc-sub .toc-num{min-width:26px;color:var(--accent-2)}
+.toc-note{margin:14px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+
+/* ---------- sections ---------- */
+.section{margin:0 0 60px;scroll-margin-top:20px}
+.sec-head{margin-bottom:22px}
+.section h2{display:flex;align-items:center;gap:13px;margin:0 0 10px;font-size:clamp(1.35rem,2.4vw,1.7rem);line-height:1.2;font-weight:780;letter-spacing:-.01em}
+.sec-num{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:11px;
+  font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 13%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+.sec-intro{margin:0;color:var(--muted);max-width:70ch}
+.sub-title{display:flex;align-items:center;gap:10px;margin:34px 0 14px;font-size:1.16rem;font-weight:750;letter-spacing:-.01em}
+.sub-num{display:inline-flex;padding:2px 9px;border-radius:8px;font-family:var(--mono);font-size:.78rem;font-weight:700;
+  color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent-2) 35%,transparent)}
+.section h4{margin:22px 0 10px;font-size:1.02rem;font-weight:720}
+.muted{color:var(--muted)}
+.small{font-size:.86rem}
+
+/* ---------- cards & grids ---------- */
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);min-width:0}
+.card h4,.card h5{margin:0 0 8px;font-size:1rem;font-weight:730}
+.card p{margin:0 0 10px}
+.card p:last-child{margin-bottom:0}
+.card-icon{display:inline-flex;width:34px;height:34px;border-radius:9px;align-items:center;justify-content:center;
+  font-size:16px;background:color-mix(in srgb,var(--accent) 13%,transparent);border:1px solid var(--border-strong);margin-bottom:10px}
+.card-icon.violet{background:color-mix(in srgb,var(--violet) 14%,transparent)}
+.card-icon.cyan{background:color-mix(in srgb,var(--accent-2) 13%,transparent)}
+.card-icon.warn{background:color-mix(in srgb,var(--warning) 14%,transparent)}
+.card-icon.good{background:color-mix(in srgb,var(--success) 14%,transparent)}
+.card-icon.danger{background:color-mix(in srgb,var(--danger) 14%,transparent)}
+
+/* ---------- callouts ---------- */
+.callout{display:flex;gap:12px;align-items:flex-start;background:var(--surface-2);border:1px solid var(--border);
+  border-left:3px solid var(--accent);border-radius:var(--radius-sm);padding:13px 16px;margin:16px 0}
+.callout .co-tag{flex:0 0 auto;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 8px;border-radius:6px;margin-top:2px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+.callout p{margin:0;font-size:.95rem}
+.callout.warn{border-left-color:var(--warning)}
+.callout.warn .co-tag{background:color-mix(in srgb,var(--warning) 16%,transparent);color:var(--warning)}
+.callout.good{border-left-color:var(--success)}
+.callout.good .co-tag{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .co-tag{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+
+/* ---------- badges ---------- */
+.badge{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:750;
+  white-space:nowrap;border:1px solid transparent}
+.badge::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.badge.cat{color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 11%,transparent);border-color:color-mix(in srgb,var(--accent-2) 32%,transparent)}
+.badge.cat::before{display:none}
+.sev-critical{color:var(--danger);background:color-mix(in srgb,var(--danger) 13%,transparent);border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
+.sev-high{color:var(--high);background:color-mix(in srgb,var(--high) 13%,transparent);border-color:color-mix(in srgb,var(--high) 40%,transparent)}
+.sev-medium{color:var(--warning);background:color-mix(in srgb,var(--warning) 13%,transparent);border-color:color-mix(in srgb,var(--warning) 40%,transparent)}
+.sev-low{color:var(--low);background:color-mix(in srgb,var(--low) 13%,transparent);border-color:color-mix(in srgb,var(--low) 40%,transparent)}
+.sev-info{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+table.wide{min-width:720px}
+th,td{padding:11px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+thead th{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--surface-2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+td code,li code,p code,.kf-note code{font-family:var(--mono);font-size:.85em;background:var(--elevated);padding:1px 6px;border-radius:5px;border:1px solid var(--border)}
+
+/* ---------- code blocks ---------- */
+.code-block{margin:16px 0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--code-bg);box-shadow:var(--shadow)}
+.code-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;background:color-mix(in srgb,#ffffff 4%,var(--code-bg));border-bottom:1px solid rgba(255,255,255,.08)}
+.code-lang{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.06em;color:#8fb3e8;text-transform:uppercase}
+.copy-btn{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:8px;font-size:12px;font-weight:700;
+  color:#cfe0f8;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);cursor:pointer;font-family:var(--sans)}
+.copy-btn:hover{background:rgba(255,255,255,.14)}
+.copy-btn.copied{color:#7ef0c0;border-color:rgba(126,240,192,.5)}
+.code-block pre{margin:0;padding:15px 16px;overflow-x:auto}
+.code-block code{font-family:var(--mono);font-size:13px;line-height:1.6;color:var(--code-text);white-space:pre;display:block;min-width:max-content}
+
+/* ---------- key/value list ---------- */
+.kv{margin:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:hidden;box-shadow:var(--shadow)}
+.kv>div{display:grid;grid-template-columns:190px minmax(0,1fr);gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)}
+.kv>div:last-child{border-bottom:0}
+.kv dt{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.kv dd{margin:0;font-size:.92rem}
+
+/* ---------- checklist ---------- */
+.checklist{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.checklist li{display:flex;gap:11px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:11px 14px;font-size:.94rem}
+.checklist .box{flex:0 0 auto;width:17px;height:17px;margin-top:2px;border-radius:5px;border:2px solid var(--accent)}
+
+/* ---------- attack chain strip ---------- */
+.chain{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:14px 0}
+.chain span{font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;background:var(--surface-2);
+  border:1px solid var(--border);color:var(--muted)}
+.chain .arrow{border:0;background:none;padding:0;color:var(--muted);font-weight:400}
+.chain .active-step{color:#fff;background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+
+/* ---------- timeline ---------- */
+.timeline{list-style:none;margin:14px 0;padding:0 0 0 26px;border-left:2px solid var(--border-strong);display:grid;gap:18px}
+.timeline li{position:relative}
+.timeline li::before{content:"";position:absolute;left:-33px;top:5px;width:12px;height:12px;border-radius:50%;
+  background:var(--accent);border:3px solid var(--bg);box-shadow:0 0 0 2px var(--accent)}
+.timeline .tl-time{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent-2);display:block;margin-bottom:3px}
+.timeline p{margin:4px 0 0;font-size:.94rem;color:var(--muted)}
+
+/* ---------- simulation ---------- */
+.sim-shell{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;outline-offset:4px}
+.sim-head{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+.sim-title{display:block;font-weight:760;font-size:1.02rem}
+.sim-sub{display:block;font-size:12.5px;color:var(--muted)}
+.sim-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}
+.sim-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:baseline}
+.sim-stage{position:relative;background:
+  linear-gradient(color-mix(in srgb,var(--border) 45%,transparent) 1px,transparent 1px),
+  linear-gradient(90deg,color-mix(in srgb,var(--border) 45%,transparent) 1px,transparent 1px),
+  var(--surface-2);
+  background-size:28px 28px,28px 28px,auto}
+.sim-stage canvas{display:block;width:100%;height:auto}
+.sim-tip{position:absolute;z-index:30;max-width:250px;background:var(--elevated);border:1px solid var(--border-strong);
+  border-radius:10px;padding:9px 12px;font-size:12.5px;line-height:1.5;box-shadow:var(--shadow);pointer-events:none}
+.sim-tip strong{display:block;font-size:12px;margin-bottom:2px}
+.sim-caption{padding:13px 18px;border-top:1px solid var(--border);display:grid;gap:5px}
+.sim-caption p{margin:0;font-size:.95rem}
+.sim-hint{font-size:.85rem;color:var(--success);display:flex;gap:8px;align-items:flex-start}
+.sim-hint::before{content:"DEFENDER VIEW";flex:0 0 auto;margin-top:2px;font-size:9.5px;font-weight:800;letter-spacing:.1em;
+  color:var(--success);background:color-mix(in srgb,var(--success) 13%,transparent);padding:2px 7px;border-radius:6px}
+.sim-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:13px 18px;border-top:1px solid var(--border)}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;
+  color:var(--text);background:var(--elevated);border:1px solid var(--border-strong);cursor:pointer;font-family:var(--sans)}
+.btn:hover{border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed;border-color:var(--border-strong)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:disabled{opacity:.55}
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:9px;overflow:hidden}
+.seg button{padding:7px 12px;font-size:12.5px;font-weight:700;color:var(--muted);background:var(--elevated);border:0;cursor:pointer;font-family:var(--mono)}
+.seg button+button{border-left:1px solid var(--border-strong)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.step-chips{display:flex;flex-wrap:wrap;gap:6px}
+.step-chips button{width:32px;height:30px;border-radius:8px;border:1px solid var(--border-strong);background:var(--elevated);
+  color:var(--muted);font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer}
+.step-chips button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.sim-spacer{flex:1 1 auto}
+.story .card{border-color:color-mix(in srgb,var(--accent) 0%,var(--border));transition:border-color .25s,box-shadow .25s}
+.story .card.active{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.story .step-tag{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--accent-2);letter-spacing:.08em}
+
+/* ---------- floating controls & overlay ---------- */
+.fab{position:fixed;right:18px;z-index:940;align-items:center;gap:8px;padding:10px 15px;border-radius:999px;
+  font-size:13px;font-weight:700;color:var(--text);background:var(--elevated);border:1px solid var(--border-strong);
+  cursor:pointer;box-shadow:var(--shadow);font-family:var(--sans)}
+#topBtn{bottom:20px;display:none}
+#topBtn.show{display:inline-flex}
+#themeBtn{bottom:66px;display:inline-flex}
+#contentsBtn{bottom:112px;display:none}
+.overlay{position:fixed;inset:0;z-index:960}
+.overlay-backdrop{position:absolute;inset:0;background:rgba(4,8,18,.62);backdrop-filter:blur(2px)}
+.overlay-panel{position:absolute;top:0;right:0;bottom:0;width:min(340px,88vw);background:var(--surface);
+  border-left:1px solid var(--border);box-shadow:var(--shadow);overflow-y:auto;padding:18px}
+.overlay-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.overlay-head strong{font-size:1rem}
+.icon-btn{padding:6px 12px;border-radius:8px;font-size:12.5px;font-weight:700;color:var(--text);background:var(--elevated);
+  border:1px solid var(--border-strong);cursor:pointer;font-family:var(--sans)}
+
+/* ---------- footer strip inside content (not a page footer) ---------- */
+.next-pages{display:grid;gap:12px}
+.next-pages a{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:13px 16px;border:1px solid var(--border);
+  border-radius:var(--radius-sm);background:var(--surface);font-weight:600}
+.next-pages a:hover{border-color:var(--accent);text-decoration:none}
+
+/* ---------- print ---------- */
+.print-note{display:none}
+@media print{
+  body{background:#fff;color:#111;font-size:11.5pt;line-height:1.5}
+  .fab,.overlay,.progress-bar,.skip-link,.sim-controls,.sim-legend,.copy-btn,.toc-side,#contentsBtn,#topBtn,#themeBtn{display:none!important}
+  .layout{display:block;padding:0;max-width:100%}
+  .hero{border-bottom:2px solid #333;background:#fff}
+  .sim-stage{display:none}
+  .print-note{display:block;padding:12px;border:1px dashed #888;border-radius:8px;margin:10px 0;font-size:10pt}
+  .card,.callout,.code-block,.kv,.table-wrap,.sim-shell{box-shadow:none;break-inside:avoid}
+  .section{margin-bottom:34pt}
+  .code-block{background:#f4f6fa;border-color:#ccd}
+  .code-block code{color:#1a2440;white-space:pre-wrap;word-break:break-word;min-width:0}
+  .code-head{background:#e7ecf5;border-color:#ccd}
+  .code-lang{color:#33415e}
+  a{color:#111;text-decoration:underline}
+  h2,h3{break-after:avoid}
+  table{font-size:9.5pt}
+}
+
+/* ---------- responsive ---------- */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc-side{display:none}
+  #contentsBtn{display:inline-flex}
+  .keyfacts{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .hero{padding:38px 16px 30px}
+  .layout{padding:26px 14px 96px}
+  .keyfacts{grid-template-columns:1fr}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .kv>div{grid-template-columns:130px minmax(0,1fr);padding:9px 12px}
+  .page-title .tech-id{display:block;margin:10px 0 0;width:fit-content}
+  .sim-controls{gap:6px}
+  .step-chips button{width:29px}
+  #topBtn{bottom:16px;right:14px}
+  #themeBtn{bottom:60px;right:14px}
+  #contentsBtn{bottom:104px;right:14px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1597.002"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div class="progress-bar" aria-hidden="true"><div id="progressFill"></div></div>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&amp;CK · Reconnaissance · Sub-technique Guide</p>
+    <h1 class="page-title">Purchase <span class="accent-word">Technical Data</span><span class="tech-id">T1597.002</span></h1>
+    <p class="hero-intro">Every domain your company ever used left a paper trail: DNS records, WHOIS registrations, certificates. Commercial platforms sell that history in seconds. This guide explains how attackers buy your technical past to find your weakest present — and how defenders can watch the same data before someone else uses it.</p>
+    <ul class="chips" role="list">
+      <li class="chip chip-accent"><span class="dot"></span>T1597.002</li>
+      <li class="chip">Sub-technique of T1597</li>
+      <li class="chip">Tactic: Reconnaissance</li>
+      <li class="chip">Platforms: PRE</li>
+      <li class="chip">Created: Oct 2020</li>
+      <li class="chip">Detection: Difficult</li>
+      <li class="chip">Chain position: Early</li>
+      <li class="chip">Guide v2.0</li>
+    </ul>
+    <div class="keyfacts">
+      <div class="kf"><span class="kf-label">Parent</span><span class="kf-value">T1597</span><span class="kf-note">Search Closed Sources — buying information instead of stealing it.</span></div>
+      <div class="kf"><span class="kf-label">What is bought</span><span class="kf-value">DNS · WHOIS · certs</span><span class="kf-note">Passive DNS, registration history, subdomains, certificate records.</span></div>
+      <div class="kf"><span class="kf-label">Platforms</span><span class="kf-value">PRE</span><span class="kf-note">Queries run against data platforms, never against your systems.</span></div>
+      <div class="kf"><span class="kf-label">Defender edge</span><span class="kf-value">Same data</span><span class="kf-note">You can run the attacker's query on yourself — for less money.</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="toc-side" aria-label="Table of contents">
+    <nav id="toc" class="toc" aria-label="Table of contents">
+      <noscript><p class="toc-note">Enable JavaScript to see an auto-generated table of contents. All sections below remain readable without it.</p></noscript>
+    </nav>
+  </aside>
+  <main id="main" class="content">
+
+<section id="s1" class="section" data-num="1">
+  <div class="sec-head">
+    <h2><span class="sec-num">1</span><span class="sec-title">Overview</span></h2>
+    <p class="sec-intro">What this sub-technique covers, why technical history is dangerous, and where it sits in the attack chain.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>What is T1597.002?</h4>
+      <p>Purchase Technical Data means an adversary buys technical records about a target from commercial platforms: passive DNS (a record of which hostnames pointed at which IP addresses, and when), WHOIS history (who registered a domain, and when it changed hands), certificate transparency data, subdomain lists, and IP reputation history.</p>
+      <p>The magic ingredient is <strong>history</strong>. Your current DNS points at what exists today. Your historic DNS shows what existed in 2014 — including the test portal, the old VPN, and the staging server somebody forgot to decommission. Attackers buy your past because your present is usually defended better.</p>
+    </div>
+    <div class="card">
+      <h4>Why it matters to defenders</h4>
+      <p>This technique needs no exploit and makes no noise. A five-dollar API query can return an asset map your own CMDB does not contain. The classic result is "the attacker knew about our infrastructure before our IT team did."</p>
+      <p>The good news: every query the attacker can run, you can run too — against yourself. Attack-surface management is essentially this technique pointed inward, continuously. Teams that do both (outside-in inventory + vendor telemetry) close the gap before it becomes an entry point.</p>
+    </div>
+  </div>
+
+  <h4 class="muted" style="margin-top:20px">Where it fits in the attack chain</h4>
+  <div class="chain" role="img" aria-label="Attack chain: Reconnaissance is active, followed by weaponization, delivery, exploitation, installation, command and control, and actions on objectives.">
+    <span class="active-step">1 · Recon</span><span class="arrow">→</span>
+    <span>2 · Weaponize</span><span class="arrow">→</span>
+    <span>3 · Deliver</span><span class="arrow">→</span>
+    <span>4 · Exploit</span><span class="arrow">→</span>
+    <span>5 · Install</span><span class="arrow">→</span>
+    <span>6 · C2</span><span class="arrow">→</span>
+    <span>7 · Act</span>
+  </div>
+  <p class="muted small">As a PRE technique, T1597.002 happens before initial access. Its output selects the door: a forgotten VPN portal (T1133), an unpatched legacy web app (T1190), or the naming pattern used for a convincing lookalike domain (T1583.001).</p>
+
+  <h4 class="muted" style="margin-top:20px">What you will learn in this guide</h4>
+  <div class="grid-3">
+    <div class="card"><span class="card-icon cyan">1</span><h4>The buyer's playbook</h4><p>Which records are sold, what they reveal, and how a purchased history becomes a chosen entry point.</p></div>
+    <div class="card"><span class="card-icon violet">2</span><h4>The defender's mirror</h4><p>How to run the same queries against your own domains and diff the result against your inventory.</p></div>
+    <div class="card"><span class="card-icon good">3</span><h4>Detection you can ship</h4><p>Five ranked threats with log examples, five Sigma rules, matching Splunk SPL, and validation steps.</p></div>
+  </div>
+
+  <h4 class="muted" style="margin-top:22px">Key facts</h4>
+  <dl class="kv">
+    <div><dt>Technique ID</dt><dd>T1597.002 — Purchase Technical Data (sub-technique of T1597)</dd></div>
+    <div><dt>Tactic</dt><dd>Reconnaissance (PRE)</dd></div>
+    <div><dt>Data bought</dt><dd>Passive DNS, WHOIS history, certificate records, subdomain lists, IP reputation history</dd></div>
+    <div><dt>Victim-side artifacts</dt><dd>None directly; vendor-side API audit logs are the only echo</dd></div>
+    <div><dt>Best defenses</dt><dd>Attack-surface management, DNS purge discipline, certificate hygiene, CT monitoring, vendor alerts</dd></div>
+  </dl>
+
+  <div class="callout note"><span class="co-tag">Note</span><p>Buying DNS or WHOIS history is completely legal — the data is aggregated from public records. The danger is not the transaction; it is the gap between what the buyer can see and what you track. This guide keeps every example defensive and lab-only.</p></div>
+</section>
+
+<section id="s2" class="section" data-num="2">
+  <div class="sec-head">
+    <h2><span class="sec-num">2</span><span class="sec-title">Animated Simulation</span></h2>
+    <p class="sec-intro">Watch purchased records become a chosen entry point, and see the two echoes the SOC can still catch. Hover or tap any node for details.</p>
+  </div>
+
+  <div class="sim-shell" id="simShell" tabindex="0" aria-label="Interactive simulation. Use the buttons below, or the left and right arrow keys, to move between steps.">
+    <div class="sim-head">
+      <div><span class="sim-title">Simulation: Your history, their map</span><span class="sim-sub">Attacker actions (left) vs. SOC visibility (right)</span></div>
+      <div class="sim-legend" aria-hidden="true">
+        <span><i style="background:var(--danger)"></i>Attacker</span>
+        <span><i style="background:var(--violet)"></i>Data platforms</span>
+        <span><i style="background:var(--accent)"></i>Target</span>
+        <span><i style="background:var(--success)"></i>SOC</span>
+      </div>
+    </div>
+    <div class="sim-stage">
+      <canvas id="simCanvas" width="960" height="440" role="img" aria-label="Animated diagram of an attacker buying WHOIS history, passive DNS, and certificate data from a technical data platform to map a target company's forgotten assets, while the SOC receives a vendor bulk-query alert. A written version of every step follows below the diagram."></canvas>
+      <div class="sim-tip" id="simTip" hidden></div>
+    </div>
+    <div class="sim-caption">
+      <p id="simCaption" aria-live="polite">Press Play to start the simulation.</p>
+      <p class="sim-hint" id="simHint">Defender hints appear here for every step.</p>
+    </div>
+    <div class="sim-controls">
+      <button class="btn primary" id="simPlay" type="button">Play</button>
+      <button class="btn" id="simPause" type="button" disabled>Pause</button>
+      <button class="btn" id="simRestart" type="button">Restart</button>
+      <button class="btn" id="simPrev" type="button" aria-label="Previous step">Prev</button>
+      <button class="btn" id="simNext" type="button" aria-label="Next step">Next</button>
+      <div class="seg" role="group" aria-label="Playback speed">
+        <button type="button" data-speed="0.5" aria-pressed="false">0.5x</button>
+        <button type="button" data-speed="1" aria-pressed="true">1x</button>
+        <button type="button" data-speed="2" aria-pressed="false">2x</button>
+      </div>
+      <div class="sim-spacer"></div>
+      <div class="step-chips" id="simStepChips" role="group" aria-label="Jump to a step"></div>
+    </div>
+    <noscript><p style="padding:14px 18px;margin:0">The interactive canvas needs JavaScript. A full written version of all steps is right below, so no content is lost.</p></noscript>
+  </div>
+
+  <h4 class="muted" style="margin-top:22px">Written version of the simulation (text alternative)</h4>
+  <div class="grid-2 story">
+    <div class="card" data-step="1"><span class="step-tag">STEP 1</span><h4>Buy API credits</h4><p>The operator funds an account on a technical data platform with a few hundred dollars of API credits. No target is named yet, so nothing looks unusual.</p></div>
+    <div class="card" data-step="2"><span class="step-tag">STEP 2</span><h4>Pull WHOIS history</h4><p>WHOIS history for the target's main domain shows the original registrant email, a 2014 re-registration, and two old brand names the company retired.</p></div>
+    <div class="card" data-step="3"><span class="step-tag">STEP 3</span><h4>Query passive DNS</h4><p>Passive DNS returns every hostname that ever resolved: today's website, and a long tail of test, staging, and VPN hosts from years past.</p></div>
+    <div class="card" data-step="4"><span class="step-tag">STEP 4</span><h4>Find the forgotten assets</h4><p>Cross-checking shows <code>vpn-old.target.example</code> still resolves, and a certificate for it was renewed as recently as last year. The company's CMDB has no record of it.</p></div>
+    <div class="card" data-step="5"><span class="step-tag">STEP 5</span><h4>Pull certificate history</h4><p>Certificate records reveal internal naming conventions — <code>hq-vpn01</code> patterns — that make future lookalike domains instantly believable.</p></div>
+    <div class="card" data-step="6"><span class="step-tag">STEP 6</span><h4>Assemble the map</h4><p>The operator merges everything into an attack-surface map: 38 assets, one clearly abandoned, one still serving login pages. The target's own inventory lists 11.</p></div>
+    <div class="card" data-step="7"><span class="step-tag">STEP 7</span><h4>Check the quiet door</h4><p>A single harmless-looking request confirms the old VPN portal is alive and serving a login page. The operator has a chosen entry point without ever scanning the target's range.</p></div>
+    <div class="card" data-step="8"><span class="step-tag">STEP 8</span><h4>The SOC's echoes</h4><p>The SOC's only possible signals: the data platform's bulk-query alert about their domains, and their own ASM tool if it runs the same query first. Both exist — if someone bought and wired them.</p></div>
+  </div>
+</section>
+
+<section id="s3" class="section" data-num="3">
+  <div class="sec-head">
+    <h2><span class="sec-num">3</span><span class="sec-title">Red Team / Hacker Perspective</span></h2>
+    <p class="sec-intro">How operators turn purchased technical records into a chosen entry point, presented for defense and education only.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <span class="card-icon danger">?</span>
+      <h4>When and why attackers use it</h4>
+      <p>Scanning a target's IP range (T1595) is slow, expensive in stealth terms, and may hit a honeypot. Purchased data answers the same question instantly and silently: what existed, what changed, and what was abandoned. For well-prepared crews, it is the default first step before any active technique.</p>
+      <p>It also degrades your defense-in-depth. A target who thinks "they can't know our internal names" is wrong: certificate records leak SANs and CNs for years, including names that were never meant to be public. Assumptions built on obscurity collapse quietly.</p>
+    </div>
+    <div class="card">
+      <span class="card-icon violet">≡</span>
+      <h4>How it is performed</h4>
+      <ul>
+        <li><strong>WHOIS history:</strong> registrant emails, old brand names, and ownership changes that reveal acquisitions and rebrands.</li>
+        <li><strong>Passive DNS:</strong> every hostname-to-IP mapping observed over years, exposing the full shape of the estate.</li>
+        <li><strong>Certificate data:</strong> SANs, CNs, issuance dates, and internal naming conventions from transparency logs.</li>
+        <li><strong>Subdomain datasets:</strong> curated lists of hostnames found by crawling and resolvers, including long-dead ones.</li>
+        <li><strong>IP reputation history:</strong> what else lived on the IPs your assets share — neighbors, abuse history, hosting patterns.</li>
+      </ul>
+      <p>Operational note: careful buyers spread queries over days and rotate API keys, precisely because some platforms alert the domains being queried in bulk.</p>
+    </div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Prerequisites and conditions</h4>
+  <div class="grid-3">
+    <div class="card"><h5>API budget</h5><p>Data platforms price by query or subscription. A full mapping of a mid-size company costs tens to hundreds of dollars — trivial for any funded actor.</p></div>
+    <div class="card"><h5>Correlation skill</h5><p>Raw records are not a map. The skill is joining them: WHOIS dates + passive DNS + certificates → "this forgotten host still resolves and serves a login page."</p></div>
+    <div class="card"><h5>Patience with OPSEC</h5><p>Query patterns are logged. Professional buyers throttle queries and avoid single-session bulk pulls that trip vendor abuse rules.</p></div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Illustrative (lab-only) workflow</h4>
+  <p class="small muted">The pseudo-workflow below models the <em>shape</em> of the activity for defensive design. It is abstract and applies only to your own fictional lab tenant.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Recon workflow · illustrative only</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code># Lab-only modeling of T1597.002 against your OWN fictional lab tenant.
+# All names are fictional; run nothing against real organizations.
+
+1. credits          = platform.buy(api_credits=200)                  # lawful, licensed
+2. whois_history    = platform.whois_history("labcorp-fictional.example")
+3. pdns_records     = platform.pdns("*.labcorp-fictional.example")
+4. cert_history     = platform.certs("labcorp-fictional.example")
+5. candidate_assets = correlate(pdns_records, cert_history)
+6. quiet_door       = rank(candidate_assets, prefer="old + still alive")
+
+# Defensive mirror exercise (run this on YOURSELF, continuously):
+#   - schedule the same three queries for every domain you own
+#   - diff the results against your CMDB every month
+#   - anything "in the data but not in the inventory" is a finding
+#   - decommission or adopt it; purge DNS for what dies</code></pre>
+  </figure>
+
+  <h4 class="muted" style="margin-top:18px">Common variations and mistakes</h4>
+  <div class="grid-2">
+    <div class="card">
+      <h5>Variations</h5>
+      <ul>
+        <li>Buying <strong>subsidiary and acquisition domains</strong> after WHOIS history reveals them — young subsidiaries are rarely hardened.</li>
+        <li>Using <strong>IP reputation history</strong> to find shared hosting where a neighbor compromise yields route-level access.</li>
+        <li>Harvesting <strong>internal naming conventions</strong> from certificate records to build perfect lookalike domains.</li>
+        <li>Combining with <strong>open technical databases</strong> (T1596) to confirm purchased findings before acting.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>Attacker mistakes defenders can profit from</h5>
+      <ul>
+        <li><strong>Bulk queries in one session</strong>, which trigger vendor abuse alerts to the queried brand.</li>
+        <li>Trusting <strong>stale maps</strong>: the quiet door was patched or decommissioned last month — wasted effort and, sometimes, a probe you can see.</li>
+        <li>Correlating on <strong>old registrant emails</strong> that now belong to the defender's monitoring inbox.</li>
+        <li>Building lookalikes on <strong>naming patterns</strong> the defender has already watched for since their last CT-log review.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="s4" class="section" data-num="4">
+  <div class="sec-head">
+    <h2><span class="sec-num">4</span><span class="sec-title">Blue Team / SOC Perspective</span></h2>
+    <p class="sec-intro">The query happens on someone else's platform. Your defense is to run it first, watch the echoes, and kill the raw material.</p>
+  </div>
+
+  <div class="callout warn"><span class="co-tag">Reality check</span><p>You will not see the purchase in your logs — ever. ATT&amp;CK's detection guidance for the T1597 family says much of this activity may take place outside the visibility of the target organization, may carry a very high false-positive rate, and is best covered by watching related stages such as Initial Access. What you can do is eliminate the advantage: if your own outside-in view is fresher than the attacker's purchased map, they gain nothing. Two echoes (vendor alerts, CT watchers) still give you a heads-up.</p></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>What artifacts it leaves (and where)</h4>
+      <ul>
+        <li><strong>Vendor API audit alerts:</strong> several platforms notify (or can be contracted to notify) when a domain is queried at unusual volume.</li>
+        <li><strong>Certificate transparency:</strong> lookalike certificates issued after internal naming patterns are harvested appear in CT logs — your watcher can catch them.</li>
+        <li><strong>Probe echoes:</strong> the attacker eventually checks whether a forgotten asset is alive — one request to a dead service is a signal worth logging.</li>
+        <li><strong>Registration echoes:</strong> lookalike domain registrations built on your naming patterns appear in newly-registered-domain feeds.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Why it matters for the chain</h4>
+      <p>T1597.002 selects the door for T1190 and T1133. If your asset inventory is complete and your DNS is clean, the technique returns nothing useful. If it is not, this is usually where breaches quietly start — and your first real log line may be the successful login weeks later.</p>
+      <p>It is also the cheapest technique to defend in the whole ATT&amp;CK catalog. The data is the same data; the only question is who queries it first, and who acts on the difference.</p>
+    </div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Short triage flow (run it as a playbook)</h4>
+  <ol class="timeline">
+    <li><span class="tl-time">Signal in</span><div><strong>Vendor or CT alert arrives</strong><p>Bulk-query notice about your domains, or a new certificate matching your naming pattern. Assign to the ASM owner — not to nobody.</p></div></li>
+    <li><span class="tl-time">Minute 0–15</span><div><strong>Verify</strong><p>Confirm the certificate/domain is not yours. Confirm the query volume is real, not your own tooling (allowlist first, always).</p></div></li>
+    <li><span class="tl-time">Minute 15–60</span><div><strong>Run the mirror</strong><p>Execute the attacker's queries on yourself: WHOIS history, passive DNS, certs. Diff against the CMDB. List every "alive but unknown" asset.</p></div></li>
+    <li><span class="tl-time">Hour 1–24</span><div><strong>Act on the diff</strong><p>Decommission what is dead (and purge its DNS), patch or MFA what is alive and forgotten, and block/monitor the lookalike.</p></div></li>
+    <li><span class="tl-time">Day 1–7</span><div><strong>Close the loop</strong><p>Update the CMDB, log the finding, and set a recurring mirror query so the next buyer finds a boring map.</p></div></li>
+  </ol>
+</section>
+
+<section id="s5" class="section" data-num="5">
+  <div class="sec-head">
+    <h2><span class="sec-num">5</span><span class="sec-title">Detection Engineering Deep Dive</span></h2>
+    <p class="sec-intro">Regulation mapping, threat intelligence, ranked threats, log patterns, and ready-to-adapt Sigma and Splunk content for the technical-data path.</p>
+  </div>
+
+  <h3 id="s5-1" class="sub-title"><span class="sub-num">5.1</span>Regulation mapping</h3>
+  <p class="muted">Technical-data reconnaissance is addressed by controls on asset management, exposure monitoring, and secure configuration. The mappings below are the ones auditors recognize. Replace <code>example-corp.com</code> with your own registered domain in all examples.</p>
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+      <tbody>
+        <tr><td>ISO/IEC 27001:2022</td><td>A.5.9 Inventory of assets</td><td>The technique exploits inventory gaps; the control requires an accurate, maintained asset register.</td><td>Asset register with owner fields; monthly reconciliation records against ASM results.</td></tr>
+        <tr><td>ISO/IEC 27001:2022</td><td>A.8.9 Configuration management</td><td>Forgotten services are configuration drift made visible from the outside.</td><td>Baseline configs, decommissioning checklists including DNS/cert purge.</td></tr>
+        <tr><td>ISO/IEC 27001:2022</td><td>A.5.7 / A.8.16</td><td>Threat intel and monitoring cover vendor alerts and CT watchers as inputs.</td><td>Feed register, SIEM ingestion records, triage tickets.</td></tr>
+        <tr><td>SOC 2 (Security TSC)</td><td>CC6.1 / CC6.6</td><td>Boundary protection requires knowing what the boundary actually is — including forgotten assets.</td><td>Network diagrams matching reality; external scan diffs with closures.</td></tr>
+        <tr><td>SOC 2 (Security TSC)</td><td>CC7.1 / CC7.2</td><td>Monitoring and anomaly detection include external exposure signals.</td><td>ASM alerts with SLAs; CT watcher findings and dispositions.</td></tr>
+        <tr><td>PCI DSS v4.0.1</td><td>12.5.1 / 11.3.1</td><td>Inventory of systems in scope plus regular external testing surface forgotten CDE-adjacent hosts.</td><td>Current network diagram; external scan results with remediation notes.</td></tr>
+        <tr><td>PCI DSS v4.0.1</td><td>12.3.1 Targeted risk analysis</td><td>Documents the cadence for exposure checks and mirror queries.</td><td>Written TRA with defined frequencies.</td></tr>
+        <tr><td>GDPR</td><td>Art. 32 / Art. 25</td><td>Forgotten personal-data systems (old HR portals, test copies) are data-protection failures attackers find first.</td><td>Records of processing tied to decommissioning; test-data minimization evidence.</td></tr>
+        <tr><td>HIPAA Security Rule</td><td>§164.308(a)(1)(ii)(A)</td><td>Risk analysis must cover all systems handling ePHI, including legacy ones.</td><td>Risk analysis scope showing legacy asset review.</td></tr>
+        <tr><td>NIST CSF 2.0</td><td>ID.AM-01 / ID.AM-08 / DE.CM-01</td><td>Asset inventories (hardware, software, services, data) and continuous monitoring are first-class outcomes.</td><td>Inventory completeness KPIs; monitoring coverage matrix.</td></tr>
+        <tr><td>CIS Controls v8</td><td>1 / 12 / 13</td><td>Enterprise asset inventory, network infrastructure management, and monitoring directly counter this technique.</td><td>Self-assessment results; ASM-to-CMDB diff reports.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="s5-2" class="sub-title"><span class="sub-num">5.2</span>Threat intelligence</h3>
+  <p class="muted">For technical-data abuse, intelligence means knowing what your domains say about you and which actors monetize that knowledge.</p>
+  <div class="grid-2">
+    <div class="card"><span class="card-icon cyan">D</span><h4>Data platforms (defensive use)</h4><p>Schedule the attacker's queries — WHOIS history, passive DNS, certs — for every domain you own. Collect weekly via API. Apply by diffing against the CMDB; every unmatched live asset is a ticket.</p></div>
+    <div class="card"><span class="card-icon violet">C</span><h4>Certificate transparency feeds</h4><p>CT logs are public but aggregation platforms make them searchable. Collect via watcher services or your own log monitoring. Apply by alerting on brand + auth keywords and on internal naming patterns.</p></div>
+    <div class="card"><span class="card-icon">N</span><h4>Newly-registered-domain feeds</h4><p>NRD feeds show lookalikes built on harvested naming conventions. Collect daily. Apply by matching against your brand strings and host-name patterns, then blocking pre-delivery.</p></div>
+    <div class="card"><span class="card-icon warn">V</span><h4>Vendor abuse and audit alerts</h4><p>Some platforms alert brands about bulk queries and can share audit summaries. Collect contractually. Apply as an early indicator with low severity but real context value.</p></div>
+    <div class="card"><span class="card-icon good">I</span><h4>ISAC and peer reporting</h4><p>Peers share which asset types (old VPNs, staging portals) are being weaponized in your sector this quarter. Apply by prioritizing your own cleanup queue to match.</p></div>
+    <div class="card"><span class="card-icon danger">A</span><h4>ATT&amp;CK + confidence labels</h4><p>Map findings to T1597.002 → T1190/T1133/T1583.001 chains. Label every intel item High/Medium/Low and say why. A labeled guess beats an unlabeled certainty in an incident bridge.</p></div>
+  </div>
+
+  <div class="table-wrap" style="margin-top:16px">
+    <table class="wide">
+      <thead><tr><th>Actor / pattern (public reporting)</th><th>Relevance to T1597.002</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>Access brokers selling VPN/edge footholds</td><td>Systematically map legacy remote-access assets before purchase of credentials; passive DNS is the natural tool.</td><td><span class="badge sev-high">High (pattern)</span></td></tr>
+        <tr><td>Ransomware affiliate programs</td><td>Repeatedly observed using old, less-monitored edge devices and portals as initial access paths.</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>Phishing infrastructure operators</td><td>Harvest internal naming conventions from certificate data to mint believable lookalike domains.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="muted small" style="margin-top:10px">Accuracy note: MITRE ATT&amp;CK currently lists no specific group or software procedure examples for this sub-technique — purchased queries leave no victim-side logs. Treat the rows above as documented <em>patterns</em> with confidence labels, not as named attributions.</p>
+
+  <h3 id="s5-3" class="sub-title"><span class="sub-num">5.3</span>Threats ranking and categorization</h3>
+  <p class="muted">Five realistic threats for the technical-data path. Rank reflects (possible damage × likelihood). Categories follow where detection and mitigation actually live; the detection-surface column shows where you would actually see each threat.</p>
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>ID</th><th>Threat</th><th>Rank</th><th>Category</th><th>Detection surface</th><th>Preconditions</th><th>Impact</th><th>Justification</th></tr></thead>
+      <tbody>
+        <tr><td>TH-01</td><td>Passive DNS purchase maps forgotten subdomains that still resolve</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span></td><td>DNS data; ASM mirror diff</td><td>Historic records exist (almost always) and DNS was never purged</td><td>Quiet entry points outside the CMDB</td><td>Inventory gaps are common; conversion to access is frequent</td></tr>
+        <tr><td>TH-02</td><td>Certificate history reveals internal host-naming conventions</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span></td><td>CT logs; PKI issuance records</td><td>Old certificates published internal names in SANs/CNs</td><td>Believable lookalike domains; smarter social engineering</td><td>Feeds the highest-yield phishing infrastructure</td></tr>
+        <tr><td>TH-03</td><td>Purchased WHOIS/DNS data guides lookalike domain registration</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span></td><td>NRD feeds; CT logs</td><td>Old brand names or acquisition domains visible in WHOIS</td><td>Trusted-looking lures that survive casual inspection</td><td>Direct precursor to credential theft and BEC</td></tr>
+        <tr><td>TH-04</td><td>Bulk API queries about your domains observed via vendor alerts</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge cat">Network</span></td><td>Vendor API audit feed</td><td>Platform offers brand alerts or audit sharing</td><td>Early indicator, not damage itself</td><td>Low direct impact; valuable context when correlated</td></tr>
+        <tr><td>TH-05</td><td>Purchased data finds exposed or takeover-prone abandoned assets</td><td><span class="badge sev-critical">Critical</span></td><td><span class="badge cat">Cloud</span></td><td>DNS zones; cloud hosting probes</td><td>Dangling DNS or unclaimed hosting survives from past projects</td><td>Trusted-content hosting or direct foothold on your domain</td><td>Takeover on a corporate subdomain defeats user trust instantly</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="s5-4" class="sub-title"><span class="sub-num">5.4</span>Logs and patterns</h3>
+  <p class="muted">For each threat: the log source, the fields that matter, normal versus suspicious behavior, and the detection logic. Event shapes use realistic field names you can map to your schema.</p>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-01 · Forgotten subdomains found in passive DNS data <span class="badge sev-high">High</span> <span class="badge cat">Network</span></h4>
+    <p class="small muted"><strong>Log source:</strong> your own ASM tool running scheduled mirror queries, or its change feed into the SIEM. <strong>Fields:</strong> <code>hostname</code>, <code>state</code>, <code>last_seen_pdns</code>, <code>cmdb_match</code>.</p>
+    <p class="small"><strong>Normal:</strong> every resolving hostname exists in the CMDB with an owner. <strong>Suspicious:</strong> a hostname that resolves now but has no inventory entry, especially with VPN/admin/staging tokens in the name. <strong>Detection logic:</strong> alert when <code>state: resolving</code> AND <code>cmdb_match: false</code>.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · ASM mirror diff finding</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "alert_type": "unknown_live_asset",
+  "hostname": "vpn-old.example-corp.com",
+  "state": "resolving",
+  "resolved_ip": "203.0.113.44",
+  "last_seen_pdns": "2026-09-26T00:00:00Z",
+  "first_seen_pdns": "2014-03-02T00:00:00Z",
+  "cmdb_match": false,
+  "name_tokens": ["vpn"],
+  "tool": "asm-mirror-01"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-02 · Internal naming leaked through certificate data <span class="badge sev-high">High</span> <span class="badge cat">Network</span></h4>
+    <p class="small muted"><strong>Log source:</strong> your CT ingestion/watcher reviewing your issued certificates. <strong>Fields:</strong> <code>common_name</code>, <code>san_entries</code>, <code>issuer</code>, <code>contains_internal_pattern</code>.</p>
+    <p class="small"><strong>Normal:</strong> public-facing certificates with public names. <strong>Suspicious:</strong> certificates whose SANs include internal-style names (<code>hq-vpn01</code>, <code>core-fs02</code>) or non-public TLDs (<code>.internal</code>, <code>.corp</code>). <strong>Detection logic:</strong> flag issuance events where any SAN matches the internal-naming regex.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · CT ingestion event (own cert)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "alert_type": "cert_internal_naming",
+  "common_name": "vpn.example-corp.com",
+  "san_entries": [
+    "vpn.example-corp.com",
+    "hq-vpn01.internal.example-corp.com"
+  ],
+  "issuer": "R11",
+  "contains_internal_pattern": true,
+  "not_before": "2026-09-27T08:00:00Z",
+  "tool": "ctwatch-01"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-03 · Lookalike domain built on harvested naming patterns <span class="badge sev-high">High</span> <span class="badge cat">Network</span></h4>
+    <p class="small muted"><strong>Log source:</strong> newly-registered-domain (NRD) feed + CT watcher. <strong>Fields:</strong> <code>domain</code>, <code>match_type</code>, <code>registered_at</code>, <code>cert_issued</code>.</p>
+    <p class="small"><strong>Normal:</strong> unrelated registrations containing your brand by coincidence (suppliers, regional resellers). <strong>Suspicious:</strong> brand + auth tokens (<code>login</code>, <code>sso</code>, <code>vpn</code>) or hyphenated lookalikes registered days after a data-platform spike. <strong>Detection logic:</strong> brand match AND auth token AND age under 30 days.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · NRD feed event</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "alert_type": "nrd_lookalike",
+  "domain": "example-corp-hq-vpn.com",
+  "match_type": "brand+token",
+  "matched_tokens": ["example-corp", "hq-vpn"],
+  "registered_at": "2026-09-27T19:12:04Z",
+  "cert_issued": true,
+  "feed": "nrd-daily"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-04 · Bulk technical-data queries about your domains <span class="badge sev-medium">Medium</span> <span class="badge cat">Network</span></h4>
+    <p class="small muted"><strong>Log source:</strong> data platform brand-alert / API audit feed (contractual). <strong>Fields:</strong> <code>query_term</code>, <code>endpoint</code>, <code>query_count</code>, <code>client_country</code>.</p>
+    <p class="small"><strong>Normal:</strong> researchers, your own tooling (allowlisted), compliance checks. <strong>Suspicious:</strong> one client hitting multiple endpoint types for your domains in a short window. <strong>Detection logic:</strong> per-client counts above threshold across 2+ endpoint types within an hour.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · data platform brand alert</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "alert_type": "bulk_domain_query",
+  "provider": "techdata-platform-b",
+  "query_term": "example-corp.com",
+  "endpoints": ["/whois/domains", "/pdns/domains", "/certs/search"],
+  "query_count": 178,
+  "client_country": "unknown",
+  "window_start": "2026-09-28T03:00:00Z",
+  "window_end": "2026-09-28T03:52:41Z"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-05 · Abandoned asset becomes takeover-prone <span class="badge sev-critical">Critical</span> <span class="badge cat">Cloud</span></h4>
+    <p class="small muted"><strong>Log source:</strong> ASM tool probing known dangling records and unclaimed hosting. <strong>Fields:</strong> <code>hostname</code>, <code>dangling_record</code>, <code>provider_response</code>, <code>takeover_risk</code>.</p>
+    <p class="small"><strong>Normal:</strong> zero dangling records for your domains. <strong>Suspicious:</strong> any CNAME pointing to unclaimed cloud storage or hosting, or NXDOMAIN answers on records still served by nameservers. <strong>Detection logic:</strong> alert on <code>takeover_risk: high</code> regardless of other fields — this class is always urgent.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · ASM dangling-record probe</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "alert_type": "dangling_record",
+  "hostname": "promo2019.example-corp.com",
+  "dangling_record": "CNAME promo-bucket.hosting-provider.example",
+  "provider_response": "NoSuchBucket",
+  "takeover_risk": "high",
+  "first_observed": "2026-09-29T06:14:55Z",
+  "tool": "asm-probe-02"
+}</code></pre>
+    </figure>
+  </div>
+
+  <h3 id="s5-5" class="sub-title"><span class="sub-num">5.5</span>Sigma rules and Splunk SPL</h3>
+  <p class="muted">One Sigma rule and one matching Splunk query per threat. The ASM and vendor log sources are custom categories — map them to your ingestion as noted. Tune every threshold to your baselines.</p>
+
+  <h4>SIG-01 · Live asset missing from the inventory <span class="badge sev-high">High</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Resolving Hostname Missing from Asset Inventory
+id: d9a5f1c7-8e02-4b36-8c4a-1e7b3d9f6a25
+status: stable
+description: >
+    Detects ASM mirror-query findings where a hostname still resolves but
+    has no CMDB entry, exactly the gap that purchased passive DNS exposes
+    to attackers (MITRE ATT&CK T1597.002).
+references:
+    - https://attack.mitre.org/techniques/T1597/002/
+author: Detection Engineering Guild
+date: 2026-09-30
+logsource:
+    category: application
+    product: asm_tool
+    service: mirror_diff
+detection:
+    selection_state:
+        state: resolving
+    selection_gap:
+        cmdb_match: false
+    filter_known_tools:
+        hostname|endswith:
+            - '.monitoring.example-corp.com'
+            - '.canary.example-corp.com'
+    condition: selection_state and selection_gap and not filter_known_tools
+fields:
+    - hostname
+    - resolved_ip
+    - last_seen_pdns
+    - first_seen_pdns
+    - name_tokens
+falsepositives:
+    - Legitimately new assets awaiting inventory sync; confirm TTL windows first
+level: high
+tags:
+    - attack.reconnaissance
+    - attack.t1597.002
+    - attack.t1597</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=asm sourcetype=asm:mirror_diff state=resolving cmdb_match=false
+    NOT hostname="*.monitoring.example-corp.com" NOT hostname="*.canary.example-corp.com"
+| stats values(resolved_ip) AS ips min(first_seen_pdns) AS first_seen latest(last_seen_pdns) AS last_seen
+        values(name_tokens) AS tokens BY hostname
+| eval tokens_str=coalesce(mvjoin(tokens, ","), "")
+| eval age_days=round((now()-strptime(first_seen,"%Y-%m-%dT%H:%M:%SZ"))/86400)
+| eval priority=if(match(tokens_str, "vpn|admin|stage|test"), "P1", "P2")
+| sort priority, - age_days</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> the <code>name_tokens</code> check mirrors the Sigma intent — old admin/VPN-shaped names are the ones buyers hunt; the multivalue list is flattened with <code>mvjoin</code> before <code>match()</code> so the regex works reliably. <strong>False positives:</strong> inventory sync lag — allow a 48-hour TTL for brand-new assets before paging.</p>
+
+  <h4>SIG-02 · Internal naming pattern published in a certificate <span class="badge sev-high">High</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Certificate Publishes Internal Naming Pattern
+id: 4b8e2d6a-1c75-4e90-a3f2-7d0b9c5e1a86
+status: stable
+description: >
+    Detects certificate issuances whose SANs contain internal-style host
+    names, which certificate transparency makes permanently public and data
+    platforms resell (MITRE ATT&CK T1597.002).
+references:
+    - https://attack.mitre.org/techniques/T1597/002/
+author: Detection Engineering Guild
+date: 2026-09-30
+logsource:
+    category: application
+    product: ctlog_monitor
+    service: own_certs
+detection:
+    selection_internal:
+        contains_internal_pattern: true
+    condition: selection_internal
+fields:
+    - common_name
+    - san_entries
+    - issuer
+    - not_before
+falsepositives:
+    - Sanctioned dual-naming during a migration; add a NOT clause for the sanctioned names
+level: high
+tags:
+    - attack.reconnaissance
+    - attack.t1597.002</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=ctlog sourcetype=ctlog:own_certs contains_internal_pattern=true
+| stats values(san_entries) AS sans values(issuer) AS issuers earliest(not_before) AS issued BY common_name
+| sort - issued</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> the <code>contains_internal_pattern</code> flag is computed by your CT pipeline with a regex like <code>(hq|core|fs|vpn|adm)[a-z0-9-]*\.(internal|corp|local)</code> — document it. Sigma and the SPL share one condition (flag is true), so they fire together. <strong>Fix:</strong> this is a hygiene alert — the right response is to stop issuing internal names in public certificates. To allowlist a sanctioned migration, add a <code>NOT</code> clause with the sanctioned certificate names on both sides.</p>
+
+  <h4>SIG-03 · Fresh lookalike domain on brand + auth tokens <span class="badge sev-high">High</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Newly Registered Lookalike Domain Using Brand and Auth Tokens
+id: 8a1d5c9f-3e62-4b78-9d04-6c3a2e8f0b51
+status: stable
+description: >
+    Detects newly registered domains that combine the company brand with
+    authentication-related tokens, the typical product of harvested naming
+    conventions (MITRE ATT&CK T1597.002, T1583.001).
+references:
+    - https://attack.mitre.org/techniques/T1597/002/
+    - https://attack.mitre.org/techniques/T1583/001/
+author: Detection Engineering Guild
+date: 2026-09-30
+logsource:
+    category: application
+    product: nrd_feed
+    service: brand_match
+detection:
+    selection_brand:
+        matched_tokens|contains: 'example-corp'
+    selection_token:
+        matched_tokens|contains:
+            - 'login'
+            - 'sso'
+            - 'vpn'
+            - 'hq'
+            - 'mail'
+    filter_partner:
+        domain|endswith:
+            - '.examplecorp-partner.net'
+            - '.example-corp.com'
+    condition: selection_brand and selection_token and not filter_partner
+fields:
+    - domain
+    - match_type
+    - registered_at
+    - cert_issued
+falsepositives:
+    - Real regional partners and resellers; maintain the allowlist
+level: high
+tags:
+    - attack.reconnaissance
+    - attack.t1597.002
+    - attack.resource_development
+    - attack.t1583.001</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=brandmon sourcetype=nrd:brand_match matched_tokens="*example-corp*"
+    matched_tokens IN ("*login*","*sso*","*vpn*","*hq*","*mail*")
+    NOT domain IN ("*.examplecorp-partner.net","*.example-corp.com")
+| eval age_days=round((now()-strptime(registered_at,"%Y-%m-%dT%H:%M:%SZ"))/86400)
+| where age_days &lt;= 30
+| stats values(domain) AS domains max(age_days) AS oldest BY match_type, cert_issued
+| sort - cert_issued</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> SPL ranks results with certificates first — a registered lookalike with a live cert is the act-now case. <strong>Tuning:</strong> the 30-day window matches typical phishing-infrastructure lifetimes.</p>
+
+  <h4>SIG-04 · Bulk multi-endpoint queries about your domains <span class="badge sev-medium">Medium</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Bulk Technical Data Queries Across Multiple Endpoints
+id: f2c7a3e9-6d18-4b45-8a9e-0b5d7f1c3a62
+status: testing
+description: >
+    Detects a single client querying WHOIS, passive DNS, and certificate
+    endpoints for the company's domains within one hour, matching the
+    attack-surface mapping workflow (MITRE ATT&CK T1597.002).
+references:
+    - https://attack.mitre.org/techniques/T1597/002/
+author: Detection Engineering Guild
+date: 2026-09-30
+logsource:
+    category: application
+    product: techdata_platform
+    service: api_audit
+detection:
+    selection_endpoints:
+        endpoint:
+            - '/whois/domains'
+            - '/pdns/domains'
+            - '/certs/search'
+    selection_scope:
+        query_term|contains: 'example-corp.com'
+    condition: selection_endpoints and selection_scope | sum(query_count) by api_key_hash &gt; 80
+    timeframe: 1h
+fields:
+    - query_term
+    - query_count
+    - client_country
+    - window_start
+falsepositives:
+    - Your own ASM tooling; allowlist its API key hashes first
+    - Security researchers with coordinated disclosure intentions
+level: medium
+tags:
+    - attack.reconnaissance
+    - attack.t1597.002</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=vendor_audit sourcetype=techdata:api_audit endpoint IN ("/whois/domains","/pdns/domains","/certs/search")
+    query_term="*example-corp.com*"
+| bin _time span=1h
+| stats sum(query_count) AS queries dc(endpoint) AS endpoint_types values(client_country) AS countries BY _time, api_key_hash
+| where queries &gt; 80
+| eval note=if(endpoint_types &gt;= 2, "multi-endpoint mapping", "single-purpose lookups")
+| sort - queries</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> Sigma and the SPL share one threshold: the sum of <code>query_count</code> per API key per hour above 80 — identical firing logic. The 2+-endpoint check remains as triage context in the <code>note</code> field; promote it to a hard condition in a companion rule if noise requires. <strong>Tuning:</strong> raise the threshold to 3× your observed maximum after allowlisting your own tools.</p>
+
+  <h4>SIG-05 · Dangling DNS record with takeover risk <span class="badge sev-critical">Critical</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Dangling DNS Record With Subdomain Takeover Risk
+id: 0d4e8f2a-7b61-4c93-8e15-3a9c6d1f4b27
+status: stable
+description: >
+    Detects ASM probe findings where a hostname still has a DNS record but
+    the backing service is unclaimed or deleted, enabling subdomain
+    takeover — the worst outcome of forgotten assets (MITRE ATT&CK T1597.002,
+    found via purchased passive DNS).
+references:
+    - https://attack.mitre.org/techniques/T1597/002/
+author: Detection Engineering Guild
+date: 2026-09-30
+logsource:
+    category: application
+    product: asm_tool
+    service: dangling_probe
+detection:
+    selection_risk:
+        takeover_risk:
+            - high
+            - critical
+    condition: selection_risk
+fields:
+    - hostname
+    - dangling_record
+    - provider_response
+    - first_observed
+falsepositives:
+    - Provider maintenance windows; verify with a second probe before declaring
+level: critical
+tags:
+    - attack.reconnaissance
+    - attack.t1597.002
+    - attack.initial_access</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=asm sourcetype=asm:dangling_probe takeover_risk IN ("high", "critical")
+| stats count values(dangling_record) AS records values(provider_response) AS responses
+        earliest(first_observed) AS first BY hostname, takeover_risk
+| sort takeover_risk, - count</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> dedupe by hostname — probes repeat hourly and the Sigma/SPL counts reflect that by design; group at triage. <strong>Response:</strong> remove the record first, investigate second. A takeover risk is a live vulnerability, not a hygiene item.</p>
+
+  <div class="callout good"><span class="co-tag">Validation</span><p>Replay the JSON examples above through your ingestion path and confirm each rule fires; then replay one "normal" event per rule and confirm silence. For SIG-01, plant a deliberate test hostname (<code>asmtest.example-corp.com</code>) and prove the diff finds it.</p></div>
+</section>
+
+<section id="s6" class="section" data-num="6">
+  <div class="sec-head">
+    <h2><span class="sec-num">6</span><span class="sec-title">Real-World Case Study</span></h2>
+    <p class="sec-intro">An illustrative composite based on the forgotten-asset pattern that access brokers and ransomware crews exploit. Names and details are fictional; the mechanism is real and common.</p>
+  </div>
+
+  <div class="callout note"><span class="co-tag">Composite</span><p>Purchased technical data never appears in public incident timelines as its own step, because it leaves no victim-side trace. This composite shows the moment where it plausibly did — and the mirror query that would have beaten the attacker to it.</p></div>
+
+  <div class="grid-3">
+    <div class="card"><h4>Victim</h4><p><strong>Helios Energy</strong> (fictional), 2,100 staff, two data centers, a 2019 cloud migration that left debris behind.</p></div>
+    <div class="card"><h4>Adversary</h4><p>An access broker mapping edge assets for resale to a ransomware affiliate.</p></div>
+    <div class="card"><h4>Objective</h4><p>Find one quiet, credible foothold and sell it.</p></div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Timeline</h4>
+  <ol class="timeline">
+    <li><span class="tl-time">Day −25</span><div><strong>The purchase</strong><p>The broker buys WHOIS history, passive DNS, and certificate records for all Helios domains: under $200 of API credits. The platform logs the queries; Helios has no alert arrangement.</p></div></li>
+    <li><span class="tl-time">Day −25 to −20</span><div><strong>Correlation</strong><p>Passive DNS shows <code>stage.helios-energy.example</code> resolving to the same IP as today's mail gateway. Certificate history confirms a 2025 renewal. The CMDB, as the broker will later prove, says nothing.</p></div></li>
+    <li><span class="tl-time">Day −20</span><div><strong>The quiet check</strong><p>One HTTPS request confirms the staging portal serves a login page for a deprecated SSO product — unpatched since the migration. The broker has a product.</p></div></li>
+    <li><span class="tl-time">Day −20 to −12</span><div><strong>Foothold built and listed</strong><p>Exploiting the stale SSO service, the broker plants a small proxy, harvests two service accounts, and lists "verified access, energy sector" on an access market.</p></div></li>
+    <li><span class="tl-time">Day −12</span><div><strong>Detection point — the mirror</strong><p>Helios runs its first monthly ASM mirror query after a vendor visit. The diff flags stage.helios-energy.example: resolving, unknown, token "stage". The team decommissions it within the hour and reviews the host: the proxy is found.</p></div></li>
+    <li><span class="tl-time">Day −12 to −8</span><div><strong>Containment and eradication</strong><p>Record deleted, host isolated and rebuilt, both service accounts rotated, SSO logs reviewed for the broker's sessions, and the market listing reported through the ISAC.</p></div></li>
+    <li><span class="tl-time">Day −8 to −1</span><div><strong>Verification</strong><p>Full passive-DNS re-mirror shows a clean diff. Two more dangling records found and removed. The listing's buyer (if any existed before takedown) finds a dead door.</p></div></li>
+    <li><span class="tl-time">Day −1 to Day 30</span><div><strong>Recovery of process</strong><p>DNS purge added to the decommissioning checklist, mirror query scheduled weekly instead of monthly, vendor alert clauses added at renewal, and a leadership report quantifies the near-miss: no breach, one caught foothold.</p></div></li>
+  </ol>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Attack chain summary</h4>
+      <ul>
+        <li>T1597.002 — passive DNS + cert data purchased to find the staging portal</li>
+        <li>T1190 — exploitation of the unpatched, forgotten SSO service</li>
+        <li>T1078 — valid service accounts harvested for access resale</li>
+        <li>T1090 — proxy planted on the forgotten host</li>
+        <li>Averted: affiliate's T1133/T1486 chain never started</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Tools in play</h4>
+      <p class="small"><strong>Attacker side:</strong> technical-data platform API credits, simple correlation scripts, a single HTTPS liveness probe, and an access-market listing.</p>
+      <p class="small"><strong>Defender side:</strong> ASM mirror queries and dangling-record probes, CMDB diff tooling, sinkhole/logging on retired IP ranges, and the ISAC channel for listing takedown.</p>
+    </div>
+    <div class="card">
+      <h4>Impact and consequences</h4>
+      <ul>
+        <li>No confirmed buyer intrusion; one broker foothold eradicated</li>
+        <li>≈ 120 staff-hours across ASM rollout, rebuild, and review</li>
+        <li>Positive regulatory story: documented pre-breach discovery</li>
+        <li>Cultural shift: "decommission = remove the record" became policy</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Team response and communication</h4>
+      <p>The ASM owner triaged the diff as P1 because of the "stage" token, and the security engineering lead joined within minutes — the runbook said unknown-live-asset equals possible foothold. Leadership got a three-line update the same day: what was found, what was removed, what changes permanently. The vendor relationship was reopened the same week to add query alerts, and the ISAC shared the indicators so two peer utilities could check their own staging hosts.</p>
+    </div>
+    <div class="card">
+      <h4>Lessons learned</h4>
+      <ul>
+        <li>The mirror query found in one hour what five external pentests had missed — because it ran against the same data the attacker buys.</li>
+        <li>DNS purge discipline is the cheapest control in the entire technique chain. It costs a checklist line.</li>
+        <li>Vendor alert clauses are easier to negotiate before renewal season pressure, not during.</li>
+        <li>"Unknown live asset" must be a P1 by default: the attacker's map is probably fresher than yours was.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="s7" class="section" data-num="7">
+  <div class="sec-head">
+    <h2><span class="sec-num">7</span><span class="sec-title">Mitigation and Defense</span></h2>
+    <p class="sec-intro">The attacker's power comes from the gap between your past and your inventory. Shrink the gap and the purchased data buys them nothing. This matches MITRE's official mitigation position for the T1597 family (M1056 Pre-compromise): the activity happens outside enterprise defenses, so efforts focus on minimizing the amount and sensitivity of data available to external parties.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>Area</th><th>Control</th><th>What it does against T1597.002</th></tr></thead>
+      <tbody>
+        <tr><td>Policy</td><td>Decommission checklist with DNS purge</td><td>Every retirement removes records, certificates, and NAT rules — the raw material of purchased maps.</td></tr>
+        <tr><td>Policy</td><td>Unknown-live-asset = P1</td><td>ASM findings get urgency by default; the attacker's map is assumed fresher than yours.</td></tr>
+        <tr><td>Identity</td><td>MFA on every remote-access portal</td><td>Even a perfectly mapped legacy VPN becomes a dead end without a second factor.</td></tr>
+        <tr><td>Endpoint</td><td>Asset agents with auto-inventory</td><td>CMDB stays honest where agents can reach; everything else is flagged for manual review.</td></tr>
+        <tr><td>Network</td><td>Attack-surface management with mirror queries</td><td>Weekly WHOIS/pDNS/cert queries on your own domains, diffed against the CMDB.</td></tr>
+        <tr><td>Network</td><td>Certificate hygiene</td><td>Stop publishing internal names in public certificates; short lifetimes shrink the harvested history.</td></tr>
+        <tr><td>Cloud</td><td>Dangling-record hunting and provider locks</td><td>Zero tolerance for takeover-prone records; locks make re-claiming hostile claims harder.</td></tr>
+        <tr><td>Logging</td><td>Ingest ASM, CT, and NRD feeds</td><td>The Sigma rules in 5.5 need these sources landed in the SIEM with consistent field names.</td></tr>
+        <tr><td>Monitoring</td><td>Vendor query-alert clauses</td><td>Bulk lookups about your domains arrive as alerts, not surprises.</td></tr>
+        <tr><td>Response</td><td>Forgotten-asset runbook</td><td>Verify → mirror → purge/patch → review for footholds → update inventory → report.</td></tr>
+        <tr><td>Third party</td><td>Registrar and platform security</td><td>Registrar lock, transfer secrets, and monitoring on acquisition domains from old deals.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4 class="muted" style="margin-top:20px">Home and small-office advice</h4>
+  <div class="grid-3">
+    <div class="card"><span class="card-icon good">R</span><h4>Retire cleanly</h4><p>Shut down an old router, NAS, or blog? Delete its port-forward and DNS name the same day. Forgotten home services are scanned for free.</p></div>
+    <div class="card"><span class="card-icon cyan">U</span><h4>Update what stays</h4><p>Small offices often keep one ancient camera or printer portal "temporarily". If it must live, patch it and put it behind MFA.</p></div>
+    <div class="card"><span class="card-icon warn">D</span><h4>Check your domain's past</h4><p>Free WHOIS and DNS history lookups show what the world remembers about your domain. If an old name surprises you, clean it up.</p></div>
+  </div>
+
+  <h4 class="muted" style="margin-top:20px">Prioritized actions</h4>
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>#</th><th>Action</th><th>Effort</th><th>Owner</th><th>Risk reduction</th><th>How to verify</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Run one mirror query (WHOIS/pDNS/certs) on every owned domain</td><td>Low</td><td>Security eng</td><td><span class="badge sev-high">High</span></td><td>Diff report produced; every finding ticketed</td></tr>
+        <tr><td>2</td><td>Add "DNS + cert purge" to the decommissioning checklist</td><td>Low</td><td>IT ops</td><td><span class="badge sev-high">High</span></td><td>Next two decommissions show purged records</td></tr>
+        <tr><td>3</td><td>Put MFA on all remote-access portals, legacy included</td><td>Medium</td><td>IAM team</td><td><span class="badge sev-critical">Very high</span></td><td>Portal-by-portal MFA coverage = 100%</td></tr>
+        <tr><td>4</td><td>Hunt and fix dangling DNS records</td><td>Low</td><td>IT ops</td><td><span class="badge sev-critical">Very high</span></td><td>Zero takeover-risk findings for 30 days</td></tr>
+        <tr><td>5</td><td>Schedule weekly mirror queries and monthly CMDB diff</td><td>Low</td><td>Security eng</td><td><span class="badge sev-medium">Medium</span></td><td>Automated diff lands in the SIEM</td></tr>
+        <tr><td>6</td><td>Stop issuing public certs with internal names</td><td>Medium</td><td>PKI owner</td><td><span class="badge sev-medium">Medium</span></td><td>CT watcher shows zero internal-pattern issuances</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s8" class="section" data-num="8">
+  <div class="sec-head">
+    <h2><span class="sec-num">8</span><span class="sec-title">Common Mistakes and Best Practices</span></h2>
+    <p class="sec-intro">Ten blue-team mistakes around technical-data exposure, each with symptom, root cause, fix, and prevention.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Trusting the CMDB as complete</td><td>Attacker's purchased map is richer than inventory</td><td>Inventory built from what agents report, not what resolves</td><td>Add outside-in ASM as an inventory source</td><td>Monthly ASM-vs-CMDB diff with owner sign-off</td></tr>
+        <tr><td>2</td><td>Decommissioning without DNS purge</td><td>Passive DNS shows live records for dead systems</td><td>Teardown ends at powering off</td><td>Purge DNS, certs, and NAT rules in the teardown step</td><td>Checklist item + quarterly passive-DNS spot check</td></tr>
+        <tr><td>3</td><td>Internal names in public certificates</td><td>CT records leak <code>hq-vpn01</code>-style names</td><td>PKI templates never reviewed for privacy</td><td>Separate internal PKI; sanitize SANs on public certs</td><td>CT watcher alerting on internal-pattern issuances</td></tr>
+        <tr><td>4</td><td>Ignoring dangling records</td><td>Takeover-prone subdomains live for months</td><td>Nobody owns the zone files end to end</td><td>Assign zone ownership; automate dangling-record probes</td><td>Zero dangling records as a standing KPI</td></tr>
+        <tr><td>5</td><td>Vendor query alerts not contracted</td><td>Bulk lookups about your domains go unnoticed</td><td>Feature unknown; contracts silent</td><td>Add alert/audit clauses at renewal</td><td>Vendor register lists telemetry terms per contract</td></tr>
+        <tr><td>6</td><td>Allowlisting forgotten instead of auditing</td><td>ASM noise silenced by broad allowlists</td><td>Alert fatigue handled by suppression</td><td>Allowlist specific hostnames and keys, not whole zones</td><td>Quarterly allowlist review</td></tr>
+        <tr><td>7</td><td>Old acquisition domains unmonitored</td><td>Lookalikes of retired brands go unseen</td><td>Monitoring scoped to the current brand only</td><td>Watch retired names and acquisition domains too</td><td>Brand list reviewed at every M&amp;A event</td></tr>
+        <tr><td>8</td><td>Legacy portals outside MFA scope</td><td>Perfectly mapped legacy VPN accepts passwords</td><td>"Main portals first" never finished</td><td>Extend FIDO2 to every password-accepting endpoint</td><td>Monthly password-only authenticator report</td></tr>
+        <tr><td>9</td><td>Treating ASM findings as P3 hygiene</td><td>Unknown-live-asset tickets age for months</td><td>No linkage to attacker tradecraft</td><td>Default P1 for unknown-live and takeover-risk findings</td><td>Runbook defines the severity matrix explicitly</td></tr>
+        <tr><td>10</td><td>No probe-echo logging on dead assets</td><td>Attacker's liveness check invisible</td><td>Decommissioned hosts stop logging anything</td><td>Keep a low-cost sinkhole/logger on retired IP ranges</td><td>Review sinkhole hits weekly for liveness probes</td></tr>
+        <tr><td>11</td><td>Test data left on staging hosts</td><td>Forgotten staging portal leaks real records</td><td>Copy-real-data habits in lower environments</td><td>Synthetic data only in non-production</td><td>Quarterly scan of non-prod for PII patterns</td></tr>
+        <tr><td>12</td><td>No one asks "what does our domain history say?"</td><td>Team surprised by its own 2014 DNS records</td><td>Outside-in view never part of reviews</td><td>Add mirror-query results to quarterly risk reviews</td><td>Risk register includes an exposure-history entry</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4 class="muted" style="margin-top:20px">Habits that keep the program healthy</h4>
+  <div class="grid-3">
+    <div class="card"><span class="card-icon">D</span><h4>Daily</h4><ul><li>Work the ASM finding queue</li><li>Check CT watcher for new lookalikes</li><li>Skim NRD feed for brand matches</li></ul></div>
+    <div class="card"><span class="card-icon cyan">W</span><h4>Weekly</h4><ul><li>Run the mirror query on all domains</li><li>Review sinkhole hits on retired ranges</li><li>Verify dangling-record KPI still at zero</li></ul></div>
+    <div class="card"><span class="card-icon violet">M</span><h4>Monthly</h4><ul><li>Full ASM-vs-CMDB diff with sign-off</li><li>Review allowlists and suppressions</li><li>Report exposure metrics to leadership</li></ul></div>
+  </div>
+</section>
+
+<section id="s9" class="section" data-num="9">
+  <div class="sec-head">
+    <h2><span class="sec-num">9</span><span class="sec-title">Cheat Sheet and Quick Reference</span></h2>
+    <p class="sec-intro">The whole sub-technique on one screen. Print it, pin it, share it with the on-call rotation.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Key facts</h4>
+      <dl class="kv" style="box-shadow:none">
+        <div><dt>ID</dt><dd>T1597.002 — Purchase Technical Data</dd></div>
+        <div><dt>Parent</dt><dd>T1597 — Search Closed Sources</dd></div>
+        <div><dt>Tactic</dt><dd>Reconnaissance (PRE)</dd></div>
+        <div><dt>Core risk</dt><dd>Attackers map forgotten assets your inventory forgot first</dd></div>
+        <div><dt>Best signals</dt><dd>Vendor bulk-query alerts, CT lookalikes, ASM diffs, NRD matches</dd></div>
+        <div><dt>Best controls</dt><dd>ASM mirror queries, DNS purge discipline, MFA on all portals, zero dangling records</dd></div>
+      </dl>
+    </div>
+    <div class="card">
+      <h4>Top detections</h4>
+      <div class="table-wrap" style="box-shadow:none">
+        <table>
+          <thead><tr><th>Signal</th><th>Source</th><th>First action</th></tr></thead>
+          <tbody>
+            <tr><td>Unknown live asset</td><td>ASM mirror diff</td><td>Treat as P1; purge or adopt; check for foothold</td></tr>
+            <tr><td>Dangling record</td><td>ASM probe</td><td>Remove record immediately; claim hosting</td></tr>
+            <tr><td>Internal name in cert</td><td>CT ingestion</td><td>Fix PKI template; rotate if sensitive</td></tr>
+            <tr><td>Lookalike domain</td><td>NRD feed + CT</td><td>Block pre-delivery; report to registrar</td></tr>
+            <tr><td>Bulk domain queries</td><td>Vendor alert</td><td>Record; correlate with other signals; brief ASM owner</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Response checklist</h4>
+  <ul class="checklist">
+    <li><span class="box"></span>Confirm the signal is genuine and allowlisted tooling is excluded</li>
+    <li><span class="box"></span>Run the mirror query on yourself: WHOIS history, passive DNS, certificates</li>
+    <li><span class="box"></span>Diff results against the CMDB; list every unknown-live or takeover-prone asset</li>
+    <li><span class="box"></span>Purge or secure each finding; rotate credentials on anything that served logins</li>
+    <li><span class="box"></span>Review logs on retired IP ranges for liveness probes or footholds</li>
+    <li><span class="box"></span>Block and report lookalike domains to the registrar and your feed provider</li>
+    <li><span class="box"></span>Update the CMDB and the exposure-history entry in the risk register</li>
+    <li><span class="box"></span>Write the one-page summary: finding, action, process change</li>
+  </ul>
+
+  <h4 class="muted" style="margin-top:18px">Official links and related techniques</h4>
+  <div class="next-pages">
+    <a href="https://attack.mitre.org/techniques/T1597/002/" target="_blank" rel="noopener"><span>T1597.002 — Purchase Technical Data (official page)</span><span class="muted">attack.mitre.org</span></a>
+    <a href="https://attack.mitre.org/techniques/T1597/" target="_blank" rel="noopener"><span>T1597 — Search Closed Sources (parent technique)</span><span class="muted">parent</span></a>
+    <a href="https://attack.mitre.org/techniques/T1597/001/" target="_blank" rel="noopener"><span>T1597.001 — Threat Intel Vendors</span><span class="muted">sibling</span></a>
+    <a href="../T1597-Search-Closed-Sources.html"><span>Guide: T1597 — Search Closed Sources (parent overview)</span><span class="muted">companion guide</span></a>
+    <a href="001-Threat-Intel-Vendors.html"><span>Guide: T1597.001 — Threat Intel Vendors (deep dive)</span><span class="muted">companion guide</span></a>
+    <a href="https://attack.mitre.org/techniques/T1596/" target="_blank" rel="noopener"><span>T1596 — Search Open Technical Databases</span><span class="muted">related</span></a>
+    <a href="https://attack.mitre.org/techniques/T1595/" target="_blank" rel="noopener"><span>T1595 — Active Scanning (what purchased data replaces)</span><span class="muted">related</span></a>
+    <a href="https://attack.mitre.org/techniques/T1583/001/" target="_blank" rel="noopener"><span>T1583.001 — Acquire Infrastructure: Domains (the lookalike step)</span><span class="muted">follow-on</span></a>
+    <a href="https://attack.mitre.org/techniques/T1190/" target="_blank" rel="noopener"><span>T1190 — Exploit Public-Facing Application (the quiet door)</span><span class="muted">follow-on</span></a>
+    <a href="https://attack.mitre.org/techniques/T1133/" target="_blank" rel="noopener"><span>T1133 — External Remote Services (the legacy VPN)</span><span class="muted">follow-on</span></a>
+  </div>
+</section>
+
+</main>
+</div>
+
+<div class="overlay" id="tocOverlay" hidden>
+  <div class="overlay-backdrop" data-close></div>
+  <div class="overlay-panel" role="dialog" aria-modal="true" aria-label="Page contents">
+    <div class="overlay-head">
+      <strong>Contents</strong>
+      <button class="icon-btn" id="overlayClose" type="button">Close</button>
+    </div>
+    <nav id="tocMobile" class="toc toc-mobile" aria-label="Table of contents"></nav>
+  </div>
+</div>
+
+<button class="fab" id="contentsBtn" type="button" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="fab" id="topBtn" type="button" aria-label="Back to top">Back to top</button>
+<button class="fab" id="themeBtn" type="button" aria-label="Switch between dark and light theme">Theme</button>
+
+<script>
+/* ATT&CK Detection Guide — page framework (no external dependencies) */
+(function () {
+  "use strict";
+  var d = document;
+  var root = d.documentElement;
+  var reduced = false;
+  try { reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+
+  /* ---------- theme toggle ---------- */
+  var themeBtn = d.getElementById("themeBtn");
+  function setTheme(t) {
+    root.setAttribute("data-theme", t);
+    try { localStorage.setItem("atk-theme", t); } catch (e) {}
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      setTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    });
+  }
+
+  /* ---------- table of contents (generated from real headings) ---------- */
+  function buildTOC(container) {
+    if (!container) return;
+    var sections = d.querySelectorAll("main.content > section.section");
+    var html = '<p class="toc-title">On this page</p><ul>';
+    sections.forEach(function (sec) {
+      var num = sec.getAttribute("data-num") || "";
+      var titleEl = sec.querySelector(".sec-title");
+      var title = titleEl ? titleEl.textContent.trim() : "";
+      if (!sec.id || !title) return;
+      html += '<li><a href="#' + sec.id + '"><span class="toc-num">' + num + "</span><span>" + title + "</span></a>";
+      if (num === "5") {
+        var subs = sec.querySelectorAll("h3.sub-title[id]");
+        if (subs.length) {
+          html += '<ul class="toc-sub">';
+          subs.forEach(function (h3) {
+            var sNum = h3.querySelector(".sub-num");
+            var sLabel = sNum ? sNum.textContent.trim() : "";
+            var sTitle = h3.cloneNode(true);
+            var sNumClone = sTitle.querySelector(".sub-num");
+            if (sNumClone) sTitle.removeChild(sNumClone);
+            html += '<li><a href="#' + h3.id + '"><span class="toc-num">' + sLabel + "</span><span>" + sTitle.textContent.trim() + "</span></a></li>";
+          });
+          html += "</ul>";
+        }
+      }
+      html += "</li>";
+    });
+    html += "</ul>";
+    container.innerHTML = html;
+  }
+  buildTOC(d.getElementById("toc"));
+  buildTOC(d.getElementById("tocMobile"));
+
+  /* ---------- active section highlighting + progress ---------- */
+  var fill = d.getElementById("progressFill");
+  var topBtn = d.getElementById("topBtn");
+  var tocNavs = [d.getElementById("toc"), d.getElementById("tocMobile")].filter(Boolean);
+  var tocLinks = [];
+  tocNavs.forEach(function (nav) {
+    nav.querySelectorAll("a[href^='#']").forEach(function (a) { tocLinks.push(a); });
+  });
+  function activeTOC() {
+    var pos = (window.scrollY || root.scrollTop) + 130;
+    var currentId = null;
+    d.querySelectorAll("main.content > section.section, section.section h3.sub-title[id]").forEach(function (el) {
+      if (el.offsetTop <= pos) currentId = el.id;
+    });
+    tocLinks.forEach(function (a) {
+      a.classList.toggle("active", a.getAttribute("href") === "#" + currentId);
+    });
+  }
+  function onScroll() {
+    var st = window.scrollY || root.scrollTop;
+    var h = d.documentElement.scrollHeight - window.innerHeight;
+    if (fill) fill.style.width = (h > 0 ? Math.min(1, st / h) : 0) * 100 + "%";
+    if (topBtn) topBtn.classList.toggle("show", st > 600);
+    activeTOC();
+  }
+  var ticking = false;
+  window.addEventListener("scroll", function () {
+    if (!ticking) { ticking = true; window.requestAnimationFrame(function () { onScroll(); ticking = false; }); }
+  }, { passive: true });
+  onScroll();
+
+  /* ---------- mobile contents overlay ---------- */
+  var overlay = d.getElementById("tocOverlay");
+  var contentsBtn = d.getElementById("contentsBtn");
+  var closeBtn = d.getElementById("overlayClose");
+  function openOverlay() {
+    if (!overlay) return;
+    overlay.hidden = false;
+    if (contentsBtn) contentsBtn.setAttribute("aria-expanded", "true");
+    d.body.style.overflow = "hidden";
+    if (closeBtn) closeBtn.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.hidden = true;
+    if (contentsBtn) contentsBtn.setAttribute("aria-expanded", "false");
+    d.body.style.overflow = "";
+    if (contentsBtn) contentsBtn.focus();
+  }
+  if (contentsBtn) contentsBtn.addEventListener("click", openOverlay);
+  if (closeBtn) closeBtn.addEventListener("click", closeOverlay);
+  if (overlay) {
+    overlay.addEventListener("click", function (e) {
+      if (e.target.hasAttribute("data-close")) closeOverlay();
+    });
+    overlay.addEventListener("click", function (e) {
+      if (e.target.closest("a[href^='#']")) closeOverlay();
+    });
+  }
+  d.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && overlay && !overlay.hidden) closeOverlay();
+  });
+
+  /* ---------- back to top ---------- */
+  if (topBtn) {
+    topBtn.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+    });
+  }
+
+  /* ---------- copy buttons ---------- */
+  function fallbackCopy(text, btn) {
+    try {
+      var ta = d.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed"; ta.style.left = "-9999px";
+      d.body.appendChild(ta);
+      ta.select();
+      d.execCommand("copy");
+      d.body.removeChild(ta);
+      flash(btn);
+    } catch (err) {}
+  }
+  function flash(btn) {
+    var old = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    window.setTimeout(function () { btn.textContent = old; btn.classList.remove("copied"); }, 1600);
+  }
+  d.addEventListener("click", function (e) {
+    var btn = e.target.closest(".copy-btn");
+    if (!btn) return;
+    var block = btn.closest(".code-block");
+    if (!block) return;
+    var code = block.querySelector("code");
+    if (!code) return;
+    var text = code.innerText;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash(btn); }, function () { fallbackCopy(text, btn); });
+    } else {
+      fallbackCopy(text, btn);
+    }
+  });
+
+  /* ============================================================
+     Simulation engine (HTML5 Canvas + vanilla JS)
+     Powered by window.SIM_CONFIG = {alt, nodes, edges, steps, info}
+     ============================================================ */
+  function bootSim() {
+    var cfg = window.SIM_CONFIG;
+    var canvas = d.getElementById("simCanvas");
+    if (!cfg || !canvas || canvas.dataset.booted) return;
+    canvas.dataset.booted = "1";
+    var ctx = canvas.getContext("2d");
+    var tip = d.getElementById("simTip");
+    var cap = d.getElementById("simCaption");
+    var hint = d.getElementById("simHint");
+    var stage = canvas.parentElement;
+    var shell = d.getElementById("simShell");
+    var W = 960, H = 440;
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var scale = 1;
+    var NW = 176, NH = 62;
+
+    var step = 0, t = 0, playing = false, speed = 1, lastTs = 0, rafId = null;
+    var finished = false;
+    var STEP_MS = 3800;
+    var colors = {};
+    function readColors() {
+      var cs = getComputedStyle(root);
+      ["accent", "accent-2", "violet", "success", "warning", "danger", "high", "low",
+        "text", "muted", "surface", "elevated", "border", "border-strong"].forEach(function (k) {
+        colors[k] = cs.getPropertyValue("--" + k).trim() || "#888";
+      });
+    }
+    var ROLE = {
+      attacker: "danger", vendor: "violet", broker: "accent-2", target: "accent",
+      soc: "success", leak: "warning", infra: "high"
+    };
+    function nodeById(id) { for (var i = 0; i < cfg.nodes.length; i++) if (cfg.nodes[i].id === id) return cfg.nodes[i]; return null; }
+
+    function resize() {
+      var w = stage.clientWidth || 600;
+      scale = w / W;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(w * (H / W) * dpr);
+      canvas.style.height = (w * H / W) + "px";
+      draw();
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    function anchor(a, b) {
+      var dx = (b.x - a.x), dy = (b.y - a.y);
+      var p1 = { x: a.x, y: a.y }, p2 = { x: b.x, y: b.y };
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        if (dx > 0) { p1.x += NW / 2; p2.x -= NW / 2; } else { p1.x -= NW / 2; p2.x += NW / 2; }
+        p1.y = a.y; p2.y = b.y;
+      } else {
+        if (dy > 0) { p1.y += NH / 2; p2.y -= NH / 2; } else { p1.y -= NH / 2; p2.y += NH / 2; }
+        p1.x = a.x; p2.x = b.x;
+      }
+      return [p1, p2];
+    }
+    function arrow(p1, p2, color, dash, prog) {
+      ctx.save();
+      ctx.strokeStyle = color; ctx.fillStyle = color;
+      ctx.lineWidth = 1.6;
+      if (dash) ctx.setLineDash([6, 5]);
+      ctx.globalAlpha = dash ? 0.7 : 0.9;
+      var end = prog == null ? 1 : Math.max(0, Math.min(1, prog));
+      var ex = p1.x + (p2.x - p1.x) * end, ey = p1.y + (p2.y - p1.y) * end;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.setLineDash([]);
+      var ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      ctx.translate(ex, ey); ctx.rotate(ang);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-8, -4); ctx.lineTo(-8, 4); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    function drawNode(n, glow) {
+      var roleColor = colors[ROLE[n.role]] || colors.accent;
+      ctx.save();
+      if (glow) { ctx.shadowColor = roleColor; ctx.shadowBlur = 18; }
+      roundRect(n.x - NW / 2, n.y - NH / 2, NW, NH, 12);
+      ctx.fillStyle = colors.elevated; ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = roleColor; ctx.lineWidth = glow ? 2.2 : 1.4;
+      roundRect(n.x - NW / 2, n.y - NH / 2, NW, NH, 12); ctx.stroke();
+      ctx.fillStyle = roleColor;
+      ctx.beginPath(); ctx.arc(n.x - NW / 2 + 15, n.y - NH / 2 + 16, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = colors.text;
+      ctx.font = "700 12.5px " + "system-ui, sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      ctx.fillText(n.label, n.x - NW / 2 + 27, n.y - NH / 2 + 17, NW - 34);
+      ctx.fillStyle = colors.muted;
+      ctx.font = "400 10.5px system-ui, sans-serif";
+      ctx.fillText(n.sub || "", n.x - NW / 2 + 12, n.y - NH / 2 + 36, NW - 22);
+      if (n.status) {
+        ctx.fillStyle = roleColor;
+        ctx.font = "700 10.5px ui-monospace, monospace";
+        ctx.fillText(n.status, n.x - NW / 2 + 12, n.y - NH / 2 + 50, NW - 22);
+      }
+      ctx.restore();
+    }
+
+    function currentSet() {
+      var s = cfg.steps[step];
+      var set = {};
+      cfg.nodes.forEach(function (n) { set[n.id] = { status: n.status || "", glow: false }; });
+      if (s && s.set) {
+        Object.keys(s.set).forEach(function (k) {
+          set[k] = Object.assign(set[k] || {}, s.set[k]);
+        });
+      }
+      return set;
+    }
+
+    function draw() {
+      if (!ctx) return;
+      ctx.setTransform(canvas.width / W, 0, 0, canvas.width / W, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      var set = currentSet();
+      var s = cfg.steps[step] || { actions: [] };
+      cfg.edges.forEach(function (e) {
+        var a = nodeById(e[0]), b = nodeById(e[1]);
+        if (!a || !b) return;
+        var p = anchor(a, b);
+        arrow(p[0], p[1], colors.muted, e[2] === "dashed", null);
+      });
+      s.actions.forEach(function (act) {
+        if (act.type === "packet") {
+          var a = nodeById(act.from), b = nodeById(act.to);
+          if (!a || !b) return;
+          var p = anchor(a, b);
+          var prog = reduced ? 1 : Math.max(0, Math.min(1, (t - (act.at || 0) * STEP_MS) / ((act.dur || 0.55) * STEP_MS)));
+          if (prog > 0 && prog <= 1) {
+            arrow(p[0], p[1], act.color || colors.accent, false, prog);
+            var px = p[0].x + (p[1].x - p[0].x) * prog;
+            var py = p[0].y + (p[1].y - p[0].y) * prog;
+            ctx.save();
+            ctx.shadowColor = act.color || colors.accent; ctx.shadowBlur = 12;
+            ctx.fillStyle = act.color || colors.accent;
+            ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+          }
+        } else if (act.type === "pulse") {
+          var n = nodeById(act.at_node);
+          if (!n) return;
+          var ph = reduced ? 0.5 : ((t / STEP_MS + (act.phase || 0)) % 1);
+          var r = 14 + ph * 34;
+          ctx.save();
+          ctx.globalAlpha = 0.75 * (1 - ph);
+          ctx.strokeStyle = act.color || colors[ROLE[n.role]] || colors.accent;
+          ctx.lineWidth = 2.4;
+          ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+        }
+      });
+      cfg.nodes.forEach(function (n) {
+        var st = set[n.id] || {};
+        var nn = Object.assign({}, n, { status: st.status !== undefined ? st.status : (n.status || "") });
+        drawNode(nn, st.glow);
+      });
+    }
+
+    function updateCaption() {
+      var s = cfg.steps[step];
+      if (!s) return;
+      if (cap) cap.textContent = "Step " + (step + 1) + " of " + cfg.steps.length + " — " + s.title + ". " + s.caption;
+      if (hint) hint.textContent = s.hint;
+      d.querySelectorAll(".step-chips button").forEach(function (b) {
+        b.setAttribute("aria-pressed", Number(b.dataset.step) === step ? "true" : "false");
+      });
+      d.querySelectorAll(".story .card[data-step]").forEach(function (c) {
+        c.classList.toggle("active", Number(c.getAttribute("data-step")) === step);
+      });
+    }
+    function goto(i) {
+      step = Math.max(0, Math.min(cfg.steps.length - 1, i));
+      t = 0;
+      finished = false;
+      updateCaption();
+      draw();
+    }
+    function frame(ts) {
+      if (!playing) return;
+      if (!lastTs) lastTs = ts;
+      var dt = ts - lastTs; lastTs = ts;
+      t += dt * speed;
+      if (t >= STEP_MS) {
+        if (step < cfg.steps.length - 1) { goto(step + 1); }
+        else { playing = false; finished = true; t = 0; syncButtons(); draw(); return; }
+      }
+      draw();
+      rafId = window.requestAnimationFrame(frame);
+    }
+    function syncButtons() {
+      var play = d.getElementById("simPlay");
+      var pause = d.getElementById("simPause");
+      if (play) play.disabled = playing;
+      if (pause) pause.disabled = !playing;
+    }
+    function startPlay() {
+      if (reduced) { goto(step + 1); return; }
+      if (finished) { finished = false; step = 0; updateCaption(); }
+      playing = true; lastTs = 0; syncButtons();
+      rafId = window.requestAnimationFrame(frame);
+    }
+    function stopPlay() {
+      playing = false; syncButtons();
+      if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
+    }
+
+    var playBtn = d.getElementById("simPlay");
+    var pauseBtn = d.getElementById("simPause");
+    var restartBtn = d.getElementById("simRestart");
+    var prevBtn = d.getElementById("simPrev");
+    var nextBtn = d.getElementById("simNext");
+    if (playBtn) playBtn.addEventListener("click", startPlay);
+    if (pauseBtn) pauseBtn.addEventListener("click", stopPlay);
+    if (restartBtn) restartBtn.addEventListener("click", function () { stopPlay(); goto(0); });
+    if (prevBtn) prevBtn.addEventListener("click", function () { stopPlay(); goto(step - 1); });
+    if (nextBtn) nextBtn.addEventListener("click", function () { stopPlay(); goto(step + 1); });
+    d.querySelectorAll(".seg [data-speed]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        speed = Number(b.dataset.speed);
+        d.querySelectorAll(".seg [data-speed]").forEach(function (x) {
+          x.setAttribute("aria-pressed", x === b ? "true" : "false");
+        });
+      });
+    });
+    var chips = d.getElementById("simStepChips");
+    if (chips) {
+      cfg.steps.forEach(function (s, i) {
+        var b = d.createElement("button");
+        b.type = "button"; b.dataset.step = i;
+        b.textContent = i + 1;
+        b.title = s.title;
+        b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+        b.setAttribute("aria-label", "Jump to step " + (i + 1) + ": " + s.title);
+        b.addEventListener("click", function () { stopPlay(); goto(i); });
+        chips.appendChild(b);
+      });
+    }
+    if (shell) {
+      shell.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowRight") { stopPlay(); goto(step + 1); e.preventDefault(); }
+        if (e.key === "ArrowLeft") { stopPlay(); goto(step - 1); e.preventDefault(); }
+      });
+    }
+
+    function hitNode(mx, my) {
+      for (var i = 0; i < cfg.nodes.length; i++) {
+        var n = cfg.nodes[i];
+        if (Math.abs(mx - n.x) <= NW / 2 && Math.abs(my - n.y) <= NH / 2) return n;
+      }
+      return null;
+    }
+    function showTip(n, cx, cy) {
+      if (!tip) return;
+      var info = (cfg.info && cfg.info[n.id]) || "";
+      tip.innerHTML = "<strong>" + n.label + "</strong>" + info;
+      tip.hidden = false;
+      var rect = stage.getBoundingClientRect();
+      var x = cx - rect.left + 14, y = cy - rect.top + 14;
+      if (x + 260 > rect.width) x = x - 280;
+      if (y + 120 > rect.height) y = y - 130;
+      tip.style.left = Math.max(4, x) + "px";
+      tip.style.top = Math.max(4, y) + "px";
+    }
+    canvas.addEventListener("mousemove", function (e) {
+      if (!tip) return;
+      var rect = canvas.getBoundingClientRect();
+      var mx = (e.clientX - rect.left) / scale;
+      var my = (e.clientY - rect.top) / scale;
+      var n = hitNode(mx, my);
+      if (n) showTip(n, e.clientX, e.clientY); else tip.hidden = true;
+    });
+    canvas.addEventListener("mouseleave", function () { if (tip) tip.hidden = true; });
+    canvas.addEventListener("click", function (e) {
+      var rect = canvas.getBoundingClientRect();
+      var mx = (e.clientX - rect.left) / scale;
+      var my = (e.clientY - rect.top) / scale;
+      var n = hitNode(mx, my);
+      if (n) showTip(n, e.clientX, e.clientY); else if (tip) tip.hidden = true;
+    });
+
+    var themeObs = new MutationObserver(function () { readColors(); draw(); });
+    themeObs.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    if (window.ResizeObserver) { new ResizeObserver(function () { resize(); }).observe(stage); }
+    else window.addEventListener("resize", resize);
+
+    readColors();
+    resize();
+    updateCaption();
+    goto(0);
+    if (reduced && playBtn) playBtn.title = "Reduced motion: press to move to the next step";
+  }
+  if (d.readyState === "loading") d.addEventListener("DOMContentLoaded", bootSim);
+  else bootSim();
+  window.ATTACK_SIM_BOOT = bootSim;
+})();
+
+</script>
+<script>
+/* T1597.002 — Purchase Technical Data: simulation configuration */
+window.SIM_CONFIG = {
+  info: {
+    attacker: "An access broker mapping a target before deciding what to sell. No scanning, no exploits yet — just purchased history.",
+    platform: "A commercial technical-data platform selling WHOIS history, passive DNS, and certificate records via API (T1597.002).",
+    pdns: "The passive DNS store: years of hostname-to-IP observations, including hostnames nobody at the target remembers.",
+    old: "A forgotten asset of the target: still resolving, still serving a login page, absent from the victim's inventory.",
+    target: "The victim organization. Nothing here touches its defenses; the attacker is reading, not probing.",
+    soc: "The victim's SOC. Its echoes: a vendor bulk-query alert and its own ASM mirror query — if both exist."
+  },
+  nodes: [
+    { id: "attacker", x: 110, y: 220, label: "Access Broker", sub: "maps before touching", role: "attacker" },
+    { id: "platform", x: 370, y: 80, label: "Technical Data API", sub: "WHOIS · certs · reputation", role: "vendor" },
+    { id: "pdns", x: 370, y: 360, label: "Passive DNS Store", sub: "years of resolutions", role: "broker" },
+    { id: "old", x: 670, y: 360, label: "Forgotten Asset", sub: "vpn-old · still alive", role: "infra" },
+    { id: "target", x: 670, y: 130, label: "Target Company", sub: "not touched yet", role: "target" },
+    { id: "soc", x: 866, y: 130, label: "SOC / Blue Team", sub: "two echoes exist", role: "soc" }
+  ],
+  edges: [
+    ["attacker", "platform"],
+    ["attacker", "pdns"],
+    ["pdns", "old"],
+    ["attacker", "target", "dashed"],
+    ["target", "soc", "dashed"]
+  ],
+  steps: [
+    {
+      title: "Buy API credits",
+      caption: "The broker funds a technical-data platform account with a few hundred dollars. No target name is attached yet, so nothing looks special.",
+      hint: "Data platforms keep API audit logs. A clause at renewal can give you alerts when your domains are queried in bulk.",
+      set: { attacker: { glow: true, status: "credits ready" }, platform: { glow: true, status: "account funded" } },
+      actions: [{ type: "packet", from: "attacker", to: "platform", at: 0.05, dur: 0.5, color: null }]
+    },
+    {
+      title: "Pull WHOIS history",
+      caption: "WHOIS history for the target's main domain shows the 2013 registrant, a 2014 re-registration, and two retired brand names still connected to the company.",
+      hint: "Watch retired brand and acquisition domains too — attackers harvest them from exactly this data.",
+      set: { platform: { status: "whois history sent" }, attacker: { status: "old brands found: 2" } },
+      actions: [{ type: "packet", from: "platform", to: "attacker", at: 0.05, dur: 0.5, color: null }]
+    },
+    {
+      title: "Query passive DNS",
+      caption: "Passive DNS returns every hostname that ever resolved for the target: today's site, plus a long tail of test, staging, and VPN hosts.",
+      hint: "Your own mirror query shows the same list. If it surprises you, it will surprise an attacker less.",
+      set: { pdns: { glow: true, status: "1,204 records" } },
+      actions: [{ type: "packet", from: "attacker", to: "pdns", at: 0.05, dur: 0.5, color: null }]
+    },
+    {
+      title: "Find the forgotten assets",
+      caption: "Cross-checking shows vpn-old.target.example still resolves, and a certificate for it was renewed last year. The target's CMDB has no record of it.",
+      hint: "'Resolving but unknown' must be a P1 finding. This exact gap is what the broker is paying to find.",
+      set: { old: { glow: true, status: "resolving · not in CMDB" }, attacker: { status: "candidate: vpn-old" } },
+      actions: [{ type: "packet", from: "pdns", to: "old", at: 0.05, dur: 0.5, color: null }]
+    },
+    {
+      title: "Pull certificate history",
+      caption: "Certificate records reveal internal naming conventions — hq-vpn01, core-fs02 patterns — that future lookalike domains can copy verbatim.",
+      hint: "Stop issuing public certificates with internal names. CT logs make them public forever.",
+      set: { platform: { glow: true, status: "cert history sent" }, attacker: { status: "naming patterns: hq-vpnNN" } },
+      actions: [{ type: "packet", from: "platform", to: "attacker", at: 0.05, dur: 0.5, color: null }]
+    },
+    {
+      title: "Assemble the map",
+      caption: "Everything merges into one picture: 38 assets, one clearly abandoned, one still serving a login page. The target's own inventory lists 11.",
+      hint: "A monthly ASM-versus-CMDB diff closes this gap on your side. Freshness beats perfection.",
+      set: { attacker: { glow: true, status: "map: 38 assets" }, target: { status: "mapped from outside" } },
+      actions: [{ type: "pulse", at_node: "attacker", color: null }]
+    },
+    {
+      title: "Check the quiet door",
+      caption: "A single harmless-looking HTTPS request confirms the old VPN portal is alive and serving a login page. The broker now has a product to sell.",
+      hint: "A sinkhole or logger on retired IP ranges turns this probe into a signal you can actually see.",
+      set: { old: { glow: true, status: "login page: live" }, attacker: { status: "footprint verified" } },
+      actions: [
+        { type: "packet", from: "attacker", to: "old", at: 0.05, dur: 0.55, color: null },
+        { type: "pulse", at_node: "old", phase: 0.5, color: null }
+      ]
+    },
+    {
+      title: "The SOC's echoes",
+      caption: "The SOC sees none of the queries in its own logs. Its two echoes: a vendor bulk-query alert about the domain, and its own ASM mirror diff — if someone wired both up.",
+      hint: "Run the attacker's queries on yourself first, and the purchased map returns nothing they did not already fix.",
+      set: { soc: { glow: true, status: "vendor alert + ASM diff" }, attacker: { status: "ready to sell access" } },
+      actions: [{ type: "pulse", at_node: "soc", color: null }]
+    }
+  ]
+};
+window.ATTACK_SIM_BOOT && window.ATTACK_SIM_BOOT();
+
+</script>
+</body>
+</html>
+

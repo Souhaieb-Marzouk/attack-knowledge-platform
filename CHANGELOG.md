@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — 2026-10-20
+
+### Added
+
+- 37 new technique guides covering T1584, T1589, T1591, T1593, T1595, T1596,
+  T1597 and T1598, including 29 sub-techniques.
+- Canonical URLs for every newly added guide.
+- The new guides are wired into the technique catalogue, sitemap, search,
+  hub pages and ATT&CK Explorer.
+
+### Fixed
+
+- Renamed the new sub-technique pages to `00N-Name.html` and updated the
+  catalogue, sitemap, canonical URLs and internal links.
+- Replaced legacy `*-v2.0.html` internal links with the real page paths.
+- Updated README live-guide counts from 20 to 57.
+
 ## v1.2 — 2026-10-19
 
 ### Changed

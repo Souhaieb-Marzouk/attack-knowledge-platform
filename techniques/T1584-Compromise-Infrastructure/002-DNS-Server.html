@@ -1,0 +1,1823 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1584.002 · DNS Server — Detection &amp; Defense Guide</title>
+<meta name="description" content="Beginner-friendly, detection-focused guide to MITRE ATT&CK T1584.002 DNS Server: how attackers hijack recursive resolvers and authoritative name servers, rewrite DNS answers, redirect users to fake sites, and how defenders catch spoofed answers with cross-resolver checks, Sigma rules and Splunk SPL. Guide version 2.0, reviewed against the official MITRE ATT&CK catalog.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1584-Compromise-Infrastructure/002-DNS-Server.html">
+<script>
+(function(){try{var t=null;try{t=localStorage.getItem('atk-theme')}catch(e){}
+if(t!=='dark'&&t!=='light'){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}
+document.documentElement.setAttribute('data-theme',t)}catch(e){}})();
+</script>
+<style>
+/* ============ Design tokens ============ */
+:root{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa;
+  --success:#34d399; --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --accent-soft:rgba(79,140,255,.14); --accent-2-soft:rgba(34,211,238,.12);
+  --violet-soft:rgba(167,139,250,.14); --success-soft:rgba(52,211,153,.13);
+  --warning-soft:rgba(251,191,36,.13); --danger-soft:rgba(248,113,113,.13);
+  --high-soft:rgba(251,146,60,.14); --low-soft:rgba(74,222,128,.13);
+  --shadow:0 10px 28px rgba(2,6,18,.42);
+  --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+:root[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0;
+  --success:#0d9e6e; --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --accent-soft:rgba(47,111,228,.10); --accent-2-soft:rgba(8,145,178,.10);
+  --violet-soft:rgba(124,92,224,.10); --success-soft:rgba(13,158,110,.10);
+  --warning-soft:rgba(180,83,9,.10); --danger-soft:rgba(220,38,38,.09);
+  --high-soft:rgba(194,65,12,.10); --low-soft:rgba(21,128,61,.10);
+  --shadow:0 10px 24px rgba(23,43,77,.10);
+}
+/* ============ Base ============ */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:20px}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--font-sans);font-size:16.5px;line-height:1.65;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  overflow-wrap:break-word;
+}
+img,canvas{max-width:100%}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+code,kbd,samp{font-family:var(--font-mono)}
+p{margin:0 0 12px}
+p:last-child{margin-bottom:0}
+ul,ol{margin:0 0 12px;padding-left:22px}
+li{margin:4px 0}
+strong{font-weight:700}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent-soft)}
+.skip-link{position:absolute;left:-9999px;top:0;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;z-index:200}
+.skip-link:focus{left:12px;top:12px}
+/* ============ Progress bar ============ */
+.progress{position:fixed;top:0;left:0;right:0;height:3px;z-index:120;background:transparent;pointer-events:none}
+.progress-fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .1s linear}
+/* ============ Page frame ============ */
+.page{max-width:1280px;margin:0 auto;padding:0 24px 80px}
+/* ============ Hero ============ */
+.hero{position:relative;padding:44px 0 26px;border-bottom:1px solid var(--border);margin-bottom:34px}
+.theme-toggle{
+  position:absolute;top:0;right:0;border:1px solid var(--border);background:var(--surface);
+  color:var(--muted);font-size:12.5px;padding:7px 12px;border-radius:999px;cursor:pointer;
+  font-family:var(--font-sans);transition:color .15s,border-color .15s;
+}
+.theme-toggle:hover{color:var(--text);border-color:var(--border-strong)}
+.kicker{
+  display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--accent-2);margin:0 0 14px;
+}
+.page-title{font-size:clamp(28px,4vw,40px);line-height:1.15;font-weight:800;margin:0 0 16px;letter-spacing:-.01em}
+.tech-id{
+  display:inline-block;font-family:var(--font-mono);font-size:.58em;font-weight:700;color:var(--accent);
+  background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;
+  padding:3px 12px;margin:0 12px 8px 0;vertical-align:middle;letter-spacing:.04em;
+}
+.lead{max-width:72ch;color:var(--muted);font-size:17px;margin:0 0 18px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px;padding:0;list-style:none}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:5px 12px;
+}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none}
+.chip.alt::before{background:var(--violet)}
+.chip.cool::before{background:var(--accent-2)}
+.facts{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.fact{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:14px 16px;box-shadow:var(--shadow);min-width:0;
+}
+.fact-k{display:block;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.fact-v{font-size:14.5px;line-height:1.5;color:var(--text)}
+.fact-v em{font-style:normal;color:var(--accent-2);font-weight:600}
+/* ============ Two-column layout ============ */
+.layout{display:grid;grid-template-columns:258px minmax(0,1fr);gap:38px;align-items:start}
+.toc{
+  position:sticky;top:20px;max-height:calc(100vh - 40px);overflow:auto;
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:16px 12px 18px;box-shadow:var(--shadow);scrollbar-width:thin;
+}
+.toc-title{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:2px 6px 10px}
+.toc ul{list-style:none;margin:0;padding:0}
+.toc-list > li{margin:2px 0}
+.toc a{
+  display:flex;align-items:baseline;gap:8px;color:var(--muted);font-size:13.5px;line-height:1.45;
+  padding:7px 10px;border-radius:8px;border-left:3px solid transparent;
+}
+.toc a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent)}
+.toc .toc-num{font-family:var(--font-mono);font-size:11.5px;font-weight:700;flex:none;min-width:20px;color:var(--accent-2)}
+.toc .toc-sub{margin:2px 0 4px;padding-left:14px}
+.toc .toc-sub a{font-size:12.5px;padding:5px 10px}
+.toc .toc-sub .toc-num{min-width:26px}
+/* ============ Sections ============ */
+.content{min-width:0}
+.section{margin:0 0 58px;scroll-margin-top:20px}
+.sec-head{display:flex;align-items:center;gap:14px;margin:0 0 12px}
+.sec-num{
+  flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:36px;height:36px;border-radius:11px;background:var(--accent-soft);
+  border:1px solid var(--accent);color:var(--accent);
+  font-family:var(--font-mono);font-size:15px;font-weight:700;
+}
+.sec-head h2{font-size:clamp(21px,2.6vw,27px);line-height:1.2;font-weight:800;margin:0;letter-spacing:-.01em}
+.sec-intro{color:var(--muted);max-width:74ch;margin:0 0 20px}
+h3.subsec{
+  display:flex;align-items:center;gap:10px;font-size:18.5px;font-weight:750;margin:30px 0 6px;
+  padding-top:18px;border-top:1px dashed var(--border);
+}
+h3.subsec::before{content:"";flex:none;width:8px;height:8px;border-radius:3px;background:var(--accent-2);transform:rotate(45deg)}
+h3.subsec .ss-id{font-family:var(--font-mono);font-size:12px;color:var(--accent-2);font-weight:700}
+h4{font-size:15.5px;font-weight:700;margin:16px 0 8px}
+/* ============ Cards & grids ============ */
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:18px 20px;box-shadow:var(--shadow);margin:0 0 16px;
+}
+.card > h3{font-size:16px;font-weight:750;margin:0 0 10px;display:flex;align-items:center;gap:9px}
+.card > h3::before{content:"";flex:none;width:4px;height:16px;border-radius:2px;background:var(--accent)}
+.card.tight{padding:14px 16px}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.grid-2 .card,.grid-3 .card{margin:0;min-width:0}
+.card.plain{box-shadow:none}
+/* ============ Callouts ============ */
+.callout{
+  border:1px solid var(--border);border-left-width:4px;border-radius:12px;
+  background:var(--surface-2);padding:14px 16px;margin:0 0 16px;font-size:15px;
+}
+.callout-label{display:inline;font-weight:750}
+.callout.note{border-left-color:var(--accent);background:var(--accent-soft)}
+.callout.warn{border-left-color:var(--warning);background:var(--warning-soft)}
+.callout.tip{border-left-color:var(--success);background:var(--success-soft)}
+.callout.danger{border-left-color:var(--danger);background:var(--danger-soft)}
+.callout.note .callout-label{color:var(--accent)}
+.callout.warn .callout-label{color:var(--warning)}
+.callout.tip .callout-label{color:var(--success)}
+.callout.danger .callout-label{color:var(--danger)}
+/* ============ Badges ============ */
+.sev{
+  display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:800;letter-spacing:.04em;
+  text-transform:uppercase;border-radius:999px;padding:3px 10px;white-space:nowrap;font-family:var(--font-sans);
+}
+.sev::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.sev.critical{color:var(--danger);background:var(--danger-soft);border:1px solid var(--danger)}
+.sev.high{color:var(--high);background:var(--high-soft);border:1px solid var(--high)}
+.sev.medium{color:var(--warning);background:var(--warning-soft);border:1px solid var(--warning)}
+.sev.low{color:var(--low);background:var(--low-soft);border:1px solid var(--low)}
+.cat{
+  display:inline-block;font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--violet);
+  background:var(--violet-soft);border:1px solid var(--violet);border-radius:7px;padding:2px 8px;white-space:nowrap;
+}
+/* ============ Tables ============ */
+.tablewrap{border:1px solid var(--border);border-radius:12px;overflow-x:auto;margin:0 0 16px;background:var(--surface);box-shadow:var(--shadow)}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:660px}
+th{
+  text-align:left;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  background:var(--surface-2);padding:11px 14px;border-bottom:1px solid var(--border-strong);white-space:nowrap;
+}
+td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:nth-child(odd){background:var(--surface-2)}
+td code,th code{font-size:12.5px;background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:var(--accent-2)}
+/* ============ Key/value lists ============ */
+.kv{display:grid;grid-template-columns:190px minmax(0,1fr);gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--surface);box-shadow:var(--shadow)}
+.kv > div{display:contents}
+.kv dt{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:11px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.kv dd{margin:0;padding:11px 16px;border-bottom:1px solid var(--border);font-size:14.5px}
+.kv div:last-child dt,.kv div:last-child dd{border-bottom:none}
+/* ============ Code blocks ============ */
+.codeblock{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;margin:0 0 16px;overflow:hidden;box-shadow:var(--shadow)}
+.codeblock-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:8px 8px 8px 14px;border-bottom:1px solid var(--border);background:var(--surface);
+}
+.codeblock-head .fname{font-family:var(--font-mono);font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.copybtn{
+  flex:none;font-family:var(--font-sans);font-size:12px;font-weight:600;color:var(--text);
+  background:var(--elevated);border:1px solid var(--border-strong);border-radius:8px;
+  padding:5px 12px;cursor:pointer;transition:border-color .15s,color .15s;
+}
+.copybtn:hover{border-color:var(--accent);color:var(--accent)}
+.codeblock pre{margin:0;padding:14px 16px;overflow:auto;max-height:480px;scrollbar-width:thin}
+.codeblock pre code{font-size:13px;line-height:1.55;color:var(--text);white-space:pre}
+code.inline,li code,p code{font-size:.86em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;color:var(--accent-2)}
+/* ============ Timeline ============ */
+.timeline{list-style:none;margin:0 0 16px;padding:0 0 0 22px;border-left:2px solid var(--border-strong)}
+.timeline > li{position:relative;margin:0 0 18px;padding-left:18px}
+.timeline > li:last-child{margin-bottom:0}
+.timeline > li::before{
+  content:"";position:absolute;left:-29px;top:5px;width:12px;height:12px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--bg);box-shadow:0 0 0 2px var(--accent-soft);
+}
+.tl-date{font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent-2);letter-spacing:.04em}
+.tl-body{font-size:14.5px}
+.tl-body p{margin:4px 0 0}
+/* ============ Checklist ============ */
+.checklist{list-style:none;margin:0 0 16px;padding:0}
+.checklist li{position:relative;padding:0 0 0 30px;margin:9px 0;font-size:15px}
+.checklist li::before{
+  content:"";position:absolute;left:0;top:3px;width:15px;height:15px;border-radius:4px;
+  border:2px solid var(--success);background:var(--success-soft);
+}
+.checklist li::after{
+  content:"";position:absolute;left:4px;top:7px;width:7px;height:4px;border-radius:1px;
+  border-left:2px solid var(--success);border-bottom:2px solid var(--success);transform:rotate(-45deg);
+}
+/* ============ Chain (attack flow) ============ */
+.chain{list-style:none;display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 16px;padding:0}
+.chain li{
+  background:var(--elevated);border:1px solid var(--border-strong);border-radius:999px;
+  padding:6px 14px;font-size:13px;font-weight:600;margin:0;
+}
+.chain li.chain-step{border-color:var(--accent);color:var(--accent)}
+.chain li + li::before{content:"→";margin-right:8px;color:var(--muted);font-weight:400}
+/* ============ Simulation ============ */
+.sim-card{padding:16px}
+.sim-top{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(0,1fr);gap:16px}
+.sim-top>*{min-width:0}
+.sim-stage{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:12px;overflow:hidden;min-width:0}
+.sim-stage canvas{display:block;width:100%;cursor:crosshair}
+.sim-tooltip{
+  position:fixed;z-index:150;max-width:260px;background:var(--elevated);color:var(--text);
+  border:1px solid var(--border-strong);border-radius:10px;padding:9px 12px;font-size:12.5px;line-height:1.5;
+  box-shadow:var(--shadow);pointer-events:none;
+}
+.sim-tooltip b{display:block;font-size:12px;color:var(--accent-2);margin-bottom:2px}
+.sim-panel{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;min-width:0}
+.sim-step-label{font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.sim-title{font-size:16.5px;font-weight:800;margin:0 0 6px}
+.sim-caption{font-size:14px;margin:0 0 12px}
+.sim-hint{border-left:3px solid var(--success);background:var(--success-soft);border-radius:0 10px 10px 0;padding:9px 12px;margin:0 0 12px}
+.sim-hint-label,.sim-ev-label{display:block;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.sim-hint p{font-size:13.5px;margin:0}
+.sim-ev ul{list-style:none;margin:0;padding:0}
+.sim-ev li{position:relative;padding-left:20px;font-family:var(--font-mono);font-size:12px;color:var(--muted);margin:6px 0;line-height:1.5}
+.sim-ev li::before{content:"";position:absolute;left:2px;top:6px;width:8px;height:8px;border-radius:2px;background:var(--accent-2)}
+.sim-controls{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.btn{
+  font-family:var(--font-sans);font-size:13.5px;font-weight:650;color:var(--text);
+  background:var(--elevated);border:1px solid var(--border-strong);border-radius:9px;
+  padding:8px 16px;cursor:pointer;transition:border-color .15s,color .15s,background .15s;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{color:#fff;filter:brightness(1.08)}
+.sim-speed{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.sim-speed select{
+  font-family:var(--font-sans);font-size:13px;color:var(--text);background:var(--elevated);
+  border:1px solid var(--border-strong);border-radius:8px;padding:7px 10px;cursor:pointer;
+}
+.sim-steps{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.sim-steps button{
+  font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:var(--muted);
+  background:var(--surface);border:1px solid var(--border);border-radius:999px;
+  padding:4px 11px;cursor:pointer;transition:all .15s;
+}
+.sim-steps button:hover{color:var(--text);border-color:var(--border-strong)}
+.sim-steps button.active{color:#fff;background:var(--accent);border-color:var(--accent)}
+.sim-story ol{margin:0;padding-left:22px}
+.sim-story li{margin:10px 0;font-size:14.5px}
+.sim-story li b{color:var(--accent-2)}
+/* ============ Floating controls ============ */
+.floating{
+  position:fixed;right:18px;border-radius:999px;border:1px solid var(--border-strong);
+  background:var(--elevated);color:var(--text);box-shadow:var(--shadow);cursor:pointer;z-index:110;
+  font-family:var(--font-sans);display:none;align-items:center;gap:8px;
+}
+#tocBtn{bottom:18px;padding:11px 18px;font-size:13.5px;font-weight:700}
+#backToTop{bottom:70px;width:44px;height:44px;font-size:18px;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+#backToTop.show{opacity:1;pointer-events:auto}
+#backToTop:hover,#tocBtn:hover{border-color:var(--accent);color:var(--accent)}
+/* ============ Mobile overlay ============ */
+.overlay{
+  position:fixed;inset:0;z-index:140;background:rgba(5,9,20,.6);backdrop-filter:blur(3px);
+  display:flex;justify-content:flex-start;align-items:stretch;
+}
+:root[data-theme="light"] .overlay{background:rgba(24,34,56,.45)}
+.overlay[hidden]{display:none}
+.overlay-panel{
+  width:min(340px,86vw);background:var(--surface);border-right:1px solid var(--border);
+  box-shadow:var(--shadow);padding:18px 14px;overflow:auto;
+}
+.overlay-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 6px}
+.overlay-head h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0}
+.overlay-close{background:var(--elevated);border:1px solid var(--border-strong);color:var(--text);border-radius:9px;width:36px;height:36px;font-size:16px;cursor:pointer}
+.overlay-close:hover{border-color:var(--accent);color:var(--accent)}
+/* ============ Responsive ============ */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{display:none}
+  #tocBtn{display:flex}
+  .sim-top{grid-template-columns:1fr}
+  .facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  .page{padding:0 14px 70px}
+  .hero{padding-top:52px}
+  .facts{grid-template-columns:minmax(0,1fr)}
+  .grid-2,.grid-3{grid-template-columns:minmax(0,1fr)}
+  .sec-head{gap:10px}
+  .sec-num{width:30px;height:30px;font-size:13px;border-radius:9px}
+  .sim-controls{gap:8px}
+  .sim-steps{margin-left:0;width:100%}
+  .sim-steps button{flex:1 1 auto}
+  .kv{grid-template-columns:1fr}
+  .kv dt{border-bottom:none;padding-bottom:2px}
+  .kv dd{padding-top:0}
+  .kv div{border-bottom:1px solid var(--border)}
+  .kv div:last-child{border-bottom:none}
+  .kv > div{display:block}
+  .chain{flex-direction:column;align-items:flex-start}
+  .chain li + li::before{content:"↓";display:block;margin:0 0 2px 14px}
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+/* ============ Print ============ */
+@media print{
+  body{background:#fff;color:#111;font-size:11.5pt}
+  .progress,.toc,#tocBtn,#backToTop,.sim-controls,.copybtn,.theme-toggle,.skip-link,.sim-tooltip,.overlay{display:none!important}
+  .page{max-width:100%;padding:0}
+  .layout{display:block}
+  .card,.callout,.tablewrap,.codeblock,.fact,.sim-panel{box-shadow:none;border-color:#bbb;background:#fff}
+  .codeblock pre{max-height:none;overflow:visible;white-space:pre-wrap}
+  .sim-stage{display:none}
+  .section{break-inside:auto}
+  h2,h3{break-after:avoid}
+  a{color:#111;text-decoration:none}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:9pt;color:#555}
+  .sev,.cat{border-color:#999;color:#111}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1584.002"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<div class="progress" role="progressbar" aria-label="Reading progress" aria-hidden="true"><div id="progressBar" class="progress-fill"></div></div>
+<a class="skip-link" href="#overview">Skip to main content</a>
+<main class="page">
+
+  <header class="hero">
+    <button id="themeToggle" class="theme-toggle" type="button" aria-label="Switch between dark and light theme">Light theme</button>
+    <p class="kicker">MITRE ATT&amp;CK · Resource Development · Detection Guide</p>
+    <h1 class="page-title"><span class="tech-id">T1584.002</span>DNS Server</h1>
+    <p class="lead">
+      Every visit to a website starts with a question: which server is behind this name? DNS servers answer that
+      question, and this guide covers what happens when an attacker takes one over. A single wrong answer can
+      silently send every user of that server to a fake website — no email, no malware, and no obvious warning.
+    </p>
+    <ul class="chips">
+      <li class="chip">Tactic · Resource Development</li>
+      <li class="chip alt">Platforms · PRE (pre-compromise)</li>
+      <li class="chip cool">Created 1 Oct 2020 · ATT&amp;CK v8</li>
+      <li class="chip alt">Technique v1.3 · Guide v2.0</li>
+      <li class="chip">Parent · T1584 Compromise Infrastructure</li>
+      <li class="chip alt">MITRE mitigation · M1056 Pre-compromise</li>
+    </ul>
+    <div class="facts">
+      <div class="fact"><span class="fact-k">What it is</span><span class="fact-v">Taking over a <em>DNS server</em> — a recursive resolver or an authoritative name server — and rewriting the answers it gives out.</span></div>
+      <div class="fact"><span class="fact-k">Why it matters</span><span class="fact-v">One changed record redirects <em>every client</em> of that server at the same time, quietly and with no phishing email needed.</span></div>
+      <div class="fact"><span class="fact-k">Attack chain role</span><span class="fact-v">Preparation stage. It feeds <em>fake phishing sites</em>, <em>adversary-in-the-middle</em> harvesting, and dynamic resolution for C2.</span></div>
+      <div class="fact"><span class="fact-k">Core defense</span><span class="fact-v">Cross-check answers against a <em>second resolver</em>, alert on zone changes, and lock down the DNS admin path.</span></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="toc" id="toc" aria-label="Table of contents">
+      <p class="toc-title">Contents</p>
+      <div id="tocNav">
+      <ul class="toc-list">
+  <li><a class="toc-link" href="#overview"><span class="toc-num">1</span><span class="toc-txt">Overview</span></a>
+  </li>
+  <li><a class="toc-link" href="#simulation"><span class="toc-num">2</span><span class="toc-txt">Animated simulation</span></a>
+  </li>
+  <li><a class="toc-link" href="#red-team"><span class="toc-num">3</span><span class="toc-txt">Red team / hacker perspective</span></a>
+  </li>
+  <li><a class="toc-link" href="#blue-team"><span class="toc-num">4</span><span class="toc-txt">Blue team / SOC perspective</span></a>
+  </li>
+  <li><a class="toc-link" href="#detection"><span class="toc-num">5</span><span class="toc-txt">Detection engineering deep dive</span></a>
+    <ul class="toc-sub">
+      <li><a class="toc-link toc-sublink" href="#detection-regulation"><span class="toc-num">5.1</span><span class="toc-txt">Regulation mapping</span></a></li>
+      <li><a class="toc-link toc-sublink" href="#detection-threatintel"><span class="toc-num">5.2</span><span class="toc-txt">Threat intelligence</span></a></li>
+      <li><a class="toc-link toc-sublink" href="#detection-ranking"><span class="toc-num">5.3</span><span class="toc-txt">Threats ranking and categorization</span></a></li>
+      <li><a class="toc-link toc-sublink" href="#detection-logs"><span class="toc-num">5.4</span><span class="toc-txt">Logs and patterns</span></a></li>
+      <li><a class="toc-link toc-sublink" href="#detection-sigma"><span class="toc-num">5.5</span><span class="toc-txt">Sigma rules and Splunk SPL</span></a></li>
+    </ul>
+  </li>
+  <li><a class="toc-link" href="#case-study"><span class="toc-num">6</span><span class="toc-txt">Real-world case study — Sea Turtle (2019–2021)</span></a>
+  </li>
+  <li><a class="toc-link" href="#mitigation"><span class="toc-num">7</span><span class="toc-txt">Mitigation and defense</span></a>
+  </li>
+  <li><a class="toc-link" href="#mistakes"><span class="toc-num">8</span><span class="toc-txt">Common mistakes and best practices</span></a>
+  </li>
+  <li><a class="toc-link" href="#cheat-sheet"><span class="toc-num">9</span><span class="toc-txt">Cheat sheet and quick reference</span></a>
+  </li>
+</ul>
+      </div>
+    </nav>
+
+    <div class="content">
+      <!-- ================= 1. OVERVIEW ================= -->
+      <section id="overview" class="section">
+        <div class="sec-head"><span class="sec-num">1</span><h2>Overview</h2></div>
+        <p class="sec-intro">This section explains DNS server compromise in plain words, why it is dangerous even though nothing looks broken, where it sits in an attack, and how it differs from hijacking a domain (T1584.001).</p>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>What this technique is</h3>
+            <p>DNS (Domain Name System) is the address book of the internet: it turns names like <code>example.com</code> into the IP addresses that computers really contact. <strong>T1584.002 DNS Server</strong> means an attacker takes control of a machine that answers those questions and changes what it says.</p>
+            <p>Two kinds of servers matter. A <em>recursive resolver</em> looks up answers on behalf of users — companies and internet providers run them. An <em>authoritative name server</em> holds the official records for one domain. Whoever controls either kind decides where users really go.</p>
+          </div>
+          <div class="card">
+            <h3>Why it matters to defenders</h3>
+            <p>The redirection is <strong>silent</strong>. The user types the correct address, the browser still shows the correct name, and only the underlying IP address is wrong. There is no email to catch and no file to scan.</p>
+            <p>The blast radius is also large. One compromised corporate resolver feeds answers to thousands of laptops. One poisoned authoritative server spreads further, because other resolvers remember (cache) the false answer for its whole lifetime. So detection must compare <em>answers</em>, not only watch <em>queries</em>.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Where it fits in the attack chain</h3>
+          <p>ATT&amp;CK places this technique in <strong>Resource Development</strong>, the stage before the victim is involved. The hijacked DNS server then quietly supports the next steps:</p>
+          <ol class="chain">
+            <li class="chain-step">T1584.002 DNS Server hijack</li>
+            <li>T1566 Phishing (fake site is ready)</li>
+            <li>T1557 Adversary-in-the-Middle (harvest logins)</li>
+            <li>T1568 Dynamic Resolution (fast-changing answers)</li>
+            <li>T1071.004 DNS (C2 over DNS)</li>
+          </ol>
+          <p>A hijacked resolver can also hide the true location of command-and-control (C2) servers: the malware asks the trusted resolver for a name and receives the address the attacker wants, and the attacker can change that address at any moment.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>DNS server vs. domain — the T1584.001 difference</h3>
+            <p>Keep the two sibling techniques apart, because their evidence and fixes differ. <strong>T1584.001 Domains</strong> is about owning or hijacking the <em>name</em> itself — for example by stealing a registrar account or changing the nameserver records that say where a domain is hosted. <strong>T1584.002 DNS Server</strong> is about attacking the <em>machine that answers</em> the lookups.</p>
+            <p>Both end in false answers for users. But the domain version leaves changes at the registrar and in nameserver records, while the server version leaves changes on the DNS server itself — in zone files, resolver configuration, and answer logs. You defend the domain with registrar security; you defend the server with patching, admin lockdown, and answer monitoring.</p>
+          </div>
+          <div class="card">
+            <h3>What you will learn in this guide</h3>
+            <ul>
+              <li>An animated walkthrough of a full DNS takeover story.</li>
+              <li>How red teamers think about DNS hijacking — lab-only and conceptual.</li>
+              <li>Which artifacts a poisoned resolver leaves behind.</li>
+              <li>Regulation mapping, threat intel sources, and a ranked threat list.</li>
+              <li>Ready-to-adapt Sigma rules and Splunk SPL queries.</li>
+              <li>A real case study, mitigations, and a cheat sheet.</li>
+            </ul>
+          </div>
+        </div>
+
+        <dl class="kv">
+          <div><dt>ATT&amp;CK ID</dt><dd><code>T1584.002</code> — DNS Server (sub-technique of T1584)</dd></div>
+          <div><dt>Tactic</dt><dd>Resource Development (pre-compromise, platform PRE)</dd></div>
+          <div><dt>Targets</dt><dd>Recursive resolvers (corporate, ISP) and authoritative name servers, including hosted provider DNS</dd></div>
+          <div><dt>MITRE mitigation</dt><dd>M1056 Pre-compromise — hard to prevent from inside your network; defense is monitoring and hardening</dd></div>
+          <div><dt>Typical evidence</dt><dd>Zone or config changes without tickets, answers that differ between resolvers, AXFR requests, certificate mismatch reports</dd></div>
+        </dl>
+      </section>
+
+      <!-- ================= 2. ANIMATED SIMULATION ================= -->
+      <section id="simulation" class="section">
+        <div class="sec-head"><span class="sec-num">2</span><h2>Animated simulation</h2></div>
+        <p class="sec-intro">Watch an attacker take over a DNS server, rewrite the record of a brand domain, and send an employee to a fake site — while the SOC cross-checks the answers and restores the truth. Use the controls to play, pause, restart, change speed, or jump to any step. Hover over a node to learn what it is.</p>
+
+        <div class="card sim-card">
+          <div class="sim-top">
+            <div class="sim-stage" id="simWrap">
+              <canvas id="simCanvas" tabindex="0" role="img" aria-label="Animated diagram: an attacker takes over a DNS server, rewrites the record of a brand domain, sends an employee to a fake site, and the SOC cross-checks the answers and restores the records. A written step-by-step version follows below."></canvas>
+              <div id="simTooltip" class="sim-tooltip" hidden></div>
+              <noscript><p style="padding:16px">The animation needs JavaScript. The written story below covers the same steps.</p></noscript>
+            </div>
+            <div class="sim-panel" aria-live="polite">
+              <div class="sim-step-label" id="simStepLabel">Step 1 of 8</div>
+              <h3 class="sim-title" id="simTitle">Find a weak DNS server</h3>
+              <p class="sim-caption" id="simCaption">Loading…</p>
+              <div class="sim-hint"><span class="sim-hint-label">SOC view</span><p id="simHint">Loading…</p></div>
+              <div class="sim-ev"><span class="sim-ev-label">Evidence left behind</span><ul id="simEvidence"></ul></div>
+            </div>
+          </div>
+          <div class="sim-controls">
+            <button id="simPlay" class="btn primary" type="button">Pause</button>
+            <button id="simRestart" class="btn" type="button">Restart</button>
+            <label class="sim-speed">Speed
+              <select id="simSpeed">
+                <option value="0.5">0.5×</option>
+                <option value="1" selected>1×</option>
+                <option value="2">2×</option>
+              </select>
+            </label>
+            <div class="sim-steps" id="simSteps"></div>
+          </div>
+        </div>
+
+        <div class="card sim-story">
+          <h3>The same story in words</h3>
+          <ol id="simStory">
+            <li><b>Find a weak DNS server.</b> The attacker scans the internet for an exposed DNS admin panel or an old, unpatched resolver. <em>SOC view:</em> scanning of port 53 and admin pages from an unknown network.</li>
+            <li><b>Abuse weak admin credentials.</b> A default or reused password, or an old bug, hands the DNS server to the attacker. <em>SOC view:</em> an admin login from a new device or country.</li>
+            <li><b>Rewrite the zone record.</b> The A record of the brand domain now points to an attacker-controlled IP address. <em>SOC view:</em> a zone serial change with no matching change ticket.</li>
+            <li><b>The laptop asks for the domain.</b> An employee opens the bank or vendor site, and the laptop sends a normal DNS query to the corporate resolver. <em>SOC view:</em> nothing unusual — the question looks perfectly normal.</li>
+            <li><b>A false answer comes back.</b> The compromised server replies with the attacker's IP address instead of the real one. <em>SOC view:</em> the answer differs from a trusted public DoH resolver.</li>
+            <li><b>The user lands on the fake site.</b> A certificate warning appears, or a perfect copy of the site asks for login details. <em>SOC view:</em> certificate mismatch reports and user complaints.</li>
+            <li><b>Harvest and continue.</b> The attacker saves the submitted passwords and can now log in as the victim. <em>SOC view:</em> impossible-travel logins right after the DNS anomaly.</li>
+            <li><b>SOC detects and restores.</b> The team cross-checks with a secondary DoH resolver, blocks the attacker address, and restores the correct records. <em>SOC view:</em> the false answers stop and the case opens.</li>
+          </ol>
+        </div>
+      </section>
+      <!-- ================= 3. RED TEAM PERSPECTIVE ================= -->
+      <section id="red-team" class="section">
+        <div class="sec-head"><span class="sec-num">3</span><h2>Red team / hacker perspective</h2></div>
+        <p class="sec-intro">This section explains how attackers think when they target DNS servers. Everything here is described for <strong>education and defense only</strong> — no exploit steps, no code. Practice these ideas exclusively against servers inside your own isolated lab.</p>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Why attackers target DNS servers</h3>
+            <p><strong>Scale first.</strong> One company resolver answers for every laptop and server on the network. One authoritative server answers for a whole brand. Change one record once, and the attacker reaches thousands of users without sending a single phishing email.</p>
+            <p><strong>Stealth second.</strong> DNS answers are trusted by default. The browser address bar still shows the real name, so victims see nothing wrong. There is no attachment for a mail filter to catch. For the attacker, a hijacked resolver is also a stable asset: it stays in place inside the target's network, while rented servers get blocked and replaced.</p>
+          </div>
+          <div class="card">
+            <h3>How takeover happens (conceptual)</h3>
+            <ul>
+              <li><strong>Exposed admin panels:</strong> management web pages or control channels left reachable from the public internet.</li>
+              <li><strong>Weak or default credentials:</strong> shared passwords, vendor defaults, or passwords reused from old leaks.</li>
+              <li><strong>Vulnerable versions:</strong> resolvers with known, unpatched security bugs in the service itself.</li>
+              <li><strong>Unpatched or forgotten resolvers:</strong> appliances and VMs that nobody owns and nobody updates.</li>
+              <li><strong>Weaker upstream hops:</strong> forwarders and hosted provider accounts that inherit the attacker's control.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Where the technique applies</h3>
+            <ul>
+              <li><strong>Corporate resolvers:</strong> the internal DNS servers every workstation uses. Highest value inside a company.</li>
+              <li><strong>ISP resolvers:</strong> the default resolvers of an internet provider. One change hits many homes at once.</li>
+              <li><strong>Authoritative servers for brands:</strong> where a company's public records live, often at a hosted provider. Attackers target both the provider's panel and the servers themselves.</li>
+            </ul>
+            <p>The common thread is <em>position</em>: the attacker does not need your password or your laptop. Sitting on the path between users and the internet is enough.</p>
+          </div>
+          <div class="card">
+            <h3>Prerequisites an attacker needs</h3>
+            <ul>
+              <li>Network reachability to the admin interface or the vulnerable service.</li>
+              <li>Valid credentials or a working exploit for the DNS software.</li>
+              <li>Knowledge of which zones and records matter (names of the victim brand's domains).</li>
+              <li>A place to send users — a server that imitates the real site or accepts the redirected traffic.</li>
+              <li>A quiet window: no alerting on zone changes, no cross-checking of answers.</li>
+            </ul>
+            <p>Notice that four of the five prerequisites are <em>defensive failures</em> — reachability, credentials, patching, and monitoring. Remove one and the technique usually fails.</p>
+          </div>
+        </div>
+
+        <div class="callout danger"><span class="callout-label">LAB ONLY — never touch DNS you do not own.</span> Redirecting real users or real domains is illegal in most countries and can turn into a mass incident, because DNS changes spread to caches. Do all DNS exercises inside an isolated virtual network with fake domain names, and never point lab resolvers at production records.</div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>A safe lab exercise</h3>
+            <ul>
+              <li>Set up an isolated lab VM and install a resolver such as Unbound or BIND on it.</li>
+              <li>Create a private test zone (for example <code>lab.example</code>) with one A record.</li>
+              <li>Query it from a second lab VM and confirm the answer.</li>
+              <li>Change the record through the admin tool, then observe the query log and the zone serial number increasing.</li>
+              <li>Try a zone transfer request against the lab server and watch how the log records it.</li>
+              <li>Now enable logging of every change and every transfer — this is exactly the telemetry your SOC needs.</li>
+            </ul>
+            <p>The goal is not the trick itself. The goal is to learn <em>which logs fire</em> when a record changes, so you can build alerts on them.</p>
+          </div>
+          <div class="card">
+            <h3>Variations attackers use</h3>
+            <ul>
+              <li><strong>Zone poisoning:</strong> editing the zone file or record set directly on the server, as in the simulation.</li>
+              <li><strong>Forwarder abuse:</strong> changing the resolver's upstream forwarder to an attacker-controlled resolver, so <em>every</em> unknown name goes through the attacker.</li>
+              <li><strong>Cache-only poisoning:</strong> using old software bugs to insert false answers into the cache without touching config.</li>
+              <li><strong>Open-resolver abuse:</strong> using someone else's open resolver to answer victims' queries with chosen data.</li>
+            </ul>
+            <h3>Mistakes in exercises</h3>
+            <ul>
+              <li>Leaving a lab admin interface reachable after the test ends.</li>
+              <li>Changing records without a ticket, then losing track of what was touched.</li>
+              <li>Forgetting to restore the original zone or to lower the cache time (TTL) afterwards.</li>
+              <li>Not writing down the test window, so the SOC investigates a ghost.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+      <!-- ================= 4. BLUE TEAM / SOC PERSPECTIVE ================= -->
+      <section id="blue-team" class="section">
+        <div class="sec-head"><span class="sec-num">4</span><h2>Blue team / SOC perspective</h2></div>
+        <p class="sec-intro">Defenders cannot stop every hijack on the internet, but a poisoned DNS server leaves surprisingly clear marks. This section shows where the visibility comes from, which artifacts to hunt for, where to look first, and a short triage flow.</p>
+
+        <div class="card">
+          <h3>Where visibility comes from</h3>
+          <ul>
+            <li><strong>DNS server logs:</strong> BIND query and zone logs, Windows DNS Server audit/analytical logs, Unbound logs. They show changes, transfers, and unusual answer patterns at the source.</li>
+            <li><strong>Zeek dns.log on the wire:</strong> a passive sensor records every question <em>and every answer</em> on the network — the answer field is the important one here.</li>
+            <li><strong>Resolver query logs:</strong> cloud and hosted DNS providers (and managed resolvers) can stream per-query logs with answers.</li>
+            <li><strong>Passive DNS cross-check:</strong> passive DNS databases keep the long-term history of which answers a domain normally returns, so a sudden change stands out.</li>
+            <li><strong>Certificate signals:</strong> browsers, pinning plugins, and users report certificate mismatch warnings — often the first human-seen sign of redirection.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Artifacts a DNS hijack leaves behind</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Artifact</th><th>What it looks like</th><th>Why it matters</th></tr></thead>
+            <tbody>
+              <tr><td>Unexpected A-record answers</td><td>A known domain now resolves to an IP outside the owner's networks, often with a short TTL</td><td>The core signature of the technique; nothing else needs to happen for harm to start</td></tr>
+              <tr><td>New zone transfer (AXFR) request</td><td>TCP connection to port 53 asking for the whole zone, from an unknown source</td><td>Reconnaissance — the attacker is mapping your records, often right before a change</td></tr>
+              <tr><td>Config or zone change without a ticket</td><td>Zone serial number jumps, new records appear, no change record exists</td><td>Direct evidence of tampering on the server itself</td></tr>
+              <tr><td>Certificate mismatch</td><td>Browser or pinning reports a wrong certificate on a brand domain</td><td>The fake site almost never has the real certificate; this is the human-scale alarm</td></tr>
+              <tr><td>Resolver config edits</td><td>Forwarders, allowlists, or logging settings change outside maintenance windows</td><td>Attackers redirect upstream paths or blind the logging first</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Where to look first</h3>
+            <ul>
+              <li>Pull the <strong>zone-change history</strong> of your brand domains for the last 30 days and match each change to a ticket.</li>
+              <li>Compare answers from your resolver with a <strong>trusted second resolver</strong> (a DoH service works well) for your top 500 domains.</li>
+              <li>Search Zeek <code>dns.log</code> for answers that fall <strong>outside the owner's known networks</strong>.</li>
+              <li>Check <strong>AXFR/IXFR attempts</strong> against your authoritative and internal servers.</li>
+              <li>Review <strong>admin logins</strong> on the DNS servers themselves for new devices, countries, or hours.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Why this matters to the SOC</h3>
+            <p>A DNS hijack is one of the few attacks where <strong>the victim's own endpoint logs stay completely clean</strong>. The laptop did nothing wrong; it just believed its resolver. That is why queries-only dashboards miss the whole technique.</p>
+            <p>It also multiplies every other threat. Fake sites make phishing more convincing, and hijacked answers can hide C2. When your brand domain redirects wrongly, <em>your customers</em> are the victims, so the incident may belong to you even though the hijacked server belonged to someone else.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Short triage checklist — suspected DNS redirection</h3>
+          <ul class="checklist">
+            <li>Confirm the anomaly: query the same domain from your resolver and from an independent DoH resolver.</li>
+            <li>Record the false answer (IP, TTL, timestamp) before caches change; capture the Zeek record if available.</li>
+            <li>Identify the path: is your resolver poisoned, or is the authoritative side serving false answers?</li>
+            <li>Check zone-change and admin-login logs on the affected servers for the last change window.</li>
+            <li>If your server is compromised: block attacker ranges, restore records from a known-good copy, and rotate admin credentials.</li>
+            <li>If another party's server is poisoned: notify the owner and the registrar, and protect your users by pinning or blocking the fake address.</li>
+            <li>Open the incident record and warn users to treat certificate warnings on the brand domain as real.</li>
+          </ul>
+        </div>
+      </section>
+      <!-- ================= 5. DETECTION ENGINEERING DEEP DIVE ================= -->
+      <section id="detection" class="section">
+        <div class="sec-head"><span class="sec-num">5</span><h2>Detection engineering deep dive</h2></div>
+        <p class="sec-intro">This is the practical core of the guide. It maps DNS server compromise to regulations, lists the intel worth wiring up, ranks the realistic threats, defines the logs to collect, and finishes with complete Sigma rules and matching Splunk SPL queries.</p>
+
+        <h3 class="subsec" id="detection-regulation" data-num="5.1">5.1 · Regulation mapping</h3>
+        <p>Compliance teams often ask "why should we fund DNS monitoring?". The table below links DNS server compromise to well-known frameworks. The pattern is the same everywhere: you must <strong>protect and monitor</strong> a critical service, <strong>log the evidence</strong>, and <strong>react in a defined way</strong>.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+          <tbody>
+            <tr><td>GDPR</td><td>Art. 32 security of processing; Art. 33 breach notification</td><td>Silent redirection to a fake site can capture personal data of EU users; a poisoned resolver is a security failure of a critical system.</td><td>DNS server config baselines, answer-monitoring records, incident tickets, notification timeline.</td></tr>
+            <tr><td>HIPAA (Security Rule)</td><td>§164.308(a)(1) risk analysis; §164.308(a)(6) incident procedures</td><td>Health workers rely on DNS for clinical systems; hijacked answers can expose ePHI paths, and incidents need a written process.</td><td>Risk register entries for DNS assets, admin access reviews, incident response records.</td></tr>
+            <tr><td>ISO/IEC 27001:2022</td><td>A.8.16 monitoring activities; A.8.9 configuration management</td><td>Requires monitoring of critical infrastructure and controlled, logged configuration changes — exactly what DNS servers need.</td><td>Zone/config change logs, monitoring configurations, change-approval records.</td></tr>
+            <tr><td>SOC 2 (Trust Services)</td><td>CC7.1–CC7.2 detection and monitoring</td><td>Auditors expect anomaly detection on critical shared services, including internal resolvers.</td><td>Alert definitions for DNS, triage records, detection test results.</td></tr>
+            <tr><td>PCI DSS 4.0</td><td>10.2 audit logging; 11.5 change and tamper detection</td><td>Cardholder environments must log and detect changes to network and security systems; resolvers sit in that path.</td><td>Retained DNS server logs, change-detection alerts, tamper-evidence records.</td></tr>
+            <tr><td>NIST CSF 2.0</td><td>DE.CM continuous monitoring</td><td>Maps directly to watching DNS answers, zone changes, and admin access continuously.</td><td>Monitoring coverage matrix with DNS entries, threat register with T1584.002.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout note"><span class="callout-label">Note.</span> Evidence for all frameworks comes from the same engineering work: an asset inventory of your DNS servers, change alerts on those servers, retained answer telemetry, and a tested response process. Build it once, use it for every audit.</div>
+
+        <h3 class="subsec" id="detection-threatintel" data-num="5.2">5.2 · Threat intelligence</h3>
+        <p>Much of this technique happens outside your network, so external intelligence does real work here. A simple pipeline: <strong>collect</strong> signals, <strong>analyze</strong> them against your domains and resolvers, <strong>apply</strong> the result to detections and blocks, then <strong>review</strong> what helped.</p>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Sources worth wiring up</h3>
+            <ul>
+              <li><strong>MITRE ATT&amp;CK:</strong> the T1584.002 page and its citations describe documented DNS server abuse.</li>
+              <li><strong>Passive DNS + DoH cross-validation:</strong> passive DNS history shows normal answers; querying a trusted DoH resolver shows what the world sees right now. Comparing both catches poisoned paths.</li>
+              <li><strong>Vendor reporting:</strong> Cisco Talos, ESET, Microsoft, Mandiant and CERT blogs publish DNS hijack campaigns and indicators.</li>
+              <li><strong>OSINT scanning:</strong> Shodan and Censys expose resolvers with open admin panels; urlscan.io and crt.sh show where brand names really resolve.</li>
+              <li><strong>ISACs:</strong> sector sharing groups push fast alerts when members see hijacks targeting your industry.</li>
+              <li><strong>Internal telemetry:</strong> your own DNS server audit logs and answer comparisons — the highest-signal source you own.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Confidence levels that work</h3>
+            <p>Tag every indicator with a confidence level and keep the meaning strict:</p>
+            <ul>
+              <li><strong>High:</strong> confirmed by two independent sources or by direct observation in your own logs.</li>
+              <li><strong>Medium:</strong> one reliable source, no second confirmation yet — good for detection and hunting, not for blocking.</li>
+              <li><strong>Low:</strong> rumor, paste-site claim, or machine-only correlation — hunt lists only.</li>
+            </ul>
+            <p>Write the level into the indicator record so the analyst who meets it at 03:00 knows how much to trust it — and whether they may block it.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Known actors and campaigns using DNS server compromise</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Actor / campaign</th><th>Documented use</th><th>Typical route</th><th>Confidence</th></tr></thead>
+            <tbody>
+              <tr><td>Sea Turtle (G1041)</td><td>Modified Name Server (NS) records at compromised registrars so every lookup for victim domains went to Sea Turtle-controlled servers (case study in section 6)</td><td>Registrar access → NS rewrite → on-path interception</td><td><span class="sev high">High</span></td></tr>
+              <tr><td>LAPSUS$ (G1004)</td><td>Reconfigured a victim's DNS records to actor-controlled domains and websites — an official ATT&amp;CK procedure</td><td>DNS record rewrite at the DNS provider</td><td><span class="sev high">High</span></td></tr>
+              <tr><td>MyEtherWallet hijack actors (2018)</td><td>BGP hijack pulled Route 53 DNS traffic to attacker servers that answered false records for myetherwallet.com</td><td>Routing-layer interception answered by fake DNS (BGP-based, not an ATT&amp;CK-listed procedure)</td><td><span class="sev high">High</span></td></tr>
+              <tr><td>Roaming Mantis</td><td>Hijacks DNS settings on consumer routers to redirect mobile users in Asia</td><td>Resolver hijack at consumer scale</td><td><span class="sev medium">Medium</span></td></tr>
+            </tbody>
+          </table></div>
+        <div class="callout note"><span class="callout-label">Note.</span> APT-C-36 appears on the parent T1584 page; ATT&amp;CK does not list it under T1584.002. For the registrar-side hijack (domain registration takeover), see the T1584.001 page. Keep lists fresh with MITRE ATT&amp;CK updates, CISA advisories, vendor blogs, ISAC sharing, and your own telemetry.</div>
+          <p style="margin-top:10px">Application pattern: pull indicators from each report, enrich them with passive DNS to find <em>related</em> assets, then push High-confidence sets into your proxy blocklist and all sets into your hunt queries. For DNS specifically, also test each indicator against <em>your own resolvers</em> — the difference between their answer and the public answer is the alert.</p>
+        </div>
+        <h3 class="subsec" id="detection-ranking" data-num="5.3">5.3 · Threats ranking and categorization</h3>
+        <p>The six threats below are the realistic ways T1584.002 harms an organization. Each one is ranked with the standard scale — <strong>Critical</strong>, <strong>High</strong>, <strong>Medium</strong>, <strong>Low</strong> — and tagged with the platform where detection happens. Ranking logic: probability × impact on a mid-size enterprise.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>#</th><th>Threat</th><th>Rank</th><th>Platform</th><th>Preconditions</th><th>Impact &amp; justification</th></tr></thead>
+          <tbody>
+            <tr><td>TH-01</td><td>Authoritative server hijack for a brand domain (answers rewritten at the source)</td><td><span class="sev critical">Critical</span></td><td><span class="cat">Network</span></td><td>Access to the authoritative DNS server, its admin panel, or its provider account; no answer cross-check anywhere</td><td>Every user worldwide is silently redirected from the real brand site. Highest trust and widest blast radius; caches spread the false answer.</td></tr>
+            <tr><td>TH-02</td><td>Corporate resolver poisoning (internal answers rewritten)</td><td><span class="sev critical">Critical</span></td><td><span class="cat">Network</span></td><td>Compromised or exposed internal resolver; no per-client DNSSEC validation; alerts only on queries, not answers</td><td>Redirects every employee to fake internal and external sites at once, and can capture domain credentials at scale.</td></tr>
+            <tr><td>TH-03</td><td>Resolver used as C2 tunnel or command channel (data encoded in DNS)</td><td><span class="sev high">High</span></td><td><span class="cat">Network</span></td><td>Malware already inside; resolver forwards arbitrary names; no limit on query size or rate</td><td>Gives attacker a covert channel that passes most firewalls. Detection needs per-client query statistics and label-length checks.</td></tr>
+            <tr><td>TH-04</td><td>Resolver used for data exfiltration via encoded subdomains</td><td><span class="sev medium">Medium</span></td><td><span class="cat">Network</span> <span class="cat">Endpoint</span></td><td>Attacker-controlled authoritative server; internal resolver happily forwards unusual names</td><td>Quietly moves small secrets out as name lookups. Slower than HTTP exfil, so it suits low-and-slow theft.</td></tr>
+            <tr><td>TH-05</td><td>Zone transfer exposure (AXFR) leaks the whole zone</td><td><span class="sev medium">Medium</span></td><td><span class="cat">Network</span></td><td>Authoritative or internal server allows AXFR to unauthenticated clients</td><td>Hands the attacker a complete map of hosts and services; accelerates targeted follow-up attacks.</td></tr>
+            <tr><td>TH-06</td><td>Open resolver abuse — your resolver amplifies DDoS attacks</td><td><span class="sev medium">Medium</span></td><td><span class="cat">Network</span></td><td>Recursive service reachable from the internet; recursion enabled for any source</td><td>Availability and reputation damage; your bandwidth is used to attack others, and blacklists may follow.</td></tr>
+          </tbody>
+        </table></div>
+
+        <h3 class="subsec" id="detection-logs" data-num="5.4">5.4 · Logs and patterns</h3>
+        <p>Each threat needs the right log source with the right fields. "Normal" and "suspicious" below describe the <em>same</em> fields — that contrast is what makes the detection logic possible.</p>
+
+        <div class="card">
+          <h3>TH-01 / TH-02 — Hijacked answers on the DNS servers</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Log source</th><th>Key fields</th><th>Normal</th><th>Suspicious</th></tr></thead>
+            <tbody>
+              <tr><td>Windows DNS Server audit log / BIND zone log</td><td>event or action, zone, record, old_value, new_value, actor, time, serial</td><td>Changes from known admins inside change windows, every change ticketed</td><td>A-record change or serial bump outside a window, unknown source address, no ticket</td></tr>
+              <tr><td>Zeek dns.log (answers!)</td><td>id.orig_h, id.resp_h, query, answers, rcode_name, TTLs</td><td>Brand domains resolve into the owner's known networks, stable over months</td><td>Brand domain resolves to an IP outside the expected ASN or CIDR list, TTL drops</td></tr>
+              <tr><td>Resolver config audit (Unbound/BIND/syslog)</td><td>config change, forwarder, actor, source_ip, time</td><td>Config edits from the management host only, during maintenance</td><td>Forwarder or allowlist change from an unknown host, logging quietly disabled</td></tr>
+            </tbody>
+          </table></div>
+          <p><strong>Detection logic:</strong> alert when a protected brand domain resolves to an address <em>not</em> in the owner's expected network ranges, and alert on any zone/config change where the actor or source is not on the admin allowlist. This is exactly what SIG-001 and SIG-003 below implement.</p>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>zeek_dns_spoofed_answer.json</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-json">{
+  "ts": "2026-10-19T08:41:22.517431Z",
+  "uid": "CX4kQ7Zt2vW9pRn3bf",
+  "id.orig_h": "10.14.22.7",
+  "id.orig_p": 51422,
+  "id.resp_h": "10.20.53.10",
+  "id.resp_p": 53,
+  "proto": "udp",
+  "query": "payments.vendor-bank.com",
+  "qtype_name": "A",
+  "rcode_name": "NOERROR",
+  "answers": ["203.0.113.77"],
+  "TTLs": [120.0]
+}</code></pre>
+          </figure>
+          <p>Why this record is suspicious: <code>payments.vendor-bank.com</code> normally answers from the bank's known range, but here the only answer is <code>203.0.113.77</code> — a network the owner never uses — with a short 120-second TTL, which attackers lower so the poisoned answer sticks while they work.</p>
+        </div>
+
+        <div class="card">
+          <h3>TH-03 / TH-04 — Tunnel and exfil traffic through the resolver</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Log source</th><th>Key fields</th><th>Normal</th><th>Suspicious</th></tr></thead>
+            <tbody>
+              <tr><td>Resolver query log (BIND query log / Unbound)</td><td>client, query, qtype, rcode, time</td><td>Short labels, real-name patterns, low repeat rate per client</td><td>Very long random labels, base32/base16 blobs in subdomains, one client dominating query volume</td></tr>
+              <tr><td>Zeek dns.log</td><td>query, rcode_name, id.orig_h</td><td>Few NXDOMAIN answers per client per hour</td><td>High NXDOMAIN rate or DGA-like names from a single source</td></tr>
+            </tbody>
+          </table></div>
+          <p><strong>Detection logic:</strong> per-client counters — NXDOMAIN count, unique-question count, and maximum label length. Thresholds in SIG-002 below are starting points; tune them to your baseline week.</p>
+        </div>
+
+        <div class="card">
+          <h3>TH-05 / TH-06 — Exposed zone transfers and open recursion</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Log source</th><th>Key fields</th><th>Normal</th><th>Suspicious</th></tr></thead>
+            <tbody>
+              <tr><td>DNS server security log (BIND security / Windows DNS audit)</td><td>action, client, zone, result</td><td>Transfers only to listed secondaries, refused elsewhere</td><td>AXFR or IXFR attempt from an internet address, or repeated refusals from one source</td></tr>
+              <tr><td>Firewall / Zeek conn.log</td><td>src_ip, dest_ip, dest_port, transport</td><td>TCP 53 only between resolver pairs and admins</td><td>TCP 53 from unexpected external sources toward your resolvers</td></tr>
+            </tbody>
+          </table></div>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>bind_audit_log.txt (JSON-tagged)</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-json">19-Oct-2026 08:12:55.103 general: info: zone vendor-bank.com/IN: zone serial (2026101903 -&gt; 2026101904) changed by update from 198.51.100.77
+19-Oct-2026 08:41:07.912 queries: info: client @0x7f3a2c104d00 10.14.22.7#51422 (payments.vendor-bank.com): query: payments.vendor-bank.com IN A +E(0)K (10.20.53.10)
+19-Oct-2026 08:41:55.204 general: info: received control channel command 'reload'
+19-Oct-2026 09:02:18.877 security: info: client @0x7f3a2c0b3e00 203.0.113.77#53001 (vendor-bank.com): transfer of 'vendor-bank.com/IN': AXFR request denied - not authorized</code></pre>
+          </figure>
+          <p><strong>Detection logic:</strong> read the four lines as a story — a zone change from an external address, a reload command, a client receiving a false answer, and later a transfer attempt from the attacker's network. Any one of them alone deserves a look; together they are an incident.</p>
+        </div>
+        <h3 class="subsec" id="detection-sigma" data-num="5.5">5.5 · Sigma rules and Splunk SPL</h3>
+        <p>The four rules below cover the highest-value threats (TH-01, TH-02, TH-05 and the tunnel/exfil pair TH-03/TH-04). Each Sigma rule is valid YAML and is followed by a matching Splunk query, a mapping note, and tuning advice. Replace index and sourcetype names with your local naming — the field assumptions are stated under each query.</p>
+
+        <div class="card">
+          <h3>SIG-001 · Brand domain resolves outside expected networks (TH-01, TH-02)</h3>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>sigma_t1584_002_answer_mismatch.yml</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-yaml">title: Brand Domain Resolves Outside Expected Network Ranges
+id: 5be4c036-6e6c-4c6f-ac30-0dd9d7a69348
+status: stable
+description: Detects successful DNS answers for protected brand or vendor domains where the returned address is not inside the owner's expected network ranges. A hijacked or spoofed DNS server (T1584.002) is the classic cause of this pattern.
+references:
+  - https://attack.mitre.org/techniques/T1584/002/
+author: Detection Engineering Team
+date: 2026-10-19
+logsource:
+  category: dns
+  product: zeek
+detection:
+  selection_domain:
+    query|endswith:
+      - '.vendor-bank.com'
+      - '.brand-supplier.com'
+    rcode_name: 'NOERROR'
+  filter_expected:
+    answers|cidr:
+      - '203.0.113.0/24'
+      - '198.51.100.0/24'
+  condition: selection_domain and not filter_expected
+fields:
+  - id.orig_h
+  - id.resp_h
+  - query
+  - qtype_name
+  - answers
+  - rcode_name
+falsepositives:
+  - A legitimate hosting migration that was not added to the expected range list yet
+  - Content delivery networks that answer brand domains from many provider networks
+level: critical
+tags:
+  - attack.t1584.002
+  - attack.resource_development</code></pre>
+          </figure>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>search_spl</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-spl">index=network sourcetype=zeek:dns rcode_name=NOERROR (query=*.vendor-bank.com OR query=*.brand-supplier.com)
+| eval answer=coalesce(mvindex(answers,0),"none")
+| where NOT cidrmatch("203.0.113.0/24",answer) AND NOT cidrmatch("198.51.100.0/24",answer)
+| stats count values(query) as domains values(answer) as answers earliest(_time) as first_seen latest(_time) as last_seen by id.orig_h
+| sort - count</code></pre>
+          </figure>
+          <p><strong>Mapping note:</strong> the logsource is Zeek dns.log shipped as JSON; <code>answers</code> is a multi-value field, so the SPL takes the first answer and <code>cidrmatch</code> checks the expected ranges. <strong>False positives:</strong> planned migrations and CDN changes — update the range list through the same change process as the DNS records themselves. <strong>Tuning:</strong> keep the domain list in a lookup table, and raise the answer list from passive DNS history so new attacker networks never pass by default.</p>
+        </div>
+
+        <div class="card">
+          <h3>SIG-002 · NXDOMAIN flood or DGA-like names from one client (TH-03, TH-04)</h3>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>sigma_t1584_002_nxdomain_dga.yml</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-yaml">title: High NXDOMAIN Rate or DGA-like Domains from One Client
+id: a687cd4b-426d-43ef-8ece-d250d4a78ad2
+status: stable
+description: Detects a single client producing an unusual number of NXDOMAIN answers or long random-looking domain labels. Fast-changing domains point to C2 or tunneling, and a hijacked resolver can also push this noise to cover a poisoning event.
+references:
+  - https://attack.mitre.org/techniques/T1584/002/
+author: Detection Engineering Team
+date: 2026-10-19
+logsource:
+  category: dns
+  product: zeek
+detection:
+  selection_nxdomain:
+    rcode_name: 'NXDOMAIN'
+  selection_random:
+    query|re: '(?i)[a-z0-9]{28,}\.(top|xyz|club|online|site|com)'
+  condition: (selection_nxdomain or selection_random) | count(query) by id.orig_h > 100
+fields:
+  - id.orig_h
+  - query
+  - rcode_name
+falsepositives:
+  - A misconfigured application that retries dead names in a tight loop
+  - Update checks for discontinued products or decommissioned partners
+level: medium
+tags:
+  - attack.t1584.002
+  - attack.t1568.002</code></pre>
+          </figure>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>search_spl</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-spl">index=network sourcetype=zeek:dns (rcode_name=NXDOMAIN OR match(query,"(?i)[a-z0-9]{28,}\.(top|xyz|club|online|site|com)"))
+| eval label_len=len(query)
+| stats count as event_count dc(query) as unique_queries max(label_len) as max_label by id.orig_h
+| where event_count &gt; 100 OR max_label &gt; 28
+| sort - event_count</code></pre>
+          </figure>
+          <p><strong>Mapping note:</strong> Sigma's aggregation counts matching events per client (<code>id.orig_h</code>); the SPL mirrors it with <code>stats by</code> plus a threshold. <strong>False positives:</strong> buggy retry loops and monitoring agents. <strong>Tuning:</strong> baseline one normal week, set the count a little above the busiest benign client, and exclude the resolver's own health-check names.</p>
+        </div>
+        <div class="card">
+          <h3>SIG-003 · Zone transfer attempt or admin path to port 53 (TH-05)</h3>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>sigma_t1584_002_zone_transfer.yml</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-yaml">title: Unexpected TCP Connection to DNS Service from Non-Admin Source
+id: afba2684-66a8-4b40-9196-17193de1b101
+status: stable
+description: Detects TCP connections to the DNS service of the protected resolvers from sources outside the administration network. TCP port 53 traffic is uncommon for normal lookups and often means a zone transfer attempt or management access to the DNS server.
+references:
+  - https://attack.mitre.org/techniques/T1584/002/
+author: Detection Engineering Team
+date: 2026-10-19
+logsource:
+  category: network_connection
+  product: zeek
+detection:
+  selection_dest:
+    dest_ip:
+      - '10.20.53.10'
+      - '10.20.53.11'
+    dest_port: 53
+    network_transport: tcp
+  filter_admins:
+    src_ip|cidr:
+      - '10.8.0.0/24'
+  condition: selection_dest and not filter_admins
+fields:
+  - src_ip
+  - dest_ip
+  - dest_port
+  - network_transport
+falsepositives:
+  - Monitoring hosts that probe the DNS service with TCP health checks
+  - A secondary resolver inside an allowlist that was not updated yet
+level: high
+tags:
+  - attack.t1584.002
+  - attack.resource_development</code></pre>
+          </figure>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>search_spl</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-spl">index=network sourcetype=zeek:conn dest_port=53 transport=tcp dest_ip IN (10.20.53.10, 10.20.53.11)
+| where NOT cidrmatch("10.8.0.0/24",src_ip)
+| stats count values(dest_ip) as targets values(dest_port) as ports by src_ip
+| sort - count</code></pre>
+          </figure>
+          <p><strong>Mapping note:</strong> the logsource is Zeek conn.log (network connections); normal UDP lookups never match because the rule requires <code>network_transport: tcp</code>. <strong>False positives:</strong> monitoring probes and forgotten secondary resolvers — add them to the admin CIDR list. <strong>Tuning:</strong> pair this with the DNS server's own security log; an allowed transfer from a rogue source is worse than a denied one, so alert on <em>successful</em> transfers from outside the secondary list as critical.</p>
+        </div>
+
+        <div class="card">
+          <h3>SIG-004 · Client bypassing the internal resolver (TH-02 follow-up)</h3>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>sigma_t1584_002_resolver_bypass.yml</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-yaml">title: Client Attempting DNS Egress to External Resolver
+id: c61ecccf-f1af-42e4-a920-2f377338e226
+status: stable
+description: Detects endpoint clients trying to send DNS traffic to destinations outside the internal resolver range. A client that bypasses the internal resolver escapes answer monitoring, and malware commonly switches resolvers after a poisoning event is fixed.
+references:
+  - https://attack.mitre.org/techniques/T1584/002/
+author: Detection Engineering Team
+date: 2026-10-19
+logsource:
+  category: firewall
+detection:
+  selection_dns:
+    dst_port: 53
+  filter_internal:
+    dst_ip|cidr:
+      - '10.0.0.0/8'
+  condition: selection_dns and not filter_internal | count() by src_ip > 20
+fields:
+  - src_ip
+  - dst_ip
+  - dst_port
+  - action
+falsepositives:
+  - Corporate devices that legitimately use a cloud DNS service by policy
+  - Guest or BYOD network segments without the internal resolver list
+level: medium
+tags:
+  - attack.t1584.002
+  - attack.resource_development</code></pre>
+          </figure>
+          <figure class="codeblock">
+            <figcaption class="codeblock-head"><span>search_spl</span><button class="copybtn" type="button">Copy</button></figcaption>
+            <pre><code class="lang-spl">index=firewall sourcetype=firewall:* dest_port=53
+| where NOT cidrmatch("10.0.0.0/8",dst_ip)
+| stats count as attempts values(dst_ip) as external_resolvers by src_ip
+| where attempts &gt; 20
+| sort - attempts</code></pre>
+          </figure>
+          <p><strong>Mapping note:</strong> the logsource is the perimeter firewall; the count threshold keeps one-off bursts quiet and surfaces repeat offenders. <strong>False positives:</strong> devices with a policy exception — keep the exception list next to the rule. <strong>Tuning:</strong> also alert on <em>denied</em> attempts separately, because a deny followed by silence often means malware moved on to DoH; combine with proxy logs for that case.</p>
+        </div>
+      </section>
+
+      <!-- ================= 6. REAL-WORLD CASE STUDY ================= -->
+            <section id="case-study" class="section">
+        <div class="sec-head"><span class="sec-num">6</span><h2>Real-world case study — Sea Turtle (2019–2021)</h2></div>
+        <p class="sec-intro">Sea Turtle is the name Cisco Talos gave a group that ran DNS hijacking at registrar scale against government and infrastructure organizations. ATT&amp;CK's official procedure for T1584.002 is exactly what Talos described: Sea Turtle "modified Name Server (NS) items to refer to Sea Turtle-controlled DNS servers to provide responses for all DNS lookups." Talos reported roughly 40 affected organizations across about a dozen countries — national security agencies, ministries, energy organizations, and internet providers.</p>
+
+        <div class="card">
+          <h3>What happened, step by step</h3>
+          <p>The attackers did not hack the victims' servers. They hacked the <em>path</em>: registrar and DNS-provider accounts. With those accounts they rewrote Name Server records, so every resolver on the internet asked the attacker's servers for answers. Valid TLS certificates then made the redirection invisible.</p>
+          <ul class="timeline">
+            <li><span class="tl-date">2016–2018 — quiet build-up</span><div class="tl-body"><p>Later reporting pushed Sea Turtle activity back to at least 2016. The group studied how target organizations ran their domains, registrars, and DNS providers.</p></div></li>
+            <li><span class="tl-date">Early 2019 — registrar access</span><div class="tl-body"><p>Phishing and stolen credentials gave the group control of accounts at registrars and DNS providers used by the targets.</p></div></li>
+            <li><span class="tl-date">Spring–Summer 2019 — NS rewrite</span><div class="tl-body"><p>Name Server records for victim domains were changed to Sea Turtle-controlled DNS servers. From that moment, every lookup for those names went to the attacker first — the official T1584.002 pattern.</p></div></li>
+            <li><span class="tl-date">Days later — valid certificates</span><div class="tl-body"><p>Because the attacker now answered the domain-control checks, certificate authorities issued valid TLS certificates for the hijacked names. Browsers showed padlocks, not warnings.</p></div></li>
+            <li><span class="tl-date">Following weeks — silent interception</span><div class="tl-body"><p>Web and mail traffic was copied on the way through. Users "logged in normally" to perfect copies; the group harvested credentials and session cookies. The goal was intelligence collection, not money, and most victims noticed nothing.</p></div></li>
+            <li><span class="tl-date">October 2019 — disclosure</span><div class="tl-body"><p>Talos published the "Sea Turtle" report. CISA later released a malware analysis report (April 2020) covering the group's tooling.</p></div></li>
+            <li><span class="tl-date">2020–2021 — return</span><div class="tl-body"><p>Researchers documented renewed activity ("Teal Kurma", PwC, July 2021) using similar registrar-first tradecraft against a similar audience.</p></div></li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>The attack chain</h3>
+          <ol class="chain">
+            <li class="chain-step">Registrar / DNS provider account takeover</li>
+            <li>NS records rewritten to attacker DNS (T1584.002)</li>
+            <li>Domain-control checks answered by attacker DNS</li>
+            <li>Valid TLS certificates issued for hijacked names</li>
+            <li>Web and mail traffic intercepted with valid encryption (T1557)</li>
+            <li>Credentials and session cookies collected</li>
+          </ol>
+          <p>This is a full <strong>adversary-in-the-middle</strong> supply chain, and every stage lives in Resource Development except the final collection. That is why a change at one registrar account can silently affect an entire organization.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Detection point</h3>
+            <p>The highest-value signals were all <em>external</em> to the victim: an NS change at the registrar, a new certificate for a corporate domain in Certificate Transparency, and a certificate issued by an unusual authority. Inside the network, TLS inspection or pinning catches a proxy that holds a cert the client never saw before, and DNSSEC-aware resolvers reject the false answers. The victims who detected Sea Turtle fastest were the ones watching <em>their own name's</em> certificate and NS history, not just their own networks.</p>
+          </div>
+          <div class="card">
+            <h3>Response arc</h3>
+            <ul>
+              <li><strong>Containment:</strong> restore the correct NS records through the registrar, lock the compromised registrar accounts, and revoke the fraudulent certificates through the issuing CAs.</li>
+              <li><strong>Eradication:</strong> audit every DNS record for hidden edits (MX, TXT, subdomains), remove attacker mail forwarding, reset all registrar and DNS-provider credentials, and invalidate sessions that may have been captured.</li>
+              <li><strong>Recovery:</strong> add registry lock and CAA records, enforce hardware MFA on registrar accounts, consider DNSSEC, and re-issue certificates with tighter validation; users re-authenticate everywhere because session cookies must be assumed stolen.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Impact and communication</h3>
+            <p>Impact was espionage-grade: credentials, mail content, and session access across government and critical-infrastructure organizations — with no malware on any victim server and no downtime to alert anyone. Affected organizations worked through national CERTs and the CAs to unwind the hijack quietly. Communication was deliberately low-key; the priority was restoring the true DNS path before attackers re-registered the access they had lost.</p>
+          </div>
+          <div class="card">
+            <h3>Lessons learned</h3>
+            <ul>
+              <li><strong>Your DNS is a supply chain.</strong> The registrar, the DNS provider, and the CA are all part of your attack surface.</li>
+              <li><strong>Watch answers and certificates, not only queries.</strong> Monitors on NS changes, CT logs, and issuing CAs catch this class early.</li>
+              <li><strong>Registry lock and CAA records are cheap insurance.</strong> They block exactly the two moves Sea Turtle relied on.</li>
+              <li><strong>Assume sessions are stolen after any on-path event.</strong> Short session lifetimes and phishing-resistant MFA limit the reuse of harvested cookies.</li>
+              <li><strong>Certificate warnings matter, but padlocks can lie.</strong> A valid certificate on a hijacked path is worse than an obvious warning — monitor issuance, not just browser signals.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Who responded — team roles</h3>
+          <div class="tablewrap"><table>
+            <thead><tr><th>Role</th><th>What they did in this incident</th></tr></thead>
+            <tbody>
+              <tr><td>Incident Commander (IC)</td><td>Sequenced NS restoration, certificate revocation, and credential resets so nothing was left half-fixed</td></tr>
+              <tr><td>SOC analysts</td><td>Hunted for captured sessions and unusual certificate warnings across the estate</td></tr>
+              <tr><td>DNS and infrastructure owners</td><td>Restored records, audited every zone for hidden edits, and re-locked the registrar accounts</td></tr>
+              <tr><td>PKI / CA liaison</td><td>Revoked fraudulent certificates and tightened issuance with CAA records</td></tr>
+              <tr><td>Mail administrators</td><td>Removed attacker forwarding rules and re-secured mail sessions</td></tr>
+              <tr><td>Legal and communications</td><td>Coordinated with the national CERT, the registrar, and the CAs; briefed leadership</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+
+        <div class="callout note"><span class="callout-label">Sources.</span> Cisco Talos, "Sea Turtle: Ongoing DNS hijacking campaigns" (October 2019); CISA malware analysis report MAR-10394614-1.v1 (April 2020); PwC "Teal Kurma" (July 2021); ATT&amp;CK group G1041 procedures. Details are simplified for a broad audience.</div>
+      </section>
+
+      <!-- ================= 7. MITIGATION AND DEFENSE ================= -->
+      <section id="mitigation" class="section">
+        <div class="sec-head"><span class="sec-num">7</span><h2>Mitigation and defense</h2></div>
+        <p class="sec-intro">ATT&amp;CK lists only M1056 Pre-compromise for this technique, which honestly says: you cannot fully prevent DNS hijacking from inside your network. What you can do is make the takeover hard, make the false answers visible, and limit what a hijacked resolver can do.</p>
+
+        <h4>Enterprise controls by layer</h4>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Registry, registrar &amp; admin path</h3>
+            <ul>
+              <li>Registry lock on brand domains, and hardware MFA on the registrar and hosted-DNS accounts that manage them.</li>
+              <li>Restrict DNS administration: management interfaces only from a VPN or bastion, never from the internet.</li>
+              <li>Named owners for every DNS server and zone; every change needs a ticket and dual approval.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Resolver hardening</h3>
+            <ul>
+              <li>Patch resolvers (BIND, Unbound, Windows DNS, appliances) on a fixed clock — they are internet-facing services too.</li>
+              <li>Enable DNSSEC validation where possible, and sign your own authoritative zones.</li>
+              <li>Disable recursion toward the internet and refuse AXFR to everyone except listed secondaries.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Trusted resolution paths</h3>
+            <ul>
+              <li>Point clients at known internal resolvers, and use DoT/DoH to <em>trusted</em> upstream resolvers so answers are authenticated in transit.</li>
+              <li>Run a secondary DoH resolver and cross-check answers for critical domains on a schedule.</li>
+              <li>Keep a known-good copy of your zones so records can be restored in minutes.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Network &amp; monitoring controls</h3>
+            <ul>
+              <li>Egress control: allow outbound port 53 only to your resolvers (SIG-004), which also kills DNS tunnels to arbitrary servers.</li>
+              <li>Ship DNS server audit logs, query logs, and Zeek dns.log into the SIEM; run the Section 5.5 rules.</li>
+              <li>Alert on zone serial changes, AXFR attempts, and certificate mismatch reports for brand domains.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Home and small office</h3>
+            <ul>
+              <li>Change the default password on your router — attackers have hijacked home routers just to change their DNS settings.</li>
+              <li>Review the router's DNS settings: set them to trusted resolvers (or "automatic" from a provider you trust) instead of unknown values.</li>
+              <li>Turn off remote administration of the router unless you truly need it, and enable firmware updates.</li>
+              <li>Never click through a certificate warning on a banking or wallet site. Close the tab and investigate.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Prioritized actions</h3>
+            <div class="tablewrap"><table>
+              <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Risk reduction</th></tr></thead>
+              <tbody>
+                <tr><td>Restrict DNS admin interfaces to VPN/bastion only</td><td><span class="sev low">Low</span></td><td>Network team</td><td><span class="sev high">High</span></td></tr>
+                <tr><td>Alert on zone/config changes without tickets</td><td><span class="sev low">Low</span></td><td>Detection team</td><td><span class="sev high">High</span></td></tr>
+                <tr><td>Restrict egress port 53 to internal resolvers</td><td>Medium</td><td>Network team</td><td><span class="sev high">High</span></td></tr>
+                <tr><td>Patch resolvers on a 14-day clock</td><td>Medium</td><td>IT operations</td><td><span class="sev high">High</span></td></tr>
+                <tr><td>Cross-check answers via secondary DoH resolver</td><td>Medium</td><td>Detection team</td><td><span class="sev high">High</span></td></tr>
+                <tr><td>Refuse AXFR except to listed secondaries</td><td><span class="sev low">Low</span></td><td>DNS admins</td><td><span class="sev medium">Medium</span></td></tr>
+                <tr><td>Enable DNSSEC validation on resolvers</td><td>Medium</td><td>DNS admins</td><td><span class="sev medium">Medium</span></td></tr>
+                <tr><td>Practiced "poisoned resolver" runbook</td><td>Medium</td><td>IR lead</td><td><span class="sev medium">Medium</span></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 8. COMMON MISTAKES AND BEST PRACTICES ================= -->
+      <section id="mistakes" class="section">
+        <div class="sec-head"><span class="sec-num">8</span><h2>Common mistakes and best practices</h2></div>
+        <p class="sec-intro">These twelve mistakes appear again and again in SOCs that miss DNS compromise. Each row gives the symptom you will notice first, the real root cause, the fix, and how to keep the problem from coming back.</p>
+
+        <div class="tablewrap"><table>
+          <thead><tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+          <tbody>
+            <tr><td>M1</td><td>No cross-resolver validation</td><td>Hijack found by users or partners, not by the SOC</td><td>Queries are monitored, but answers are never compared</td><td>Compare critical domains against a trusted DoH resolver on a schedule</td><td>Make answer comparison part of the daily detection checks</td></tr>
+            <tr><td>M2</td><td>Trusting cache blindly</td><td>False answer keeps working after the server is fixed</td><td>Nobody flushes caches or lowers TTLs during response</td><td>Flush resolver caches and shorten TTLs as a response step</td><td>Runbook includes cache handling for every DNS incident</td></tr>
+            <tr><td>M3</td><td>No DNS server audit logs</td><td>Zone change cannot be explained afterwards</td><td>DNS servers treated as "set and forget" appliances</td><td>Enable audit/query logging and forward it to the SIEM</td><td>Log-source inventory includes every resolver and authoritative server</td></tr>
+            <tr><td>M4</td><td>Alert fatigue from NXDOMAIN noise</td><td>Analysts mute SIG-002-style alerts; real tunneling hides inside</td><td>Thresholds set without a baseline</td><td>Baseline a normal week, tune thresholds, group duplicates</td><td>Every rule has an owner and a monthly tuning review</td></tr>
+            <tr><td>M5</td><td>Missing egress port 53 control</td><td>Clients quietly query outside resolvers</td><td>Nobody owns the egress policy for DNS</td><td>Allow outbound 53 only to internal resolvers (SIG-004)</td><td>Firewall policy review includes a DNS egress check</td></tr>
+            <tr><td>M6</td><td>Unpatched resolver</td><td>Known CVE sits open for months on a critical service</td><td>DNS patching is nobody's sprint work</td><td>Add resolvers to the standard patch cadence</td><td>Vulnerability scans flag DNS servers as internet-facing assets</td></tr>
+            <tr><td>M7</td><td>No ownership of DNS operations</td><td>Nobody knows which team can restore the zone</td><td>DNS falls between network and platform teams</td><td>Name one owner per resolver, zone, and provider account</td><td>Asset inventory with owner field, reviewed quarterly</td></tr>
+            <tr><td>M8</td><td>Ignoring certificate warnings</td><td>Users click through and get phished on the real domain name</td><td>Warnings are treated as everyday friction</td><td>Train users to stop; investigate the path instead of proceeding</td><td>Pinning plugins or HSTS on critical internal domains</td></tr>
+            <tr><td>M9</td><td>Blocking legit domains broadly</td><td>Response to a hijack breaks a business partner's site</td><td>Reputation data is stale or misread</td><td>Verify current ownership before blocking; prefer the fake IP, not the real domain</td><td>Documented "block review" step in the runbook</td></tr>
+            <tr><td>M10</td><td>No DNSSEC anywhere</td><td>False answers validate without any cryptographic check</td><td>Seen as complex; never scheduled</td><td>Enable validation on resolvers first, then sign owned zones</td><td>DNSSEC status tracked per domain in the asset inventory</td></tr>
+            <tr><td>M11</td><td>Treating DNS as someone else's problem</td><td>ISP or provider hijack hits your users unnoticed</td><td>Monitoring scope stops at the firewall</td><td>Watch the answers your users actually receive, wherever they come from</td><td>Threat model includes upstream resolvers and providers</td></tr>
+            <tr><td>M12</td><td>Never testing detections</td><td>Rules fail silently after a log format change</td><td>No validation pipeline for DNS rules</td><td>Replay test events (like the samples in 5.4) monthly</td><td>CI job runs the Sigma rules against sample logs</td></tr>
+          </tbody>
+        </table></div>
+
+        <div class="grid-3">
+          <div class="card tight">
+            <h3>Daily habits</h3>
+            <ul>
+              <li>Check overnight zone-change and AXFR alerts.</li>
+              <li>Spot-check a few brand domains against a DoH resolver.</li>
+              <li>Confirm DNS log sources are arriving in the SIEM.</li>
+            </ul>
+          </div>
+          <div class="card tight">
+            <h3>Weekly habits</h3>
+            <ul>
+              <li>Review certificate mismatch reports for brand domains.</li>
+              <li>Tune the noisiest DNS rule of the week.</li>
+              <li>Hunt: per-client NXDOMAIN and long-label statistics.</li>
+            </ul>
+          </div>
+          <div class="card tight">
+            <h3>Monthly habits</h3>
+            <ul>
+              <li>Verify DNS admin access lists and MFA on provider accounts.</li>
+              <li>Replay detection tests against sample logs (M12).</li>
+              <li>Update DNS threat intel indicators and confidence levels.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 9. CHEAT SHEET AND QUICK REFERENCE ================= -->
+      <section id="cheat-sheet" class="section">
+        <div class="sec-head"><span class="sec-num">9</span><h2>Cheat sheet and quick reference</h2></div>
+        <p class="sec-intro">One screen for the 03:00 analyst: key facts, the alerts that matter most, a response checklist, and the official links.</p>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Key facts</h3>
+            <dl class="kv">
+              <div><dt>ID</dt><dd>T1584.002 · DNS Server (parent T1584)</dd></div>
+              <div><dt>Tactic</dt><dd>Resource Development (PRE)</dd></div>
+              <div><dt>Core idea</dt><dd>Hijack the server that answers, and every client believes the lie</dd></div>
+              <div><dt>Best early signals</dt><dd>Answer outside expected ranges · zone change without ticket · AXFR attempt · cert mismatch</dd></div>
+              <div><dt>MITRE mitigation</dt><dd>M1056 Pre-compromise</dd></div>
+            </dl>
+          </div>
+          <div class="card">
+            <h3>Top detections</h3>
+            <div class="tablewrap"><table>
+              <thead><tr><th>Alert on</th><th>Source</th><th>Rule</th></tr></thead>
+              <tbody>
+                <tr><td>Brand domain answers outside expected ranges</td><td>Zeek dns.log</td><td>SIG-001 · critical</td></tr>
+                <tr><td>NXDOMAIN flood or DGA-like names per client</td><td>Zeek dns.log</td><td>SIG-002 · medium</td></tr>
+                <tr><td>TCP 53 to resolvers from non-admin source</td><td>Zeek conn.log</td><td>SIG-003 · high</td></tr>
+                <tr><td>Clients pushing DNS to external resolvers</td><td>Firewall</td><td>SIG-004 · medium</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Response checklist — suspected DNS server compromise</h3>
+          <ul class="checklist">
+            <li>Confirm with two resolvers: your own and an independent DoH service; record both answers with TTLs.</li>
+            <li>Freeze evidence: Zeek records, zone-change logs, admin-login logs, screenshots of the fake site.</li>
+            <li>Identify the path — your resolver poisoned, your authoritative server, or an upstream provider.</li>
+            <li>If your server: block attacker ranges, restore records from the known-good copy, rotate admin credentials, flush caches.</li>
+            <li>If upstream: notify the owner and provider, and pin or block the false address for your users meanwhile.</li>
+            <li>Scope: search 90 days of logs for the false IP and the affected domains; look for credential reuse from the fake site.</li>
+            <li>Warn users: certificate warnings on the brand domain are real until this case closes.</li>
+            <li>File the incident record with the timeline and evidence links.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Official links and related techniques</h3>
+          <div class="grid-2">
+            <div>
+              <h4>This technique and its siblings</h4>
+              <ul>
+                <li><a href="https://attack.mitre.org/techniques/T1584/002/">T1584.002 · DNS Server (this page)</a></li>
+                <li><a href="https://attack.mitre.org/techniques/T1584/">T1584 · Compromise Infrastructure (parent)</a></li>
+                <li><a href="https://attack.mitre.org/techniques/T1584/001/">T1584.001 · Domains</a></li>
+                <li><a href="https://attack.mitre.org/techniques/T1584/003/">T1584.003 · Virtual Private Server</a></li>
+                <li><a href="https://attack.mitre.org/techniques/T1584/004/">T1584.004 · Server</a></li>
+                <li><a href="https://attack.mitre.org/techniques/T1584/005/">T1584.005 · Botnet</a></li>
+                <li><a href="https://attack.mitre.org/techniques/T1584/006/">T1584.006 · Web Services</a></li>
+                <li><a href="https://attack.mitre.org/techniques/T1584/007/">T1584.007 · Serverless</a></li>
+                <li><a href="https://attack.mitre.org/techniques/T1584/008/">T1584.008 · Network Devices</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4>Related ATT&amp;CK techniques</h4>
+              <ul>
+                <li><a href="https://attack.mitre.org/techniques/T1071/004/">T1071.004 · Application Layer Protocol: DNS</a> (C2 over hijacked answers)</li>
+                <li><a href="https://attack.mitre.org/techniques/T1568/">T1568 · Dynamic Resolution</a> (fast-changing answers)</li>
+                <li><a href="https://attack.mitre.org/techniques/T1557/">T1557 · Adversary-in-the-Middle</a> (harvesting at the fake site)</li>
+                <li><a href="https://attack.mitre.org/techniques/T1583/">T1583 · Acquire Infrastructure</a> (buying instead of stealing)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /content -->
+  </div><!-- /layout -->
+</main>
+
+<button id="tocBtn" class="floating" type="button" aria-haspopup="dialog" aria-controls="tocOverlay">Contents</button>
+<button id="backToTop" class="floating" type="button" aria-label="Back to top">↑</button>
+
+<div id="tocOverlay" class="overlay" role="dialog" aria-modal="true" aria-label="Table of contents" hidden>
+  <div class="overlay-panel">
+    <div class="overlay-head">
+      <h2>Contents</h2>
+      <button id="tocClose" class="overlay-close" type="button" aria-label="Close table of contents">✕</button>
+    </div>
+    <div id="tocOverlayNav"><ul class="toc-list">
+  <li><a class="toc-link" href="#overview"><span class="toc-num">1</span><span class="toc-txt">Overview</span></a>
+  </li>
+  <li><a class="toc-link" href="#simulation"><span class="toc-num">2</span><span class="toc-txt">Animated simulation</span></a>
+  </li>
+  <li><a class="toc-link" href="#red-team"><span class="toc-num">3</span><span class="toc-txt">Red team / hacker perspective</span></a>
+  </li>
+  <li><a class="toc-link" href="#blue-team"><span class="toc-num">4</span><span class="toc-txt">Blue team / SOC perspective</span></a>
+  </li>
+  <li><a class="toc-link" href="#detection"><span class="toc-num">5</span><span class="toc-txt">Detection engineering deep dive</span></a>
+    <ul class="toc-sub">
+      <li><a class="toc-link toc-sublink" href="#detection-regulation"><span class="toc-num">5.1</span><span class="toc-txt">Regulation mapping</span></a></li>
+      <li><a class="toc-link toc-sublink" href="#detection-threatintel"><span class="toc-num">5.2</span><span class="toc-txt">Threat intelligence</span></a></li>
+      <li><a class="toc-link toc-sublink" href="#detection-ranking"><span class="toc-num">5.3</span><span class="toc-txt">Threats ranking and categorization</span></a></li>
+      <li><a class="toc-link toc-sublink" href="#detection-logs"><span class="toc-num">5.4</span><span class="toc-txt">Logs and patterns</span></a></li>
+      <li><a class="toc-link toc-sublink" href="#detection-sigma"><span class="toc-num">5.5</span><span class="toc-txt">Sigma rules and Splunk SPL</span></a></li>
+    </ul>
+  </li>
+  <li><a class="toc-link" href="#case-study"><span class="toc-num">6</span><span class="toc-txt">Real-world case study — Sea Turtle (2019–2021)</span></a>
+  </li>
+  <li><a class="toc-link" href="#mitigation"><span class="toc-num">7</span><span class="toc-txt">Mitigation and defense</span></a>
+  </li>
+  <li><a class="toc-link" href="#mistakes"><span class="toc-num">8</span><span class="toc-txt">Common mistakes and best practices</span></a>
+  </li>
+  <li><a class="toc-link" href="#cheat-sheet"><span class="toc-num">9</span><span class="toc-txt">Cheat sheet and quick reference</span></a>
+  </li>
+</ul></div>
+  </div>
+</div>
+<script>
+(function(){
+'use strict';
+var d=document, root=d.documentElement;
+function qs(s,c){return (c||d).querySelector(s)}
+function qsa(s,c){return Array.prototype.slice.call((c||d).querySelectorAll(s))}
+
+/* ---------- Theme ---------- */
+var THEME_KEY='atk-theme';
+var themeBtn=qs('#themeToggle');
+function applyTheme(t,save){
+  root.setAttribute('data-theme',t);
+  if(save){try{localStorage.setItem(THEME_KEY,t)}catch(e){}}
+  if(themeBtn){themeBtn.textContent = t==='dark' ? 'Light theme' : 'Dark theme';}
+  d.dispatchEvent(new CustomEvent('atk-themechange'));
+}
+if(themeBtn){
+  themeBtn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme')==='dark'?'light':'dark';
+    applyTheme(cur,true);
+  });
+  themeBtn.textContent = root.getAttribute('data-theme')==='dark' ? 'Light theme' : 'Dark theme';
+}
+
+/* ---------- Reading progress + back to top ---------- */
+var bar=qs('#progressBar'), topBtn=qs('#backToTop');
+var reduceMotion=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function onScroll(){
+  var h=d.documentElement;
+  var max=h.scrollHeight-window.innerHeight;
+  if(bar){bar.style.width=(max>0?(h.scrollTop/max*100):0).toFixed(2)+'%';}
+  if(topBtn){topBtn.classList.toggle('show',h.scrollTop>600);}
+}
+window.addEventListener('scroll',onScroll,{passive:true});
+onScroll();
+if(topBtn){
+  topBtn.addEventListener('click',function(){
+    window.scrollTo({top:0,behavior:reduceMotion?'auto':'smooth'});
+  });
+}
+
+/* ---------- Table of contents (generated from real headings) ---------- */
+function buildToc(container){
+  if(!container){return;}
+  container.innerHTML='';
+  var sections=qsa('.content > section.section');
+  var ul=d.createElement('ul');ul.className='toc-list';
+  sections.forEach(function(sec){
+    var h2=sec.querySelector('h2'); if(!h2){return;}
+    var numEl=sec.querySelector('.sec-num');
+    var li=d.createElement('li');
+    var a=d.createElement('a');
+    a.className='toc-link';a.href='#'+sec.id;
+    a.innerHTML='<span class="toc-num">'+(numEl?numEl.textContent.trim():'')+'</span><span class="toc-txt">'+h2.textContent.trim()+'</span>';
+    li.appendChild(a);
+    var subs=qsa('h3.subsec[id]',sec);
+    if(subs.length){
+      var sub=d.createElement('ul');sub.className='toc-sub';
+      subs.forEach(function(h3){
+        var li2=d.createElement('li');
+        var a2=d.createElement('a');
+        a2.className='toc-link toc-sublink';a2.href='#'+h3.id;
+        a2.innerHTML='<span class="toc-num">'+(h3.getAttribute('data-num')||'')+'</span><span class="toc-txt">'+h3.textContent.replace(/^\s*\d+(\.\d+)?\s*·\s*/,'').trim()+'</span>';
+        li2.appendChild(a2);sub.appendChild(li2);
+      });
+      li.appendChild(sub);
+    }
+    ul.appendChild(li);
+  });
+  container.appendChild(ul);
+}
+buildToc(qs('#tocNav'));
+buildToc(qs('#tocOverlayNav'));
+
+/* ---------- Active TOC highlighting ---------- */
+var targets=qsa('.content > section.section[id], .content h3.subsec[id]');
+var currentId=targets.length?targets[0].id:null;
+function markActive(){
+  qsa('.toc-link').forEach(function(a){
+    var on=a.getAttribute('href')==='#'+currentId;
+    a.classList.toggle('active',on);
+    if(on){a.setAttribute('aria-current','true');}else{a.removeAttribute('aria-current');}
+  });
+}
+if('IntersectionObserver' in window && targets.length){
+  var vis={};
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){vis[en.target.id]=en.isIntersecting?en.intersectionRatio:0;});
+    var best=null,bestR=0;
+    targets.forEach(function(t){var r=vis[t.id]||0;if(r>bestR){bestR=r;best=t.id;}});
+    if(best&&bestR>0){currentId=best;markActive();}
+  },{threshold:[0,0.15,0.4,0.75],rootMargin:'-12% 0px -35% 0px'});
+  targets.forEach(function(t){io.observe(t);});
+}
+markActive();
+d.addEventListener('click',function(e){
+  var a=e.target.closest?e.target.closest('.toc-link'):null;
+  if(a&&a.hash&&qs(a.hash)){currentId=a.hash.slice(1);markActive();}
+});
+
+/* ---------- Mobile contents overlay ---------- */
+var overlay=qs('#tocOverlay'), tocBtn=qs('#tocBtn'), tocClose=qs('#tocClose');
+function openOverlay(){if(!overlay){return;}overlay.hidden=false;document.body.style.overflow='hidden';if(tocClose){tocClose.focus();}}
+function closeOverlay(){if(!overlay){return;}overlay.hidden=true;document.body.style.overflow='';if(tocBtn){tocBtn.focus();}}
+if(tocBtn){tocBtn.addEventListener('click',openOverlay);}
+if(tocClose){tocClose.addEventListener('click',closeOverlay);}
+if(overlay){
+  overlay.addEventListener('click',function(e){if(e.target===overlay){closeOverlay();}});
+  var ovNav=qs('#tocOverlayNav');
+  if(ovNav){ovNav.addEventListener('click',function(e){var a=e.target.closest?e.target.closest('.toc-link'):null;if(a){closeOverlay();}});}
+  d.addEventListener('keydown',function(e){if(e.key==='Escape'&&!overlay.hidden){closeOverlay();}});
+}
+
+/* ---------- Copy buttons ---------- */
+qsa('.copybtn').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    var fig=btn.closest('.codeblock');
+    var pre=fig?fig.querySelector('pre'):null;
+    if(!pre){return;}
+    var txt=pre.innerText;
+    function done(ok){
+      btn.textContent=ok?'Copied':'Press Ctrl+C';
+      if(ok){setTimeout(function(){btn.textContent='Copy';},1600);}
+    }
+    function fallback(){
+      var ta=d.createElement('textarea');
+      ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';
+      d.body.appendChild(ta);ta.select();
+      var ok=false;try{ok=d.execCommand('copy');}catch(e){}
+      d.body.removeChild(ta);done(ok);
+    }
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){done(true);},fallback);
+    }else{fallback();}
+  });
+});
+/* ---------- Canvas simulation ---------- */
+var SIM_CONFIG={
+  nodes:[
+    {id:'atk',x:0.09,y:0.30,label:'Attacker',kind:'attacker',tip:'The threat actor workstation. From here the attacker scans for weak DNS servers and controls the fake site.'},
+    {id:'dns',x:0.42,y:0.70,label:'Compromised DNS server',kind:'infra',tip:'A DNS server that answers name lookups for its clients. After the takeover it gives false answers to everyone who trusts it.'},
+    {id:'dom',x:0.40,y:0.14,label:'Victim brand domain',kind:'service',tip:'The domain of a bank or vendor. The attacker rewrites its records so it points to a fake copy of the real site.'},
+    {id:'vic',x:0.80,y:0.40,label:'Employee laptop',kind:'victim',tip:'A user at the target organization. The laptop trusts the resolver and follows its answers without question.'},
+    {id:'soc',x:0.80,y:0.84,label:'SOC',kind:'defender',tip:'The security operations center. It cross-checks DNS answers with a second resolver and can restore the records.'}
+  ],
+  steps:[
+    {t:'Find a weak DNS server',cap:'The attacker scans the internet for a DNS server with an exposed admin panel or an old, unpatched version. This server will become the attacker\u2019s silent redirector.',
+     hint:'Most DNS admin interfaces should never be reachable from the internet. Shodan-style scans find them in minutes, so inventory and close your own first.',
+     flows:[{from:'atk',to:'dns',label:'port scan',color:'danger'}],fx:[],ev:['Internet-wide scan for port 53 and admin panels','New connections from an unknown network']},
+    {t:'Abuse weak admin credentials',cap:'A default or reused password, or an old bug, gives the attacker control of the DNS server. It still serves normal answers, so nobody notices.',
+     hint:'Watch for logins to DNS management from new countries or at unusual hours, and alert on failed-then-successful login bursts.',
+     flows:[{from:'atk',to:'dns',label:'admin login',color:'danger'}],fx:[{id:'dns',state:'compromised'}],ev:['Admin login from a new device or country','DNS server config backup downloaded']},
+    {t:'Rewrite the zone record',cap:'The attacker edits the zone file of the victim brand domain and changes the A record from the real web server to an attacker-controlled IP address.',
+     hint:'Every change to production zone files should come from a change ticket. A zone serial number bump with no ticket is a red alert.',
+     flows:[{from:'atk',to:'dns',label:'zone update',color:'danger'},{from:'dom',to:'dns',label:'record hosted here',color:'violet'}],fx:[{id:'dns',state:'compromised'},{id:'dom',state:'active'}],ev:['Zone serial number increases without a ticket','A record now points outside the owner ASN']},
+    {t:'The laptop asks for the domain',cap:'An employee opens the bank or vendor website. The laptop sends a normal DNS question: what is the IP address of this domain?',
+     hint:'This step looks completely normal. A single query cannot reveal the attack, so detection must compare the answer, not the question.',
+     flows:[{from:'vic',to:'dns',label:'DNS query',color:'accent'}],fx:[{id:'vic',state:'active'},{id:'dns',state:'compromised'},{id:'dom',state:'active'}],ev:['Standard A query for the brand domain','Query arrives over the corporate resolver']},
+    {t:'A false answer comes back',cap:'The compromised DNS server answers with the attacker\u2019s IP address instead of the real one. The laptop accepts it because it trusts the server.',
+     hint:'Compare answers from your resolver with a second, trusted resolver (for example a DoH service). Different answers for the same domain are the core signal.',
+     flows:[{from:'dns',to:'vic',label:'spoofed answer',color:'danger'}],fx:[{id:'dns',state:'compromised'},{id:'dom',state:'active'}],ev:['Answer differs from public resolvers','Answer IP sits in an unexpected network']},
+    {t:'The user lands on the fake site',cap:'The browser connects to the attacker\u2019s copy of the site. A wrong certificate warning may appear, or the page quietly asks for login details.',
+     hint:'Certificate mismatch reports and user reports are fast signals. Browser plugins that pin known certificates catch this too.',
+     flows:[{from:'vic',to:'dom',label:'HTTP visit',color:'danger'}],fx:[{id:'vic',state:'active'},{id:'dom',state:'active'}],ev:['Certificate name mismatch warning','Credentials submitted to an unexpected server']},
+    {t:'Harvest and continue',cap:'The attacker collects the submitted passwords, reads any captured traffic, and can now log in as the victim or move deeper into the target.',
+     hint:'Impossible-travel logins right after a DNS anomaly link the two events. Phishing-resistant MFA turns stolen passwords into a dead end.',
+     flows:[{from:'dom',to:'atk',label:'stolen data',color:'danger'}],fx:[{id:'dom',state:'active'}],ev:['Login from an impossible location','Fake site uploads credentials to the attacker']},
+    {t:'SOC detects and restores',cap:'The SOC cross-checks the answer through a secondary DoH resolver, blocks the attacker address, restores the correct records, and starts the response plan.',
+     hint:'Response needs preparation: admin access to the DNS server or its provider, a restore runbook, and pre-approved blocking steps.',
+     flows:[{from:'soc',to:'dns',label:'restore records',color:'success'},{from:'soc',to:'dom',label:'block fake site',color:'success'}],fx:[{id:'dns',state:'blocked'},{id:'dom',state:'blocked'}],ev:['Zone records restored from backup','Attacker IP blocked at proxy and firewall']}
+  ]
+};
+
+(function initSim(){
+  var wrap=qs('#simWrap'), canvas=qs('#simCanvas');
+  if(!wrap||!canvas||!canvas.getContext){return;}
+  var cfg=SIM_CONFIG;
+  var ctx=canvas.getContext('2d');
+  var capEl=qs('#simCaption'), titleEl=qs('#simTitle'), stepEl=qs('#simStepLabel');
+  var hintEl=qs('#simHint'), evEl=qs('#simEvidence'), chipsEl=qs('#simSteps');
+  var playBtn=qs('#simPlay'), restartBtn=qs('#simRestart'), speedSel=qs('#simSpeed');
+  var tipEl=qs('#simTooltip');
+
+  var dpr=Math.max(1,window.devicePixelRatio||1);
+  var W=0,H=0;
+  var step=0, playing=false, speed=1, stepClock=0, lastTs=0, spawnClock=0;
+  var packets=[];
+  var states={};
+  var hover=null;
+  var STEP_MS=6200, PACKET_MS=1500, SPAWN_MS=950;
+
+  cfg.nodes.forEach(function(n){states[n.id]='';});
+
+  function colors(){
+    var s=getComputedStyle(root);
+    return {
+      accent:(s.getPropertyValue('--accent')||'#4f8cff').trim(),
+      accent2:(s.getPropertyValue('--accent-2')||'#22d3ee').trim(),
+      danger:(s.getPropertyValue('--danger')||'#f87171').trim(),
+      success:(s.getPropertyValue('--success')||'#34d399').trim(),
+      warning:(s.getPropertyValue('--warning')||'#fbbf24').trim(),
+      violet:(s.getPropertyValue('--violet')||'#a78bfa').trim(),
+      text:(s.getPropertyValue('--text')||'#e7edf8').trim(),
+      muted:(s.getPropertyValue('--muted')||'#9aa8c0').trim(),
+      border:(s.getPropertyValue('--border-strong')||'#2f4066').trim(),
+      surface:(s.getPropertyValue('--surface')||'#121a2e').trim(),
+      elevated:(s.getPropertyValue('--elevated')||'#1a2542').trim(),
+      bg:(s.getPropertyValue('--bg')||'#0b0f1a').trim()
+    };
+  }
+  var C=colors();
+  d.addEventListener('atk-themechange',function(){C=colors();});
+
+  function resize(){
+    var r=wrap.getBoundingClientRect();
+    var w=Math.max(280,r.width);
+    var h=Math.max(320,Math.min(540,Math.round(w*0.58)));
+    canvas.style.height=h+'px';
+    canvas.width=Math.round(w*dpr);
+    canvas.height=Math.round(h*dpr);
+    W=w;H=h;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  if(window.ResizeObserver){new ResizeObserver(resize).observe(wrap);}else{window.addEventListener('resize',resize);}
+  resize();
+
+  function nodeById(id){for(var i=0;i<cfg.nodes.length;i++){if(cfg.nodes[i].id===id){return cfg.nodes[i];}}return null;}
+  function pos(n){return {x:n.x*W,y:n.y*H};}
+  function kindColor(k){
+    if(k==='attacker'){return C.danger;}
+    if(k==='service'){return C.violet;}
+    if(k==='victim'){return C.warning;}
+    if(k==='defender'){return C.success;}
+    return C.accent;
+  }
+  function flowColor(c){
+    if(c==='danger'){return C.danger;}
+    if(c==='success'){return C.success;}
+    if(c==='violet'){return C.violet;}
+    if(c==='accent2'){return C.accent2;}
+    return C.accent;
+  }
+  function curvePoints(a,b){
+    var bend=(a.x<b.x?1:-1)*Math.min(40,Math.abs(b.y-a.y)*0.25+16);
+    return {
+      p0:a,
+      p1:b,
+      cx:(a.x+b.x)/2,
+      cy:(a.y+b.y)/2-bend
+    };
+  }
+  function qPoint(cp,t){
+    var mt=1-t;
+    return {
+      x:mt*mt*cp.p0.x+2*mt*t*cp.cx+t*t*cp.p1.x,
+      y:mt*mt*cp.p0.y+2*mt*t*cp.cy+t*t*cp.p1.y
+    };
+  }
+  function roundedRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  function drawNode(n){
+    var p=pos(n);
+    var col=kindColor(n.kind);
+    var st=states[n.id]||'';
+    var w=112,h=40;
+    var isBox=(n.kind==='infra'||n.kind==='service');
+    ctx.save();
+    if(n===hover){ctx.shadowColor=col;ctx.shadowBlur=14;}
+    ctx.lineWidth=2;
+    ctx.strokeStyle=st==='compromised'?C.danger:(st==='blocked'?C.success:col);
+    if(st==='compromised'){ctx.setLineDash([6,4]);}
+    if(isBox){
+      ctx.fillStyle=C.elevated;
+      roundedRect(p.x-w/2,p.y-h/2,w,h,11);
+      ctx.fill();ctx.stroke();
+    }else{
+      ctx.beginPath();ctx.arc(p.x,p.y,24,0,Math.PI*2);
+      ctx.fillStyle=C.elevated;ctx.fill();ctx.stroke();
+    }
+    ctx.restore();
+    if(st==='active'){
+      ctx.save();
+      ctx.strokeStyle=C.accent2;ctx.lineWidth=2;ctx.globalAlpha=0.8;
+      ctx.beginPath();ctx.arc(p.x,p.y,(isBox?62:31),0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    }
+    if(st){
+      var badge=st==='compromised'?'compromised':'blocked';
+      ctx.save();
+      ctx.font='700 10px '+'ui-monospace,monospace';
+      var tw=ctx.measureText(badge).width+12;
+      ctx.fillStyle=st==='compromised'?C.danger:C.success;
+      roundedRect(p.x-tw/2,p.y-(isBox?h/2:24)-20,tw,15,7);ctx.fill();
+      ctx.fillStyle=C.bg;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(badge,p.x,p.y-(isBox?h/2:24)-12);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.font='600 12px system-ui,sans-serif';
+    ctx.fillStyle=C.text;ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillText(n.label,p.x,p.y+(isBox?h/2+6:31));
+    ctx.restore();
+  }
+
+  function drawFlow(f,alpha){
+    var a=pos(nodeById(f.from)),b=pos(nodeById(f.to));
+    var cp=curvePoints(a,b);
+    var col=flowColor(f.color);
+    ctx.save();
+    ctx.globalAlpha=alpha||0.85;
+    ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([7,6]);
+    ctx.beginPath();ctx.moveTo(cp.p0.x,cp.p0.y);ctx.quadraticCurveTo(cp.cx,cp.cy,cp.p1.x,cp.p1.y);ctx.stroke();
+    ctx.setLineDash([]);
+    var e=qPoint(cp,0.9),e2=qPoint(cp,1.0);
+    var ang=Math.atan2(e2.y-e.y,e2.x-e.x);
+    ctx.fillStyle=col;
+    ctx.beginPath();
+    ctx.moveTo(e2.x,e2.y);
+    ctx.lineTo(e2.x-11*Math.cos(ang-0.42),e2.y-11*Math.sin(ang-0.42));
+    ctx.lineTo(e2.x-11*Math.cos(ang+0.42),e2.y-11*Math.sin(ang+0.42));
+    ctx.closePath();ctx.fill();
+    if(f.label){
+      var m=qPoint(cp,0.5);
+      ctx.font='600 11px ui-monospace,monospace';
+      var tw=ctx.measureText(f.label).width+12;
+      ctx.fillStyle=C.surface;ctx.globalAlpha=1;
+      roundedRect(m.x-tw/2,m.y-9,tw,18,9);ctx.fill();
+      ctx.strokeStyle=C.border;ctx.lineWidth=1;ctx.stroke();
+      ctx.fillStyle=C.text;ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(f.label,m.x,m.y);
+    }
+    ctx.restore();
+  }
+
+  function drawPackets(dt){
+    var flows=cfg.steps[step].flows||[];
+    if(playing&&!reduceMotion){
+      spawnClock+=dt*speed;
+      if(spawnClock>SPAWN_MS){
+        spawnClock=0;
+        flows.forEach(function(f){packets.push({f:f,t:0});});
+      }
+    }
+    ctx.save();
+    for(var i=packets.length-1;i>=0;i--){
+      var pk=packets[i];
+      if(!reduceMotion&&playing){pk.t+=dt*speed/PACKET_MS;}
+      if(pk.t>1){packets.splice(i,1);continue;}
+      var a=pos(nodeById(pk.f.from)),b=pos(nodeById(pk.f.to));
+      var cp=curvePoints(a,b);
+      var col=flowColor(pk.f.color);
+      for(var k=2;k>=0;k--){
+        var tt=Math.max(0,pk.t-k*0.05);
+        var pt=qPoint(cp,tt);
+        ctx.globalAlpha=(3-k)/3*0.9;
+        ctx.fillStyle=col;
+        ctx.beginPath();ctx.arc(pt.x,pt.y,4-k*0.8,0,Math.PI*2);ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawGrid(){
+    ctx.save();
+    ctx.strokeStyle=C.border;ctx.globalAlpha=0.28;ctx.lineWidth=1;
+    var gap=34;
+    for(var x=gap;x<W;x+=gap){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+    for(var y=gap;y<H;y+=gap){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+    ctx.restore();
+  }
+
+  function frame(ts){
+    if(!lastTs){lastTs=ts;}
+    var dt=Math.min(100,ts-lastTs);
+    lastTs=ts;
+    ctx.clearRect(0,0,W,H);
+    drawGrid();
+    var flows=cfg.steps[step].flows||[];
+    flows.forEach(function(f){drawFlow(f,0.9);});
+    drawPackets(dt);
+    cfg.nodes.forEach(drawNode);
+    if(playing){
+      stepClock+=dt*speed;
+      if(stepClock>STEP_MS){
+        if(step+1<cfg.steps.length){setStep(step+1);}
+        else{playing=false;updatePlayBtn();}
+      }
+    }
+    window.requestAnimationFrame(frame);
+  }
+
+  function setStep(i,keepPlaying){
+    step=Math.max(0,Math.min(cfg.steps.length-1,i));
+    stepClock=0;packets=[];spawnClock=0;
+    cfg.nodes.forEach(function(n){states[n.id]='';});
+    (cfg.steps[step].fx||[]).forEach(function(fx){states[fx.id]=fx.state;});
+    var st=cfg.steps[step];
+    if(titleEl){titleEl.textContent=st.t;}
+    if(capEl){capEl.textContent=st.cap;}
+    if(hintEl){hintEl.textContent=st.hint;}
+    if(stepEl){stepEl.textContent='Step '+(step+1)+' of '+cfg.steps.length;}
+    if(evEl){
+      evEl.innerHTML='';
+      (st.ev||[]).forEach(function(txt){
+        var li=d.createElement('li');li.textContent=txt;evEl.appendChild(li);
+      });
+    }
+    qsa('#simSteps button').forEach(function(b,k){
+      b.classList.toggle('active',k===step);
+      if(k===step){b.setAttribute('aria-current','step');}else{b.removeAttribute('aria-current');}
+    });
+  }
+  function updatePlayBtn(){
+    if(!playBtn){return;}
+    playBtn.textContent=playing?'Pause':(step>=cfg.steps.length-1?'Replay':'Play');
+  }
+  if(chipsEl){
+    cfg.steps.forEach(function(s,i){
+      var b=d.createElement('button');
+      b.type='button';b.textContent='Step '+(i+1);
+      b.setAttribute('aria-label','Go to simulation step '+(i+1)+': '+s.t);
+      b.addEventListener('click',function(){setStep(i);});
+      chipsEl.appendChild(b);
+    });
+  }
+  if(playBtn){
+    playBtn.addEventListener('click',function(){
+      if(playing){playing=false;}
+      else{
+        if(step>=cfg.steps.length-1){setStep(0);}
+        if(reduceMotion){setStep(step+1<cfg.steps.length?step+1:0);}
+        else{playing=true;}
+      }
+      updatePlayBtn();
+    });
+  }
+  if(restartBtn){
+    restartBtn.addEventListener('click',function(){
+      setStep(0);playing=false;updatePlayBtn();
+    });
+  }
+  if(speedSel){
+    speedSel.addEventListener('change',function(){speed=parseFloat(speedSel.value)||1;});
+  }
+  canvas.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'){e.preventDefault();setStep(step+1);updatePlayBtn();}
+    else if(e.key==='ArrowLeft'){e.preventDefault();setStep(step-1);updatePlayBtn();}
+    else if(e.key==='Enter'||e.key===' '){e.preventDefault();if(playBtn){playBtn.click();}}
+  });
+  function hitTest(mx,my){
+    for(var i=0;i<cfg.nodes.length;i++){
+      var n=cfg.nodes[i],p=pos(n);
+      var isBox=(n.kind==='infra'||n.kind==='service');
+      var dx=Math.abs(mx-p.x),dy=Math.abs(my-p.y);
+      if(isBox){if(dx<58&&dy<24){return n;}}
+      else{if(dx*dx+dy*dy<28*28){return n;}}
+    }
+    return null;
+  }
+  canvas.addEventListener('pointermove',function(e){
+    var r=canvas.getBoundingClientRect();
+    var n=hitTest(e.clientX-r.left,e.clientY-r.top);
+    if(n!==hover){hover=n;}
+    if(n&&tipEl){
+      tipEl.innerHTML='<b>'+n.label+'</b>'+n.tip;
+      tipEl.hidden=false;
+      var x=e.clientX+14,y=e.clientY+14;
+      tipEl.style.left=Math.min(x,window.innerWidth-280)+'px';
+      tipEl.style.top=Math.min(y,window.innerHeight-90)+'px';
+      canvas.style.cursor='pointer';
+    }else{
+      if(tipEl){tipEl.hidden=true;}
+      canvas.style.cursor='crosshair';
+    }
+  });
+  canvas.addEventListener('pointerleave',function(){hover=null;if(tipEl){tipEl.hidden=true;}});
+
+  setStep(0);
+  updatePlayBtn();
+  if(!reduceMotion){playing=true;updatePlayBtn();}
+  window.requestAnimationFrame(frame);
+})();
+
+})();
+</script>
+</body>
+</html>

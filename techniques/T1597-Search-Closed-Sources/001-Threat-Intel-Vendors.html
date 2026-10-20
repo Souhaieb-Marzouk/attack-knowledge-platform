@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1597.001 — Threat Intel Vendors | MITRE ATT&amp;CK Detection Guide</title>
+<meta name="description" content="Beginner-friendly detection engineering guide for MITRE ATT&amp;CK sub-technique T1597.001 (Threat Intel Vendors): how adversaries purchase private vendor reports to profile victims, what defenders can see, Sigma rules, Splunk SPL, mitigation, and response. Version 2.0, audited and corrected.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1597-Search-Closed-Sources/001-Threat-Intel-Vendors.html">
+<!-- Detection Engineering Guide v2.0 — rebuilt 2026-10-20 after full audit: MITRE accuracy framing (incl. Search Threat Vendor Data scope note and T1566 chain fix), Sigma/SPL correctness and equivalence fixes, platform detection surfaces, tools cards, B1 English pass. -->
+<script>
+(function(){try{var t=localStorage.getItem("atk-theme");if(!t){t=window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}document.documentElement.setAttribute("data-theme",t);}catch(e){}})();
+</script>
+<style>
+/* ============================================================
+   ATT&CK Detection Guide — shared design system
+   Self-contained; uses CSS custom properties only.
+   ============================================================ */
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  --bg:#0b0f1a;--surface:#121a2e;--surface-2:#172138;--elevated:#1a2542;
+  --text:#e7edf8;--muted:#9aa8c0;--border:#24314e;--border-strong:#2f4066;
+  --accent:#4f8cff;--accent-2:#22d3ee;--violet:#a78bfa;--success:#34d399;
+  --warning:#fbbf24;--danger:#f87171;--high:#fb923c;--low:#4ade80;
+  --shadow:0 10px 30px rgba(3,8,20,.38);
+  --radius:14px;--radius-sm:9px;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --code-bg:#0a101f;--code-text:#d7e3f7;
+  --maxw:1280px;--sidebar-w:260px;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc;--surface:#ffffff;--surface-2:#f5f8ff;--elevated:#e9eefa;
+  --text:#182238;--muted:#5a6a85;--border:#d9e2f2;--border-strong:#c2d0ea;
+  --accent:#2f6fe4;--accent-2:#0891b2;--violet:#7c5ce0;--success:#0d9e6e;
+  --warning:#b45309;--danger:#dc2626;--high:#c2410c;--low:#15803d;
+  --shadow:0 10px 30px rgba(23,34,56,.10);
+  --code-bg:#101a30;--code-text:#d7e3f7;
+}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+  font-size:16.5px;line-height:1.66;overflow-x:hidden;-webkit-font-smoothing:antialiased;
+}
+[hidden]{display:none!important}
+img,canvas,svg{max-width:100%}
+p{overflow-wrap:break-word}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent);color:#fff}
+.skip-link{position:absolute;left:-9999px;top:0;background:var(--accent);color:#fff;padding:10px 16px;border-radius:0 0 10px 0;z-index:1000;font-weight:600}
+.skip-link:focus{left:0}
+
+/* ---------- progress bar ---------- */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:3px;background:transparent;z-index:900;pointer-events:none}
+.progress-bar>div{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .1s linear}
+
+/* ---------- hero ---------- */
+.hero{position:relative;padding:56px 20px 40px;border-bottom:1px solid var(--border);
+  background:
+    radial-gradient(1000px 400px at 85% -10%,color-mix(in srgb,var(--accent) 14%,transparent),transparent 70%),
+    radial-gradient(700px 300px at 10% 110%,color-mix(in srgb,var(--violet) 10%,transparent),transparent 70%);
+}
+.hero-inner{max-width:var(--maxw);margin:0 auto}
+.kicker{margin:0 0 14px;font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent-2)}
+.page-title{margin:0 0 16px;font-size:clamp(1.85rem,4.2vw,2.7rem);line-height:1.12;font-weight:800;letter-spacing:-.02em;max-width:22ch}
+.accent-word{color:var(--accent)}
+.tech-id{display:inline-block;vertical-align:middle;margin-left:14px;padding:4px 12px;border-radius:10px;
+  font-family:var(--mono);font-size:.52em;font-weight:700;letter-spacing:.04em;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid var(--border-strong)}
+.hero-intro{margin:0 0 20px;max-width:68ch;color:var(--muted);font-size:1.04rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 26px;padding:0;list-style:none}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:12.5px;font-weight:600;
+  font-family:var(--mono);color:var(--muted);background:var(--surface);border:1px solid var(--border)}
+.chip.chip-accent{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--accent-2)}
+.keyfacts{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kf{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;
+  box-shadow:var(--shadow);display:flex;flex-direction:column;gap:3px;min-width:0}
+.kf-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.kf-value{font-size:1.06rem;font-weight:750;line-height:1.25}
+.kf-note{font-size:12.5px;color:var(--muted);line-height:1.45}
+
+/* ---------- layout ---------- */
+.layout{max-width:var(--maxw);margin:0 auto;padding:36px 20px 80px;
+  display:grid;grid-template-columns:var(--sidebar-w) minmax(0,1fr);gap:38px;align-items:start}
+.toc-side{position:sticky;top:22px;max-height:calc(100vh - 44px);overflow-y:auto;padding-right:4px}
+.toc{font-size:13.5px}
+.toc-title{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.toc ul{list-style:none;margin:0;padding:0}
+.toc>ul>li{margin-bottom:2px}
+.toc a{display:flex;gap:9px;align-items:baseline;padding:6px 10px;border-radius:8px;color:var(--muted);line-height:1.35}
+.toc a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc a .toc-num{font-family:var(--mono);font-size:11.5px;color:var(--accent);min-width:20px;font-weight:700}
+.toc a.active{color:var(--text);background:color-mix(in srgb,var(--accent) 13%,transparent);
+  box-shadow:inset 2px 0 0 var(--accent)}
+.toc .toc-sub{margin:1px 0 6px;padding-left:14px;border-left:1px solid var(--border)}
+.toc .toc-sub a{padding:4px 10px;font-size:12.5px}
+.toc .toc-sub .toc-num{min-width:26px;color:var(--accent-2)}
+.toc-note{margin:14px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5}
+
+/* ---------- sections ---------- */
+.section{margin:0 0 60px;scroll-margin-top:20px}
+.sec-head{margin-bottom:22px}
+.section h2{display:flex;align-items:center;gap:13px;margin:0 0 10px;font-size:clamp(1.35rem,2.4vw,1.7rem);line-height:1.2;font-weight:780;letter-spacing:-.01em}
+.sec-num{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:11px;
+  font-family:var(--mono);font-size:1rem;font-weight:700;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 13%,transparent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)}
+.sec-intro{margin:0;color:var(--muted);max-width:70ch}
+.sub-title{display:flex;align-items:center;gap:10px;margin:34px 0 14px;font-size:1.16rem;font-weight:750;letter-spacing:-.01em}
+.sub-num{display:inline-flex;padding:2px 9px;border-radius:8px;font-family:var(--mono);font-size:.78rem;font-weight:700;
+  color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 12%,transparent);border:1px solid color-mix(in srgb,var(--accent-2) 35%,transparent)}
+.section h4{margin:22px 0 10px;font-size:1.02rem;font-weight:720}
+.muted{color:var(--muted)}
+.small{font-size:.86rem}
+
+/* ---------- cards & grids ---------- */
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);min-width:0}
+.card h4,.card h5{margin:0 0 8px;font-size:1rem;font-weight:730}
+.card p{margin:0 0 10px}
+.card p:last-child{margin-bottom:0}
+.card-icon{display:inline-flex;width:34px;height:34px;border-radius:9px;align-items:center;justify-content:center;
+  font-size:16px;background:color-mix(in srgb,var(--accent) 13%,transparent);border:1px solid var(--border-strong);margin-bottom:10px}
+.card-icon.violet{background:color-mix(in srgb,var(--violet) 14%,transparent)}
+.card-icon.cyan{background:color-mix(in srgb,var(--accent-2) 13%,transparent)}
+.card-icon.warn{background:color-mix(in srgb,var(--warning) 14%,transparent)}
+.card-icon.good{background:color-mix(in srgb,var(--success) 14%,transparent)}
+.card-icon.danger{background:color-mix(in srgb,var(--danger) 14%,transparent)}
+
+/* ---------- callouts ---------- */
+.callout{display:flex;gap:12px;align-items:flex-start;background:var(--surface-2);border:1px solid var(--border);
+  border-left:3px solid var(--accent);border-radius:var(--radius-sm);padding:13px 16px;margin:16px 0}
+.callout .co-tag{flex:0 0 auto;font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 8px;border-radius:6px;margin-top:2px;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent)}
+.callout p{margin:0;font-size:.95rem}
+.callout.warn{border-left-color:var(--warning)}
+.callout.warn .co-tag{background:color-mix(in srgb,var(--warning) 16%,transparent);color:var(--warning)}
+.callout.good{border-left-color:var(--success)}
+.callout.good .co-tag{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .co-tag{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+
+/* ---------- badges ---------- */
+.badge{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:750;
+  white-space:nowrap;border:1px solid transparent}
+.badge::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.badge.cat{color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 11%,transparent);border-color:color-mix(in srgb,var(--accent-2) 32%,transparent)}
+.badge.cat::before{display:none}
+.sev-critical{color:var(--danger);background:color-mix(in srgb,var(--danger) 13%,transparent);border-color:color-mix(in srgb,var(--danger) 40%,transparent)}
+.sev-high{color:var(--high);background:color-mix(in srgb,var(--high) 13%,transparent);border-color:color-mix(in srgb,var(--high) 40%,transparent)}
+.sev-medium{color:var(--warning);background:color-mix(in srgb,var(--warning) 13%,transparent);border-color:color-mix(in srgb,var(--warning) 40%,transparent)}
+.sev-low{color:var(--low);background:color-mix(in srgb,var(--low) 13%,transparent);border-color:color-mix(in srgb,var(--low) 40%,transparent)}
+.sev-info{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+table.wide{min-width:720px}
+th,td{padding:11px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border)}
+thead th{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);background:var(--surface-2);white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+td code,li code,p code,.kf-note code{font-family:var(--mono);font-size:.85em;background:var(--elevated);padding:1px 6px;border-radius:5px;border:1px solid var(--border)}
+
+/* ---------- code blocks ---------- */
+.code-block{margin:16px 0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--code-bg);box-shadow:var(--shadow)}
+.code-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 14px;background:color-mix(in srgb,#ffffff 4%,var(--code-bg));border-bottom:1px solid rgba(255,255,255,.08)}
+.code-lang{font-family:var(--mono);font-size:11.5px;font-weight:700;letter-spacing:.06em;color:#8fb3e8;text-transform:uppercase}
+.copy-btn{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:8px;font-size:12px;font-weight:700;
+  color:#cfe0f8;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.18);cursor:pointer;font-family:var(--sans)}
+.copy-btn:hover{background:rgba(255,255,255,.14)}
+.copy-btn.copied{color:#7ef0c0;border-color:rgba(126,240,192,.5)}
+.code-block pre{margin:0;padding:15px 16px;overflow-x:auto}
+.code-block code{font-family:var(--mono);font-size:13px;line-height:1.6;color:var(--code-text);white-space:pre;display:block;min-width:max-content}
+
+/* ---------- key/value list ---------- */
+.kv{margin:0;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);overflow:hidden;box-shadow:var(--shadow)}
+.kv>div{display:grid;grid-template-columns:190px minmax(0,1fr);gap:12px;padding:10px 16px;border-bottom:1px solid var(--border)}
+.kv>div:last-child{border-bottom:0}
+.kv dt{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.kv dd{margin:0;font-size:.92rem}
+
+/* ---------- checklist ---------- */
+.checklist{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.checklist li{display:flex;gap:11px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);padding:11px 14px;font-size:.94rem}
+.checklist .box{flex:0 0 auto;width:17px;height:17px;margin-top:2px;border-radius:5px;border:2px solid var(--accent)}
+
+/* ---------- attack chain strip ---------- */
+.chain{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:14px 0}
+.chain span{font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:999px;background:var(--surface-2);
+  border:1px solid var(--border);color:var(--muted)}
+.chain .arrow{border:0;background:none;padding:0;color:var(--muted);font-weight:400}
+.chain .active-step{color:#fff;background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+
+/* ---------- timeline ---------- */
+.timeline{list-style:none;margin:14px 0;padding:0 0 0 26px;border-left:2px solid var(--border-strong);display:grid;gap:18px}
+.timeline li{position:relative}
+.timeline li::before{content:"";position:absolute;left:-33px;top:5px;width:12px;height:12px;border-radius:50%;
+  background:var(--accent);border:3px solid var(--bg);box-shadow:0 0 0 2px var(--accent)}
+.timeline .tl-time{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent-2);display:block;margin-bottom:3px}
+.timeline p{margin:4px 0 0;font-size:.94rem;color:var(--muted)}
+
+/* ---------- simulation ---------- */
+.sim-shell{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;outline-offset:4px}
+.sim-head{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+.sim-title{display:block;font-weight:760;font-size:1.02rem}
+.sim-sub{display:block;font-size:12.5px;color:var(--muted)}
+.sim-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--muted)}
+.sim-legend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px;vertical-align:baseline}
+.sim-stage{position:relative;background:
+  linear-gradient(color-mix(in srgb,var(--border) 45%,transparent) 1px,transparent 1px),
+  linear-gradient(90deg,color-mix(in srgb,var(--border) 45%,transparent) 1px,transparent 1px),
+  var(--surface-2);
+  background-size:28px 28px,28px 28px,auto}
+.sim-stage canvas{display:block;width:100%;height:auto}
+.sim-tip{position:absolute;z-index:30;max-width:250px;background:var(--elevated);border:1px solid var(--border-strong);
+  border-radius:10px;padding:9px 12px;font-size:12.5px;line-height:1.5;box-shadow:var(--shadow);pointer-events:none}
+.sim-tip strong{display:block;font-size:12px;margin-bottom:2px}
+.sim-caption{padding:13px 18px;border-top:1px solid var(--border);display:grid;gap:5px}
+.sim-caption p{margin:0;font-size:.95rem}
+.sim-hint{font-size:.85rem;color:var(--success);display:flex;gap:8px;align-items:flex-start}
+.sim-hint::before{content:"DEFENDER VIEW";flex:0 0 auto;margin-top:2px;font-size:9.5px;font-weight:800;letter-spacing:.1em;
+  color:var(--success);background:color-mix(in srgb,var(--success) 13%,transparent);padding:2px 7px;border-radius:6px}
+.sim-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:13px 18px;border-top:1px solid var(--border)}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;
+  color:var(--text);background:var(--elevated);border:1px solid var(--border-strong);cursor:pointer;font-family:var(--sans)}
+.btn:hover{border-color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:not-allowed;border-color:var(--border-strong)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:disabled{opacity:.55}
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:9px;overflow:hidden}
+.seg button{padding:7px 12px;font-size:12.5px;font-weight:700;color:var(--muted);background:var(--elevated);border:0;cursor:pointer;font-family:var(--mono)}
+.seg button+button{border-left:1px solid var(--border-strong)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.step-chips{display:flex;flex-wrap:wrap;gap:6px}
+.step-chips button{width:32px;height:30px;border-radius:8px;border:1px solid var(--border-strong);background:var(--elevated);
+  color:var(--muted);font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer}
+.step-chips button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.sim-spacer{flex:1 1 auto}
+.story .card{border-color:color-mix(in srgb,var(--accent) 0%,var(--border));transition:border-color .25s,box-shadow .25s}
+.story .card.active{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.story .step-tag{font-family:var(--mono);font-size:11px;font-weight:800;color:var(--accent-2);letter-spacing:.08em}
+
+/* ---------- floating controls & overlay ---------- */
+.fab{position:fixed;right:18px;z-index:940;align-items:center;gap:8px;padding:10px 15px;border-radius:999px;
+  font-size:13px;font-weight:700;color:var(--text);background:var(--elevated);border:1px solid var(--border-strong);
+  cursor:pointer;box-shadow:var(--shadow);font-family:var(--sans)}
+#topBtn{bottom:20px;display:none}
+#topBtn.show{display:inline-flex}
+#themeBtn{bottom:66px;display:inline-flex}
+#contentsBtn{bottom:112px;display:none}
+.overlay{position:fixed;inset:0;z-index:960}
+.overlay-backdrop{position:absolute;inset:0;background:rgba(4,8,18,.62);backdrop-filter:blur(2px)}
+.overlay-panel{position:absolute;top:0;right:0;bottom:0;width:min(340px,88vw);background:var(--surface);
+  border-left:1px solid var(--border);box-shadow:var(--shadow);overflow-y:auto;padding:18px}
+.overlay-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.overlay-head strong{font-size:1rem}
+.icon-btn{padding:6px 12px;border-radius:8px;font-size:12.5px;font-weight:700;color:var(--text);background:var(--elevated);
+  border:1px solid var(--border-strong);cursor:pointer;font-family:var(--sans)}
+
+/* ---------- footer strip inside content (not a page footer) ---------- */
+.next-pages{display:grid;gap:12px}
+.next-pages a{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:13px 16px;border:1px solid var(--border);
+  border-radius:var(--radius-sm);background:var(--surface);font-weight:600}
+.next-pages a:hover{border-color:var(--accent);text-decoration:none}
+
+/* ---------- print ---------- */
+.print-note{display:none}
+@media print{
+  body{background:#fff;color:#111;font-size:11.5pt;line-height:1.5}
+  .fab,.overlay,.progress-bar,.skip-link,.sim-controls,.sim-legend,.copy-btn,.toc-side,#contentsBtn,#topBtn,#themeBtn{display:none!important}
+  .layout{display:block;padding:0;max-width:100%}
+  .hero{border-bottom:2px solid #333;background:#fff}
+  .sim-stage{display:none}
+  .print-note{display:block;padding:12px;border:1px dashed #888;border-radius:8px;margin:10px 0;font-size:10pt}
+  .card,.callout,.code-block,.kv,.table-wrap,.sim-shell{box-shadow:none;break-inside:avoid}
+  .section{margin-bottom:34pt}
+  .code-block{background:#f4f6fa;border-color:#ccd}
+  .code-block code{color:#1a2440;white-space:pre-wrap;word-break:break-word;min-width:0}
+  .code-head{background:#e7ecf5;border-color:#ccd}
+  .code-lang{color:#33415e}
+  a{color:#111;text-decoration:underline}
+  h2,h3{break-after:avoid}
+  table{font-size:9.5pt}
+}
+
+/* ---------- responsive ---------- */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc-side{display:none}
+  #contentsBtn{display:inline-flex}
+  .keyfacts{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .hero{padding:38px 16px 30px}
+  .layout{padding:26px 14px 96px}
+  .keyfacts{grid-template-columns:1fr}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .kv>div{grid-template-columns:130px minmax(0,1fr);padding:9px 12px}
+  .page-title .tech-id{display:block;margin:10px 0 0;width:fit-content}
+  .sim-controls{gap:6px}
+  .step-chips button{width:29px}
+  #topBtn{bottom:16px;right:14px}
+  #themeBtn{bottom:60px;right:14px}
+  #contentsBtn{bottom:104px;right:14px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1597.001"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div class="progress-bar" aria-hidden="true"><div id="progressFill"></div></div>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<header class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&amp;CK · Reconnaissance · Sub-technique Guide</p>
+    <h1 class="page-title">Threat Intel <span class="accent-word">Vendors</span><span class="tech-id">T1597.001</span></h1>
+    <p class="hero-intro">Threat intelligence vendors sell exactly what attackers want to know: who is being targeted, which TTPs work, and what defenses look like. This guide explains how adversaries use paid vendor reports and portals to study a victim, and how defenders turn the same vendors into an early-warning system.</p>
+    <ul class="chips" role="list">
+      <li class="chip chip-accent"><span class="dot"></span>T1597.001</li>
+      <li class="chip">Sub-technique of T1597</li>
+      <li class="chip">Tactic: Reconnaissance</li>
+      <li class="chip">Platforms: PRE</li>
+      <li class="chip">Created: Oct 2020</li>
+      <li class="chip">Detection: Difficult</li>
+      <li class="chip">Chain position: Early</li>
+      <li class="chip">Guide v2.0</li>
+    </ul>
+    <div class="keyfacts">
+      <div class="kf"><span class="kf-label">Parent</span><span class="kf-value">T1597</span><span class="kf-note">Search Closed Sources — buying information instead of stealing it.</span></div>
+      <div class="kf"><span class="kf-label">What is bought</span><span class="kf-value">Private reports</span><span class="kf-note">Vendor portals, analyst research, custom target-specific reports.</span></div>
+      <div class="kf"><span class="kf-label">Platforms</span><span class="kf-value">PRE</span><span class="kf-note">All activity happens on the vendor's side, before any attack.</span></div>
+      <div class="kf"><span class="kf-label">Defender edge</span><span class="kf-value">Keyword alerts</span><span class="kf-note">Vendors can tell you when someone searches your brand.</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="toc-side" aria-label="Table of contents">
+    <nav id="toc" class="toc" aria-label="Table of contents">
+      <noscript><p class="toc-note">Enable JavaScript to see an auto-generated table of contents. All sections below remain readable without it.</p></noscript>
+    </nav>
+  </aside>
+  <main id="main" class="content">
+
+<section id="s1" class="section" data-num="1">
+  <div class="sec-head">
+    <h2><span class="sec-num">1</span><span class="sec-title">Overview</span></h2>
+    <p class="sec-intro">What this sub-technique covers, why it is attractive, and where it sits in the attack chain.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>What is T1597.001?</h4>
+      <p>Threat Intel Vendors is the sub-technique where an adversary buys information from commercial threat intelligence companies. The products include private research reports, searchable vendor portals with curated actor data, and — most sensitive of all — <strong>custom reports</strong> written by analysts to answer a paying customer's specific questions.</p>
+      <p>None of this requires hacking. A subscription, a payment method, and sometimes a screened buyer identity are enough. The attacker reads the same high-quality research your security team reads, but aims it at you.</p>
+    </div>
+    <div class="card">
+      <h4>Why it matters to defenders</h4>
+      <p>Vendor reports compress months of expertise into a short document. For an attacker, that means knowing your sector's common weaknesses, the exploits that work against your stack, and the incidents that made your peers pay ransoms. It raises their success rate before the first packet is sent.</p>
+      <p>The defender's edge is that vendors sit in the middle. They see who searches for what. Many offer "monitored term" alerts when someone researches your brand, and most keep audit logs of searches and downloads. Those signals are invisible to your firewalls but available by contract — if you ask for them.</p>
+    </div>
+  </div>
+
+  <h4 class="muted" style="margin-top:20px">Where it fits in the attack chain</h4>
+  <div class="chain" role="img" aria-label="Attack chain: Reconnaissance is active, followed by weaponization, delivery, exploitation, installation, command and control, and actions on objectives.">
+    <span class="active-step">1 · Recon</span><span class="arrow">→</span>
+    <span>2 · Weaponize</span><span class="arrow">→</span>
+    <span>3 · Deliver</span><span class="arrow">→</span>
+    <span>4 · Exploit</span><span class="arrow">→</span>
+    <span>5 · Install</span><span class="arrow">→</span>
+    <span>6 · C2</span><span class="arrow">→</span>
+    <span>7 · Act</span>
+  </div>
+  <p class="muted small">As a PRE technique, T1597.001 happens before initial access. Its output feeds the whole operation: sector context improves phishing lures (T1566), vendor-described vulnerabilities guide exploitation of public-facing apps (T1190), and actor tracking helps attackers mimic or avoid known patterns.</p>
+
+  <h4 class="muted" style="margin-top:20px">What you will learn in this guide</h4>
+  <div class="grid-3">
+    <div class="card"><span class="card-icon cyan">1</span><h4>The buyer's playbook</h4><p>What vendor products attackers buy, how custom reports work, and what a "victim profile" looks like when assembled from paid research.</p></div>
+    <div class="card"><span class="card-icon violet">2</span><h4>The vendor's dual role</h4><p>The same platforms that arm attackers also offer the best pre-attack telemetry: keyword alerts, portal audit logs, and monitored-term feeds.</p></div>
+    <div class="card"><span class="card-icon good">3</span><h4>Detection you can ship</h4><p>Five ranked threats with log examples, five Sigma rules, matching Splunk SPL, and a validation plan for each.</p></div>
+  </div>
+
+  <h4 class="muted" style="margin-top:22px">Key facts</h4>
+  <dl class="kv">
+    <div><dt>Technique ID</dt><dd>T1597.001 — Threat Intel Vendors (sub-technique of T1597)</dd></div>
+    <div><dt>Tactic</dt><dd>Reconnaissance (PRE)</dd></div>
+    <div><dt>Products abused</dt><dd>Private reports, vendor portals, custom analyst reports, victim-monitoring feeds</dd></div>
+    <div><dt>Victim-side artifacts</dt><dd>None directly; vendor-side telemetry is the only echo</dd></div>
+    <div><dt>Best defenses</dt><dd>Vendor telemetry clauses, monitored-brand alerts, SIEM ingestion of vendor feeds, phishing-resistant MFA</dd></div>
+  </dl>
+
+  <div class="callout note"><span class="co-tag">Note</span><p>Buying a threat intelligence report is legal. The abuse lies in the intent, not the purchase. This is why detection must lean on behavior (unusual search patterns) and contracts (telemetry rights), not on "blocklist the vendor".</p></div>
+
+  <div class="callout"><span class="co-tag">Scope</span><p>One scope note from ATT&amp;CK: if a threat actor searches vendor data for information about <em>their own</em> activities (to see what defenders know about them), that is a different technique — Search Threat Vendor Data. T1597.001 covers searching vendor data for information about <strong>victims</strong>. Keeping the two apart prevents wrong mappings in your detection inventory.</p></div>
+</section>
+
+<section id="s2" class="section" data-num="2">
+  <div class="sec-head">
+    <h2><span class="sec-num">2</span><span class="sec-title">Animated Simulation</span></h2>
+    <p class="sec-intro">Follow a paid-research operation from subscription to custom report, and watch where the SOC gets its only signals. Hover or tap any node for details.</p>
+  </div>
+
+  <div class="sim-shell" id="simShell" tabindex="0" aria-label="Interactive simulation. Use the buttons below, or the left and right arrow keys, to move between steps.">
+    <div class="sim-head">
+      <div><span class="sim-title">Simulation: The custom report</span><span class="sim-sub">Attacker actions (left) vs. SOC visibility (right)</span></div>
+      <div class="sim-legend" aria-hidden="true">
+        <span><i style="background:var(--danger)"></i>Attacker</span>
+        <span><i style="background:var(--violet)"></i>Vendor</span>
+        <span><i style="background:var(--accent)"></i>Target</span>
+        <span><i style="background:var(--success)"></i>SOC</span>
+      </div>
+    </div>
+    <div class="sim-stage">
+      <canvas id="simCanvas" width="960" height="440" role="img" aria-label="Animated diagram of an attacker buying a subscription and custom reports from a threat intel vendor to profile a target company, while the SOC only receives a vendor keyword alert. A written version of every step follows below the diagram."></canvas>
+      <div class="sim-tip" id="simTip" hidden></div>
+    </div>
+    <div class="sim-caption">
+      <p id="simCaption" aria-live="polite">Press Play to start the simulation.</p>
+      <p class="sim-hint" id="simHint">Defender hints appear here for every step.</p>
+    </div>
+    <div class="sim-controls">
+      <button class="btn primary" id="simPlay" type="button">Play</button>
+      <button class="btn" id="simPause" type="button" disabled>Pause</button>
+      <button class="btn" id="simRestart" type="button">Restart</button>
+      <button class="btn" id="simPrev" type="button" aria-label="Previous step">Prev</button>
+      <button class="btn" id="simNext" type="button" aria-label="Next step">Next</button>
+      <div class="seg" role="group" aria-label="Playback speed">
+        <button type="button" data-speed="0.5" aria-pressed="false">0.5x</button>
+        <button type="button" data-speed="1" aria-pressed="true">1x</button>
+        <button type="button" data-speed="2" aria-pressed="false">2x</button>
+      </div>
+      <div class="sim-spacer"></div>
+      <div class="step-chips" id="simStepChips" role="group" aria-label="Jump to a step"></div>
+    </div>
+    <noscript><p style="padding:14px 18px;margin:0">The interactive canvas needs JavaScript. A full written version of all steps is right below, so no content is lost.</p></noscript>
+  </div>
+
+  <h4 class="muted" style="margin-top:22px">Written version of the simulation (text alternative)</h4>
+  <div class="grid-2 story">
+    <div class="card" data-step="1"><span class="step-tag">STEP 1</span><h4>Buy a subscription</h4><p>Through a front company, the operator subscribes to a commercial threat intel portal. Payment clears, buyer screening passes, and the account is ready. The target company sees nothing of this.</p></div>
+    <div class="card" data-step="2"><span class="step-tag">STEP 2</span><h4>Browse the catalog</h4><p>The operator studies the vendor's catalog: actor profiles, sector threat reports, malware libraries, and the option to order custom research.</p></div>
+    <div class="card" data-step="3"><span class="step-tag">STEP 3</span><h4>Search for the target</h4><p>They search the portal for the target's name and domain. Two private reports mention the company. The vendor's monitoring service quietly logs every search — this becomes the SOC's first echo.</p></div>
+    <div class="card" data-step="4"><span class="step-tag">STEP 4</span><h4>Order a custom report</h4><p>The operator pays for a custom research task: "describe the security posture and key staff of this logistics group, with a focus on M&amp;A activity".</p></div>
+    <div class="card" data-step="5"><span class="step-tag">STEP 5</span><h4>The analyst compiles</h4><p>A vendor analyst assembles public and licensed data into a report. The analyst follows the vendor's rules — the report is legal to write and sell. Intent, not content, makes it dangerous.</p></div>
+    <div class="card" data-step="6"><span class="step-tag">STEP 6</span><h4>Download and digest</h4><p>The operator downloads the finished PDF: key executives, an acquisition timeline, and a summary of the security stack. The vendor logs the download event.</p></div>
+    <div class="card" data-step="7"><span class="step-tag">STEP 7</span><h4>Plan the operation</h4><p>Armed with the report, the operator drafts an invoice-fraud email timed to the M&amp;A transition and shortlists the executives named in the document.</p></div>
+    <div class="card" data-step="8"><span class="step-tag">STEP 8</span><h4>The SOC's only echo</h4><p>The SOC receives one email: the vendor's monitored-term alert showing a spike in searches for the brand. Properly wired, that alert starts a hunt. Ignored, it is the only warning that ever existed.</p></div>
+  </div>
+</section>
+
+<section id="s3" class="section" data-num="3">
+  <div class="sec-head">
+    <h2><span class="sec-num">3</span><span class="sec-title">Red Team / Hacker Perspective</span></h2>
+    <p class="sec-intro">How operators use paid vendor research, shown for defensive and educational purposes only.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <span class="card-icon danger">?</span>
+      <h4>When and why attackers use it</h4>
+      <p>Vendor reports answer questions an attacker would otherwise spend weeks answering badly: which ransomware groups hit this sector, what their success rates look like, which vulnerabilities get exploited, and what victims paid. Buying that picture is cheaper and quieter than discovering it with scans that trigger alarms.</p>
+      <p>Custom reports are the sharpest tool. A victim-specific document with executives, org changes, and security posture turns generic phishing into precise social engineering. It is also the most defensible-looking part of a pre-attack operation — research is not a crime.</p>
+    </div>
+    <div class="card">
+      <span class="card-icon violet">≡</span>
+      <h4>How it is performed</h4>
+      <ul>
+        <li><strong>Portal subscription:</strong> standard commercial account, sometimes via reseller or shell company.</li>
+        <li><strong>Catalog research:</strong> reading actor profiles and sector reports to model what works against the target's industry.</li>
+        <li><strong>Target search:</strong> querying the victim's name, domain, and executives in the portal's private data.</li>
+        <li><strong>Custom order:</strong> commissioning analyst research framed as due diligence, market study, or journalism.</li>
+        <li><strong>Feed monitoring:</strong> subscribing to victim-watch services that report when a company appears in incidents.</li>
+      </ul>
+      <p>OPSEC detail: careful buyers search subsidiaries and old brand names instead of the exact brand, precisely because monitored-term alerts exist.</p>
+    </div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Prerequisites and conditions</h4>
+  <div class="grid-3">
+    <div class="card"><h5>Budget</h5><p>Subscriptions range from hundreds to tens of thousands of dollars. Custom reports are priced per question. Well-funded crews see this as a very small cost.</p></div>
+    <div class="card"><h5>Clean-enough identity</h5><p>Major vendors screen buyers. Operators use front companies, resellers, or stolen analyst credentials when screening blocks them.</p></div>
+    <div class="card"><h5>A use plan</h5><p>Raw reports only help when converted into operations: lure drafts, timing calendars, and target lists. Weak operators collect and never act.</p></div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Illustrative (lab-only) workflow</h4>
+  <p class="small muted">The pseudo-workflow below models the <em>shape</em> of the activity for defensive design. It is abstract on purpose and applies only to your own fictional lab tenant.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Recon workflow · illustrative only</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code># Lab-only modeling of T1597.001 against your OWN fictional lab tenant.
+# All names are fictional; run nothing against real organizations.
+
+1. persona          = register(vendor_portal, entity="lab-shell-co")     # lawful, licensed
+2. sector_picture   = portal.read(sector_reports="logistics")
+3. target_mentions  = portal.search(terms=["labcorp-fictional.example",
+                                           "LabCorp Fictional", "LCF Group"])
+4. custom_task      = portal.order(research="public-licensed posture summary")
+5. report           = portal.download(custom_task)
+6. plan             = build_lures(report.executives, report.timeline)
+
+# Defensive mirror exercise:
+#   - register your brand and domain as MONITORED terms in the same portal
+#   - request weekly keyword-hit and portal-audit exports
+#   - run your own "custom report" request against your lab tenant and
+#     read what a buyer would learn about you</code></pre>
+  </figure>
+
+  <h4 class="muted" style="margin-top:18px">Common variations and mistakes</h4>
+  <div class="grid-2">
+    <div class="card">
+      <h5>Variations</h5>
+      <ul>
+        <li>Ordering custom reports under the cover of <strong>due diligence</strong>, M&amp;A research, or press inquiries.</li>
+        <li>Subscribing to <strong>victim-notification feeds</strong> to catch breaches early and buy access from the first responders' competitors.</li>
+        <li>Buying <strong>compromised vendor accounts</strong> instead of subscriptions — cheaper and untraceable to the buyer.</li>
+        <li>Using <strong>free vendor trials</strong> in bulk to stay under screening thresholds.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h5>Attacker mistakes defenders can profit from</h5>
+      <ul>
+        <li>Searching the <strong>exact brand</strong> and triggering monitored-term alerts.</li>
+        <li>Ordering custom reports with questions that <strong>name the victim too precisely</strong>, leaving a paper trail at the vendor.</li>
+        <li>Reusing the same <strong>payment rail or persona</strong> across vendors, letting investigators cluster campaigns.</li>
+        <li>Downloading entire report libraries, whose <strong>bulk-export logs</strong> stand out immediately.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="s4" class="section" data-num="4">
+  <div class="sec-head">
+    <h2><span class="sec-num">4</span><span class="sec-title">Blue Team / SOC Perspective</span></h2>
+    <p class="sec-intro">Your visibility lives at the vendor, not in your network. Here is how to see the echoes and act on them.</p>
+  </div>
+
+  <div class="callout warn"><span class="co-tag">Reality check</span><p>A purchased report leaves zero logs on your side. ATT&amp;CK's own detection guidance says much of this activity may have a very high occurrence and false-positive rate, may take place outside your visibility, and is best covered by watching related stages such as Initial Access. The SOC's realistic goals are: (1) receive vendor-side echoes, (2) treat them as early warnings, and (3) harden the specific things a report would reveal about you.</p></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>What artifacts it leaves (and where)</h4>
+      <ul>
+        <li><strong>Monitored-term alerts:</strong> vendor notifications when searches for your brand, domain, or executives spike.</li>
+        <li><strong>Portal audit logs:</strong> account-level records of searches, report views, and downloads — available on request or via API.</li>
+        <li><strong>Custom-report paper trail:</strong> a written record of who asked what about you; vendors may notify you for sensitive orders.</li>
+        <li><strong>Downstream echoes:</strong> phishing that uses report-quality details (correct M&amp;A context, correct executive names) is itself evidence that paid research happened.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Why it matters for the chain</h4>
+      <p>T1597.001 is the context-gathering phase. When a phishing email arrives quoting a real acquisition timeline, the problem is no longer "user clicked a link" — the problem is "someone bought a profile of us". Teams that capture vendor echoes can brief leadership with a simple story: the reconnaissance is observable, and here is what we changed because of it.</p>
+      <p>It also reframes the vendor relationship. You are a customer and a data subject at the same time. Contracts should include: keyword alerts, audit-log export, and notification duties for sensitive research orders.</p>
+    </div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Short triage flow (run it as a playbook)</h4>
+  <ol class="timeline">
+    <li><span class="tl-time">Signal in</span><div><strong>Vendor keyword alert arrives</strong><p>Record the term searched, volume, window, and any account metadata the vendor provides. Assign to the intel owner — not a group mailbox.</p></div></li>
+    <li><span class="tl-time">Minute 0–15</span><div><strong>Contextualize</strong><p>Is a sector event live (funding, M&amp;A, layoff, earnings)? Known campaigns against your industry this month? Context decides urgency.</p></div></li>
+    <li><span class="tl-time">Minute 15–60</span><div><strong>Score the exposure</strong><p>What would a report about us reveal today? Check: executive exposure, M&amp;A status, public attack surface, recent incidents. Fix the worst finding this week.</p></div></li>
+    <li><span class="tl-time">Hour 1–24</span><div><strong>Hunt downstream</strong><p>Search email and IdP logs for lures referencing live sector events. Brief high-risk staff named in possible reports with a short, human warning.</p></div></li>
+    <li><span class="tl-time">Day 1–7</span><div><strong>Report and adjust</strong><p>One-page summary to leadership: what was searched, what we did, what we changed. Tune the vendor alert thresholds with the new baseline.</p></div></li>
+  </ol>
+</section>
+
+<section id="s5" class="section" data-num="5">
+  <div class="sec-head">
+    <h2><span class="sec-num">5</span><span class="sec-title">Detection Engineering Deep Dive</span></h2>
+    <p class="sec-intro">Regulation mapping, threat intelligence, ranked threats, log patterns, and ready-to-adapt Sigma and Splunk content for the vendor-report path.</p>
+  </div>
+
+  <h3 id="s5-1" class="sub-title"><span class="sub-num">5.1</span>Regulation mapping</h3>
+  <p class="muted">Vendor-based reconnaissance is mostly a governance topic: auditors expect threat intelligence to be managed, monitored, and fed into response. The controls below map most naturally. Replace <code>example-corp.com</code> with your own registered domain in all examples.</p>
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+      <tbody>
+        <tr><td>ISO/IEC 27001:2022</td><td>A.5.7 Threat intelligence</td><td>The flagship control: analyze threat information from multiple sources — vendor reports are the primary such source.</td><td>TI policy, source register, intake and dissemination records, quarterly review minutes.</td></tr>
+        <tr><td>ISO/IEC 27001:2022</td><td>A.5.19–A.5.22 Supplier relationships</td><td>Intel vendors are suppliers; their telemetry duties, confidentiality, and screening belong in contracts.</td><td>Contracts with telemetry and notification clauses, supplier risk reviews.</td></tr>
+        <tr><td>ISO/IEC 27001:2022</td><td>A.8.16 Monitoring activities</td><td>Vendor keyword alerts are a monitoring input and must reach a monitored channel.</td><td>SIEM ingestion records, alert routing config, triage tickets.</td></tr>
+        <tr><td>SOC 2 (Security TSC)</td><td>CC3.2 / CC2.2</td><td>Requires obtaining and evaluating threat information, internal and external, to identify risk.</td><td>Source inventory, risk-register entries citing vendor intelligence.</td></tr>
+        <tr><td>SOC 2 (Security TSC)</td><td>CC7.1 / CC7.2</td><td>Detection and monitoring must include externally visible signals, not only internal logs.</td><td>Monitoring architecture including vendor feeds; alert SLA evidence.</td></tr>
+        <tr><td>PCI DSS v4.0.1</td><td>12.10.1 / 12.10.5</td><td>IR plans and alert response must include pre-attack signals relevant to cardholder-data environments.</td><td>IR plan covering exposure alerts; response tickets; test evidence.</td></tr>
+        <tr><td>GDPR</td><td>Art. 32 / Art. 5(1)(f)</td><td>Report-quality profiles of staff support targeted phishing against personal data processors; proportional measures are expected.</td><td>MFA coverage records, phishing-awareness content, DPIA updates.</td></tr>
+        <tr><td>HIPAA Security Rule</td><td>§164.308(a)(5) / §164.308(a)(1)</td><td>Security awareness and risk analysis must reflect realistic, sector-informed phishing threats.</td><td>Training materials using realistic (synthetic) lures; risk analysis updates.</td></tr>
+        <tr><td>NIST CSF 2.0</td><td>ID.RA-06 / DE.CM-01 / RS.CO-03</td><td>Cyber threat intelligence is collected and prioritized (ID.RA-06), monitoring consumes it, and sharing closes the loop.</td><td>CTI requirements doc, monitoring coverage matrix, sharing agreements.</td></tr>
+        <tr><td>CIS Controls v8</td><td>13.1 / 17.4 / 14.2</td><td>Centralize security event alerting (including external feeds), establish an IR process fed by intelligence, and train skills.</td><td>Feed-to-SIEM matrix, IR runbooks, training completion records.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="s5-2" class="sub-title"><span class="sub-num">5.2</span>Threat intelligence</h3>
+  <p class="muted">This sub-technique is a threat intelligence problem end to end. The sources below, plus honest confidence labels, make the difference between noise and signal.</p>
+  <div class="grid-2">
+    <div class="card"><span class="card-icon violet">V</span><h4>Your intel vendors (first party)</h4><p>The vendors you already pay are your best sources here: monitored-term alerts, portal audit exports, and researcher reports on who targets your sector. Collect via API or scheduled exports into the SIEM. Apply by pairing every alert with a disposition note.</p></div>
+    <div class="card"><span class="card-icon cyan">P</span><h4>Peer reporting and ISACs</h4><p>Sector ISACs share when members see profiling or pre-attack signals. Collect through member feeds and calls. Apply by comparing your keyword alerts to the sector baseline — a spike that peers also see is probably campaign-scale.</p></div>
+    <div class="card"><span class="card-icon">A</span><h4>MITRE ATT&amp;CK</h4><p>Use ATT&amp;CK to classify what the research enables: T1597.001 feeding T1566 (phishing) or T1190 (public apps). Navigator layers showing PRE coverage make leadership conversations concrete.</p></div>
+    <div class="card"><span class="card-icon warn">O</span><h4>OSINT checks on yourself</h4><p>Quarterly self-assessment: search your own brand in trial portals, order a synthetic "custom report" against your lab tenant, and read what a buyer would learn. Collect into a findings log. Apply by closing the worst exposures.</p></div>
+    <div class="card"><span class="card-icon good">I</span><h4>Internal telemetry</h4><p>Your SEG, IdP, and help-desk data show whether report-grade details are already being used against you (correct exec names, correct timelines in lures). Collect by tagging lures with "report-quality context" flags. Apply by raising response priority when they appear.</p></div>
+    <div class="card"><span class="card-icon danger">C</span><h4>Confidence labeling</h4><p><strong>High</strong> = vendor telemetry plus corroboration. <strong>Medium</strong> = single-source telemetry or credible peer report. <strong>Low</strong> = plausible inference. Every intel product you circulate must carry one of these labels — decisions depend on it.</p></div>
+  </div>
+
+  <div class="table-wrap" style="margin-top:16px">
+    <table class="wide">
+      <thead><tr><th>Actor / pattern (public reporting)</th><th>Relevance to T1597.001</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>Sector-focused ransomware programs</td><td>Select victims using vendor-published sector risk picture; affiliate playbooks reference "companies that appear in the news for acquisitions".</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>BEC / invoice-fraud crews</td><td>Heavy reliance on org charts, executive names, and payment-process details of the kind found in victim profiles.</td><td><span class="badge sev-high">High (pattern)</span></td></tr>
+        <tr><td>Nation-state target development</td><td>Long-horizon interest matches custom-report workflows; public attribution of specific purchases is rare.</td><td><span class="badge sev-low">Low–Medium</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="muted small" style="margin-top:10px">Accuracy note: MITRE ATT&amp;CK currently lists no specific group or software procedure examples for this sub-technique — the purchases happen entirely on the vendor side. Treat the rows above as documented <em>patterns</em> with confidence labels, not as named attributions.</p>
+
+  <h3 id="s5-3" class="sub-title"><span class="sub-num">5.3</span>Threats ranking and categorization</h3>
+  <p class="muted">Five realistic threats for the vendor path. Rank reflects (possible damage × likelihood). Categories follow where detection and mitigation actually live; the detection-surface column shows where you would actually see each threat.</p>
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>ID</th><th>Threat</th><th>Rank</th><th>Category</th><th>Detection surface</th><th>Preconditions</th><th>Impact</th><th>Justification</th></tr></thead>
+      <tbody>
+        <tr><td>TH-01</td><td>Custom vendor report reveals victim's security posture and key staff</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Third-party intel</span></td><td>Vendor research-order feed</td><td>Attacker holds a subscription; vendor accepts the research order</td><td>Precise social engineering and vulnerability selection</td><td>Dramatically raises phishing and intrusion success rates</td></tr>
+        <tr><td>TH-02</td><td>Portal keyword data shows an outsider researching the brand</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge cat">Network</span></td><td>Vendor keyword-alert feed</td><td>Brand/domain registered as a monitored term (defender action)</td><td>Early warning signal, not damage itself</td><td>High value as an indicator; low direct impact</td></tr>
+        <tr><td>TH-03</td><td>Report-grade details appear in live phishing lures</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">People</span></td><td>Email gateway (SEG); staff reports</td><td>A report or profile was used to write lures</td><td>Higher click and payment-fraud rates</td><td>The moment bought research converts into an operation</td></tr>
+        <tr><td>TH-04</td><td>Criminal buys or abuses a paid vendor subscription at scale</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge cat">Cloud / SaaS</span></td><td>Vendor portal audit feed</td><td>Vendor screening fails or an account is stolen</td><td>Bulk research across many victims at once</td><td>Vendor-side control failure; visible in audit logs</td></tr>
+        <tr><td>TH-05</td><td>Stolen analyst credentials used on your vendor portal account</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Identity</span></td><td>IdP + vendor SSO audit feed</td><td>Your analyst account is compromised or MFA is absent</td><td>Attacker reads your sector picture and abuses your telemetry</td><td>Turns your own intel stack against you; direct signal exists</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="s5-4" class="sub-title"><span class="sub-num">5.4</span>Logs and patterns</h3>
+  <p class="muted">For each threat: the log source, the fields that matter, normal versus suspicious behavior, and the detection logic. Event shapes use realistic field names you can map to your schema.</p>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-01 · Custom report ordered about your organization <span class="badge sev-high">High</span> <span class="badge cat">Third-party intel</span></h4>
+    <p class="small muted"><strong>Log source:</strong> vendor notification service for sensitive research orders (contractual). <strong>Fields:</strong> <code>order_id</code>, <code>subject_terms</code>, <code>account_type</code>, <code>account_age_days</code>, <code>billing_country</code>.</p>
+    <p class="small"><strong>Normal:</strong> research orders from known customers, universities, and journalists about public topics. <strong>Suspicious:</strong> an order naming your executives or internal systems from a very young account, or research questions that read like reconnaissance. <strong>Detection logic:</strong> alert when <code>subject_terms</code> matches your brand AND <code>account_age_days</code> is low OR the order includes security-posture questions.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · vendor research-order notice</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "alert_type": "sensitive_research_order",
+  "order_id": "CR-2026-11472",
+  "subject_terms": ["ExampleCorp", "example-corp.com"],
+  "order_questions": [
+    "security stack summary",
+    "key finance staff",
+    "M&A timeline"
+  ],
+  "account_type": "standard",
+  "account_age_days": 9,
+  "billing_country": "unknown",
+  "received_at": "2026-09-22T11:20:41Z",
+  "vendor": "tip-portal-a"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-02 · Keyword-alert spike for your brand <span class="badge sev-medium">Medium</span> <span class="badge cat">Network</span></h4>
+    <p class="small muted"><strong>Log source:</strong> vendor monitored-term alert feed. <strong>Fields:</strong> <code>query_term</code>, <code>query_count</code>, <code>query_window</code>, <code>source_account_type</code>.</p>
+    <p class="small"><strong>Normal:</strong> baseline of a few hits per day from analysts and media. <strong>Suspicious:</strong> 24-hour counts far above the weekly median, especially from new accounts. <strong>Detection logic:</strong> sum of <code>query_count</code> per term per day above 3× the trailing median.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · vendor keyword alert</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "alert_type": "monitored_term_hit",
+  "query_term": "ExampleCorp",
+  "query_count": 41,
+  "query_window": "24h",
+  "source_account_type": "new",
+  "account_country": "unknown",
+  "first_hit": "2026-09-23T02:10:55Z",
+  "vendor": "tip-portal-a"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-03 · Report-grade details in live phishing lures <span class="badge sev-high">High</span> <span class="badge cat">People</span></h4>
+    <p class="small muted"><strong>Log source:</strong> email security gateway (SEG) detections, enriched by your triage notes. <strong>Fields:</strong> <code>mail_subject</code>, <code>sender_domain</code>, <code>context_flag</code>, <code>recipient_role</code>.</p>
+    <p class="small"><strong>Normal:</strong> generic phishing with public details. <strong>Suspicious:</strong> lures referencing non-public timelines, correct org structure, or internal project names — the signature of bought research. <strong>Detection logic:</strong> tag any lure whose content matches "report-quality context" and raise severity when it targets finance or executives.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · SEG lure event (enriched)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "alert_type": "phish_quarantined",
+  "mail_subject": "Payment run change - Northfield deal closing",
+  "sender_domain": "northfield-closing.example.net",
+  "recipient_role": "finance_director",
+  "context_flag": "report_quality",
+  "mentions": ["acquisition codename", "correct approver chain"],
+  "detected_at": "2026-09-24T09:41:12Z",
+  "gateway": "seg-01"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-04 · Bulk research across many victims from one account <span class="badge sev-medium">Medium</span> <span class="badge cat">Cloud / SaaS</span></h4>
+    <p class="small muted"><strong>Log source:</strong> vendor portal audit feed (abuse view shared by the vendor, or your own tenant's audit slice). <strong>Fields:</strong> <code>account_id</code>, <code>action</code>, <code>searched_terms</code>, <code>distinct_targets</code>.</p>
+    <p class="small"><strong>Normal:</strong> an analyst researching one sector per project. <strong>Suspicious:</strong> one account searching dozens of unrelated company names in a day, or mass report downloads. <strong>Detection logic:</strong> count of <code>distinct_targets</code> per account per day above threshold, or download volume far above account baseline.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · portal audit (abuse view)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "alert_type": "portal_abuse_summary",
+  "account_id": "acct-88412",
+  "action": "search_and_download",
+  "searched_terms": 96,
+  "distinct_targets": 61,
+  "reports_downloaded": 38,
+  "window_start": "2026-09-24T00:00:00Z",
+  "window_end": "2026-09-24T23:59:59Z",
+  "vendor": "tip-portal-a"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h4>TH-05 · Stolen analyst credentials on your vendor account <span class="badge sev-high">High</span> <span class="badge cat">Identity</span></h4>
+    <p class="small muted"><strong>Log source:</strong> vendor SSO/audit feed for your tenant plus your IdP sign-in logs. <strong>Fields:</strong> <code>user</code>, <code>auth_method</code>, <code>mfa_used</code>, <code>source_ip</code>, <code>geo</code>.</p>
+    <p class="small"><strong>Normal:</strong> two named analysts, office or VPN IPs, MFA always used. <strong>Suspicious:</strong> missing MFA, new geography, new device, or session activity while the analyst is offline. <strong>Detection logic:</strong> <code>mfa_used: false</code> OR impossible travel on the vendor application, regardless of what the identity provider saw.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">JSON · vendor SaaS audit event</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code>{
+  "vendor": "tip-portal-a",
+  "action": "session.start",
+  "user": "analyst1@example-corp.com",
+  "auth_method": "password",
+  "mfa_used": false,
+  "source_ip": "198.51.100.23",
+  "geo": "unfamiliar-country",
+  "device_id": "unknown-device",
+  "ts": "2026-09-25T01:32:07Z"
+}</code></pre>
+    </figure>
+  </div>
+
+  <h3 id="s5-5" class="sub-title"><span class="sub-num">5.5</span>Sigma rules and Splunk SPL</h3>
+  <p class="muted">One Sigma rule and one matching Splunk query per threat. The vendor log sources are custom categories — map them to your ingestion as noted. Tune every threshold to your baselines.</p>
+
+  <h4>SIG-01 · Sensitive research order naming your organization <span class="badge sev-high">High</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Sensitive Vendor Research Order Naming Monitored Brand
+id: e6b2c8d4-7a09-4e13-9f26-3d5a8c0e2b71
+status: stable
+description: >
+    Detects a custom research order at a threat intel vendor that names the
+    company, its executives, or its security posture, indicating paid
+    victim profiling (MITRE ATT&CK T1597.001).
+references:
+    - https://attack.mitre.org/techniques/T1597/001/
+author: Detection Engineering Guild
+date: 2026-09-26
+logsource:
+    category: application
+    product: tip_vendor
+    service: research_orders
+detection:
+    selection_brand:
+        subject_terms|contains:
+            - 'ExampleCorp'
+            - 'example-corp.com'
+    selection_risky:
+        order_questions|contains:
+            - 'security stack'
+            - 'key staff'
+            - 'M&A'
+    filter_mature:
+        account_age_days|gte: 365
+    condition: selection_brand and selection_risky and not filter_mature
+fields:
+    - order_id
+    - subject_terms
+    - order_questions
+    - account_age_days
+    - billing_country
+falsepositives:
+    - Legitimate due-diligence and press research by long-standing accounts
+level: high
+tags:
+    - attack.reconnaissance
+    - attack.t1597.001
+    - attack.t1597</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=vendor_audit sourcetype=tip:research_orders
+    (subject_terms="*ExampleCorp*" OR subject_terms="*example-corp.com*")
+    (order_questions="*security stack*" OR order_questions="*key staff*" OR order_questions="*M&amp;A*")
+| where account_age_days &lt; 365
+| stats values(order_id) AS orders max(account_age_days) AS oldest_account
+        values(billing_country) AS countries BY subject_terms
+| eval order_count=mvcount(orders)
+| sort - order_count</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> SPL keeps the Sigma intent exactly: brand match AND at least one reconnaissance-shaped question AND an account younger than a year (a year lets established researchers through and flags fresh accounts). <strong>False positives:</strong> genuine M&amp;A due diligence; keep an allowlist of known counterparties.</p>
+
+  <h4>SIG-02 · Keyword-alert spike for monitored brand terms <span class="badge sev-medium">Medium</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Spike in Vendor Portal Searches for Monitored Brand Terms
+id: 1f5a8d3c-9e74-4a62-b3d1-8c2e5f0b6a94
+status: stable
+description: >
+    Detects abnormal search volume for the company brand or domain on a
+    threat intel vendor portal, a common early echo of paid victim
+    profiling (MITRE ATT&CK T1597.001).
+references:
+    - https://attack.mitre.org/techniques/T1597/001/
+author: Detection Engineering Guild
+date: 2026-09-26
+logsource:
+    category: application
+    product: tip_vendor
+    service: keyword_alerts
+detection:
+    selection_terms:
+        query_term:
+            - 'ExampleCorp'
+            - 'example-corp.com'
+    condition: selection_terms | sum(query_count) &gt; 30
+    timeframe: 24h
+fields:
+    - query_term
+    - query_count
+    - source_account_type
+    - account_country
+falsepositives:
+    - Media coverage or funding news driving benign research
+    - Internal analysts using the same portal
+level: medium
+tags:
+    - attack.reconnaissance
+    - attack.t1597.001</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=vendor_audit sourcetype=tip:keyword_alerts query_term IN ("ExampleCorp", "example-corp.com")
+| bin _time span=24h
+| stats sum(query_count) AS hits dc(source_account_id) AS accounts values(source_account_type) AS src_types BY _time, query_term
+| eventstats median(hits) AS med BY query_term
+| eval dynamic_baseline=max(30, round(med * 3))
+| where hits &gt; 30
+| eval note=if(isnotnull(mvfind(src_types, "new")), "new-account activity", "check account mix")
+| sort - _time</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> the firing threshold matches Sigma exactly (<code>sum(query_count) &gt; 30</code> per 24 hours). The <code>dynamic_baseline</code> field is a ready-made upgrade: after two weeks of data, swap the <code>where</code> line for <code>where hits &gt; dynamic_baseline</code>. <strong>False positives:</strong> news-driven spikes — add an "is sector event live?" annotation field to triage notes.</p>
+
+  <h4>SIG-03 · Report-quality context in phishing lures <span class="badge sev-high">High</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Phishing Lures Containing Report-Quality Target Context
+id: b8d4e2f6-0a35-4c91-8e27-5f1a9c3d7b60
+status: stable
+description: >
+    Detects quarantined phishing whose content uses non-public or
+    report-grade details (correct org structure, deal codenames, internal
+    project names), indicating paid victim research (MITRE ATT&CK T1597.001,
+    T1566).
+references:
+    - https://attack.mitre.org/techniques/T1597/001/
+    - https://attack.mitre.org/techniques/T1566/
+author: Detection Engineering Guild
+date: 2026-09-26
+logsource:
+    category: email
+    product: email_security_gateway
+    service: quarantine
+detection:
+    selection_context:
+        context_flag: report_quality
+    selection_targets:
+        recipient_role:
+            - executive
+            - finance_director
+            - hr_lead
+    condition: selection_context and selection_targets
+fields:
+    - mail_subject
+    - sender_domain
+    - recipient_role
+    - mentions
+falsepositives:
+    - Public-news details mis-tagged as report-quality by triage
+level: high
+tags:
+    - attack.reconnaissance
+    - attack.t1597.001
+    - attack.initial_access
+    - attack.t1566</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=email sourcetype=seg:quarantine context_flag=report_quality
+    recipient_role IN ("executive", "finance_director", "hr_lead")
+| stats count values(mail_subject) AS subjects values(sender_domain) AS senders BY recipient_role
+| where count &gt;= 2
+| sort - count</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> <code>context_flag</code> is a triage-applied enrichment, not a raw gateway field — document how analysts set it. <strong>Tuning:</strong> require 2+ lures before escalating to a campaign investigation.</p>
+
+  <h4>SIG-04 · Bulk multi-target research from one vendor account <span class="badge sev-medium">Medium</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Single Vendor Account Researching Unusually Many Targets
+id: 3c6a9e1b-2d84-4f05-9a7e-4b0d8c2f5e13
+status: testing
+description: >
+    Detects one threat intel portal account searching or downloading data
+    about many unrelated organizations in a short window, a pattern typical
+    of criminal subscriptions bought for victim brokering (MITRE ATT&CK T1597.001).
+references:
+    - https://attack.mitre.org/techniques/T1597/001/
+author: Detection Engineering Guild
+date: 2026-09-26
+logsource:
+    category: application
+    product: tip_vendor
+    service: portal_audit
+detection:
+    selection_actions:
+        action:
+            - search_and_download
+            - report.download
+    condition: selection_actions | max(distinct_targets) by account_id &gt; 40
+    timeframe: 24h
+fields:
+    - account_id
+    - action
+    - distinct_targets
+    - reports_downloaded
+falsepositives:
+    - Broad sector studies by research teams and market analysts
+level: medium
+tags:
+    - attack.reconnaissance
+    - attack.t1597.001</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=vendor_audit sourcetype=tip:portal_audit action IN ("search_and_download", "report.download")
+| bin _time span=24h
+| stats max(distinct_targets) AS targets max(reports_downloaded) AS downloads BY _time, account_id
+| where targets &gt; 40
+| eval note=if(downloads &gt; 25, "also high download volume", "target-count signal only")
+| sort - targets</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> the audit feed sends one daily summary per account, so Sigma and the SPL both take the day's <strong>maximum</strong> <code>distinct_targets</code> and fire above 40 — identical logic. The SPL keeps download volume as triage context; make it a second arm or a companion rule (<code>downloads &gt; 25</code>) if your vendor's abuse team uses that measure. <strong>Tuning:</strong> agree thresholds with the vendor's own abuse team — they know the real baselines.</p>
+
+  <h4>SIG-05 · Non-MFA or impossible-travel session on vendor portal <span class="badge sev-high">High</span></h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Risky Session on Corporate Threat Intel Vendor Account
+id: 6e0c3f8a-5b91-4d24-b7e6-9a2c1d5f8b30
+status: testing
+description: >
+    Detects password-only sign-ins or geographically impossible travel on
+    the company's own accounts at a threat intel vendor, which may indicate
+    a stolen analyst session used to profile victims (MITRE ATT&CK T1597.001,
+    T1078).
+references:
+    - https://attack.mitre.org/techniques/T1597/001/
+author: Detection Engineering Guild
+date: 2026-09-26
+logsource:
+    category: application
+    product: tip_vendor
+    service: portal_audit
+detection:
+    selection_nomfa:
+        mfa_used: false
+    selection_travel:
+        geo: unfamiliar-country
+    filter_office:
+        source_ip|startswith: '198.51.100.'
+    condition: (selection_nomfa or selection_travel) and not filter_office
+fields:
+    - user
+    - auth_method
+    - source_ip
+    - geo
+    - device_id
+falsepositives:
+    - Analysts traveling without the corporate VPN
+level: high
+tags:
+    - attack.reconnaissance
+    - attack.t1597.001
+    - attack.defense_evasion
+    - attack.t1078</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">SPL · Splunk</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=vendor_audit sourcetype=tip:portal_audit (mfa_used=false OR geo="unfamiliar-country")
+    NOT source_ip="198.51.100.*"
+| stats count values(user) AS users values(device_id) AS devices earliest(_time) AS first BY source_ip, geo
+| sort - count</code></pre>
+  </figure>
+  <p class="small muted"><strong>Mapping note:</strong> the <code>198.51.100.</code> range is a reserved example range — replace it with your real VPN egress range. <strong>Tuning:</strong> enforce SSO with MFA at the vendor side so <code>mfa_used=false</code> becomes structurally impossible, then keep the rule as a drift alarm.</p>
+
+  <div class="callout good"><span class="co-tag">Validation</span><p>Replay the JSON examples above through your ingestion path and confirm each rule fires; then replay one "normal" event per rule and confirm silence. Store both runs as validation evidence for auditors (see 5.1).</p></div>
+</section>
+
+<section id="s6" class="section" data-num="6">
+  <div class="sec-head">
+    <h2><span class="sec-num">6</span><span class="sec-title">Real-World Case Study</span></h2>
+    <p class="sec-intro">An illustrative composite based on common BEC and invoice-fraud patterns. Names and details are fictional; the mechanism is what defenders actually encounter.</p>
+  </div>
+
+  <div class="callout note"><span class="co-tag">Composite</span><p>Custom-report purchases almost never appear in public incident reports, because the victim never sees them. This composite shows how report-grade research turns into a payment-fraud operation — and where defenders can still catch it.</p></div>
+
+  <div class="grid-3">
+    <div class="card"><h4>Victim</h4><p><strong>Northwind Logistics</strong> (fictional), 800 staff, mid-close acquisition of a smaller competitor, finance team of twelve.</p></div>
+    <div class="card"><h4>Adversary</h4><p>A BEC crew that buys victim research instead of scanning, and strikes during corporate transitions.</p></div>
+    <div class="card"><h4>Objective</h4><p>Redirect a supplier payment during the acquisition window using a spoofed executive thread.</p></div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Timeline</h4>
+  <ol class="timeline">
+    <li><span class="tl-time">Day −30</span><div><strong>The purchase</strong><p>Through a nine-day-old portal account, the crew orders a custom report: "security posture, finance staff list, and M&amp;A timeline for Northwind Logistics". The vendor logs the order. Northwind has no notification clause with this vendor, so nobody on the victim side knows.</p></div></li>
+    <li><span class="tl-time">Day −29 to −3</span><div><strong>The report and rehearsals</strong><p>The PDF arrives: correct executives, the acquisition codename, payment-process notes. The crew registers the lookalike domain <code>northwind-closing.example.net</code> and drafts lures that quote the real approver chain.</p></div></li>
+    <li><span class="tl-time">Day −12</span><div><strong>An echo nobody reads</strong><p>The vendor's monitored-term service emails Northwind's finance address: brand searches spiked 14×. It is forwarded to a shared mailbox and forgotten. No SLA, no owner.</p></div></li>
+    <li><span class="tl-time">Day 0 · 10:05</span><div><strong>The strike</strong><p>Three lure emails land, timed to a real payment run: "update the beneficiary account for the Northfield closing". Two are opened; one reply comes from the CFO's impersonated thread.</p></div></li>
+    <li><span class="tl-time">Day 0 · 14:20</span><div><strong>Detection point — the catch</strong><p>The treasury system's new-payee rule flags the change: new bank account, new country, 90 minutes before a payment run. Payment verification calls the supplier on a known number and the fraud is confirmed before money moves.</p></div></li>
+    <li><span class="tl-time">Day 0 · 15:00</span><div><strong>Containment</strong><p>Payment frozen, all staff receive a live warning with the exact lure subject line, lookalike domain submitted for takedown, and the SEG is loaded with the sender domain pattern.</p></div></li>
+    <li><span class="tl-time">Day 1–4</span><div><strong>Eradication and investigation</strong><p>Mailbox rules (none found — no compromise occurred) and sender infrastructure are swept. The vendor, now contacted formally, provides the audit export: one young account, 61 targets searched in a week. Other victims are notified through the ISAC.</p></div></li>
+    <li><span class="tl-time">Day 5–21</span><div><strong>Recovery and hardening</strong><p>Payment verification made mandatory for account changes; executive-brand monitoring moved into the SIEM with an owner and SLA; vendor contracts updated with telemetry and notification clauses at renewal.</p></div></li>
+  </ol>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Attack chain summary</h4>
+      <ul>
+        <li>T1597.001 — custom report bought on a young portal account</li>
+        <li>T1583.001 — lookalike domain registered (mitigated by CT watching later)</li>
+        <li>T1566 — phishing: external lure emails quoting the real approver chain</li>
+        <li>T1656 — impersonation of executives in lures</li>
+        <li>T1657 — financial theft attempt (payment redirection), stopped</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Tools in play</h4>
+      <p class="small"><strong>Attacker side:</strong> vendor portal subscription with custom research order (the profile), a freshly registered lookalike domain with TLS, and standard BEC lure infrastructure.</p>
+      <p class="small"><strong>Defender side:</strong> treasury payment-verification workflow (the catch), SEG quarantine rules, vendor audit export, and CT/domain monitoring for the lookalike.</p>
+    </div>
+    <div class="card">
+      <h4>Impact and consequences</h4>
+      <ul>
+        <li>No funds lost — caught by payment verification within 90 minutes</li>
+        <li>≈ 60 staff-hours of response; one supplier relationship briefly strained</li>
+        <li>Two days of distraction for the finance team during a live acquisition</li>
+        <li>Valuable positive: the vendor's audit export helped three peer victims</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Team response and communication</h4>
+      <p>Treasury, security, and finance leadership joined one bridge within 30 minutes. The CFO's office communicated directly with the real supplier to confirm no account change was real. The SOC wrote the internal summary the same evening: no mailbox compromise, lure blocked, process gap identified. Legal contacted the vendor for logs and the registrar for takedown. A short, factual note went to all staff the next morning, naming the technique — which made the follow-up training land.</p>
+    </div>
+    <div class="card">
+      <h4>Lessons learned</h4>
+      <ul>
+        <li>The earliest echo (Day −12) was free and died in a shared mailbox. Vendor keyword alerts need an owner and an SLA like any other alert class.</li>
+        <li>Payment verification (callback on a known number) was the control that actually stopped the loss — worth funding everywhere.</li>
+        <li>The vendor relationship worked both ways: once engaged formally, their audit data helped identify peer victims. Contract for it up front.</li>
+        <li>Lure quality is a detection signal. "Report-quality context" should raise severity automatically.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="s7" class="section" data-num="7">
+  <div class="sec-head">
+    <h2><span class="sec-num">7</span><span class="sec-title">Mitigation and Defense</span></h2>
+    <p class="sec-intro">You cannot stop someone from reading a report about you. You can make the report's contents less useful and its echoes visible. This matches MITRE's official mitigation position (M1056 Pre-compromise): the activity happens outside enterprise defenses, so efforts focus on minimizing the amount and sensitivity of data available to external parties.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>Area</th><th>Control</th><th>What it does against T1597.001</th></tr></thead>
+      <tbody>
+        <tr><td>Policy</td><td>Intel vendor register with telemetry clauses</td><td>Every portal subscription is known, and contracts guarantee keyword alerts, audit exports, and sensitive-order notification.</td></tr>
+        <tr><td>Policy</td><td>Alert ownership and SLA</td><td>Vendor echoes route to a ticketing queue with a named owner — not to shared mailboxes.</td></tr>
+        <tr><td>Identity</td><td>SSO + MFA for analyst vendor accounts</td><td>Stolen portal credentials become unusable; <code>mfa_used=false</code> becomes a drift alarm, not a routine.</td></tr>
+        <tr><td>Identity</td><td>Least-privilege portal seats</td><td>Analysts see the sectors they need; bulk export rights are rare and logged.</td></tr>
+        <tr><td>Endpoint</td><td>Standard laptop hygiene</td><td>Analyst devices hold portal sessions; infostealer defenses protect the credentials that matter here.</td></tr>
+        <tr><td>Network</td><td>Brand and lookalike watching</td><td>CT watchers and domain monitors catch the lookalike infrastructure that report-grade lures need.</td></tr>
+        <tr><td>Cloud</td><td>Finance process controls</td><td>Callback verification and new-payee cooling periods neutralize the most likely monetization path.</td></tr>
+        <tr><td>Logging</td><td>Vendor feeds into the SIEM</td><td>Keyword alerts, research-order notices, and portal audit events become first-class detections.</td></tr>
+        <tr><td>Monitoring</td><td>Pre-attack detections</td><td>The five Sigma rules in 5.5 with tuned thresholds and documented false-positive budgets.</td></tr>
+        <tr><td>Response</td><td>Vendor-echo runbook</td><td>A short playbook: contextualize → score exposure → hunt lures → brief named staff → report.</td></tr>
+        <tr><td>Third party</td><td>Vendor abuse-team relationship</td><td>A contact at each vendor's trust/abuse team turns an email exchange into same-day answers.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4 class="muted" style="margin-top:20px">Home and small-office advice</h4>
+  <div class="grid-3">
+    <div class="card"><span class="card-icon good">V</span><h4>Verify payment changes</h4><p>Small businesses are prime BEC targets. Call the supplier on the number you already have before any bank-detail change. Thirty seconds on the phone beats a lawsuit.</p></div>
+    <div class="card"><span class="card-icon cyan">S</span><h4>Separate your inboxes</h4><p>Keep banking and business email away from newsletter and social accounts. Leaked data from low-value sites fuels better profiles of you.</p></div>
+    <div class="card"><span class="card-icon warn">T</span><h4>Think before you post</h4><p>Public org charts and "our team" pages are the raw material of the reports sold about companies. Publish roles, not full contact chains.</p></div>
+  </div>
+
+  <h4 class="muted" style="margin-top:20px">Prioritized actions</h4>
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>#</th><th>Action</th><th>Effort</th><th>Owner</th><th>Risk reduction</th><th>How to verify</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Move all vendor keyword alerts into a queue with an owner and SLA</td><td>Low</td><td>SOC manager</td><td><span class="badge sev-high">High</span></td><td>Zero unassigned vendor alerts older than 24h</td></tr>
+        <tr><td>2</td><td>Require callback verification for supplier bank-detail changes</td><td>Low</td><td>Finance</td><td><span class="badge sev-critical">Very high</span></td><td>Policy signed; audit of last 20 changes shows callbacks</td></tr>
+        <tr><td>3</td><td>Enforce SSO with MFA on every intel portal seat</td><td>Low</td><td>IAM team</td><td><span class="badge sev-high">High</span></td><td>Vendor admin shows 100% SSO, zero local passwords</td></tr>
+        <tr><td>4</td><td>Add telemetry/notification clauses at next vendor renewals</td><td>Low</td><td>Procurement + Legal</td><td><span class="badge sev-medium">Medium</span></td><td>Contract text reviewed and signed</td></tr>
+        <tr><td>5</td><td>Stand up CT/domain monitoring for lookalikes</td><td>Medium</td><td>Security eng</td><td><span class="badge sev-high">High</span></td><td>Weekly lookalike review with dispositions</td></tr>
+        <tr><td>6</td><td>Brief named executives on profile-based lures, twice a year</td><td>Low</td><td>Security awareness</td><td><span class="badge sev-medium">Medium</span></td><td>Attendance records; simulation click-rate trend</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s8" class="section" data-num="8">
+  <div class="sec-head">
+    <h2><span class="sec-num">8</span><span class="sec-title">Common Mistakes and Best Practices</span></h2>
+    <p class="sec-intro">Ten blue-team mistakes specific to vendor-based reconnaissance, each with symptom, root cause, fix, and prevention.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="wide">
+      <thead><tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Vendor alerts sent to shared mailboxes</td><td>Keyword alerts forwarded, never triaged</td><td>No routing design; "someone will read it"</td><td>Route to ticketing with an owner and SLA</td><td>Quarterly audit of vendor alert handling</td></tr>
+        <tr><td>2</td><td>Brand never registered as a monitored term</td><td>Alerts exist in the product but are switched off</td><td>Features unused because onboarding stopped at login</td><td>Register brand, domain, and executive names as terms</td><td>Onboarding checklist includes telemetry setup</td></tr>
+        <tr><td>3</td><td>Portal seats with local passwords</td><td>Analyst accounts bypass SSO and MFA</td><td>Vendors adopted bottom-up by teams</td><td>Federate vendor portals through SSO with MFA</td><td>Annual access review includes intel vendors</td></tr>
+        <tr><td>4</td><td>Alerts without context</td><td>"Your brand was searched" with no next step</td><td>No enrichment pipeline</td><td>Pair each alert with sector-event and campaign context</td><td>Alert template includes a context checklist</td></tr>
+        <tr><td>5</td><td>Treating a spike as noise after one false positive</td><td>Alert channel muted after news-driven spike</td><td>Thresholds never tuned to baselines</td><td>Measure a month of volume; set thresholds at 3× median</td><td>Monthly tuning review with FP rate</td></tr>
+        <tr><td>6</td><td>Ignoring lure quality as a signal</td><td>Phish with report-grade details handled as routine</td><td>No link between intel and triage severity</td><td>Tag "report-quality context" lures; raise severity</td><td>Triage playbook includes the quality check</td></tr>
+        <tr><td>7</td><td>Buying reports, never reading them</td><td>Shelfware subscriptions</td><td>Intel bought for checkboxes</td><td>Convert each relevant report into actions with dates</td><td>Quarterly intel-to-action review</td></tr>
+        <tr><td>8</td><td>No vendor abuse-team contact</td><td>Questions take a week; evidence expires</td><td>Relationship treated as pure vendor lock-in</td><td>Establish a named trust/abuse contact per vendor</td><td>Contact list tested twice a year</td></tr>
+        <tr><td>9</td><td>Executives unaware they are profiled</td><td>Targets surprised by lure accuracy</td><td>Protection work never communicated to them</td><td>Brief named staff; adjust their exposure</td><td>Bi-annual executive briefing with real (sanitized) examples</td></tr>
+        <tr><td>10</td><td>Payment-process controls skipped for speed</td><td>"The CFO asked me to change it" succeeds</td><td>Verification seen as friction</td><td>Callback verification and new-payee cooling period</td><td>Process audit on a sample of changes every quarter</td></tr>
+        <tr><td>11</td><td>Portal exports unrestricted</td><td>One seat can bulk-download the whole library</td><td>Default permissions never reviewed</td><td>Restrict export rights; log all exports</td><td>Least-privilege review per vendor seat</td></tr>
+        <tr><td>12</td><td>No pre-attack metrics</td><td>Leadership sees only incident counts</td><td>PRE-phase work invisible in reporting</td><td>Report vendor-echo volume and triage time monthly</td><td>Dashboard with coverage and SLA metrics</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4 class="muted" style="margin-top:20px">Habits that keep the program healthy</h4>
+  <div class="grid-3">
+    <div class="card"><span class="card-icon">D</span><h4>Daily</h4><ul><li>Clear the vendor-alert queue</li><li>Check lures for report-grade context</li><li>Note any sector event that changes risk</li></ul></div>
+    <div class="card"><span class="card-icon cyan">W</span><h4>Weekly</h4><ul><li>Review lookalike and CT findings</li><li>Verify alert SLA compliance</li><li>Sync with the finance verification owner</li></ul></div>
+    <div class="card"><span class="card-icon violet">M</span><h4>Monthly</h4><ul><li>Tune keyword thresholds with new baselines</li><li>Pull one vendor audit export and review it</li><li>Report pre-attack metrics to leadership</li></ul></div>
+  </div>
+</section>
+
+<section id="s9" class="section" data-num="9">
+  <div class="sec-head">
+    <h2><span class="sec-num">9</span><span class="sec-title">Cheat Sheet and Quick Reference</span></h2>
+    <p class="sec-intro">The whole sub-technique on one screen. Print it, pin it, share it with the on-call rotation.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Key facts</h4>
+      <dl class="kv" style="box-shadow:none">
+        <div><dt>ID</dt><dd>T1597.001 — Threat Intel Vendors</dd></div>
+        <div><dt>Parent</dt><dd>T1597 — Search Closed Sources</dd></div>
+        <div><dt>Tactic</dt><dd>Reconnaissance (PRE)</dd></div>
+        <div><dt>Core risk</dt><dd>Attackers read the same sector picture your team reads — aimed at you</dd></div>
+        <div><dt>Best signals</dt><dd>Monitored-term alerts, research-order notices, portal audit logs</dd></div>
+        <div><dt>Best controls</dt><dd>Vendor telemetry clauses, SSO+MFA, payment verification, alert ownership</dd></div>
+      </dl>
+    </div>
+    <div class="card">
+      <h4>Top detections</h4>
+      <div class="table-wrap" style="box-shadow:none">
+        <table>
+          <thead><tr><th>Signal</th><th>Source</th><th>First action</th></tr></thead>
+          <tbody>
+            <tr><td>Keyword spike on brand</td><td>Vendor monitored-term feed</td><td>Contextualize; brief named staff; watch lures</td></tr>
+            <tr><td>Research order naming you</td><td>Vendor notification</td><td>Record details; ask vendor about the account</td></tr>
+            <tr><td>Risky portal session</td><td>Vendor SSO/audit feed</td><td>Revoke sessions; reset; check exports</td></tr>
+            <tr><td>Bulk multi-target research</td><td>Vendor abuse summary</td><td>Share with ISAC; check peer exposure</td></tr>
+            <tr><td>Report-quality lure</td><td>SEG + triage tag</td><td>Raise severity; warn recipients directly</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <h4 class="muted" style="margin-top:18px">Response checklist</h4>
+  <ul class="checklist">
+    <li><span class="box"></span>Confirm the vendor echo is genuine; record term, volume, window, and account metadata</li>
+    <li><span class="box"></span>Check for a live sector event (funding, M&amp;A, layoffs) that could explain benign spikes</li>
+    <li><span class="box"></span>Ask the vendor for the account view: age, country, other terms searched</li>
+    <li><span class="box"></span>Hunt email and IdP logs for lures that use report-grade details</li>
+    <li><span class="box"></span>Brief named executives and finance staff with the specific pattern seen</li>
+    <li><span class="box"></span>Verify payment-process controls held (callbacks, cooling periods)</li>
+    <li><span class="box"></span>Share sanitized findings with your ISAC and the vendor's abuse team</li>
+    <li><span class="box"></span>Write the one-page summary: signal, context, action, change made</li>
+  </ul>
+
+  <h4 class="muted" style="margin-top:18px">Official links and related techniques</h4>
+  <div class="next-pages">
+    <a href="https://attack.mitre.org/techniques/T1597/001/" target="_blank" rel="noopener"><span>T1597.001 — Threat Intel Vendors (official page)</span><span class="muted">attack.mitre.org</span></a>
+    <a href="https://attack.mitre.org/techniques/T1597/" target="_blank" rel="noopener"><span>T1597 — Search Closed Sources (parent technique)</span><span class="muted">parent</span></a>
+    <a href="https://attack.mitre.org/techniques/T1597/002/" target="_blank" rel="noopener"><span>T1597.002 — Purchase Technical Data</span><span class="muted">sibling</span></a>
+    <a href="../T1597-Search-Closed-Sources.html"><span>Guide: T1597 — Search Closed Sources (parent overview)</span><span class="muted">companion guide</span></a>
+    <a href="002-Purchase-Technical-Data.html"><span>Guide: T1597.002 — Purchase Technical Data (deep dive)</span><span class="muted">companion guide</span></a>
+    <a href="https://attack.mitre.org/techniques/T1589/" target="_blank" rel="noopener"><span>T1589 — Gather Victim Identity Information</span><span class="muted">related</span></a>
+    <a href="https://attack.mitre.org/techniques/T1598/" target="_blank" rel="noopener"><span>T1598 — Phishing for Information</span><span class="muted">related</span></a>
+    <a href="https://attack.mitre.org/techniques/T1566/" target="_blank" rel="noopener"><span>T1566 — Phishing (follow-on use of the research)</span><span class="muted">follow-on</span></a>
+    <a href="https://attack.mitre.org/techniques/T1656/" target="_blank" rel="noopener"><span>T1656 — Impersonation (lure execution)</span><span class="muted">follow-on</span></a>
+  </div>
+</section>
+
+</main>
+</div>
+
+<div class="overlay" id="tocOverlay" hidden>
+  <div class="overlay-backdrop" data-close></div>
+  <div class="overlay-panel" role="dialog" aria-modal="true" aria-label="Page contents">
+    <div class="overlay-head">
+      <strong>Contents</strong>
+      <button class="icon-btn" id="overlayClose" type="button">Close</button>
+    </div>
+    <nav id="tocMobile" class="toc toc-mobile" aria-label="Table of contents"></nav>
+  </div>
+</div>
+
+<button class="fab" id="contentsBtn" type="button" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="fab" id="topBtn" type="button" aria-label="Back to top">Back to top</button>
+<button class="fab" id="themeBtn" type="button" aria-label="Switch between dark and light theme">Theme</button>
+
+<script>
+/* ATT&CK Detection Guide — page framework (no external dependencies) */
+(function () {
+  "use strict";
+  var d = document;
+  var root = d.documentElement;
+  var reduced = false;
+  try { reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+
+  /* ---------- theme toggle ---------- */
+  var themeBtn = d.getElementById("themeBtn");
+  function setTheme(t) {
+    root.setAttribute("data-theme", t);
+    try { localStorage.setItem("atk-theme", t); } catch (e) {}
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      setTheme(root.getAttribute("data-theme") === "dark" ? "light" : "dark");
+    });
+  }
+
+  /* ---------- table of contents (generated from real headings) ---------- */
+  function buildTOC(container) {
+    if (!container) return;
+    var sections = d.querySelectorAll("main.content > section.section");
+    var html = '<p class="toc-title">On this page</p><ul>';
+    sections.forEach(function (sec) {
+      var num = sec.getAttribute("data-num") || "";
+      var titleEl = sec.querySelector(".sec-title");
+      var title = titleEl ? titleEl.textContent.trim() : "";
+      if (!sec.id || !title) return;
+      html += '<li><a href="#' + sec.id + '"><span class="toc-num">' + num + "</span><span>" + title + "</span></a>";
+      if (num === "5") {
+        var subs = sec.querySelectorAll("h3.sub-title[id]");
+        if (subs.length) {
+          html += '<ul class="toc-sub">';
+          subs.forEach(function (h3) {
+            var sNum = h3.querySelector(".sub-num");
+            var sLabel = sNum ? sNum.textContent.trim() : "";
+            var sTitle = h3.cloneNode(true);
+            var sNumClone = sTitle.querySelector(".sub-num");
+            if (sNumClone) sTitle.removeChild(sNumClone);
+            html += '<li><a href="#' + h3.id + '"><span class="toc-num">' + sLabel + "</span><span>" + sTitle.textContent.trim() + "</span></a></li>";
+          });
+          html += "</ul>";
+        }
+      }
+      html += "</li>";
+    });
+    html += "</ul>";
+    container.innerHTML = html;
+  }
+  buildTOC(d.getElementById("toc"));
+  buildTOC(d.getElementById("tocMobile"));
+
+  /* ---------- active section highlighting + progress ---------- */
+  var fill = d.getElementById("progressFill");
+  var topBtn = d.getElementById("topBtn");
+  var tocNavs = [d.getElementById("toc"), d.getElementById("tocMobile")].filter(Boolean);
+  var tocLinks = [];
+  tocNavs.forEach(function (nav) {
+    nav.querySelectorAll("a[href^='#']").forEach(function (a) { tocLinks.push(a); });
+  });
+  function activeTOC() {
+    var pos = (window.scrollY || root.scrollTop) + 130;
+    var currentId = null;
+    d.querySelectorAll("main.content > section.section, section.section h3.sub-title[id]").forEach(function (el) {
+      if (el.offsetTop <= pos) currentId = el.id;
+    });
+    tocLinks.forEach(function (a) {
+      a.classList.toggle("active", a.getAttribute("href") === "#" + currentId);
+    });
+  }
+  function onScroll() {
+    var st = window.scrollY || root.scrollTop;
+    var h = d.documentElement.scrollHeight - window.innerHeight;
+    if (fill) fill.style.width = (h > 0 ? Math.min(1, st / h) : 0) * 100 + "%";
+    if (topBtn) topBtn.classList.toggle("show", st > 600);
+    activeTOC();
+  }
+  var ticking = false;
+  window.addEventListener("scroll", function () {
+    if (!ticking) { ticking = true; window.requestAnimationFrame(function () { onScroll(); ticking = false; }); }
+  }, { passive: true });
+  onScroll();
+
+  /* ---------- mobile contents overlay ---------- */
+  var overlay = d.getElementById("tocOverlay");
+  var contentsBtn = d.getElementById("contentsBtn");
+  var closeBtn = d.getElementById("overlayClose");
+  function openOverlay() {
+    if (!overlay) return;
+    overlay.hidden = false;
+    if (contentsBtn) contentsBtn.setAttribute("aria-expanded", "true");
+    d.body.style.overflow = "hidden";
+    if (closeBtn) closeBtn.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.hidden = true;
+    if (contentsBtn) contentsBtn.setAttribute("aria-expanded", "false");
+    d.body.style.overflow = "";
+    if (contentsBtn) contentsBtn.focus();
+  }
+  if (contentsBtn) contentsBtn.addEventListener("click", openOverlay);
+  if (closeBtn) closeBtn.addEventListener("click", closeOverlay);
+  if (overlay) {
+    overlay.addEventListener("click", function (e) {
+      if (e.target.hasAttribute("data-close")) closeOverlay();
+    });
+    overlay.addEventListener("click", function (e) {
+      if (e.target.closest("a[href^='#']")) closeOverlay();
+    });
+  }
+  d.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && overlay && !overlay.hidden) closeOverlay();
+  });
+
+  /* ---------- back to top ---------- */
+  if (topBtn) {
+    topBtn.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" });
+    });
+  }
+
+  /* ---------- copy buttons ---------- */
+  function fallbackCopy(text, btn) {
+    try {
+      var ta = d.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed"; ta.style.left = "-9999px";
+      d.body.appendChild(ta);
+      ta.select();
+      d.execCommand("copy");
+      d.body.removeChild(ta);
+      flash(btn);
+    } catch (err) {}
+  }
+  function flash(btn) {
+    var old = btn.textContent;
+    btn.textContent = "Copied!";
+    btn.classList.add("copied");
+    window.setTimeout(function () { btn.textContent = old; btn.classList.remove("copied"); }, 1600);
+  }
+  d.addEventListener("click", function (e) {
+    var btn = e.target.closest(".copy-btn");
+    if (!btn) return;
+    var block = btn.closest(".code-block");
+    if (!block) return;
+    var code = block.querySelector("code");
+    if (!code) return;
+    var text = code.innerText;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash(btn); }, function () { fallbackCopy(text, btn); });
+    } else {
+      fallbackCopy(text, btn);
+    }
+  });
+
+  /* ============================================================
+     Simulation engine (HTML5 Canvas + vanilla JS)
+     Powered by window.SIM_CONFIG = {alt, nodes, edges, steps, info}
+     ============================================================ */
+  function bootSim() {
+    var cfg = window.SIM_CONFIG;
+    var canvas = d.getElementById("simCanvas");
+    if (!cfg || !canvas || canvas.dataset.booted) return;
+    canvas.dataset.booted = "1";
+    var ctx = canvas.getContext("2d");
+    var tip = d.getElementById("simTip");
+    var cap = d.getElementById("simCaption");
+    var hint = d.getElementById("simHint");
+    var stage = canvas.parentElement;
+    var shell = d.getElementById("simShell");
+    var W = 960, H = 440;
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var scale = 1;
+    var NW = 176, NH = 62;
+
+    var step = 0, t = 0, playing = false, speed = 1, lastTs = 0, rafId = null;
+    var finished = false;
+    var STEP_MS = 3800;
+    var colors = {};
+    function readColors() {
+      var cs = getComputedStyle(root);
+      ["accent", "accent-2", "violet", "success", "warning", "danger", "high", "low",
+        "text", "muted", "surface", "elevated", "border", "border-strong"].forEach(function (k) {
+        colors[k] = cs.getPropertyValue("--" + k).trim() || "#888";
+      });
+    }
+    var ROLE = {
+      attacker: "danger", vendor: "violet", broker: "accent-2", target: "accent",
+      soc: "success", leak: "warning", infra: "high"
+    };
+    function nodeById(id) { for (var i = 0; i < cfg.nodes.length; i++) if (cfg.nodes[i].id === id) return cfg.nodes[i]; return null; }
+
+    function resize() {
+      var w = stage.clientWidth || 600;
+      scale = w / W;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(w * (H / W) * dpr);
+      canvas.style.height = (w * H / W) + "px";
+      draw();
+    }
+
+    function roundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    function anchor(a, b) {
+      var dx = (b.x - a.x), dy = (b.y - a.y);
+      var p1 = { x: a.x, y: a.y }, p2 = { x: b.x, y: b.y };
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        if (dx > 0) { p1.x += NW / 2; p2.x -= NW / 2; } else { p1.x -= NW / 2; p2.x += NW / 2; }
+        p1.y = a.y; p2.y = b.y;
+      } else {
+        if (dy > 0) { p1.y += NH / 2; p2.y -= NH / 2; } else { p1.y -= NH / 2; p2.y += NH / 2; }
+        p1.x = a.x; p2.x = b.x;
+      }
+      return [p1, p2];
+    }
+    function arrow(p1, p2, color, dash, prog) {
+      ctx.save();
+      ctx.strokeStyle = color; ctx.fillStyle = color;
+      ctx.lineWidth = 1.6;
+      if (dash) ctx.setLineDash([6, 5]);
+      ctx.globalAlpha = dash ? 0.7 : 0.9;
+      var end = prog == null ? 1 : Math.max(0, Math.min(1, prog));
+      var ex = p1.x + (p2.x - p1.x) * end, ey = p1.y + (p2.y - p1.y) * end;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.setLineDash([]);
+      var ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      ctx.translate(ex, ey); ctx.rotate(ang);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-8, -4); ctx.lineTo(-8, 4); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    function drawNode(n, glow) {
+      var roleColor = colors[ROLE[n.role]] || colors.accent;
+      ctx.save();
+      if (glow) { ctx.shadowColor = roleColor; ctx.shadowBlur = 18; }
+      roundRect(n.x - NW / 2, n.y - NH / 2, NW, NH, 12);
+      ctx.fillStyle = colors.elevated; ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = roleColor; ctx.lineWidth = glow ? 2.2 : 1.4;
+      roundRect(n.x - NW / 2, n.y - NH / 2, NW, NH, 12); ctx.stroke();
+      ctx.fillStyle = roleColor;
+      ctx.beginPath(); ctx.arc(n.x - NW / 2 + 15, n.y - NH / 2 + 16, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = colors.text;
+      ctx.font = "700 12.5px " + "system-ui, sans-serif";
+      ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      ctx.fillText(n.label, n.x - NW / 2 + 27, n.y - NH / 2 + 17, NW - 34);
+      ctx.fillStyle = colors.muted;
+      ctx.font = "400 10.5px system-ui, sans-serif";
+      ctx.fillText(n.sub || "", n.x - NW / 2 + 12, n.y - NH / 2 + 36, NW - 22);
+      if (n.status) {
+        ctx.fillStyle = roleColor;
+        ctx.font = "700 10.5px ui-monospace, monospace";
+        ctx.fillText(n.status, n.x - NW / 2 + 12, n.y - NH / 2 + 50, NW - 22);
+      }
+      ctx.restore();
+    }
+
+    function currentSet() {
+      var s = cfg.steps[step];
+      var set = {};
+      cfg.nodes.forEach(function (n) { set[n.id] = { status: n.status || "", glow: false }; });
+      if (s && s.set) {
+        Object.keys(s.set).forEach(function (k) {
+          set[k] = Object.assign(set[k] || {}, s.set[k]);
+        });
+      }
+      return set;
+    }
+
+    function draw() {
+      if (!ctx) return;
+      ctx.setTransform(canvas.width / W, 0, 0, canvas.width / W, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      var set = currentSet();
+      var s = cfg.steps[step] || { actions: [] };
+      cfg.edges.forEach(function (e) {
+        var a = nodeById(e[0]), b = nodeById(e[1]);
+        if (!a || !b) return;
+        var p = anchor(a, b);
+        arrow(p[0], p[1], colors.muted, e[2] === "dashed", null);
+      });
+      s.actions.forEach(function (act) {
+        if (act.type === "packet") {
+          var a = nodeById(act.from), b = nodeById(act.to);
+          if (!a || !b) return;
+          var p = anchor(a, b);
+          var prog = reduced ? 1 : Math.max(0, Math.min(1, (t - (act.at || 0) * STEP_MS) / ((act.dur || 0.55) * STEP_MS)));
+          if (prog > 0 && prog <= 1) {
+            arrow(p[0], p[1], act.color || colors.accent, false, prog);
+            var px = p[0].x + (p[1].x - p[0].x) * prog;
+            var py = p[0].y + (p[1].y - p[0].y) * prog;
+            ctx.save();
+            ctx.shadowColor = act.color || colors.accent; ctx.shadowBlur = 12;
+            ctx.fillStyle = act.color || colors.accent;
+            ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+          }
+        } else if (act.type === "pulse") {
+          var n = nodeById(act.at_node);
+          if (!n) return;
+          var ph = reduced ? 0.5 : ((t / STEP_MS + (act.phase || 0)) % 1);
+          var r = 14 + ph * 34;
+          ctx.save();
+          ctx.globalAlpha = 0.75 * (1 - ph);
+          ctx.strokeStyle = act.color || colors[ROLE[n.role]] || colors.accent;
+          ctx.lineWidth = 2.4;
+          ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+        }
+      });
+      cfg.nodes.forEach(function (n) {
+        var st = set[n.id] || {};
+        var nn = Object.assign({}, n, { status: st.status !== undefined ? st.status : (n.status || "") });
+        drawNode(nn, st.glow);
+      });
+    }
+
+    function updateCaption() {
+      var s = cfg.steps[step];
+      if (!s) return;
+      if (cap) cap.textContent = "Step " + (step + 1) + " of " + cfg.steps.length + " — " + s.title + ". " + s.caption;
+      if (hint) hint.textContent = s.hint;
+      d.querySelectorAll(".step-chips button").forEach(function (b) {
+        b.setAttribute("aria-pressed", Number(b.dataset.step) === step ? "true" : "false");
+      });
+      d.querySelectorAll(".story .card[data-step]").forEach(function (c) {
+        c.classList.toggle("active", Number(c.getAttribute("data-step")) === step);
+      });
+    }
+    function goto(i) {
+      step = Math.max(0, Math.min(cfg.steps.length - 1, i));
+      t = 0;
+      finished = false;
+      updateCaption();
+      draw();
+    }
+    function frame(ts) {
+      if (!playing) return;
+      if (!lastTs) lastTs = ts;
+      var dt = ts - lastTs; lastTs = ts;
+      t += dt * speed;
+      if (t >= STEP_MS) {
+        if (step < cfg.steps.length - 1) { goto(step + 1); }
+        else { playing = false; finished = true; t = 0; syncButtons(); draw(); return; }
+      }
+      draw();
+      rafId = window.requestAnimationFrame(frame);
+    }
+    function syncButtons() {
+      var play = d.getElementById("simPlay");
+      var pause = d.getElementById("simPause");
+      if (play) play.disabled = playing;
+      if (pause) pause.disabled = !playing;
+    }
+    function startPlay() {
+      if (reduced) { goto(step + 1); return; }
+      if (finished) { finished = false; step = 0; updateCaption(); }
+      playing = true; lastTs = 0; syncButtons();
+      rafId = window.requestAnimationFrame(frame);
+    }
+    function stopPlay() {
+      playing = false; syncButtons();
+      if (rafId) { window.cancelAnimationFrame(rafId); rafId = null; }
+    }
+
+    var playBtn = d.getElementById("simPlay");
+    var pauseBtn = d.getElementById("simPause");
+    var restartBtn = d.getElementById("simRestart");
+    var prevBtn = d.getElementById("simPrev");
+    var nextBtn = d.getElementById("simNext");
+    if (playBtn) playBtn.addEventListener("click", startPlay);
+    if (pauseBtn) pauseBtn.addEventListener("click", stopPlay);
+    if (restartBtn) restartBtn.addEventListener("click", function () { stopPlay(); goto(0); });
+    if (prevBtn) prevBtn.addEventListener("click", function () { stopPlay(); goto(step - 1); });
+    if (nextBtn) nextBtn.addEventListener("click", function () { stopPlay(); goto(step + 1); });
+    d.querySelectorAll(".seg [data-speed]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        speed = Number(b.dataset.speed);
+        d.querySelectorAll(".seg [data-speed]").forEach(function (x) {
+          x.setAttribute("aria-pressed", x === b ? "true" : "false");
+        });
+      });
+    });
+    var chips = d.getElementById("simStepChips");
+    if (chips) {
+      cfg.steps.forEach(function (s, i) {
+        var b = d.createElement("button");
+        b.type = "button"; b.dataset.step = i;
+        b.textContent = i + 1;
+        b.title = s.title;
+        b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+        b.setAttribute("aria-label", "Jump to step " + (i + 1) + ": " + s.title);
+        b.addEventListener("click", function () { stopPlay(); goto(i); });
+        chips.appendChild(b);
+      });
+    }
+    if (shell) {
+      shell.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowRight") { stopPlay(); goto(step + 1); e.preventDefault(); }
+        if (e.key === "ArrowLeft") { stopPlay(); goto(step - 1); e.preventDefault(); }
+      });
+    }
+
+    function hitNode(mx, my) {
+      for (var i = 0; i < cfg.nodes.length; i++) {
+        var n = cfg.nodes[i];
+        if (Math.abs(mx - n.x) <= NW / 2 && Math.abs(my - n.y) <= NH / 2) return n;
+      }
+      return null;
+    }
+    function showTip(n, cx, cy) {
+      if (!tip) return;
+      var info = (cfg.info && cfg.info[n.id]) || "";
+      tip.innerHTML = "<strong>" + n.label + "</strong>" + info;
+      tip.hidden = false;
+      var rect = stage.getBoundingClientRect();
+      var x = cx - rect.left + 14, y = cy - rect.top + 14;
+      if (x + 260 > rect.width) x = x - 280;
+      if (y + 120 > rect.height) y = y - 130;
+      tip.style.left = Math.max(4, x) + "px";
+      tip.style.top = Math.max(4, y) + "px";
+    }
+    canvas.addEventListener("mousemove", function (e) {
+      if (!tip) return;
+      var rect = canvas.getBoundingClientRect();
+      var mx = (e.clientX - rect.left) / scale;
+      var my = (e.clientY - rect.top) / scale;
+      var n = hitNode(mx, my);
+      if (n) showTip(n, e.clientX, e.clientY); else tip.hidden = true;
+    });
+    canvas.addEventListener("mouseleave", function () { if (tip) tip.hidden = true; });
+    canvas.addEventListener("click", function (e) {
+      var rect = canvas.getBoundingClientRect();
+      var mx = (e.clientX - rect.left) / scale;
+      var my = (e.clientY - rect.top) / scale;
+      var n = hitNode(mx, my);
+      if (n) showTip(n, e.clientX, e.clientY); else if (tip) tip.hidden = true;
+    });
+
+    var themeObs = new MutationObserver(function () { readColors(); draw(); });
+    themeObs.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    if (window.ResizeObserver) { new ResizeObserver(function () { resize(); }).observe(stage); }
+    else window.addEventListener("resize", resize);
+
+    readColors();
+    resize();
+    updateCaption();
+    goto(0);
+    if (reduced && playBtn) playBtn.title = "Reduced motion: press to move to the next step";
+  }
+  if (d.readyState === "loading") d.addEventListener("DOMContentLoaded", bootSim);
+  else bootSim();
+  window.ATTACK_SIM_BOOT = bootSim;
+})();
+
+</script>
+<script>
+/* T1597.001 — Threat Intel Vendors: simulation configuration */
+window.SIM_CONFIG = {
+  info: {
+    attacker: "A recon operator who prefers reading reports to running scans. Everything shown here is a legal purchase with an illegal purpose.",
+    portal: "A commercial threat intel platform: actor profiles, sector reports, searchable private data, and custom research orders (T1597.001).",
+    analyst: "The vendor's research team. Writing the report is lawful work — the abuse lies entirely in the buyer's intent.",
+    target: "The victim organization. Its systems are never touched during this simulation; the harm begins later, with the lures.",
+    soc: "The victim's SOC. Its only echo of the whole operation is one vendor keyword alert — if that feed was ever wired up."
+  },
+  nodes: [
+    { id: "attacker", x: 110, y: 220, label: "Recon Operator", sub: "reads before attacking", role: "attacker" },
+    { id: "portal", x: 370, y: 100, label: "Vendor Portal", sub: "paid subscription", role: "vendor" },
+    { id: "analyst", x: 370, y: 340, label: "Vendor Analyst Team", sub: "custom research", role: "vendor" },
+    { id: "target", x: 670, y: 220, label: "Target Company", sub: "not touched yet", role: "target" },
+    { id: "soc", x: 866, y: 110, label: "SOC / Blue Team", sub: "one echo to catch", role: "soc" }
+  ],
+  edges: [
+    ["attacker", "portal"],
+    ["attacker", "analyst"],
+    ["attacker", "target", "dashed"],
+    ["target", "soc", "dashed"]
+  ],
+  steps: [
+    {
+      title: "Buy a subscription",
+      caption: "Through a front company, the operator subscribes to a commercial threat intel portal. Buyer screening passes; the account is ready.",
+      hint: "Vendor contracts can require buyer screening and account-audit exports. Add those clauses at renewal.",
+      set: { attacker: { glow: true, status: "persona ready" }, portal: { glow: true, status: "new account" } },
+      actions: [{ type: "packet", from: "attacker", to: "portal", at: 0.05, dur: 0.55, color: null }]
+    },
+    {
+      title: "Browse the catalog",
+      caption: "The operator studies actor profiles and sector reports to learn which attack patterns work against the target's industry.",
+      hint: "The same reports are your morning read too. Treat sector findings as shared intelligence, not shelfware.",
+      set: { portal: { status: "catalog browsing" } },
+      actions: [{ type: "pulse", at_node: "portal", color: null }]
+    },
+    {
+      title: "Search for the target",
+      caption: "A search for the company name and domain returns two private reports. Every search is logged — this is the SOC's first echo.",
+      hint: "Register your brand and domain as monitored terms. A 24-hour search spike is an early, concrete signal.",
+      set: { portal: { glow: true, status: "search: 2 reports" }, attacker: { status: "target confirmed" } },
+      actions: [
+        { type: "packet", from: "attacker", to: "portal", at: 0.05, dur: 0.4, color: null },
+        { type: "packet", from: "portal", to: "attacker", at: 0.5, dur: 0.4, color: null }
+      ]
+    },
+    {
+      title: "Order a custom report",
+      caption: "The operator pays for custom research: security posture, key finance staff, and the acquisition timeline of the target.",
+      hint: "Some vendors notify monitored brands about sensitive orders. Ask for that duty in writing.",
+      set: { analyst: { glow: true, status: "task received" }, portal: { status: "custom order paid" } },
+      actions: [{ type: "packet", from: "attacker", to: "analyst", at: 0.05, dur: 0.55, color: null }]
+    },
+    {
+      title: "The analyst compiles",
+      caption: "A vendor analyst assembles public and licensed data into a clean report. The work itself is legal — the buyer's intent is not.",
+      hint: "Public org charts and rosters are the raw material. Publish roles, not full contact chains.",
+      set: { analyst: { status: "compiling…" }, target: { status: "data drawn from public+licensed" } },
+      actions: [{ type: "pulse", at_node: "analyst", color: null }]
+    },
+    {
+      title: "Download and digest",
+      caption: "The finished PDF lands in the portal: executives, deal codename, approver chain, security-stack summary. The download is logged.",
+      hint: "Bulk-download logs are how vendors catch abuse. Agree thresholds with their abuse team in advance.",
+      set: { portal: { glow: true, status: "report downloaded" }, attacker: { status: "victim profile ready" } },
+      actions: [{ type: "packet", from: "portal", to: "attacker", at: 0.05, dur: 0.5, color: null }]
+    },
+    {
+      title: "Plan the operation",
+      caption: "Armed with the report, the operator drafts invoice-fraud lures quoting the real approver chain, timed to the M&A closing.",
+      hint: "Callback verification on any bank-detail change neutralizes this whole plan. Fund the control, train the people.",
+      set: { attacker: { glow: true, status: "lures drafted" }, target: { glow: true, status: "in the crosshairs" } },
+      actions: [
+        { type: "pulse", at_node: "target", color: null },
+        { type: "pulse", at_node: "attacker", phase: 0.5, color: null }
+      ]
+    },
+    {
+      title: "The SOC's only echo",
+      caption: "One monitored-term alert arrives: brand searches spiked 14× in 24 hours. Read and triaged, it is a real early warning. Ignored, it is the only trace that ever existed.",
+      hint: "Own the echo: route vendor alerts to a queue with an SLA, and hunt email for report-grade lures the same day.",
+      set: { soc: { glow: true, status: "keyword alert received" }, attacker: { status: "operation ready" } },
+      actions: [{ type: "pulse", at_node: "soc", color: null }]
+    }
+  ]
+};
+window.ATTACK_SIM_BOOT && window.ATTACK_SIM_BOOT();
+
+</script>
+</body>
+</html>
+
