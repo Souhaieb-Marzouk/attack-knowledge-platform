@@ -16,6 +16,8 @@
 
 ### Changed
 
+- ATT&CK Explorer now defaults to Live + planned, with green `Live` and gray
+  `Planned` badges, a status legend, and live/planned counts per tactic.
 - Set all 197 Sigma rules to author `Souhaieb Marzouk`, status
   `experimental`, and practical descriptions and tuning notes.
 - Normalized every rule description to one physical YAML line.

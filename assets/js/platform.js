@@ -277,9 +277,12 @@
       setCount('atk-count-rules', ruleCount);
       setCount('atk-count-tactics', tacticCoverage);
 
-      var mode = 'live';
+      // Show both live and planned techniques by default so the status badges
+      // are visible without hunting through the scope toggle. The v2 key
+      // intentionally ignores the old live-only preference.
+      var mode = 'all';
       try {
-        var savedMode = localStorage.getItem('atk-explorer-mode');
+        var savedMode = localStorage.getItem('atk-explorer-mode-v2');
         if (savedMode === 'live' || savedMode === 'all') mode = savedMode;
       } catch (e) { /* private mode */ }
 
@@ -364,8 +367,9 @@
       function badgeFor(row) {
         if (isLive(row)) return '<span class="atk-badge is-live">Live</span>';
         var n = liveChildren(row.id).length;
-        if (n) return '<span class="atk-badge is-planned">' + n + ' live sub</span>';
-        return '<span class="atk-badge is-planned">Planned</span>';
+        var plannedBadge = '<span class="atk-badge is-planned">Planned</span>';
+        if (n) return plannedBadge + '<span class="atk-badge is-live">' + n + ' live sub</span>';
+        return plannedBadge;
       }
 
       function metaFor(row, withChildren) {
@@ -387,7 +391,7 @@
           '<span class="atk-node-step">' + String(t.order).padStart(2, '0') + '</span>' +
           '<span class="atk-node-body">' +
             '<span class="atk-node-name">' + esc(t.name) + '</span>' +
-            '<span class="atk-node-meta">' + liveRows.length + ' live \u00b7 ' + all.length + ' tracked</span>' +
+            '<span class="atk-node-meta">' + liveRows.length + ' live \u00b7 ' + (all.length - liveRows.length) + ' planned</span>' +
           '</span>' +
           '<span class="atk-node-arrow" aria-hidden="true">\u203a</span>' +
         '</button>';
@@ -414,7 +418,7 @@
         '</span>';
         if (isLive(row)) {
           return '<a class="atk-explorer-node atk-node-sub is-live" href="' + esc(SITE_BASE + row.page) + '">' +
-            body + '<span class="atk-node-tail"><span class="atk-node-open">Open \u2192</span></span></a>';
+            body + '<span class="atk-node-tail"><span class="atk-badge is-live">Live</span><span class="atk-node-open">Open \u2192</span></span></a>';
         }
         return '<div class="atk-explorer-node atk-node-sub is-planned">' +
           body + '<span class="atk-node-tail"><span class="atk-badge is-planned">Planned</span></span></div>';
@@ -564,9 +568,14 @@
           '<div class="atk-explorer-head">' +
             '<p class="atk-explorer-kicker">Interactive knowledge map \u00b7 tactic \u2192 technique \u2192 sub-technique</p>' +
             '<div class="atk-explorer-modes" role="group" aria-label="Explorer scope">' +
-              '<button type="button" class="atk-mode-btn' + (mode === 'live' ? ' is-on' : '') + '" data-explorer-mode="live" aria-pressed="' + (mode === 'live') + '">Live guides (' + live + ')</button>' +
-              '<button type="button" class="atk-mode-btn' + (mode === 'all' ? ' is-on' : '') + '" data-explorer-mode="all" aria-pressed="' + (mode === 'all') + '">Full catalogue (' + (live + planned) + ')</button>' +
+              '<button type="button" class="atk-mode-btn' + (mode === 'all' ? ' is-on' : '') + '" data-explorer-mode="all" aria-pressed="' + (mode === 'all') + '">Live + planned (' + (live + planned) + ')</button>' +
+              '<button type="button" class="atk-mode-btn' + (mode === 'live' ? ' is-on' : '') + '" data-explorer-mode="live" aria-pressed="' + (mode === 'live') + '">Live only (' + live + ')</button>' +
             '</div>' +
+          '</div>' +
+          '<div class="atk-explorer-legend" aria-label="Technique status legend">' +
+            '<span><span class="atk-badge is-live">Live</span> full guide ready</span>' +
+            '<span><span class="atk-badge is-planned">Planned</span> tracked, guide not written yet</span>' +
+            '<span class="atk-legend-note">A planned parent can still have live sub-guides.</span>' +
           '</div>' +
           '<div class="atk-explorer-grid">' +
             '<svg class="atk-explorer-web" aria-hidden="true" focusable="false"></svg>' +
@@ -585,7 +594,8 @@
           '</div>' +
           '<div class="atk-explorer-foot">' +
             '<span><b>' + live + '</b> live guides</span>' +
-            '<span><b>' + (live + planned) + '</b> catalogue rows</span>' +
+            '<span><b>' + planned + '</b> planned</span>' +
+            '<span><b>' + (live + planned) + '</b> total techniques</span>' +
             '<span><b>' + ruleCount + '</b> log-tested Sigma rules</span>' +
             '<span>' + tacticCoverage + ' of ' + ordered.length + ' tactics covered</span>' +
           '</div></div>';
@@ -604,7 +614,7 @@
           var modeBtn = e.target.closest ? e.target.closest('[data-explorer-mode]') : null;
           if (modeBtn) {
             mode = modeBtn.dataset.explorerMode;
-            try { localStorage.setItem('atk-explorer-mode', mode); } catch (err) { /* private mode */ }
+            try { localStorage.setItem('atk-explorer-mode-v2', mode); } catch (err) { /* private mode */ }
             state.technique = null;
             if (mode === 'live' && state.tactic) {
               var liveRoots = rootsFor(state.tactic).filter(visibleRoot);

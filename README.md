@@ -46,8 +46,8 @@ Actions; both are free for public repositories.
   and Sigma rules. Inverted index, ranked results, full keyboard navigation,
   and live guides ranked above catalogue rows.
 - **ATT&CK Explorer**: tactic → technique → sub-technique drill-down with
-  animated connector lines and a live/full-catalogue toggle, so the roadmap
-  never buries the 76 guides that are ready to read.
+  green **Live** and gray **Planned** status badges, a status legend, and a
+  live/planned scope toggle, so the roadmap never hides what is ready to read.
 - **Cross-linked guides** with breadcrumbs, relations (used by / mitigated by /
   detected by) and prev/next within the tactic.
 - **Sigma Rule Library** with level, logsource, tactics, linked technique,
