@@ -5,13 +5,15 @@ Detection-as-code rules for the knowledge base. Every rule in
 [Sigma Rule Library](../tools/sigma.html). Every rule also has a positive and
 a negative JSONL log fixture under `tests/sigma_cases/`.
 
-**Current library: 141 rules, 141 positive cases, 141 negative cases.**
+**Current library: 178 rules, 178 positive cases, 178 negative cases.**
 
 ## Style guide
 
+New rules start as `experimental` and can be promoted after tuning.
+
 - **Filename:** `t{technique-id-lowercase}-{slug}.yml` — for example
   `t1566.001-outlook-child-process.yml`. Always `.yml`, never `.yaml`.
-- **Required fields:** `title`, `id` (UUID v4), `status` (`stable` | `test`),
+- **Required fields:** `title`, `id` (UUID v4), `status` (`experimental` | `stable` | `test`),
   `description`, `references` (must include the attack.mitre.org technique
   URL), `author`, `date` (ISO `YYYY-MM-DD`), `tags` (at least one
   `attack.tXXXXXX` technique tag), `logsource`, `detection`, `falsepositives`,

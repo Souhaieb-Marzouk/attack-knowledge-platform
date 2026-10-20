@@ -6,9 +6,18 @@
 
 - 37 new technique guides covering T1584, T1589, T1591, T1593, T1595, T1596,
   T1597 and T1598, including 29 sub-techniques.
+- 37 new Sigma rules extracted from the new detection sections, with 37
+  positive and 37 negative log fixtures.
 - Canonical URLs for every newly added guide.
 - The new guides are wired into the technique catalogue, sitemap, search,
   hub pages and ATT&CK Explorer.
+- Rebuilt `data/sigma-index.json` to 178 rules and updated library statistics.
+
+### Changed
+
+- Set all 178 Sigma rules to author `Souhaieb Marzouk`, status
+  `experimental`, and practical descriptions and tuning notes.
+- Normalized every rule description to one physical YAML line.
 
 ### Fixed
 
