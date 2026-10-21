@@ -1,0 +1,1899 @@
+<!DOCTYPE html>
+<!-- ATT&CK Technique Detection Guide v2.0 — audited & corrected against MITRE ATT&CK v20, 2026-10-21 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1055.003 - Thread Execution Hijacking | Detection Guide</title>
+<meta name="description" content="Defensive guide to MITRE ATT&amp;CK T1055.003 Thread Execution Hijacking: how thread context manipulation works, how to detect it with Sysmon and EDR, Sigma rules, Splunk SPL, and response steps.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1055-Process-Injection/003-Thread-Execution-Hijacking.html">
+<script>(function(){try{var t=localStorage.getItem('atk-theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<style>
+/* ATK-SHARED-CSS v1 — MITRE ATT&CK technique guide design system.
+   Shared by every technique page. Do not fork or re-theme per page. */
+
+:root{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --radius:14px; --radius-sm:9px;
+  --shadow:0 8px 28px rgba(2,6,18,.35);
+  --accent-soft:rgba(79,140,255,.14);
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 8px 24px rgba(23,35,64,.10);
+  --accent-soft:rgba(47,111,228,.10);
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16.5px;line-height:1.65;overflow-wrap:break-word;-webkit-font-smoothing:antialiased}
+img,svg,canvas{max-width:100%}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{line-height:1.2;font-weight:700;margin:0 0 .5em;letter-spacing:-.01em}
+p{margin:0 0 1em}
+code,kbd,samp{font-family:var(--mono);font-size:.88em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:.08em .35em}
+pre code{background:none;border:none;padding:0;font-size:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent-soft)}
+#atk-header:empty{display:none}
+
+/* ---------- progress bar ---------- */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:80;pointer-events:none}
+.progress-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+/* ---------- hero ---------- */
+.hero{border-bottom:1px solid var(--border);background:var(--bg);background:linear-gradient(180deg,var(--accent-soft),transparent 64%)}
+.hero-inner{max-width:1280px;margin:0 auto;padding:56px 28px 36px;position:relative}
+.kicker{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);margin:0 0 14px}
+.hero-title{font-size:clamp(1.9rem,4.4vw,2.75rem);letter-spacing:-.015em;max-width:26ch;margin-bottom:.45em}
+.tech-id{display:inline-block;vertical-align:middle;font-family:var(--mono);font-size:.44em;font-weight:700;color:var(--accent);border:1px solid var(--accent);background:var(--accent-soft);border-radius:10px;padding:.18em .5em;margin-right:.55rem;letter-spacing:.04em}
+.hero-intro{max-width:72ch;color:var(--muted);font-size:1.04rem;margin:0 0 20px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0 0 26px;padding:0}
+.chip{font-size:.76rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:5px 12px}
+.chip-mono{font-family:var(--mono);font-size:.71rem;color:var(--accent-2);border-color:var(--border-strong)}
+.facts-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.fact-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.fact-label{display:block;font-family:var(--mono);font-size:.67rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-2);margin-bottom:6px}
+.fact-card p{margin:0;font-size:.9rem;color:var(--muted);line-height:1.55;overflow-wrap:anywhere}
+.theme-toggle{position:absolute;top:24px;right:28px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-size:1.05rem;line-height:1;cursor:pointer}
+.theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- layout ---------- */
+.layout{max-width:1280px;margin:0 auto;padding:44px 28px 110px;display:grid;grid-template-columns:262px minmax(0,1fr);gap:38px;align-items:start}
+.sidebar{position:sticky;top:20px;max-height:calc(100vh - 40px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 14px;box-shadow:var(--shadow)}
+.toc-heading{font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:2px 6px 10px}
+.toc{display:flex;flex-direction:column;gap:2px}
+.toc a{display:block;padding:7px 10px;border-radius:8px;color:var(--muted);font-size:.86rem;border-left:2px solid transparent}
+.toc a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent);font-weight:600}
+.toc a.toc-sub{padding-left:26px;font-size:.8rem;border-left:2px solid var(--border)}
+.toc a.toc-sub.active{border-left-color:var(--accent)}
+.main-content{min-width:0}
+
+/* ---------- sections ---------- */
+.section{margin:0 0 60px;scroll-margin-top:22px}
+.section-head{margin-bottom:22px}
+.section h2{display:flex;align-items:center;gap:12px;font-size:clamp(1.35rem,2.4vw,1.8rem);margin-bottom:.4em}
+.section-num{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:34px;border-radius:10px;font-family:var(--mono);font-size:.85rem;font-weight:700;color:var(--accent);background:var(--accent-soft);border:1px solid var(--border-strong)}
+.section-intro{color:var(--muted);max-width:75ch;margin:0}
+h3.subsec{display:flex;align-items:center;gap:10px;font-size:1.12rem;margin:36px 0 14px;scroll-margin-top:22px}
+.subsec-num{flex:none;font-family:var(--mono);font-size:.72rem;font-weight:700;color:var(--accent-2);border:1px solid var(--border-strong);border-radius:8px;padding:3px 8px;background:var(--surface-2)}
+h4{font-size:1rem}
+
+/* ---------- cards, grids, callouts ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);margin:0 0 16px}
+.card h3,.card h4{margin-top:0}
+.card p:last-child{margin-bottom:0}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.grid-2 .card,.grid-3 .card{margin:0}
+.callout{border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:12px;background:var(--surface-2);padding:14px 16px;margin:0 0 16px}
+.callout .callout-title{display:block;font-weight:700;font-size:.85rem;margin-bottom:6px}
+.callout p{margin:0 0 .5em;font-size:.93rem}
+.callout p:last-child{margin:0}
+.callout.note{border-left-color:var(--accent)}   .callout.note .callout-title{color:var(--accent)}
+.callout.good{border-left-color:var(--success)}  .callout.good .callout-title{color:var(--success)}
+.callout.warning{border-left-color:var(--warning)}.callout.warning .callout-title{color:var(--warning)}
+.callout.danger{border-left-color:var(--danger)} .callout.danger .callout-title{color:var(--danger)}
+
+/* ---------- badges ---------- */
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid currentColor;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}
+.badge.critical{color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.badge.high{color:var(--high);background:color-mix(in srgb,var(--high) 12%,transparent)}
+.badge.medium{color:var(--warning);background:color-mix(in srgb,var(--warning) 14%,transparent)}
+.badge.low{color:var(--low);background:color-mix(in srgb,var(--low) 12%,transparent)}
+.badge.cat{color:var(--accent-2);background:var(--accent-soft);text-transform:none;letter-spacing:.02em}
+
+/* ---------- key/value list ---------- */
+.kv{display:grid;grid-template-columns:minmax(150px,max-content) minmax(0,1fr);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--surface)}
+.kv>div{padding:10px 14px;font-size:.9rem;border-top:1px solid var(--border);overflow-wrap:anywhere}
+.kv>div:nth-child(-n+2){border-top:none}
+.kv .k{background:var(--surface-2);font-weight:600;color:var(--muted);font-family:var(--mono);font-size:.76rem}
+
+/* ---------- timeline ---------- */
+.timeline{list-style:none;margin:0 0 16px;padding:4px 0 4px 24px;border-left:2px solid var(--border-strong)}
+.timeline li{position:relative;padding:0 0 16px 14px}
+.timeline li:last-child{padding-bottom:2px}
+.timeline li::before{content:"";position:absolute;left:-31px;top:7px;width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--bg),0 0 0 4px var(--border-strong)}
+.tl-when{font-family:var(--mono);font-size:.74rem;color:var(--accent-2);display:block;margin-bottom:2px}
+
+/* ---------- tables ---------- */
+.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:0 0 16px;background:var(--surface);-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.88rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+thead th{background:var(--surface-2);font-size:.76rem;text-transform:uppercase;letter-spacing:.06em;font-family:var(--mono)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+
+/* ---------- code blocks ---------- */
+.code-block{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--surface-2)}
+.code-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 8px 8px 14px;background:var(--surface);border-bottom:1px solid var(--border)}
+.code-head .lang{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.copy-btn{flex:none;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);font-family:var(--mono);font-size:.72rem;padding:5px 12px;border-radius:8px;cursor:pointer}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.code-block pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12.8px;line-height:1.6;tab-size:2}
+
+/* ---------- simulation ---------- */
+.sim{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);margin:0 0 16px}
+.sim-canvas-wrap{position:relative;aspect-ratio:16/9;min-height:280px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+.sim-canvas{display:block;width:100%;height:100%}
+.sim-tooltip{position:absolute;z-index:5;pointer-events:none;background:var(--elevated);color:var(--text);border:1px solid var(--border-strong);border-radius:10px;padding:8px 11px;font-size:.78rem;line-height:1.45;max-width:230px;box-shadow:var(--shadow)}
+.sim-tooltip strong{display:block;color:var(--accent-2);margin-bottom:2px}
+.sim-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.sim-btn{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);border-radius:9px;padding:8px 16px;font-size:.85rem;font-weight:600;cursor:pointer}
+.sim-btn:hover{border-color:var(--accent)}
+.sim-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.sim-speed-label{display:inline-flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted)}
+.sim-speed{background:var(--surface-2);color:var(--text);border:1px solid var(--border-strong);border-radius:8px;padding:6px 8px;font-size:.85rem}
+.sim-status{margin-left:auto;font-family:var(--mono);font-size:.74rem;color:var(--muted)}
+.step-chips{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.step-chip{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--muted);font-family:var(--mono);font-size:.71rem;border-radius:999px;padding:5px 11px;cursor:pointer}
+.step-chip:hover{color:var(--text)}
+.step-chip.active{color:#fff;background:var(--accent);border-color:var(--accent);font-weight:600}
+.sim-caption{padding:14px 16px 16px}
+.sim-step-title{font-weight:700;margin:0 0 6px;font-size:1rem}
+.sim-caption-text{font-size:.93rem;margin:0 0 12px;max-width:75ch}
+.sim-defender{border-left:3px solid var(--accent-2);background:var(--surface-2);border-radius:0 10px 10px 0;padding:10px 14px;margin:0 0 12px}
+.sim-defender-label{display:block;font-family:var(--mono);font-size:.66rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-2);margin-bottom:4px}
+.sim-defender-text{margin:0;font-size:.88rem}
+.sim-evidence{display:flex;flex-wrap:wrap;gap:8px}
+.sim-story{padding-left:22px;margin:0}
+.sim-story li{margin-bottom:10px;font-size:.93rem}
+.sim-story em{color:var(--accent-2);font-style:normal;font-weight:600}
+
+/* ---------- mobile controls + overlay ---------- */
+.mobile-toc-btn,.back-top{position:fixed;z-index:60;border-radius:999px;cursor:pointer;font-family:var(--sans)}
+.mobile-toc-btn{right:18px;bottom:18px;display:none;background:var(--accent);border:1px solid var(--accent);color:#fff;font-weight:700;font-size:.85rem;padding:12px 18px;box-shadow:var(--shadow)}
+.back-top{right:18px;bottom:74px;width:44px;height:44px;background:var(--surface);border:1px solid var(--border-strong);color:var(--text);font-size:1.15rem;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity .2s,transform .2s}
+.back-top.show{opacity:1;pointer-events:auto;transform:none}
+.toc-overlay{position:fixed;inset:0;z-index:90;background:rgba(4,8,18,.6)}
+.toc-overlay-panel{position:absolute;top:0;left:0;bottom:0;width:min(330px,88vw);background:var(--surface);border-right:1px solid var(--border);padding:18px 16px;overflow:auto;box-shadow:var(--shadow)}
+.toc-close{display:block;margin:0 0 14px auto;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);border-radius:8px;padding:6px 12px;font-size:.8rem;cursor:pointer}
+.toc-overlay .toc a{font-size:.95rem;padding:9px 12px}
+
+/* ---------- utilities ---------- */
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.small{font-size:.85rem}
+
+/* ---------- responsive ---------- */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0;padding-top:28px}
+  .sidebar{display:none}
+  .mobile-toc-btn{display:inline-block}
+  .facts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .hero-inner{padding:40px 18px 26px}
+  .hero-intro{font-size:.98rem}
+  .theme-toggle{top:14px;right:14px}
+  .facts-grid{grid-template-columns:minmax(0,1fr)}
+  .grid-2,.grid-3{grid-template-columns:minmax(0,1fr)}
+  .layout{padding:24px 14px 130px}
+  .sim-canvas-wrap{aspect-ratio:4/3;min-height:240px}
+  .sim-status{margin-left:0;width:100%}
+  .sim-toolbar .sim-btn{flex:1 1 auto}
+  table{min-width:560px}
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto!important}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+/* ---------- print ---------- */
+@media print{
+  .progress-bar,.sidebar,.mobile-toc-btn,.back-top,.toc-overlay,.theme-toggle,.sim-toolbar,.step-chips,.copy-btn,.sim-tooltip{display:none!important}
+  html,body{background:#fff!important;color:#000!important}
+  .card,.fact-card,.code-block,.table-scroll,.callout,.sim,.kv{border-color:#bbb!important;box-shadow:none!important;background:#fff!important}
+  a{color:#000;text-decoration:none}
+  pre,.code-block pre{white-space:pre-wrap;word-break:break-word;overflow:visible}
+  .table-scroll{overflow:visible}
+  table{min-width:0}
+  .section{break-inside:auto}
+  h2,h3{break-after:avoid}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1055.003"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div class="progress-bar" aria-hidden="true"><span id="progressFill"></span></div>
+
+<main>
+  <header class="hero">
+    <div class="hero-inner">
+      <button id="pageThemeToggle" class="theme-toggle" type="button" aria-label="Switch color theme">☀</button>
+      <p class="kicker">MITRE ATT&amp;CK · Sub-technique of T1055 · Stealth (TA0005) · Privilege Escalation (TA0004)</p>
+      <h1 class="hero-title"><span class="tech-id">T1055.003</span> Thread Execution Hijacking</h1>
+      <p class="hero-intro">A thread is the part of a program that actually runs instructions. Thread execution hijacking pauses an existing thread inside a trusted process, points it at attacker code instead, and resumes it. No new thread is created, which makes it quieter than classic injection. ATT&amp;CK lists this technique under the tactics Stealth (TA0005) and Privilege Escalation (TA0004). TA0005 was named Defense Evasion before ATT&amp;CK v20.</p>
+      <ul class="chips" aria-label="Technique metadata">
+        <li class="chip chip-mono">ID · T1055.003</li>
+        <li class="chip">Tactics · Stealth / Privilege Escalation (TA0005 / TA0004)</li>
+        <li class="chip">Platform · Windows</li>
+        <li class="chip">Parent · T1055 Process Injection</li>
+        <li class="chip">Domain · Enterprise</li>
+        <li class="chip">Guide v2.0</li>
+      </ul>
+      <div class="facts-grid">
+        <div class="fact-card"><span class="fact-label">What it is</span><p>An existing thread's next instruction is redirected to attacker code that was written into the process memory. The thread never leaves its original process.</p></div>
+        <div class="fact-card"><span class="fact-label">Why attackers use it</span><p>No remote thread is created and no new process appears, so there are fewer obvious events for defenders to see than with classic injection.</p></div>
+        <div class="fact-card"><span class="fact-label">Main risks</span><p>Quiet implants that run inside trusted processes such as browsers, with full access to that process's data, cookies, and network session.</p></div>
+        <div class="fact-card"><span class="fact-label">Detection focus</span><p>Thread-context writes across processes, suspend and resume handle patterns, and code in memory that has no file behind it.</p></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Table of contents">
+      <p class="toc-heading">Contents</p>
+      <nav id="tocNav" class="toc" aria-label="Sections"></nav>
+      <noscript>
+        <nav class="toc" aria-label="Sections (static fallback)">
+          <a href="#overview">Overview</a>
+          <a href="#simulation">Animated simulation</a>
+          <a href="#red-team">Red team perspective</a>
+          <a href="#blue-team">Blue team perspective</a>
+          <a href="#detection-engineering">Detection engineering deep dive</a>
+          <a class="toc-sub" href="#regulation-mapping">5.1 Regulation mapping</a>
+          <a class="toc-sub" href="#threat-intelligence">5.2 Threat intelligence</a>
+          <a class="toc-sub" href="#threats-ranking">5.3 Threats ranking</a>
+          <a class="toc-sub" href="#logs-and-patterns">5.4 Logs and patterns</a>
+          <a class="toc-sub" href="#sigma-and-spl">5.5 Sigma rules and Splunk SPL</a>
+          <a href="#case-study">Real-world case study</a>
+          <a href="#mitigation">Mitigation and defense</a>
+          <a href="#mistakes">Common mistakes and best practices</a>
+          <a href="#cheat-sheet">Cheat sheet and quick reference</a>
+        </nav>
+      </noscript>
+    </aside>
+
+    <div class="main-content">
+      <section id="overview" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">1</span><span class="section-title">Overview</span></h2>
+    <p class="section-intro">Thread Execution Hijacking is a quiet way to run attacker code inside a process you already trust. This section explains the idea in plain words and shows where it fits in an attack.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Threads and the instruction pointer</h3>
+      <p>A program is a list of instructions stored in memory. A <strong>thread</strong> is the worker that runs those instructions, one after the other. The CPU keeps a small register called the <strong>instruction pointer</strong> (named <code>EIP</code> on 32-bit x86 CPUs and <code>RIP</code> on 64-bit x64 CPUs). It always holds the address of the next instruction to run.</p>
+      <p>Whoever controls the instruction pointer controls what the thread does next. That is the whole idea of this technique.</p>
+    </div>
+    <div class="card">
+      <h3>How the hijack works</h3>
+      <p>The attacker code does five things to one thread inside the target process. <code>OpenThread</code> gets a handle to the chosen thread. <code>SuspendThread</code> pauses the thread. <code>VirtualAllocEx</code> and <code>WriteProcessMemory</code> place the payload into the process memory. <code>GetThreadContext</code> and <code>SetThreadContext</code> read and change the saved CPU registers, so the instruction pointer (<code>EIP</code> on x86, <code>RIP</code> on x64) points at the payload. Finally <code>ResumeThread</code> starts the thread again — and it now runs the attacker code.</p>
+    </div>
+    <div class="card">
+      <h3>Why it evades detection</h3>
+      <p>Classic injection creates a new remote thread with <code>CreateRemoteThread</code>, and Windows logs that event (Sysmon Event ID 8). Here no new thread is created. The attacker reuses a thread that already exists, so that event never appears. Tools that only watch for remote-thread events see nothing.</p>
+    </div>
+    <div class="card">
+      <h3>Main risks</h3>
+      <p>The payload runs inside a trusted process such as a browser. It can read that process's data, reuse its network session, and stay hidden for a long time. If the implant picks a busy thread carelessly, the trusted process can also crash — which becomes a visible side effect for the user.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Where it fits in the attack chain</h3>
+      <p>This is a <strong>post-execution Stealth (TA0005)</strong> step: the implant is already on the host and just needs a safe place to run. After the hijack succeeds, the attacker uses the hidden code for Command and Control (C2 — the attacker's remote channel) and later for Credential Access. The hijack itself is staging: it turns a fragile implant file on disk into durable code inside a trusted process.</p>
+    </div>
+    <div class="card">
+      <h3>What you will learn in this guide</h3>
+      <p>You will see the full attack story step by step, what an attacker must prepare, which traces the technique leaves on Windows, which events and fields matter (Sysmon Event ID 10 with thread-context rights), five ready-to-adapt Sigma rules with matching Splunk queries, and a complete response checklist.</p>
+    </div>
+  </div>
+
+  <div class="callout note"><span class="callout-title">Note — how T1055.003 differs from its neighbors</span><p>T1055.004 (Asynchronous Procedure Call) queues code through the APC queue instead of changing the instruction pointer. T1055.005 (Thread Local Storage) abuses TLS callbacks, which run before a program's entry point. T1055.003 is the direct approach: suspend a live thread and overwrite its instruction pointer.</p></div>
+
+  <div class="callout note"><span class="callout-title">Note — quiet does not mean invisible</span><p>The technique avoids one loud event, but it must still write into another process's memory and change a thread context. Those actions leave traces in Sysmon Event ID 10, EDR thread telemetry, and memory scans. Good detection coverage is realistic and achievable.</p></div>
+
+  <div class="kv">
+    <div class="k">ID</div><div>T1055.003 — Thread Execution Hijacking</div>
+    <div class="k">Parent technique</div><div>T1055 — Process Injection</div>
+    <div class="k">Platform</div><div>Windows</div>
+    <div class="k">Permissions required</div><div>User (no administrator rights needed)</div>
+    <div class="k">Data sources</div><div>Process access, Thread, OS API execution</div>
+    <div class="k">Related techniques</div><div>T1055.004 (Asynchronous Procedure Call), T1055.005 (Thread Local Storage), T1055.001 (Dynamic-Link Library Injection), T1106 (Native API)</div>
+  </div>
+</section>
+
+<section id="simulation" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">2</span><span class="section-title">Animated simulation</span></h2>
+    <p class="section-intro">Watch one attack, step by step. The left side shows the attacker, the middle shows the victim host and its browser process, and the right side shows what the SOC can see at the same moment.</p>
+  </header>
+
+  <div class="sim" id="sim">
+    <div class="sim-canvas-wrap">
+      <canvas class="sim-canvas" role="img" aria-label="Animated story of thread execution hijacking: an implant opens a browser process, suspends a thread, writes shellcode, redirects the instruction pointer, resumes the thread, and the SOC detects it."></canvas>
+      <div class="sim-tooltip" hidden></div>
+    </div>
+    <div class="sim-toolbar">
+      <button class="sim-btn primary sim-play" type="button">Play</button>
+      <button class="sim-btn sim-restart" type="button">Restart</button>
+      <label class="sim-speed-label">Speed
+        <select class="sim-speed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      </label>
+      <span class="sim-status" aria-live="polite">Step 1 of 8</span>
+    </div>
+    <div class="step-chips" role="group" aria-label="Jump to a step"></div>
+    <div class="sim-caption">
+      <p class="sim-step-title"></p>
+      <p class="sim-caption-text" aria-live="polite"></p>
+      <div class="sim-defender">
+        <span class="sim-defender-label">SOC view</span>
+        <p class="sim-defender-text" aria-live="polite"></p>
+      </div>
+      <div class="sim-evidence" aria-label="Evidence produced by this step"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Written story (text alternative)</h3>
+    <ol class="sim-story">
+      <li><strong>Step 1 — Foothold.</strong> A user downloads a malicious file, and the implant starts on the workstation. Nothing on screen looks wrong. <em>Defender view:</em> Sysmon Event ID 1 records the new process with a suspicious parent chain.</li>
+      <li><strong>Step 2 — Pick a thread.</strong> The implant opens the browser process and looks for a thread that is sleeping, so the program will not crash later. <em>Defender view:</em> Sysmon Event ID 10 shows a cross-process handle request from an unknown tool.</li>
+      <li><strong>Step 3 — Suspend.</strong> The implant calls SuspendThread and freezes the chosen thread between two instructions. <em>Defender view:</em> the handle access includes suspend rights; few products alert on this, so it usually stays quiet.</li>
+      <li><strong>Step 4 — Write shellcode.</strong> The implant copies its payload into a read-write-execute memory region inside the browser process. <em>Defender view:</em> EDR memory scanning flags code in a region that has no file on disk behind it.</li>
+      <li><strong>Step 5 — Redirect RIP.</strong> The implant reads the thread context, changes the instruction pointer (RIP) so it points at the payload, and writes the context back with SetThreadContext. <em>Defender view:</em> Sysmon Event ID 10 shows a thread-context write (SET_CONTEXT) from another process.</li>
+      <li><strong>Step 6 — Resume.</strong> ResumeThread restarts the thread. Instead of the original code, the thread now runs the attacker payload inside msedge.exe. <em>Defender view:</em> no remote-thread event fires, because no new thread was created; only thread behavior looks strange.</li>
+      <li><strong>Step 7 — Hidden activity.</strong> The payload works inside the browser process while the user still sees a normal page. The implant talks to its operator. <em>Defender view:</em> memory scanning and network analytics see a beacon leaving from a browser process at odd times.</li>
+      <li><strong>Step 8 — SOC triage.</strong> The analyst opens the EDR context-modification alert, captures memory from the host, and isolates the machine from the network. <em>Defender view:</em> the alert chain is complete — handle access, context write, memory alert, beacon — and isolation stops the implant.</li>
+    </ol>
+  </div>
+
+  <div class="callout note"><span class="callout-title">Note — how to read the canvas</span><p>Arrows show actions, and a moving dot means the action is in progress. The pill under the SOC analyst shows the evidence each step produces. Hover or tap any box to read what it is, and use the step chips to jump to a single step.</p></div>
+</section>
+
+      <section id="red-team" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">3</span><span class="section-title">Red team perspective</span></h2>
+    <p class="section-intro">Understanding how attackers think about thread hijacking helps you write better detections. This section describes the technique conceptually, for defense and lab learning only.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Why attackers choose it</h3>
+      <p>The main reason is stealth. Hijacking reuses a thread that already exists, so there is no remote-thread event to catch. The attacker also inherits everything the thread already has: the memory of the trusted process, its security context, and its network identity. From the outside, traffic from the implant looks like traffic from the browser or from another legitimate program.</p>
+      <p>A second reason is stability of access. Code inside a long-running process survives longer than a short-lived loader file on disk, which antivirus can delete.</p>
+    </div>
+    <div class="card">
+      <h3>Where it is used in the wild</h3>
+      <p>Thread and context manipulation appears in three families of tooling. Old loaders and RATs (remote access trojans) used it for years, and many families keep it as a fallback. Modern custom implants and red-team frameworks still offer it as a code-execution option, often together with APC injection, because it defeats naive remote-thread detections. The official ATT&amp;CK page for T1055.003 documents this behavior for Gazer, Trojan.Karagany, Waterbear, Pikabot, and Vidar.</p>
+    </div>
+  </div>
+
+  <div class="callout danger"><span class="callout-title">Danger — Lab only</span><p>The sequence below is a conceptual map for building detections, not instructions to run. Never execute injection techniques against systems you do not own. In a legal lab, the primitive chain is: find a target thread → <code>OpenThread</code> → <code>SuspendThread</code> → <code>VirtualAllocEx</code> + <code>WriteProcessMemory</code> → <code>GetThreadContext</code> → <code>SetThreadContext</code> (move the instruction pointer, EIP/RIP) → <code>ResumeThread</code>. Every step in that chain is a detection opportunity described in Section 5.</p></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Prerequisites an attacker needs</h3>
+      <ul>
+        <li><strong>A process handle with the right access.</strong> Writing memory and setting a thread context needs <code>PROCESS_VM_WRITE</code>, <code>PROCESS_VM_OPERATION</code>, and <code>THREAD_SET_CONTEXT</code> rights.</li>
+        <li><strong>Matching architecture.</strong> A 64-bit implant cannot set the context of a 32-bit process in a meaningful way; the bitness must match.</li>
+        <li><strong>An idle thread.</strong> Hijacking a thread that is mid-task corrupts the program. Attackers pick threads that are waiting, so the application survives.</li>
+        <li><strong>User-level rights.</strong> The technique works without administrator privileges, which is why it is common in ordinary malware.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Common variations</h3>
+      <ul>
+        <li><strong>Early-bird style.</strong> The process is created suspended, the payload is staged, and the main thread is hijacked before its own code runs. ATT&amp;CK tracks this suspended-process pattern mainly under T1055.004 (Asynchronous Procedure Call). For thread execution hijacking proper, the thread is suspended, not the process.</li>
+        <li><strong>APC queue alternative.</strong> T1055.004 uses the APC queue instead of the instruction pointer: the implant queues code to run at the next alertable wait.</li>
+        <li><strong>Fiber hijacking.</strong> Windows fibers are lighter than threads; an implant can switch execution to a fiber it controls with the same evasion goal.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Mistakes the technique makes (useful for defenders)</h3>
+    <p>Implants get hijacking wrong in predictable ways, and each failure leaves a trace. Hijacking a busy thread crashes the trusted process, which produces error reports. Forgetting the <code>CONTEXT_CONTROL</code> flag in the context request fails silently, so the implant retries and repeats the same handle events. Leaving the payload region as RWX (read-write-execute) memory makes it visible to memory scanners. Wrong stack alignment makes the payload crash shortly after the resume, and the crash points at a thread whose start address belongs to no module.</p>
+  </div>
+</section>
+
+<section id="blue-team" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">4</span><span class="section-title">Blue team perspective</span></h2>
+    <p class="section-intro">The technique hides one event but creates others. Here is what defenders can actually see, where to look, and how to triage an alert quickly.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Your visibility options</h3>
+      <p><strong>Sysmon Event ID 10 (ProcessAccess)</strong> is the workhorse. With the right configuration it logs cross-process handle access, including the rights requested and the call stack of the requesting thread. One limit matters: Event ID 10 records handles to <em>processes</em>. The context change happens on a handle to a <em>thread</em>, so Sysmon does not log it as a separate event — you infer it from the Event ID 10 record and from EDR thread telemetry. <strong>EDR agents</strong> close that gap: they raise context-modification alerts directly, with thread start addresses and memory region protection. <strong>ETW</strong> (Event Tracing for Windows) provides the raw stream that both tools build on.</p>
+    </div>
+    <div class="card">
+      <h3>Artifacts to collect</h3>
+      <ul>
+        <li>Handle access to a <em>process</em> with write-class rights such as <code>0x143A</code> (<code>PROCESS_VM_WRITE</code> + <code>PROCESS_VM_OPERATION</code> + query rights), or full access <code>0x1FFFFF</code>.</li>
+        <li>Handle access to a <em>thread</em> with <code>THREAD_SET_CONTEXT</code> (0x0010) and <code>THREAD_SUSPEND_RESUME</code> (0x0002). Sysmon Event ID 10 records process handles only, so these thread rights appear mainly in EDR telemetry.</li>
+        <li>On process handles, <code>PROCESS_SUSPEND_RESUME</code> (0x0800) when a tool suspends every thread of a process.</li>
+        <li>An RWX memory region in the target with no file on disk behind it (unbacked memory).</li>
+        <li>A thread whose stack shows <code>UNKNOWN(...)</code> frames — code running outside any loaded module.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout warning"><span class="callout-title">Warning — Sysmon Event ID 8 will not fire</span><p>Event ID 8 logs <code>CreateRemoteThread</code>. Thread hijacking never calls that API, so a detection stack built on Event ID 8 alone is blind to this technique. You need Event ID 10 with thread-context rights, or EDR thread telemetry.</p></div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Where to look</h3>
+      <p>In your <strong>EDR console</strong>, open the process and thread view for the target process and sort threads by start address; unbacked start addresses stand out. In <strong>Sysmon Event ID 10 logs</strong>, group by source image and granted access. In <strong>Windows Security Event ID 4688</strong> (process creation), anchor the timeline: it shows the loader and its parent, but it cannot see the hijack itself. <strong>Microsoft Defender for Endpoint</strong> alerts (IDs 1116 and 1117) can confirm malware on the host. In <strong>memory forensics</strong>, list thread start addresses and look for regions that no module maps.</p>
+    </div>
+    <div class="card">
+      <h3>Why it matters and how it fits the chain</h3>
+      <p>This technique specifically defeats naive remote-thread detections, so its presence tells you the attacker invests in evasion. It usually sits between initial access and C2. When you confirm it, assume the implant had time to collect credentials from the hijacked process, and scope the incident wider than one host.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Six-step triage flow</h3>
+    <ol class="timeline">
+      <li><span class="tl-when">Step 1</span><strong>Validate.</strong> Confirm the alert is real: check that the source image, target image, and granted access in the event match, and that the source is not a known tool on your allowlist.</li>
+      <li><span class="tl-when">Step 2</span><strong>Identify.</strong> Name the source process, target process, and source thread ID. Pull the command line and file hash of the source.</li>
+      <li><span class="tl-when">Step 3</span><strong>Capture memory.</strong> Take an EDR-triggered memory dump of the target process before killing anything, so the payload region is preserved.</li>
+      <li><span class="tl-when">Step 4</span><strong>Check thread starts.</strong> List thread start addresses and call stacks in the target. <code>UNKNOWN</code> frames or start addresses outside any module confirm injected code.</li>
+      <li><span class="tl-when">Step 5</span><strong>Isolate.</strong> If unbacked code is confirmed, remove the host from the network and block the source process hash.</li>
+      <li><span class="tl-when">Step 6</span><strong>Hunt fleet-wide.</strong> Search all endpoints for the same source hash, the same handle pattern, and the same parent chain, then open an incident if more hosts match.</li>
+    </ol>
+  </div>
+</section>
+
+      <section id="detection-engineering" class="section">
+        <header class="section-head">
+          <h2><span class="section-num">5</span><span class="section-title">Detection engineering deep dive</span></h2>
+          <p class="section-intro">This is the working part of the guide. It maps the technique to compliance controls, threat intelligence, ranked threats, concrete logs, and five detection rules you can adapt today.</p>
+        </header>
+        <h3 class="subsec" id="regulation-mapping"><span class="subsec-num">5.1</span><span class="section-title">Regulation mapping</span></h3>
+<p class="small muted">Auditors rarely name a specific injection technique. They name the capability they expect: protection from malicious code, monitoring, and evidence. The table shows how detections for T1055.003 support each control.</p>
+<div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>Regulation</th><th>Control</th><th>What it asks for</th><th>Why it applies here</th><th>Expected evidence</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>GDPR</td><td>Art. 32 + Art. 33</td><td>Art. 32: technical measures appropriate to the risk, including protection from unlawful access to personal data. Art. 33: notification of personal-data breaches.</td><td>A hijacked browser process can read exactly the data users handle: sessions, forms, cookies. If a hijack succeeds, breach-notification duties can follow.</td><td>Sigma rule IDs in the rule register, alert tickets, response records, breach-assessment notes.</td></tr>
+      <tr><td>HIPAA Security Rule</td><td>45 CFR §164.312(a)(1), §164.312(b), §164.308(a)(1)(ii)(D)</td><td>Access control on ePHI systems (§164.312(a)(1)); audit controls that record activity (§164.312(b)); periodic review of information-system activity (§164.308(a)(1)(ii)(D)).</td><td>Injection is the standard way malware hides on endpoints that hold health data, and thread-context rules are the audit trail for that activity.</td><td>Endpoint telemetry coverage list, tuned Sysmon configuration, activity-review reports.</td></tr>
+      <tr><td>ISO/IEC 27001:2022</td><td>Annex A 8.15, 8.16, 5.24–5.26</td><td>Logging (8.15); monitoring activities and anomaly response (8.16); incident management planning, assessment, and response (5.24–5.26).</td><td>Thread-context rules are a monitoring activity (8.16) whose output feeds incident management (5.24–5.26).</td><td>Rule documentation, alert volume and tuning history, incident records.</td></tr>
+      <tr><td>SOC 2</td><td>CC7.2, CC7.3</td><td>CC7.2: monitoring for anomalies and threats, with defined responses. CC7.3: evaluating security events to understand their impact.</td><td>The rule set and triage flow in this page demonstrate both the monitoring control and the evaluation control.</td><td>Dashboards, quarterly rule reviews, documented false-positive handling.</td></tr>
+      <tr><td>PCI DSS v4.0</td><td>10.2, 10.5, 10.7, 12.10</td><td>Audit logging of security events (10.2); securing and preserving audit logs (10.5); detecting and responding to failures of critical security controls (10.7); incident response planning (12.10).</td><td>Point-of-sale and payment hosts are common injection targets, so injection telemetry is expected audit-log evidence.</td><td>Sysmon/EDR logs retained per policy, detection rule change log, tested IR plan.</td></tr>
+      <tr><td>NIST CSF 2.0</td><td>DE.CM, RS.MI, PR.PS</td><td>Continuous monitoring of endpoints for malicious activity (DE.CM); incident mitigation (RS.MI); platform security hardening (PR.PS).</td><td>The five rules in 5.5 map to DE.CM, the triage flow maps to RS.MI, and exploit-protection controls map to PR.PS.</td><td>Monitoring architecture, rule test results, alert-to-response samples.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3 class="subsec" id="threat-intelligence"><span class="subsec-num">5.2</span><span class="section-title">Threat intelligence</span></h3>
+<div class="grid-2">
+  <div class="card">
+    <h3>Sources worth following</h3>
+    <ul>
+      <li><strong>MITRE ATT&amp;CK</strong> — the technique page and its parent T1055 define scope and terminology.</li>
+      <li><strong>Vendor reporting</strong> — Microsoft, Check Point, Fortinet, and Broadcom/Symantec regularly document injection chains in loader analysis.</li>
+      <li><strong>OSINT</strong> — Malpedia tracks families and their tooling; AlienVault OTX aggregates pulses that mention T1055.003.</li>
+      <li><strong>Commercial feeds</strong> — paid intel platforms add campaign tracking and ATT&amp;CK mappings you can import into your tools.</li>
+      <li><strong>ISACs</strong> — sector groups share indicators that include loader hashes and behavior notes.</li>
+      <li><strong>Internal telemetry</strong> — your own Event ID 10 archive is the best source for what is normal in your estate.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Collection, analysis, application</h3>
+    <p><strong>Collect</strong> the ATT&amp;CK mapping and the raw behavior notes from vendor write-ups. The write-ups usually name the APIs (suspend, write, context) even when they do not name the technique. <strong>Analyze</strong> by turning each behavior into a question your telemetry can answer. <strong>Apply</strong> by tuning the rules in 5.5 with what you learn, and by recording confirmed uses in your case notes so future triage is faster.</p>
+  </div>
+</div>
+
+<div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>Tool / malware</th><th>Documented use</th><th>Confidence</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Gazer (S0168)</td><td>Performs thread execution hijacking to inject its orchestrator into a running thread from a remote process. Listed on the official ATT&amp;CK page.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Trojan.Karagany (S0094)</td><td>Injects a suspended thread of its own process into a new process and starts it with ResumeThread. Listed on the official ATT&amp;CK page.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Waterbear (S0579)</td><td>Uses thread injection to inject shellcode into the process of security software. Listed on the official ATT&amp;CK page.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Pikabot (S1145)</td><td>Creates a suspended instance of a legitimate process, allocates memory in it, and runs its core module there. Listed on the official ATT&amp;CK page.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Vidar (S9050)</td><td>Has injected code into a suspended RegAsm.exe process. Listed on the official ATT&amp;CK page.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Injection frameworks (generic)</td><td>As a class, commercial and open-source red-team and malware frameworks keep thread hijacking as a code-execution option.</td><td><span class="badge medium">Medium</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="callout warning"><span class="callout-title">Warning — map behavior, not names</span><p>The five tool rows above come from the official ATT&amp;CK page for T1055.003 (v20), which lists no associated groups and five associated software entries. Public reports beyond that page rarely confirm the exact primitive: when a report says "process injection", it may mean DLL injection, hollowing, or thread hijacking. Treat the table as direction, keep the confidence label, and verify the behavior against your own logs before you attribute an incident.</p></div>
+
+<h3 class="subsec" id="threats-ranking"><span class="subsec-num">5.3</span><span class="section-title">Threats ranking and categorization</span></h3>
+<p class="small muted">Five concrete threats built from this technique, ranked by detection priority on Windows. Severity reflects how likely the pattern is malicious and how much damage it enables.</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h4><span class="badge critical">Critical</span> <span class="badge cat">Windows</span> T1 — Cross-process thread-context write (SetThreadContext)</h4>
+    <p><strong>Description.</strong> A process outside the target changes the instruction pointer of a thread inside it. This is the core primitive of the sub-technique. <strong>Preconditions.</strong> A process handle with write rights plus a thread handle with set-context rights; user-level privileges are enough. <strong>Impact.</strong> Arbitrary code runs inside a trusted process with no new thread. <strong>Justification.</strong> Legitimate cross-process context writes are rare and short-lived. With the tool filter in place, noise is workable, and this is the direct signature of the technique, so it earns a critical rule.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge medium">Medium</span> <span class="badge cat">Windows</span> T2 — Remote thread suspend/resume manipulation</h4>
+    <p><strong>Description.</strong> Suspend and resume rights requested on another process, the preparation pattern of a hijack even when the context write is not yet visible. <strong>Preconditions.</strong> Same handle chain as T1. <strong>Impact.</strong> A frozen thread or a completed hijack that started quietly. <strong>Justification.</strong> Some administration and debugging tools suspend processes, so this is a hunt signal more than an automatic alert.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge high">High</span> <span class="badge cat">Windows</span> T3 — Process created suspended, then staged</h4>
+    <p><strong>Description.</strong> A script host or Office parent creates a child with the CREATE_SUSPENDED flag, so the child's main thread can be hijacked before its own code runs. ATT&amp;CK tracks this suspended-process pattern mainly under T1055.004 (Early Bird APC), but loaders that MITRE associates with T1055.003, such as Pikabot and Vidar, use it too. For thread execution hijacking proper, the thread is suspended, not the process, so treat this as a staging signal rather than proof. <strong>Preconditions.</strong> A document, script, or dropper that starts the child. <strong>Impact.</strong> The "hijack before start" variant evades process-creation scanning entirely. <strong>Justification.</strong> The parent-child combination (wscript, winword, excel) with a suspended child is unusual in normal work.</p>
+  </div>
+  <div class="card">
+    <h4><span class="badge low">Low</span> <span class="badge cat">Windows</span> T4 — Unknown-module thread activity in a browser process</h4>
+    <p><strong>Description.</strong> Call stacks containing UNKNOWN frames — code with no module on disk behind it — appearing in events that touch browser processes. <strong>Preconditions.</strong> Code already running unbacked somewhere in the estate. <strong>Impact.</strong> Marks an active implant stage rather than preparation. <strong>Justification.</strong> JIT engines and .NET runtimes also produce UNKNOWN frames, so this is a hunt-first signal: run it as a low-severity query and escalate only when it correlates with T1 or T5.</p>
+  </div>
+</div>
+<div class="card">
+  <h4><span class="badge high">High</span> <span class="badge cat">Windows</span> T5 — Script host reads or writes another process's thread context</h4>
+  <p><strong>Description.</strong> PowerShell, wscript, cscript, or mshta opening another process with write or context rights. Script hosts almost never inject code legitimately. <strong>Preconditions.</strong> A malicious script executed by user action, macro, or scheduled task. <strong>Impact.</strong> The whole chain runs from a signed, trusted binary, which defeats application allowlisting based on image names. <strong>Justification.</strong> The source image alone makes this high-value: legitimate context writes from script hosts are rare enough to tune by allowlist.</p>
+</div>
+
+<div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Threat</th><th>Severity</th><th>Platform</th><th>Primary detection</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>T1</td><td>Cross-process thread-context write</td><td><span class="badge critical">Critical</span></td><td>Windows</td><td>Rule R1 / R5 (Event ID 10, context-rights masks)</td></tr>
+      <tr><td>T2</td><td>Remote suspend/resume manipulation</td><td><span class="badge medium">Medium</span></td><td>Windows</td><td>Rule R2 (Event ID 10, suspend-class masks)</td></tr>
+      <tr><td>T3</td><td>Suspended process staging (shared with T1055.004)</td><td><span class="badge high">High</span></td><td>Windows</td><td>Rule R3 (Event ID 1, CREATE_SUSPENDED)</td></tr>
+      <tr><td>T4</td><td>Unknown-module threads in browser</td><td><span class="badge low">Low</span></td><td>Windows</td><td>Rule R4 (Event ID 10, UNKNOWN call stack, hunt-first)</td></tr>
+      <tr><td>T5</td><td>Script host thread-context access</td><td><span class="badge high">High</span></td><td>Windows</td><td>Rule R5 (Event ID 10, script host source)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+        <h3 class="subsec" id="logs-and-patterns"><span class="subsec-num">5.4</span><span class="section-title">Logs and patterns</span></h3>
+<p class="small muted">Each ranked threat maps to specific log sources and fields. The core fields across this technique are <code>EventID</code>, <code>SourceImage</code>, <code>TargetImage</code>, <code>GrantedAccess</code>, <code>CallTrace</code>, and <code>CreationFlags</code>. Two naming notes: Sysmon records the requesting thread as <code>SourceThreadId</code> (the name the rules below use), and <code>GrantedAccess</code> on Event ID 10 is always a process-handle mask, never a thread-handle mask.</p>
+
+<div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>Threat</th><th>Log sources</th><th>Key fields</th><th>Normal vs suspicious</th><th>Detection logic</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>T1 — context write</td>
+        <td>Sysmon Event ID 10; EDR thread-context telemetry; ETW</td>
+        <td>SourceImage, TargetImage, GrantedAccess, SourceThreadId, CallTrace</td>
+        <td>Normal: debuggers and profilers attached by developers. Suspicious: unknown user-mode tools with write-class masks.</td>
+        <td>Event ID 10 where GrantedAccess is a write/context mask and TargetImage differs from SourceImage.</td>
+      </tr>
+      <tr>
+        <td>T2 — suspend/resume</td>
+        <td>Sysmon Event ID 10; EDR process access log</td>
+        <td>GrantedAccess (0x0800 class), SourceImage, TargetImage</td>
+        <td>Normal: debugging and support tooling. Suspicious: the same mask from homes, Public folders, or script hosts.</td>
+        <td>Handle masks known to include PROCESS_SUSPEND_RESUME (0x0800), cross-process.</td>
+      </tr>
+      <tr>
+        <td>T3 — suspended staging (shared with T1055.004)</td>
+        <td>Sysmon Event ID 1; Windows Security 4688; EDR process creation</td>
+        <td>CreationFlags, Image, CommandLine, ParentImage, User</td>
+        <td>Normal: installers resuming their own children. Suspicious: script host or Office parent with a suspended child.</td>
+        <td>Event ID 1 (or 4688 with command-line auditing) where CreationFlags contains the CREATE_SUSPENDED value and the parent is a script host or Office app.</td>
+      </tr>
+      <tr>
+        <td>T4 — unknown threads</td>
+        <td>Sysmon Event ID 10 (CallTrace); EDR call-stack summaries</td>
+        <td>CallTrace, TargetImage, SourceImage, GrantedAccess</td>
+        <td>Normal: JIT engines, .NET runtimes, managed profilers. Suspicious: UNKNOWN frames touching browser processes from random paths.</td>
+        <td>Event ID 10 where CallTrace contains UNKNOWN frames and the target is a browser process.</td>
+      </tr>
+      <tr>
+        <td>T5 — script host source</td>
+        <td>Sysmon Event ID 10; PowerShell/WSH operational logs</td>
+        <td>SourceImage, GrantedAccess, TargetImage, CallTrace</td>
+        <td>Normal: IR collection scripts, security agents (rare). Suspicious: any script host with write or context rights.</td>
+        <td>Event ID 10 where SourceImage ends with a script host name and GrantedAccess is a write-class mask.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<h4>Event coverage map — which log events matter here</h4>
+<div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>Event</th><th>What it gives you for this technique</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Sysmon Event ID 1 (process create)</td><td>The loader process and suspended children (<code>CreationFlags</code> 4 = CREATE_SUSPENDED).</td></tr>
+      <tr><td>Sysmon Event ID 10 (ProcessAccess)</td><td>Cross-process handle requests, GrantedAccess masks, SourceThreadId, CallTrace. The main evidence for T1, T2, T4, and T5.</td></tr>
+      <tr><td>Sysmon Event ID 8 (CreateRemoteThread)</td><td>Not used by this technique. Its absence is expected; do not build coverage on it.</td></tr>
+      <tr><td>Windows Security 4688 / 4656 / 4663</td><td>4688 anchors process creation when command-line auditing is on. 4656 (a handle to an object was requested) can show process-handle grants where audit SACLs exist, but most estates do not enable it. 4663 covers object access and rarely helps here.</td></tr>
+      <tr><td>Microsoft Defender for Endpoint 1116 / 1117</td><td>1116 records a malware detection and 1117 records the response action. Both can confirm the loader stage.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="callout note"><span class="callout-title">Note — who legitimately uses these rights</span><p>The same access rights appear in honest work. Debuggers attach to processes with full access. Profilers and some application monitoring agents read and write process memory. Antivirus and EDR agents do it constantly. Build your baseline around these three groups first, then treat everything else with write-class masks as a candidate signal.</p></div>
+
+<h4>Example event A — Sysmon Event ID 10, cross-process context write</h4>
+<p class="small muted">Illustrative example. The source is an unknown tool in a user-writable folder, the target is the Edge browser, the mask is full access, and the call stack ends in UNKNOWN frames — code with no module behind it.</p>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sysmon EID 10 · XML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-4221-4b48-9cc2-6cb9d8f97ae2}" /&gt;
+    &lt;EventID&gt;10&lt;/EventID&gt;
+    &lt;Level&gt;4&lt;/Level&gt;
+    &lt;Task&gt;10&lt;/Task&gt;
+    &lt;Opcode&gt;0&lt;/Opcode&gt;
+    &lt;TimeCreated SystemTime="2026-10-20T08:41:22.914Z" /&gt;
+    &lt;EventRecordID&gt;184223&lt;/EventRecordID&gt;
+    &lt;Channel&gt;Microsoft-Windows-Sysmon/Operational&lt;/Channel&gt;
+    &lt;Computer&gt;WIN11-WS-04.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-20 08:41:22.912&lt;/Data&gt;
+    &lt;Data Name="SourceProcessGUID"&gt;{A1B2C3D4-1122-08dc-9f01-000000000700}&lt;/Data&gt;
+    &lt;Data Name="SourceProcessId"&gt;6312&lt;/Data&gt;
+    &lt;Data Name="SourceThreadId"&gt;7412&lt;/Data&gt;
+    &lt;Data Name="SourceImage"&gt;C:\Users\Public\sync_agent.exe&lt;/Data&gt;
+    &lt;Data Name="TargetProcessGUID"&gt;{A1B2C3D4-1102-08dc-8e10-000000000700}&lt;/Data&gt;
+    &lt;Data Name="TargetProcessId"&gt;4180&lt;/Data&gt;
+    &lt;Data Name="TargetImage"&gt;C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe&lt;/Data&gt;
+    &lt;Data Name="GrantedAccess"&gt;0x1FFFFF&lt;/Data&gt;
+    &lt;Data Name="CallTrace"&gt;C:\Windows\SYSTEM32\ntdll.dll+0x9B0B4|C:\Windows\System32\KERNEL32.DLL+0x1A4E8|C:\Users\Public\sync_agent.exe+0x15A0|UNKNOWN(00007FF9C3B2A130)&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+</figure>
+
+<h4>Example event B — Sysmon Event ID 1, suspended child from a script host</h4>
+<p class="small muted">Illustrative example. The child is an empty rundll32 with no arguments, created suspended (CreationFlags 4 = CREATE_SUSPENDED), by wscript. This matches the staging pattern of threat T3. Note the scope: a suspended process is the Early Bird APC pattern (T1055.004). For thread execution hijacking proper, the thread is suspended, not the process — keep this event as a shared staging signal, not as proof of T1055.003.</p>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sysmon EID 1 · XML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-4221-4b48-9cc2-6cb9d8f97ae2}" /&gt;
+    &lt;EventID&gt;1&lt;/EventID&gt;
+    &lt;Level&gt;4&lt;/Level&gt;
+    &lt;Task&gt;1&lt;/Task&gt;
+    &lt;Opcode&gt;0&lt;/Opcode&gt;
+    &lt;TimeCreated SystemTime="2026-10-20T08:40:57.482Z" /&gt;
+    &lt;EventRecordID&gt;184118&lt;/EventRecordID&gt;
+    &lt;Channel&gt;Microsoft-Windows-Sysmon/Operational&lt;/Channel&gt;
+    &lt;Computer&gt;WIN11-WS-04.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-20 08:40:57.470&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{A1B2C3D4-1139-08dc-9f02-000000000700}&lt;/Data&gt;
+    &lt;Data Name="ProcessId"&gt;7788&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\System32\rundll32.exe&lt;/Data&gt;
+    &lt;Data Name="CommandLine"&gt;"C:\Windows\System32\rundll32.exe"&lt;/Data&gt;
+    &lt;Data Name="CurrentDirectory"&gt;C:\Users\pbaxter\&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\pbaxter&lt;/Data&gt;
+    &lt;Data Name="ParentProcessGuid"&gt;{A1B2C3D4-1137-08dc-9f00-000000000700}&lt;/Data&gt;
+    &lt;Data Name="ParentProcessId"&gt;6604&lt;/Data&gt;
+    &lt;Data Name="ParentImage"&gt;C:\Windows\System32\wscript.exe&lt;/Data&gt;
+    &lt;Data Name="CreationUtcTime"&gt;2026-10-20 08:40:57.470&lt;/Data&gt;
+    &lt;Data Name="CreationFlags"&gt;4&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+</figure>
+
+<h3 class="subsec" id="sigma-and-spl"><span class="subsec-num">5.5</span><span class="section-title">Sigma rules and Splunk SPL</span></h3>
+<p class="small muted">Five rules, one per ranked threat. Each rule has a matching Splunk query and a mapping note. Tune the filter lists against your own tooling before you enable them.</p>
+
+<h4>R1 — Cross-process context write (covers T1, level critical)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Cross-Process Handle Access With Memory Write and Thread Context Rights
+id: b83e13bc-bdb1-4a0e-b17e-a04815c2ceed
+status: stable
+description: 'Detects a process opening another process with access rights that
+  permit writing to its memory and manipulating its threads. This is the core
+  primitive of thread execution hijacking, MITRE ATT&amp;CK T1055.003. The
+  thread-context change itself happens on a thread handle (OpenThread with
+  THREAD_SET_CONTEXT 0x0010), which Sysmon Event ID 10 does not log as a separate
+  event. The companion SPL adds a cross-process check (TargetImage != SourceImage)
+  that basic Sigma field matching cannot express.'
+references:
+  - https://attack.mitre.org/techniques/T1055/003/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 10
+    GrantedAccess:
+      - '0x1FFFFF'
+      - '0x1F0FFF'
+      - '0x143A'
+      - '0x141A'
+  filter_tools:
+    SourceImage|endswith:
+      - '\procmon.exe'
+      - '\procmon64.exe'
+      - '\procexp.exe'
+      - '\procexp64.exe'
+      - '\x64dbg.exe'
+      - '\x32dbg.exe'
+      - '\windbg.exe'
+      - '\MsSense.exe'
+      - '\MsMpEng.exe'
+  condition: selection and not filter_tools
+fields:
+  - SourceImage
+  - TargetImage
+  - GrantedAccess
+  - CallTrace
+  - SourceThreadId
+falsepositives:
+  - 'Debuggers and profiling tools open other processes with the same rights.'
+  - 'Endpoint security products read and write process memory during scans.'
+level: critical
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.003</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=10
+  GrantedAccess IN ("0x1FFFFF","0x1F0FFF","0x143A","0x141A")
+  SourceImage!="*\\procmon*.exe" SourceImage!="*\\procexp*.exe" SourceImage!="*\\x64dbg.exe"
+  SourceImage!="*\\x32dbg.exe" SourceImage!="*\\windbg.exe" SourceImage!="*\\MsSense.exe"
+  SourceImage!="*\\MsMpEng.exe"
+| search TargetImage!=SourceImage
+| stats count dc(TargetImage) as TargetProcesses values(CallTrace) as CallTraces
+    values(SourceThreadId) as SourceThreadIds by host SourceImage TargetImage GrantedAccess
+| sort -count</code></pre>
+</figure>
+<p class="small muted"><strong>Mapping note.</strong> Field names follow the common Splunk Sysmon add-on naming: <code>EventCode=10</code> is the normalized Event ID, and <code>GrantedAccess</code> is kept as the exact string Sysmon recorded. Adjust the index name to your environment. The <code>SourceImage</code> filters mirror the Sigma <code>filter_tools</code> list. The <code>| search TargetImage!=SourceImage</code> line is an SPL-only refinement: basic Sigma cannot compare two fields to each other, so the rule description documents it for anyone porting the rule.</p>
+
+<h4>R2 — Remote suspend/resume rights (covers T2, level medium)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Remote Process Handle Access With Suspend and Resume Rights
+id: 4bdd609b-a806-4d07-b0ef-b9c9b016deb5
+status: stable
+description: 'Detects a handle to another process whose access mask includes
+  suspend and resume rights (PROCESS_SUSPEND_RESUME, value 0x0800). Suspending a
+  remote thread is the preparation step of thread execution hijacking. Simple
+  field matching cannot test single bits, so the rule enumerates well-known masks
+  that contain the 0x0800 bit, including a pure 0x0800 request. Pair this rule
+  with EDR thread telemetry for confirmation.'
+references:
+  - https://attack.mitre.org/techniques/T1055/003/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 10
+    GrantedAccess:
+      - '0x1FFFFF'
+      - '0x1F0FFF'
+      - '0x1FFFF'
+      - '0x1FFF'
+      - '0x0800'
+  filter_tools:
+    SourceImage|endswith:
+      - '\procexp.exe'
+      - '\procexp64.exe'
+      - '\x64dbg.exe'
+      - '\x32dbg.exe'
+      - '\windbg.exe'
+      - '\MsSense.exe'
+      - '\MsMpEng.exe'
+  condition: selection and not filter_tools
+fields:
+  - SourceImage
+  - TargetImage
+  - GrantedAccess
+  - SourceThreadId
+falsepositives:
+  - 'Debugging and support tools suspend processes during diagnostics.'
+  - 'Some deployment agents pause processes during updates.'
+level: medium
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.003</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=10
+  GrantedAccess IN ("0x1FFFFF","0x1F0FFF","0x1FFFF","0x1FFF","0x0800")
+  SourceImage!="*\\procexp*.exe" SourceImage!="*\\x64dbg.exe" SourceImage!="*\\x32dbg.exe"
+  SourceImage!="*\\windbg.exe" SourceImage!="*\\MsSense.exe" SourceImage!="*\\MsMpEng.exe"
+| search TargetImage!=SourceImage
+| stats count values(SourceThreadId) as SourceThreadIds by host SourceImage TargetImage GrantedAccess
+| where count &gt;= 2</code></pre>
+</figure>
+<p class="small muted"><strong>Mapping note.</strong> The mask list is a practical compromise: it covers full access, the common combinations that include 0x0800, and the pure 0x0800 request. The <code>SourceImage</code> filters mirror the Sigma filter list. If your EDR records thread-level suspend events (thread handles with 0x0002, THREAD_SUSPEND_RESUME), prefer those as the primary signal and use this rule as the corroboration layer. Expect more noise than R1, which is why the query requires at least two events.</p>
+
+<h4>R3 — Suspended process staging (covers T3, level high)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Suspended Process Created by Script Host or Office Parent
+id: 859e4b1e-6471-4738-906c-312ee891d63c
+status: stable
+description: 'Detects a process created with the CREATE_SUSPENDED flag (decimal
+  value 4) by a script host or Office application. Attackers start a process
+  suspended so they can hijack its main thread before any of its own code runs.
+  ATT&amp;CK tracks this pattern mainly under T1055.004 (Early Bird APC), but loaders
+  that MITRE associates with T1055.003, such as Pikabot and Vidar, use it too, so
+  keep this rule as a staging signal. Decimal flag matching is brittle: Sysmon
+  records CreationFlags as a decimal number and combined flags change the value,
+  so verify hits with EDR process creation data before alerting.'
+references:
+  - https://attack.mitre.org/techniques/T1055/003/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_flags:
+    EventID: 1
+    CreationFlags|contains: '4'
+  selection_parent:
+    ParentImage|endswith:
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+      - '\winword.exe'
+      - '\excel.exe'
+  condition: selection_flags and selection_parent
+fields:
+  - Image
+  - CommandLine
+  - ParentImage
+  - ParentCommandLine
+  - CreationFlags
+  - User
+falsepositives:
+  - 'Some installers and automation frameworks start helper processes suspended.'
+  - 'Other decimal values can contain the digit 4 and match the contains condition.'
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.003</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+| where like(CreationFlags, "%4%") AND match(ParentImage, "(?i)(wscript|cscript|mshta|winword|excel)\.exe$")
+| stats values(Image) as SuspendedChildren values(CommandLine) as CommandLines count
+    by host ParentImage User</code></pre>
+</figure>
+<p class="small muted"><strong>Mapping note.</strong> The SPL reproduces the same loose contains-style match as the Sigma rule: <code>like(CreationFlags, "%4%")</code>. Both are approximations: CREATE_SUSPENDED combined with other flags produces a different decimal value. Validate each hit by checking whether the child ever ran its own code, and cross-check with EDR process data as the tuning note in the rule says.</p>
+
+<h4>R4 — Unknown-module call stacks touching a browser (covers T4, level low)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Call Stack With Unknown Frames Touching a Browser Process
+id: 820dea7e-f126-4a66-a848-fae8275fff74
+status: stable
+description: 'Detects Sysmon Event ID 10 where the call stack of the requesting
+  thread contains UNKNOWN frames, which means code running from memory that no
+  module on disk backs, and the target is a browser process. This pattern is
+  common when an implant inside one process reaches into another, or when
+  unbacked code manages browser threads. Treat this as a hunt-first rule: run
+  it at low severity and escalate only when it correlates with the T1 or T5
+  context-write rules.'
+references:
+  - https://attack.mitre.org/techniques/T1055/003/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 10
+    CallTrace|contains: '|UNKNOWN('
+    TargetImage|endswith:
+      - '\msedge.exe'
+      - '\chrome.exe'
+      - '\firefox.exe'
+  condition: selection
+fields:
+  - SourceImage
+  - TargetImage
+  - GrantedAccess
+  - CallTrace
+  - SourceThreadId
+falsepositives:
+  - 'Software that generates code at run time, such as JIT engines, .NET runtimes
+     and some telemetry agents, can show UNKNOWN frames.'
+level: low
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.003</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=10
+  CallTrace="*|UNKNOWN(*"
+| where like(TargetImage, "%msedge.exe") OR like(TargetImage, "%chrome.exe") OR like(TargetImage, "%firefox.exe")
+| stats count values(GrantedAccess) as GrantedAccess values(SourceThreadId) as SourceThreadIds
+    by host SourceImage TargetImage CallTrace</code></pre>
+</figure>
+<p class="small muted"><strong>Mapping note.</strong> The wildcard in the base search keeps the expensive string match off the <code>where</code> stage. Tune by allowlisting your known dynamic-code tooling (browser update agents, .NET profilers, monitoring DLLs) and by ranking sources whose path is user-writable.</p>
+
+<h4>R5 — Script host with write or context rights (covers T5, level high)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Script Host Opens a Process With Write or Context Rights
+id: 99634807-fa5b-4060-9f50-d9eac7b739e5
+status: stable
+description: 'Detects a Windows script host or PowerShell process opening another
+  process with access rights that allow memory writes or thread context changes.
+  Script hosts rarely inject code legitimately, so this combination is a strong
+  signal for staged thread execution hijacking.'
+references:
+  - https://attack.mitre.org/techniques/T1055/003/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 10
+    SourceImage|endswith:
+      - '\powershell.exe'
+      - '\pwsh.exe'
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+    GrantedAccess:
+      - '0x1FFFFF'
+      - '0x1F0FFF'
+      - '0x143A'
+  condition: selection
+fields:
+  - SourceImage
+  - TargetImage
+  - GrantedAccess
+  - CallTrace
+  - SourceThreadId
+falsepositives:
+  - 'Security tooling built on PowerShell, such as incident response collection
+     scripts, can open many processes.'
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.003</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=10
+  GrantedAccess IN ("0x1FFFFF","0x1F0FFF","0x143A")
+| where match(SourceImage, "(?i)(powershell|pwsh|wscript|cscript|mshta)\.exe$")
+| stats count values(TargetImage) as Targets values(CallTrace) as CallTraces
+    by host SourceImage GrantedAccess</code></pre>
+</figure>
+<p class="small muted"><strong>Mapping note.</strong> The source-image match is case-insensitive by design, because script hosts can be launched from unusual capitalizations. If you run an incident-response toolkit that uses PowerShell for memory collection, allowlist its exact signed path first, then deploy the rule.</p>
+
+      </section>
+      <section id="case-study" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">6</span><span class="section-title">Real-world case study</span></h2>
+    <p class="section-intro">A loader with tools and behaviors similar to those reported for TrickBot, reconstructed for training. In the public incidents this chain ended in ransomware; here the detection lands in time to stop it.</p>
+  </header>
+
+  <div class="callout warning"><span class="callout-title">Warning — educational reconstruction</span><p>This case study is an educational reconstruction based on public reporting (2019–2021 DFIR and vendor reports). The tools and behaviors are similar to those reported for TrickBot and follow-on ransomware intrusions, but the incident as told here is illustrative. Hosts, users, times, and identifiers are invented. It is written for defense training only.</p></div>
+
+  <div class="card">
+    <h3>Context</h3>
+    <p>A mid-size company with roughly 800 Windows workstations ran antivirus and central log collection, but had no tuned Sysmon configuration and no thread-context rules. TrickBot is a banking trojan, and public reporting describes loaders similar to it: they inject into trusted processes and hijack their threads. After the loader settles, it can hand control to a post-exploitation framework such as Cobalt Strike. The same intrusions often ended in ransomware deployment a few days later.</p>
+  </div>
+
+  <div class="card">
+    <h3>Timeline</h3>
+    <ol class="timeline">
+      <li><span class="tl-when">Day 0 · 09:12</span>A lure email continues an existing message thread and carries a malicious attachment. Because it rides a real conversation, the user opens it. This is email thread hijacking — a different use of the word "thread", on the attacker's delivery side.</li>
+      <li><span class="tl-when">Day 0 · 09:31</span>The user opens the attachment. The loader runs, and its behavior matches TrickBot reporting: it injects into and hijacks threads in trusted processes, then survives on the host without an obvious second process.</li>
+      <li><span class="tl-when">Day 0 · 14:05</span>The implant collects browser data and stored credentials from the hijacked processes. Nothing alerts.</li>
+      <li><span class="tl-when">Day 1 · 08:40</span><strong>Detection point.</strong> The new Sysmon Event ID 10 rule fires: rundll32, started by wscript, opened msedge.exe with full access and an UNKNOWN call-stack frame. An EDR memory alert confirms an unbacked RWX region.</li>
+      <li><span class="tl-when">Day 1 · 09:20</span>The analyst validates the alert, captures memory, and isolates the host. The loader hash is blocked fleet-wide.</li>
+      <li><span class="tl-when">Day 2 · 10:00</span>Correlation finds the Cobalt Strike beacon attempt in proxy logs and a second host with the same loader hash. Both are isolated; lateral movement was attempted but blocked.</li>
+      <li><span class="tl-when">Day 3–5</span>Eradication and recovery complete. The ransomware stage was never reached because the Day 1 alert interrupted the chain.</li>
+    </ol>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Detection point</h4>
+      <p>Sysmon Event ID 10 with write-class rights and an UNKNOWN call frame, correlated with the EDR memory alert for an unbacked RWX region. One event alone was suggestive; the pair was conclusive.</p>
+    </div>
+    <div class="card">
+      <h4>Containment</h4>
+      <p>Host isolation through the EDR console, loader hash blocked fleet-wide, and the compromised mailbox credentials reset within the hour.</p>
+    </div>
+    <div class="card">
+      <h4>Eradication</h4>
+      <p>Loader files removed, persistence tasks deleted, and the memory payload confirmed gone by a follow-up offline scan of the isolated host.</p>
+    </div>
+    <div class="card">
+      <h4>Recovery</h4>
+      <p>Hosts returned to the network after verification. Passwords and browser sessions on the affected hosts were treated as compromised and rotated.</p>
+    </div>
+    <div class="card">
+      <h4>Impact</h4>
+      <p>Two hosts, about six hours of analyst work, one user's mailbox reset, and under a day of downtime. No encryption event, no data extortion note. In the public cases without an early context-write alert, the same chain reached ransomware.</p>
+    </div>
+    <div class="card">
+      <h4>Team response and communication</h4>
+      <p>The SOC used a single channel, updated leadership twice daily, and notified the email team, who purged the lure message from all mailboxes — a step that prevented at least one more open attempt.</p>
+    </div>
+  </div>
+
+  <div class="callout good"><span class="callout-title">Good practice — lessons learned</span><p>First, do not rely on Sysmon Event ID 8 alone: it never fires for thread hijacking, and this intrusion was invisible until Event ID 10 rules arrived. Second, deploy thread-context write rules — they were the single highest-value detection in this case. Third, email controls that spot replies in hijacked external threads stop the chain before it reaches the endpoint.</p></div>
+</section>
+
+<section id="mitigation" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">7</span><span class="section-title">Mitigation and defense</span></h2>
+    <p class="section-intro">You cannot patch away process injection entirely, but layered controls shrink the space in which it works and shorten the time it stays hidden.</p>
+  </header>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Control</th><th>Type</th><th>Why it helps against T1055.003</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>EDR with thread-context telemetry</td><td>Endpoint</td><td>Sees the context write itself and can auto-isolate on confirmation.</td></tr>
+        <tr><td>Sysmon Event ID 10, tuned</td><td>Logging</td><td>Cross-process handle and context events feed the rules in Section 5.5.</td></tr>
+        <tr><td>Attack Surface Reduction (ASR) rules</td><td>Endpoint</td><td>Block Office and script hosts from creating child processes and injecting code.</td></tr>
+        <tr><td>Exploit Protection</td><td>Endpoint</td><td>Raises the cost of arbitrary memory writes in browser and Office processes.</td></tr>
+        <tr><td>WDAC application control</td><td>Policy</td><td>Blocks unknown loaders from running at all, removing the implant that performs the hijack.</td></tr>
+        <tr><td>LSA Protection / Credential Guard</td><td>Identity</td><td>Limits what a hijacked process can harvest from memory.</td></tr>
+        <tr><td>Macro blocking policy</td><td>Policy</td><td>Removes the most common way loaders reach the endpoint.</td></tr>
+        <tr><td>Email gateway filtering</td><td>Email</td><td>Flags reply-chain lures and malicious attachments before the user opens them.</td></tr>
+        <tr><td>Network segmentation</td><td>Network</td><td>Contains a hijacked workstation and slows lateral movement.</td></tr>
+        <tr><td>Central logging with retention</td><td>Logging</td><td>Makes fleet-wide hunts possible after the first detection.</td></tr>
+        <tr><td>Offline, tested backups</td><td>Backup</td><td>Limits the ransomware stage that often follows this injection chain in public incidents.</td></tr>
+        <tr><td>Incident response runbook</td><td>Process</td><td>Turns the six-step triage flow into a practiced procedure with owners.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Home and small office</h3>
+    <p>Keep Windows and the browser updated — modern Edge and Chrome raise the bar against memory attacks. Leave the built-in Windows security features on, including memory integrity where the hardware supports it. Do not run scripts or documents from unexpected emails. Back up important files offline and test that you can restore them. If something feels wrong — the browser crashing in a repeating pattern, unexplained pop-ups — disconnect from the network and get help rather than debugging alone.</p>
+  </div>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Priority</th><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Deploy Sysmon Event ID 10 with the R1 and R5 rules tuned to your estate.</td><td>Medium</td><td>Detection engineering</td><td>High — closes the main visibility gap.</td></tr>
+        <tr><td>2</td><td>Enable EDR thread-context alerts with automatic isolation.</td><td>Low</td><td>Security operations</td><td>High — minutes to containment.</td></tr>
+        <tr><td>3</td><td>Enforce ASR rules for Office and script hosts.</td><td>Medium</td><td>Endpoint team</td><td>High — blocks the staging parents.</td></tr>
+        <tr><td>4</td><td>Block macros and filter reply-chain lures at the email gateway.</td><td>Low</td><td>Messaging team</td><td>Medium — reduces delivery.</td></tr>
+        <tr><td>5</td><td>Write and rehearse the injection-triage runbook.</td><td>Low</td><td>Security operations</td><td>Medium — faster, consistent response.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+      <section id="mistakes" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">8</span><span class="section-title">Common mistakes and best practices</span></h2>
+    <p class="section-intro">Twelve mistakes detection teams actually make with this technique, each with the symptom, the root cause, the fix, and the prevention. Then the habits that keep the coverage healthy.</p>
+  </header>
+
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>Assuming Event ID 8 covers all injection</td><td>No alerts ever fire for this technique.</td><td>Thread hijacking never calls CreateRemoteThread.</td><td>Deploy Event ID 10 rules R1–R5.</td><td>Map coverage per sub-technique, not per parent.</td></tr>
+        <tr><td>2</td><td>Matching only GrantedAccess 0x1FFFFF</td><td>Only full-access handles alert; partial masks slip through.</td><td>One hard-coded mask instead of a mask list.</td><td>Use the mask lists from 5.5, including 0x143A and 0x141A.</td><td>Review masks against known technique primitives quarterly.</td></tr>
+        <tr><td>3</td><td>Flagging all suspend/resume, then switching the rule off</td><td>Rule fires on every debugger, then gets disabled.</td><td>No baseline of legitimate tools before enablement.</td><td>Re-enable with the tool filter and require repeated events.</td><td>Baseline two weeks of data before any rule goes live.</td></tr>
+        <tr><td>4</td><td>No CallTrace collection</td><td>Alerts cannot separate code-backed and unbacked sources.</td><td>Sysmon configuration drops or truncates CallTrace.</td><td>Enable full CallTrace capture in the Sysmon config.</td><td>Test the config with a synthetic event on a lab host.</td></tr>
+        <tr><td>5</td><td>Treating browser processes as trust anchors</td><td>Hijacks inside browsers are never investigated.</td><td>Assumption that browsers are clean by definition.</td><td>Include browser targets in every injection rule.</td><td>Document that trust is per behavior, not per image name.</td></tr>
+        <tr><td>6</td><td>No baseline for debuggers and profilers</td><td>Analysts cannot say whether a hit is normal.</td><td>Legitimate tooling inventory was never built.</td><td>Build an allowlist of developer tools per host group.</td><td>Keep the inventory in the rule repository, reviewed with owners.</td></tr>
+        <tr><td>7</td><td>Script-host exclusions too broad</td><td>Any PowerShell path is excluded, hiding real attacks.</td><td>One noisy admin script led to a blanket exclusion.</td><td>Replace with exact signed paths and per-user scope.</td><td>Review exclusions monthly and expire unused ones.</td></tr>
+        <tr><td>8</td><td>Logs kept on the endpoint only</td><td>Fleet-wide hunt is impossible after an incident.</td><td>No forwarder or retention policy.</td><td>Ship Sysmon logs to the SIEM with 90+ day retention.</td><td>Make log forwarding part of the build standard.</td></tr>
+        <tr><td>9</td><td>No memory triage capability</td><td>Alerts stay unconfirmed; hosts stay online.</td><td>No process for EDR-triggered dumps.</td><td>Add memory capture to the injection runbook.</td><td>Practice the flow in a purple-team exercise twice a year.</td></tr>
+        <tr><td>10</td><td>Orphaned rules</td><td>Nobody responds to alerts; rules drift out of date.</td><td>No owner assigned in the rule register.</td><td>Assign an owner and review date to every rule ID.</td><td>Quarterly ownership review with named engineers.</td></tr>
+        <tr><td>11</td><td>Untested rules</td><td>Rules fail silently after a schema change.</td><td>No pipeline test on rule changes.</td><td>Add YAML validation and a sample-event test to the pipeline.</td><td>Every rule change ships with a test event.</td></tr>
+        <tr><td>12</td><td>Undocumented false positives</td><td>The same noise is re-investigated every month.</td><td>FP findings live only in tickets or in someone's head.</td><td>Record every FP in the rule's falsepositive notes.</td><td>Require an FP note update as part of alert closure.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Daily habits</h4>
+      <p>Review new high-severity injection alerts with the triage flow from Section 4. Check that Sysmon and EDR agents are reporting on all expected hosts. Note any repeat offender in the false-positive register.</p>
+    </div>
+    <div class="card">
+      <h4>Weekly habits</h4>
+      <p>Compare alert volumes against the baseline and investigate sudden changes. Verify rule-to-owner assignments are current. Spot-check one rule end to end, from event to closure.</p>
+    </div>
+    <div class="card">
+      <h4>Monthly habits</h4>
+      <p>Review exclusions and expire what is unused. Re-read vendor reporting for new injection primitives and update the mask lists. Run one purple-team validation of the full chain against a lab host.</p>
+    </div>
+  </div>
+</section>
+
+<section id="cheat-sheet" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">9</span><span class="section-title">Cheat sheet and quick reference</span></h2>
+    <p class="section-intro">Everything from this page in one place: facts, the five detections, the response checklist, and the links worth keeping.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Key facts</h3>
+      <div class="kv">
+        <div class="k">Technique</div><div>T1055.003 — Thread Execution Hijacking</div>
+        <div class="k">Parent</div><div>T1055 — Process Injection</div>
+        <div class="k">Tactics</div><div>Stealth / Privilege Escalation (TA0005 / TA0004)</div>
+        <div class="k">Platform</div><div>Windows (user-level rights)</div>
+        <div class="k">Core primitive</div><div>OpenThread → SuspendThread → memory write → SetThreadContext (EIP/RIP) → ResumeThread</div>
+        <div class="k">Key telemetry</div><div>Sysmon Event ID 10 (context/suspend masks, CallTrace), Event ID 1 (CreationFlags), Windows Security 4688, Defender 1116/1117</div>
+        <div class="k">Will not fire</div><div>Sysmon Event ID 8 (no remote thread is created)</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Top five detections</h3>
+      <ol>
+        <li>R1 — Cross-process handle access with write and context rights (<a href="#sigma-and-spl">Sigma and SPL</a>).</li>
+        <li>R2 — Remote handle with suspend/resume rights (<a href="#sigma-and-spl">Sigma and SPL</a>).</li>
+        <li>R3 — Suspended child created by a script host or Office parent (<a href="#sigma-and-spl">Sigma and SPL</a>).</li>
+        <li>R4 — UNKNOWN call-stack frames touching a browser process (<a href="#sigma-and-spl">Sigma and SPL</a>).</li>
+        <li>R5 — Script host opening a process with write rights (<a href="#sigma-and-spl">Sigma and SPL</a>).</li>
+      </ol>
+      <p class="small muted">Pair any single hit with a memory scan before you declare an incident. Two hits on one host within an hour is a strong signal.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Response checklist — first 30 minutes</h3>
+      <ul>
+        <li>Validate the alert: source image, target image, granted access, call stack.</li>
+        <li>Exclude known tooling from the allowlist before escalating.</li>
+        <li>Pull the source process command line and file hash.</li>
+        <li>Capture memory of the target process through the EDR.</li>
+        <li>Check thread start addresses in the target for unbacked regions.</li>
+        <li>Isolate the host if unbacked code is confirmed.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Response checklist — first 24 hours</h3>
+      <ul>
+        <li>Hunt the source hash and handle pattern across all endpoints.</li>
+        <li>Review proxy and DNS logs for beaconing from the affected host.</li>
+        <li>Reset credentials and sessions used on the host.</li>
+        <li>Purge lure emails from all mailboxes if delivery was by message.</li>
+        <li>Block the loader hash and parent chain in prevention mode.</li>
+        <li>Write the incident record and update rule false-positive notes.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Links</h3>
+    <ul>
+      <li><a href="https://attack.mitre.org/techniques/T1055/003/">Official MITRE ATT&amp;CK page — T1055.003 Thread Execution Hijacking</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/">Parent technique — T1055 Process Injection</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/001/">Sibling — T1055.001 Dynamic-Link Library Injection</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/002/">Sibling — T1055.002 Portable Executable Injection</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/004/">Related — T1055.004 Asynchronous Procedure Call</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/005/">Sibling — T1055.005 Thread Local Storage</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1106/">Related — T1106 Native API</a></li>
+      <li><a href="https://learn.microsoft.com/sysinternals/downloads/sysmon">Sysmon documentation (Microsoft Learn)</a></li>
+      <li><a href="https://github.com/SigmaHQ/sigma">SigmaHQ rule repository</a></li>
+    </ul>
+  </div>
+</section>
+
+    </div>
+  </div>
+</main>
+
+<button class="mobile-toc-btn" id="mobileTocBtn" type="button" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="back-top" id="backTop" type="button" aria-label="Back to top">↑</button>
+<div class="toc-overlay" id="tocOverlay" hidden>
+  <div class="toc-overlay-panel" role="dialog" aria-modal="true" aria-label="Contents">
+    <button class="toc-close" id="tocClose" type="button" aria-label="Close contents">Close ×</button>
+    <nav id="overlayNav" class="toc" aria-label="Sections"></nav>
+  </div>
+</div>
+
+<script>
+/* ATK-SHARED-JS v1 — shared behavior for ATT&CK technique guide pages.
+   Provides: theme toggle, reading progress, generated TOC, scrollspy,
+   mobile contents overlay, back-to-top, copy buttons, canvas simulation engine. */
+(function () {
+  'use strict';
+  var doc = document, win = window, root = doc.documentElement;
+  var reducedQuery = win.matchMedia('(prefers-reduced-motion: reduce)');
+  function isReduced() { return reducedQuery.matches; }
+
+  /* ---------- helpers ---------- */
+  win.atkColor = function (name) { return getComputedStyle(root).getPropertyValue(name).trim(); };
+
+  /* ---------- theme ---------- */
+  function currentTheme() { return root.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
+  function setTheme(t, store) {
+    root.setAttribute('data-theme', t);
+    if (store) { try { localStorage.setItem('atk-theme', t); } catch (e) {} }
+    doc.dispatchEvent(new CustomEvent('atkthemechange', { detail: t }));
+  }
+  var themeBtn = doc.getElementById('pageThemeToggle');
+  if (themeBtn) {
+    function syncThemeBtn() {
+      var light = currentTheme() === 'light';
+      themeBtn.textContent = light ? '\u263E' : '\u2600';
+      var label = light ? 'Switch to dark theme' : 'Switch to light theme';
+      themeBtn.setAttribute('aria-label', label);
+      themeBtn.title = label;
+    }
+    themeBtn.addEventListener('click', function () { setTheme(currentTheme() === 'light' ? 'dark' : 'light', true); });
+    syncThemeBtn();
+    /* Hide this page-level toggle if the shared site shell already provides one. */
+    function shellCheck() {
+      if (doc.querySelector('[data-shell-theme-toggle],[data-theme-toggle]')) { themeBtn.hidden = true; }
+    }
+    shellCheck();
+    win.addEventListener('load', shellCheck);
+    doc.addEventListener('atkshellready', shellCheck);
+  }
+
+  /* ---------- TOC generated from real section headings ---------- */
+  var main = doc.querySelector('.main-content');
+  var tocItems = [];
+  if (main) {
+    var sections = main.querySelectorAll('section[id]');
+    Array.prototype.forEach.call(sections, function (sec) {
+      var h2 = sec.querySelector('.section-head h2') || sec.querySelector('h2');
+      if (!h2) return;
+      var t = h2.querySelector('.section-title');
+      tocItems.push({ id: sec.id, label: t ? t.textContent : h2.textContent.replace(/^\s*[0-9.]+\s*/, ''), level: 1 });
+      var subs = sec.querySelectorAll('h3.subsec[id]');
+      Array.prototype.forEach.call(subs, function (h3) {
+        var t3 = h3.querySelector('.section-title');
+        tocItems.push({ id: h3.id, label: t3 ? t3.textContent : h3.textContent.replace(/^\s*[0-9.]+\s*/, ''), level: 2 });
+      });
+    });
+  }
+  function renderToc(container) {
+    var frag = doc.createDocumentFragment();
+    tocItems.forEach(function (it) {
+      var a = doc.createElement('a');
+      a.href = '#' + it.id;
+      a.textContent = it.label;
+      if (it.level === 2) a.className = 'toc-sub';
+      a.setAttribute('data-toc-id', it.id);
+      frag.appendChild(a);
+    });
+    container.appendChild(frag);
+  }
+  var tocNav = doc.getElementById('tocNav');
+  var overlayNav = doc.getElementById('overlayNav');
+  if (tocNav && tocItems.length) renderToc(tocNav);
+  if (overlayNav && tocItems.length) renderToc(overlayNav);
+
+  /* ---------- scrollspy + progress + back-to-top visibility ---------- */
+  var fill = doc.getElementById('progressFill');
+  var backTop = doc.getElementById('backTop');
+  var spyEls = [];
+  tocItems.forEach(function (it) {
+    var el = doc.getElementById(it.id);
+    if (el) spyEls.push({ id: it.id, el: el });
+  });
+  function setActive(id) {
+    var links = doc.querySelectorAll('[data-toc-id]');
+    Array.prototype.forEach.call(links, function (a) {
+      var on = a.getAttribute('data-toc-id') === id;
+      a.classList.toggle('active', on);
+      if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+    });
+  }
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    win.requestAnimationFrame(function () {
+      ticking = false;
+      var y = win.scrollY || root.scrollTop || 0;
+      var max = Math.max(1, root.scrollHeight - win.innerHeight);
+      if (fill) fill.style.width = Math.min(100, Math.round((y / max) * 100)) + '%';
+      if (backTop) backTop.classList.toggle('show', y > 480);
+      var pos = y + 150;
+      var cur = spyEls.length ? spyEls[0].id : null;
+      for (var i = 0; i < spyEls.length; i++) {
+        if (spyEls[i].el.getBoundingClientRect().top + y <= pos) cur = spyEls[i].id;
+      }
+      if (spyEls.length && (y + win.innerHeight) >= (root.scrollHeight - 4)) cur = spyEls[spyEls.length - 1].id;
+      if (cur) setActive(cur);
+    });
+  }
+  win.addEventListener('scroll', onScroll, { passive: true });
+  win.addEventListener('resize', onScroll);
+  onScroll();
+
+  /* ---------- mobile contents overlay ---------- */
+  var tocBtn = doc.getElementById('mobileTocBtn');
+  var overlay = doc.getElementById('tocOverlay');
+  var tocClose = doc.getElementById('tocClose');
+  var lastFocus = null;
+  function openOverlay() {
+    if (!overlay) return;
+    lastFocus = doc.activeElement;
+    overlay.hidden = false;
+    if (tocBtn) tocBtn.setAttribute('aria-expanded', 'true');
+    doc.body.style.overflow = 'hidden';
+    if (tocClose) tocClose.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.hidden = true;
+    doc.body.style.overflow = '';
+    if (tocBtn) {
+      tocBtn.setAttribute('aria-expanded', 'false');
+      tocBtn.focus();
+    } else if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+  }
+  if (tocBtn) tocBtn.addEventListener('click', openOverlay);
+  if (tocClose) tocClose.addEventListener('click', closeOverlay);
+  if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) closeOverlay(); });
+  doc.addEventListener('keydown', function (e) { if (e.key === 'Escape' && overlay && !overlay.hidden) closeOverlay(); });
+  [tocNav, overlayNav].forEach(function (nav) {
+    if (!nav) return;
+    nav.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a') : null;
+      if (a && overlay && !overlay.hidden) closeOverlay();
+    });
+  });
+
+  /* ---------- back to top ---------- */
+  if (backTop) backTop.addEventListener('click', function () {
+    win.scrollTo({ top: 0, behavior: isReduced() ? 'auto' : 'smooth' });
+  });
+
+  /* ---------- copy buttons ---------- */
+  function copyText(text, btn) {
+    function done(ok) {
+      if (!btn.getAttribute('data-label')) btn.setAttribute('data-label', btn.textContent);
+      btn.textContent = ok ? 'Copied!' : 'Copy failed';
+      setTimeout(function () { btn.textContent = btn.getAttribute('data-label') || 'Copy'; }, 1600);
+    }
+    function fallback() {
+      var ta = doc.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+      doc.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = doc.execCommand('copy'); } catch (e) {}
+      doc.body.removeChild(ta);
+      done(ok);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    } else { fallback(); }
+  }
+  doc.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('.copy-btn') : null;
+    if (!btn) return;
+    var block = btn.closest('.code-block');
+    var code = block ? block.querySelector('pre code') : null;
+    if (code) copyText(code.innerText.replace(/\n$/, ''), btn);
+  });
+
+  /* ---------- drawing helpers for simulations ---------- */
+  var MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  var SANS = 'system-ui, "Segoe UI", Roboto, Arial, sans-serif';
+  var AtkDraw = {
+    roundRect: function (ctx, x, y, w, h, r) {
+      r = Math.max(0, Math.min(r, w / 2, h / 2));
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    },
+    box: function (ctx, x, y, w, h, opts) {
+      opts = opts || {};
+      ctx.save();
+      AtkDraw.roundRect(ctx, x, y, w, h, opts.radius == null ? 10 : opts.radius);
+      ctx.fillStyle = opts.fill || win.atkColor('--surface');
+      ctx.fill();
+      ctx.lineWidth = opts.lineWidth || 1.4;
+      ctx.strokeStyle = opts.stroke || win.atkColor('--border-strong');
+      ctx.stroke();
+      var lines = (opts.label || '').split('\n');
+      ctx.fillStyle = opts.labelColor || win.atkColor('--text');
+      ctx.font = opts.font || ('600 12px ' + SANS);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var lh = opts.lineHeight || 14;
+      var startY = y + h / 2 - ((lines.length - 1) * lh) / 2;
+      for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], x + w / 2, startY + i * lh);
+      ctx.restore();
+    },
+    arrow: function (ctx, x1, y1, x2, y2, prog, opts) {
+      opts = opts || {};
+      prog = Math.max(0, Math.min(1, prog));
+      var color = opts.color || win.atkColor('--accent');
+      var dx = x2 - x1, dy = y2 - y1, dist = Math.hypot(dx, dy) || 1;
+      var ux = dx / dist, uy = dy / dist;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = opts.width || 1.6;
+      if (opts.dashed) ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (prog > 0 && prog < 1) {
+        var px = x1 + dx * prog, py = y1 + dy * prog;
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(px, py, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(px, py, 4.2, 0, Math.PI * 2); ctx.fill();
+      }
+      if (prog >= 1) {
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - ux * 10 - uy * 5, y2 - uy * 10 + ux * 5);
+        ctx.lineTo(x2 - ux * 10 + uy * 5, y2 - uy * 10 - ux * 5);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+      if (opts.label) {
+        ctx.font = '11px ' + MONO;
+        ctx.fillStyle = opts.labelColor || color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(opts.label, (x1 + x2) / 2, (y1 + y2) / 2 - 6);
+      }
+      ctx.restore();
+    },
+    dot: function (ctx, x, y, r, color, pulse) {
+      ctx.save();
+      if (pulse) {
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    },
+    pill: function (ctx, x, y, text, color) {
+      ctx.save();
+      ctx.font = '10.5px ' + MONO;
+      var w = ctx.measureText(text).width + 14;
+      AtkDraw.roundRect(ctx, x, y, w, 18, 9);
+      ctx.fillStyle = win.atkColor('--elevated');
+      ctx.fill();
+      ctx.strokeStyle = color || win.atkColor('--border-strong');
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = color || win.atkColor('--text');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + w / 2, y + 9.5);
+      ctx.restore();
+      return w;
+    },
+    text: function (ctx, str, x, y, opts) {
+      opts = opts || {};
+      ctx.save();
+      ctx.font = (opts.weight ? opts.weight + ' ' : '') + (opts.size || 12) + 'px ' + (opts.mono ? MONO : SANS);
+      ctx.fillStyle = opts.color || win.atkColor('--text');
+      ctx.textAlign = opts.align || 'left';
+      ctx.textBaseline = opts.baseline || 'alphabetic';
+      ctx.fillText(str, x, y);
+      ctx.restore();
+    }
+  };
+  win.AtkDraw = AtkDraw;
+
+  /* ---------- simulation engine ---------- */
+  win.AtkSim = { mount: mountSim };
+  function mountSim(host, cfg) {
+    if (!host) return;
+    var canvas = host.querySelector('.sim-canvas');
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext('2d');
+    var steps = cfg.steps || [];
+    var N = steps.length;
+    var stepSec = cfg.stepSeconds || 4.5;
+    var st = { i: 0, t: 0, playing: false, speed: 1, raf: 0, lastTs: 0 };
+    var W = 0, H = 0, scene = {};
+    var stepTitle = host.querySelector('.sim-step-title');
+    var capText = host.querySelector('.sim-caption-text');
+    var defText = host.querySelector('.sim-defender-text');
+    var evWrap = host.querySelector('.sim-evidence');
+    var statusEl = host.querySelector('.sim-status');
+    var playBtn = host.querySelector('.sim-play');
+    var restartBtn = host.querySelector('.sim-restart');
+    var speedSel = host.querySelector('.sim-speed');
+    var chipsWrap = host.querySelector('.step-chips');
+    var tooltip = host.querySelector('.sim-tooltip');
+    var wrap = host.querySelector('.sim-canvas-wrap');
+
+    function resize() {
+      var r = canvas.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var dpr = Math.min(win.devicePixelRatio || 1, 2);
+      W = r.width; H = r.height;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      render();
+    }
+    function render() {
+      ctx.clearRect(0, 0, W, H);
+      try { scene = cfg.scene ? (cfg.scene(W, H) || {}) : {}; } catch (e) { scene = {}; }
+      try { if (cfg.draw) cfg.draw(ctx, W, H, scene, st.i, st.t); } catch (e) {}
+    }
+    function syncUI() {
+      var s = steps[st.i] || {};
+      if (stepTitle) stepTitle.textContent = 'Step ' + (st.i + 1) + ' — ' + (s.title || '');
+      if (capText) capText.textContent = s.caption || '';
+      if (defText) defText.textContent = s.defender || '';
+      if (statusEl) statusEl.textContent = 'Step ' + (st.i + 1) + ' of ' + N;
+      if (evWrap) {
+        evWrap.innerHTML = '';
+        var evs = s.evidence || [];
+        for (var i = 0; i < evs.length; i++) {
+          var sp = doc.createElement('span');
+          sp.className = 'chip chip-mono';
+          sp.textContent = evs[i];
+          evWrap.appendChild(sp);
+        }
+      }
+      if (chipsWrap) {
+        for (var j = 0; j < chipsWrap.children.length; j++) {
+          var c = chipsWrap.children[j];
+          var on = j === st.i;
+          c.classList.toggle('active', on);
+          if (on) c.setAttribute('aria-current', 'step'); else c.removeAttribute('aria-current');
+        }
+      }
+      if (playBtn) playBtn.textContent = st.playing ? 'Pause' : 'Play';
+    }
+    function frame(ts) {
+      if (!st.playing) return;
+      if (!st.lastTs) st.lastTs = ts;
+      var dt = Math.min(0.05, (ts - st.lastTs) / 1000);
+      st.lastTs = ts;
+      st.t += (dt * st.speed) / stepSec;
+      if (st.t >= 1) {
+        if (st.i < N - 1) { st.i += 1; st.t = 0; syncUI(); }
+        else { st.t = 1; pause(); }
+      }
+      render();
+      if (st.playing) st.raf = win.requestAnimationFrame(frame);
+    }
+    function play() {
+      if (st.playing) return;
+      if (st.i >= N - 1 && st.t >= 1) { st.i = 0; st.t = 0; }
+      st.playing = true;
+      st.lastTs = 0;
+      syncUI();
+      st.raf = win.requestAnimationFrame(frame);
+    }
+    function pause() {
+      st.playing = false;
+      if (st.raf) win.cancelAnimationFrame(st.raf);
+      st.raf = 0;
+      if (playBtn) playBtn.textContent = 'Play';
+    }
+    function goTo(i) {
+      st.i = Math.max(0, Math.min(N - 1, i));
+      st.t = isReduced() ? 1 : 0;
+      syncUI();
+      render();
+    }
+    if (chipsWrap) {
+      for (var k = 0; k < steps.length; k++) {
+        (function (idx) {
+          var b = doc.createElement('button');
+          b.type = 'button';
+          b.className = 'step-chip';
+          b.textContent = (idx + 1) + '. ' + (steps[idx].title || 'Step');
+          b.title = steps[idx].title || '';
+          b.addEventListener('click', function () { goTo(idx); });
+          chipsWrap.appendChild(b);
+        })(k);
+      }
+    }
+    if (playBtn) playBtn.addEventListener('click', function () { if (st.playing) pause(); else play(); });
+    if (restartBtn) restartBtn.addEventListener('click', function () {
+      st.i = 0;
+      st.t = isReduced() ? 1 : 0;
+      syncUI();
+      render();
+      if (st.playing) st.lastTs = 0;
+    });
+    if (speedSel) speedSel.addEventListener('change', function () { st.speed = parseFloat(speedSel.value) || 1; });
+    function hideTip() { if (tooltip) tooltip.hidden = true; }
+    function showTipAt(mx, my) {
+      if (!cfg.hitTest) return;
+      var hit = null;
+      try { hit = cfg.hitTest(mx, my, W, H, scene); } catch (err) { hit = null; }
+      if (hit) {
+        tooltip.innerHTML = '<strong></strong><span></span>';
+        tooltip.firstChild.textContent = hit.label || '';
+        tooltip.lastChild.textContent = hit.desc || '';
+        tooltip.hidden = false;
+        var tw = tooltip.offsetWidth || 200;
+        var x = Math.max(8, Math.min(mx + 14, (wrap ? wrap.clientWidth : W) - tw - 8));
+        var y = Math.min(my + 14, (wrap ? wrap.clientHeight : H) - 70);
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+      } else { hideTip(); }
+    }
+    if (wrap && tooltip) {
+      canvas.addEventListener('mousemove', function (e) {
+        var r = canvas.getBoundingClientRect();
+        showTipAt(e.clientX - r.left, e.clientY - r.top);
+      });
+      canvas.addEventListener('mouseleave', hideTip);
+      canvas.addEventListener('click', function (e) {
+        var r = canvas.getBoundingClientRect();
+        showTipAt(e.clientX - r.left, e.clientY - r.top);
+      });
+    }
+    doc.addEventListener('atkthemechange', render);
+    if (win.ResizeObserver) { new ResizeObserver(resize).observe(canvas); }
+    else { win.addEventListener('resize', resize); }
+    resize();
+    syncUI();
+    if (cfg.autoplay && !isReduced()) { play(); }
+    else { st.t = 1; render(); syncUI(); }
+  }
+})();
+</script>
+<script>
+(function () {
+  'use strict';
+  var STEPS = [
+    {
+      title: 'Foothold',
+      caption: 'A user downloads a malicious file. The implant starts on the workstation and prepares its next move. Nothing on screen looks wrong.',
+      defender: 'The EDR process tree shows the new process with an unusual parent chain. Create a ticket even if the file looks harmless.',
+      evidence: ['Sysmon EID 1 process creation']
+    },
+    {
+      title: 'Pick a thread',
+      caption: 'The implant opens the browser process and looks for a thread that is sleeping, so the program will not crash later.',
+      defender: 'Sysmon Event ID 10 shows a cross-process handle request from an unknown tool.',
+      evidence: ['Sysmon EID 10 process access']
+    },
+    {
+      title: 'Suspend',
+      caption: 'The implant calls SuspendThread and freezes the chosen thread between two instructions.',
+      defender: 'The same handle access includes suspend rights. Few products alert on this, so it usually stays quiet.',
+      evidence: ['Sysmon EID 10 suspend rights']
+    },
+    {
+      title: 'Write shellcode',
+      caption: 'The implant copies its payload into a new read-write-execute memory region inside the browser process.',
+      defender: 'EDR memory scanning flags code in a region that has no file on disk behind it (unbacked memory).',
+      evidence: ['EDR memory alert']
+    },
+    {
+      title: 'Redirect RIP',
+      caption: 'The implant reads the thread context, changes the instruction pointer (RIP) so it points at the payload, and writes the context back with SetThreadContext.',
+      defender: 'Sysmon Event ID 10 shows a thread-context write (SET_CONTEXT) that comes from another process.',
+      evidence: ['Sysmon EID 10 SET_CONTEXT']
+    },
+    {
+      title: 'Resume',
+      caption: 'ResumeThread restarts the thread. Instead of the original code, the thread now runs the attacker payload inside msedge.exe.',
+      defender: 'No remote-thread event fires, because no new thread was created. Only thread behavior looks strange.',
+      evidence: ['Thread behavior anomaly']
+    },
+    {
+      title: 'Hidden activity',
+      caption: 'The payload works inside the browser process. The user still sees a normal page, while the implant talks to its operator.',
+      defender: 'Memory scanning and network analytics see a beacon leaving from a browser process at odd times.',
+      evidence: ['Beacon from msedge.exe']
+    },
+    {
+      title: 'SOC triage',
+      caption: 'The analyst opens the EDR context-modification alert, captures memory from the host, and isolates the machine from the network.',
+      defender: 'The alert chain is complete: handle access, context write, memory alert, beacon. Host isolation stops the implant.',
+      evidence: ['Alert chain', 'Host isolation']
+    }
+  ];
+
+  var PILLS = [
+    ['Sysmon EID 1'],
+    ['Sysmon EID 10'],
+    ['EID 10 suspend rights'],
+    ['EDR RWX alert'],
+    ['EID 10 SET_CONTEXT'],
+    ['No EID 8 (quiet)'],
+    ['Beacon from msedge.exe'],
+    ['Host isolated']
+  ];
+
+  function scene(W, H) {
+    return { nodes: [
+      { id: 'atk', x: W * 0.03, y: H * 0.38, w: W * 0.155, h: H * 0.22, label: 'Attacker (lab VM)', desc: 'Operator machine that runs the implant and drives every step.' },
+      { id: 'victim', x: W * 0.335, y: H * 0.07, w: W * 0.37, h: H * 0.85, label: 'Victim host', desc: 'Employee workstation. The visible browser window looks completely normal.' },
+      { id: 'proc', x: W * 0.36, y: H * 0.16, w: W * 0.32, h: H * 0.72, label: 'Target process (msedge.exe)', desc: 'Trusted browser process chosen as the host for the payload.' },
+      { id: 'thread', x: W * 0.385, y: H * 0.33, w: W * 0.27, h: H * 0.16, label: 'Victim thread (idle)', desc: 'One existing thread inside msedge.exe. It is paused, its next instruction is changed, then it resumes.' },
+      { id: 'shell', x: W * 0.385, y: H * 0.60, w: W * 0.27, h: H * 0.16, label: 'Shellcode region (RWX)', desc: 'Memory written by the implant. No file on disk backs this code.' },
+      { id: 'soc', x: W * 0.815, y: H * 0.38, w: W * 0.155, h: H * 0.22, label: 'SOC analyst (EDR console)', desc: 'Defender watching Sysmon and EDR telemetry for context manipulation.' }
+    ] };
+  }
+
+  function N(s, id) {
+    for (var i = 0; i < s.nodes.length; i++) if (s.nodes[i].id === id) return s.nodes[i];
+    return { x: 0, y: 0, w: 0, h: 0 };
+  }
+
+  function hitTest(x, y, W, H, scene) {
+    var ns = (scene && scene.nodes) || [];
+    for (var i = 0; i < ns.length; i++) {
+      var n = ns[i];
+      if (x >= n.x && x <= n.x + (n.w || 0) && y >= n.y && y <= n.y + (n.h || 0)) return n;
+    }
+    return null;
+  }
+
+  function draw(ctx, W, H, s, step, t) {
+    ctx.clearRect(0, 0, W, H);
+
+    /* subtle dot background */
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = atkColor('--border');
+    for (var gx = 24; gx < W; gx += 46) {
+      for (var gy = 22; gy < H; gy += 42) {
+        ctx.beginPath();
+        ctx.arc(gx, gy, 1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    var atk = N(s, 'atk');
+    var vic = N(s, 'victim');
+    var proc = N(s, 'proc');
+    var th = N(s, 'thread');
+    var sh = N(s, 'shell');
+    var soc = N(s, 'soc');
+
+    /* victim host + target process containers */
+    AtkDraw.box(ctx, vic.x, vic.y, vic.w, vic.h, { fill: atkColor('--surface-2'), lineWidth: 1.6, radius: 12 });
+    AtkDraw.text(ctx, 'Victim host', vic.x + 12, vic.y + 20, { weight: '700', size: 12 });
+    AtkDraw.box(ctx, proc.x, proc.y, proc.w, proc.h, { fill: atkColor('--surface'), lineWidth: 1.4 });
+    AtkDraw.text(ctx, 'Target process: msedge.exe', proc.x + 12, proc.y + 18, { weight: '700', size: 11.5 });
+
+    /* inner boxes, highlighted per step */
+    var thStroke = atkColor('--border-strong');
+    if (step === 2 || step === 4) thStroke = atkColor('--warning');
+    if (step === 5 || step === 6) thStroke = atkColor('--danger');
+    AtkDraw.box(ctx, th.x, th.y, th.w, th.h, { label: 'Victim thread\n(idle, then hijacked)', stroke: thStroke, lineWidth: 1.6 });
+
+    var shStroke = atkColor('--border-strong');
+    if (step === 3 || step === 5 || step === 6 || step === 7) shStroke = atkColor('--danger');
+    AtkDraw.box(ctx, sh.x, sh.y, sh.w, sh.h, { label: 'Shellcode region\n(RWX, unbacked)', stroke: shStroke, lineWidth: 1.6 });
+
+    /* thread state caption */
+    var state = step < 2 ? 'running' : (step < 5 ? 'suspended' : 'executes attacker code');
+    AtkDraw.text(ctx, 'thread state: ' + state, th.x + th.w / 2, th.y + th.h + 15, { size: 10.5, align: 'center', color: atkColor('--muted'), mono: true });
+
+    /* attacker + SOC */
+    AtkDraw.box(ctx, atk.x, atk.y, atk.w, atk.h, { label: 'Attacker\n(lab VM)' });
+    AtkDraw.box(ctx, soc.x, soc.y, soc.w, soc.h, {
+      label: 'SOC analyst\n(EDR console)',
+      stroke: step === 7 ? atkColor('--success') : atkColor('--accent-2'),
+      lineWidth: step === 7 ? 2.2 : 1.5
+    });
+
+    /* flows: a flow shown at step k animates on step k, then stays complete */
+    function P(k) { return step > k ? 1 : (step === k ? t : 0); }
+    AtkDraw.arrow(ctx, atk.x + atk.w, atk.y + atk.h * 0.55, vic.x, vic.y + vic.h * 0.5, P(0), { color: atkColor('--danger'), label: 'implant runs' });
+    AtkDraw.arrow(ctx, atk.x + atk.w, atk.y + atk.h * 0.35, proc.x, proc.y + proc.h * 0.18, P(1), { color: atkColor('--accent'), label: 'OpenProcess' });
+    AtkDraw.arrow(ctx, atk.x + atk.w, atk.y + atk.h * 0.35, th.x, th.y + th.h * 0.35, P(2), { color: atkColor('--warning'), label: 'SuspendThread' });
+    AtkDraw.arrow(ctx, atk.x + atk.w, atk.y + atk.h * 0.75, sh.x, sh.y + sh.h * 0.5, P(3), { color: atkColor('--danger'), label: 'WriteProcessMemory' });
+    AtkDraw.arrow(ctx, atk.x + atk.w, atk.y + atk.h * 0.6, th.x, th.y + th.h * 0.75, P(4), { color: atkColor('--violet'), label: 'SetThreadContext (RIP)' });
+    AtkDraw.arrow(ctx, th.x + th.w * 0.5, th.y + th.h, sh.x + sh.w * 0.5, sh.y, P(5), { color: atkColor('--danger'), label: 'RIP now points here' });
+    AtkDraw.arrow(ctx, vic.x, vic.y + vic.h * 0.16, atk.x + atk.w, atk.y + atk.h * 0.25, P(6), { color: atkColor('--accent-2'), dashed: true, label: 'C2 beacon' });
+    AtkDraw.arrow(ctx, soc.x, soc.y + soc.h * 0.5, vic.x + vic.w, vic.y + vic.h * 0.5, P(7), { color: atkColor('--success'), label: 'capture + isolate' });
+
+    /* SOC telemetry pill */
+    var pills = PILLS[step] || [];
+    AtkDraw.text(ctx, 'SOC telemetry:', soc.x + 6, soc.y + soc.h + 16, { size: 10, color: atkColor('--muted'), mono: true });
+    for (var p = 0; p < pills.length; p++) {
+      AtkDraw.pill(ctx, soc.x + 6, soc.y + soc.h + 24 + p * 24, pills[p], atkColor('--accent-2'));
+    }
+  }
+
+  AtkSim.mount(document.getElementById('sim'), {
+    steps: STEPS,
+    scene: scene,
+    draw: draw,
+    hitTest: hitTest,
+    stepSeconds: 4.5,
+    autoplay: !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  });
+})();
+
+</script>
+</body>
+</html>

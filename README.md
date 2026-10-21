@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 > **The bridge between attack.mitre.org and a junior analyst's first Monday.**
-> 76 hand-written technique deep-dives, 597 tracked ATT&CK techniques, 197
+> 124 hand-written technique deep-dives, 598 tracked ATT&CK techniques, 245
 > CI-validated Sigma rules, and a log test for every rule.
 
 **Live site:** https://souhaieb-marzouk.github.io/attack-knowledge-platform/
@@ -33,11 +33,11 @@ Actions; both are free for public repositories.
 
 | Area | Today |
 |---|---|
-| Live technique guides | **76** hand-written deep-dives (red view, blue view, detection engineering, case study, mitigations, mistakes) |
-| ATT&CK catalogue | **597** techniques across **15** tactics (the current Stealth / Defense Impairment model) |
+| Live technique guides | **124** hand-written deep-dives (red view, blue view, detection engineering, case study, mitigations, mistakes) |
+| ATT&CK catalogue | **598** techniques across **15** tactics (the current Stealth / Defense Impairment model) |
 | Threat intelligence data | **180** actors, **44** mitigations, **59** campaigns |
-| Sigma library | **197** rules, every one passing `sigma check` + Splunk conversion |
-| Log tests | **197** positive and **197** negative JSONL cases, one pair per rule |
+| Sigma library | **245** rules, every one passing `sigma check` + Splunk conversion |
+| Log tests | **245** positive and **245** negative JSONL cases, one pair per rule |
 | CI | data validation, case-exact paths, page integration, link check, site consistency, Sigma schema + conversion + log tests |
 
 ## The five platform features
@@ -112,13 +112,13 @@ rebuilds `data/sigma-index.json` and commits it back to `main` with
 ```
 ├── index.html                     # home + ATT&CK Explorer
 ├── 404.html                       # search-first 404
-├── techniques/                    # 76 guides + hub + _template.html
+├── techniques/                    # 124 guides + hub + _template.html
 ├── actors/ mitigations/ campaigns/# relationship hubs
 ├── tools/                         # sigma library, coverage, false positives
 ├── docs/sigma-rule-guide.html     # standalone authoring/testing handbook
 ├── assets/                        # platform CSS/JS + screenshots/social card
 ├── data/                          # JSON single source of truth
-├── sigma/rules/                   # 197 validated rules
+├── sigma/rules/                   # 245 validated rules
 ├── tests/                         # log fixtures + matcher + CI gate
 ├── scripts/                       # validators, index builder, link/site checks
 └── .github/workflows/             # Quality Gate

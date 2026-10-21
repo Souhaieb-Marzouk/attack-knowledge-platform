@@ -5,7 +5,7 @@ Detection-as-code rules for the knowledge base. Every rule in
 [Sigma Rule Library](../tools/sigma.html). Every rule also has a positive and
 a negative JSONL log fixture under `tests/sigma_cases/`.
 
-**Current library: 197 rules, 197 positive cases, 197 negative cases.**
+**Current library: 245 rules, 245 positive cases, 245 negative cases.**
 
 ## Style guide
 

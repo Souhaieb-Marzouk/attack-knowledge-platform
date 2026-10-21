@@ -1,0 +1,2417 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1078 Valid Accounts — MITRE ATT&amp;CK Technique Guide</title>
+<meta name="description" content="Defensive detection engineering guide for MITRE ATT&amp;CK technique T1078 (Valid Accounts): animated simulation, red team view, blue team view, Sigma rules, Splunk SPL, log sources, mitigations, and a real-world case study.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1078-Valid-Accounts.html">
+<script>
+(function(){try{var t=localStorage.getItem('atk-theme');
+if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}
+document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<style>
+/* ============ Design tokens (binding spec §2.1) ============ */
+:root, html[data-theme="dark"]{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --shadow:0 10px 30px rgba(0,0,0,.25);
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 10px 30px rgba(23,34,56,.10);
+}
+/* ============ Reset and base ============ */
+*,*::before,*::after{box-sizing:border-box;}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size:16.5px; line-height:1.65;
+}
+code, pre, .mono{
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+img,svg{max-width:100%;}
+a{color:var(--accent); text-decoration:none;}
+a:hover{text-decoration:underline;}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;}
+/* ============ Skip link ============ */
+.skip-link{
+  position:absolute; left:12px; top:-60px; z-index:100;
+  background:var(--accent); color:#fff; padding:9px 16px; border-radius:8px;
+  font-weight:700; transition:top .15s ease;
+}
+.skip-link:focus{top:12px; text-decoration:none;}
+/* ============ Page progress bar ============ */
+.page-progress{
+  position:fixed; top:0; left:0; right:0; height:3px; z-index:90;
+  background:transparent; pointer-events:none;
+}
+.page-progress-fill{
+  height:100%; width:0%;
+  background:linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+/* ============ Hero ============ */
+.hero{
+  max-width:1280px; margin:0 auto; padding:52px 24px 34px;
+}
+.hero::before{
+  content:""; display:block; height:0;
+}
+.kicker{
+  margin:0 0 14px; font-size:.78rem; font-weight:700; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--muted);
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+.page-title{
+  margin:0 0 16px; font-size:clamp(2rem, 5vw, 3rem); line-height:1.12; font-weight:800;
+  letter-spacing:-.02em;
+}
+.title-id{
+  display:inline-block; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size:.62em; font-weight:700; color:var(--accent);
+  background:var(--surface-2); border:1px solid var(--border-strong);
+  border-radius:10px; padding:.05em .4em; vertical-align:middle; margin-right:.35em;
+  letter-spacing:.04em;
+}
+.hero-intro{max-width:72ch; margin:0 0 20px; color:var(--muted); font-size:1.04rem;}
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 26px;}
+.chip{
+  display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;
+  font-size:.8rem; color:var(--muted);
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:999px; padding:5px 12px;
+}
+.chip strong{color:var(--text); font-weight:600;}
+.fact-grid{
+  display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:14px;
+}
+.fact-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:16px 18px; box-shadow:var(--shadow);
+  display:flex; flex-direction:column; gap:5px;
+}
+.fact-label{
+  font-size:.7rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted);
+}
+.fact-value{font-size:1.25rem; font-weight:800; line-height:1.25;}
+.fact-value.accent{color:var(--accent);}
+.fact-note{font-size:.82rem; color:var(--muted); line-height:1.45;}
+/* ============ Two-column layout ============ */
+.layout{
+  max-width:1280px; margin:0 auto; padding:8px 24px 90px;
+  display:grid; grid-template-columns:250px minmax(0,1fr); gap:38px;
+  align-items:start;
+}
+/* ============ TOC sidebar ============ */
+.toc-sidebar{
+  position:sticky; top:20px; max-height:calc(100vh - 40px); overflow:auto;
+  padding:14px 6px 14px 0; scrollbar-width:thin;
+}
+.toc-title{
+  margin:0 0 10px; font-size:.72rem; font-weight:700; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--muted);
+}
+.toc-list{list-style:none; margin:0; padding:0;}
+.toc-list li{margin:0;}
+.toc-list a{
+  display:block; padding:6px 10px; border-left:2px solid transparent;
+  border-radius:0 8px 8px 0; color:var(--muted); font-size:.86rem; line-height:1.4;
+}
+.toc-list a:hover{color:var(--text); text-decoration:none; background:var(--surface-2);}
+.toc-list a.active{
+  color:var(--accent); border-left-color:var(--accent);
+  background:var(--surface-2); font-weight:600;
+}
+.toc-sub{list-style:none; margin:2px 0 4px; padding:0 0 0 14px;}
+.toc-sub a{font-size:.8rem; padding:4px 10px;}
+/* ============ Main content and sections ============ */
+.content{min-width:0;}
+.section{padding:50px 0 26px; scroll-margin-top:16px;}
+.section + .section{border-top:1px solid var(--border);}
+.section-head{margin-bottom:18px;}
+.section-num{
+  display:inline-flex; align-items:center; justify-content:center;
+  min-width:38px; height:26px; padding:0 8px; margin-bottom:10px;
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size:.8rem; font-weight:700; color:var(--accent);
+  background:var(--surface-2); border:1px solid var(--border-strong); border-radius:8px;
+}
+.section h2{
+  margin:4px 0 8px; font-size:clamp(1.45rem, 2.6vw, 1.85rem);
+  line-height:1.2; font-weight:800; letter-spacing:-.01em;
+}
+.section-intro{max-width:72ch; margin:0; color:var(--muted);}
+h3{
+  margin:30px 0 12px; font-size:1.18rem; font-weight:750; line-height:1.3;
+  scroll-margin-top:16px;
+}
+h4{
+  margin:20px 0 8px; font-size:1rem; font-weight:750; line-height:1.35;
+  color:var(--text); scroll-margin-top:16px;
+}
+.content p{max-width:72ch;}
+.content ul, .content ol{padding-left:1.4em; max-width:74ch;}
+.content li{margin:5px 0;}
+.content li::marker{color:var(--accent);}
+.checklist{list-style:none; padding-left:0;}
+.checklist li{padding-left:1.6em; position:relative;}
+.checklist li::before{
+  content:""; position:absolute; left:.25em; top:.42em; width:.72em; height:.72em;
+  border:2px solid var(--accent); border-radius:4px; background:transparent;
+}
+/* ============ Cards and grids ============ */
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:18px 20px; box-shadow:var(--shadow);
+}
+.card > h3:first-child, .card > h4:first-child{margin-top:0;}
+.card > :last-child{margin-bottom:0;}
+.grid-2{display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; margin:16px 0;}
+.grid-3{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; margin:16px 0;}
+.grid-2 > .card, .grid-3 > .card{margin:0;}
+.card-head{
+  display:flex; align-items:center; gap:10px; margin:0 0 10px;
+  font-size:.95rem; font-weight:750;
+}
+.card-sub{color:var(--muted); font-size:.85rem; margin:0 0 10px;}
+/* ============ Callouts ============ */
+.callout{
+  border:1px solid var(--border); border-left-width:4px; border-radius:12px;
+  background:var(--surface-2); padding:14px 18px; margin:16px 0;
+  font-size:.94rem;
+}
+.callout > :first-child{margin-top:0;}
+.callout > :last-child{margin-bottom:0;}
+.callout .callout-title{
+  display:block; font-weight:750; font-size:.82rem; letter-spacing:.08em;
+  text-transform:uppercase; margin-bottom:6px;
+}
+.callout.note{border-left-color:var(--accent);}
+.callout.note .callout-title{color:var(--accent);}
+.callout.tip{border-left-color:var(--success);}
+.callout.tip .callout-title{color:var(--success);}
+.callout.warn{border-left-color:var(--warning);}
+.callout.warn .callout-title{color:var(--warning);}
+.callout.danger{border-left-color:var(--danger);}
+.callout.danger .callout-title{color:var(--danger);}
+/* ============ Tables ============ */
+.table-scroll{
+  overflow-x:auto; border:1px solid var(--border); border-radius:12px;
+  background:var(--surface); margin:16px 0;
+}
+.table-scroll table{border-collapse:collapse; width:100%; min-width:620px; font-size:.88rem;}
+.table-scroll table.narrow{min-width:420px;}
+.table-scroll th, .table-scroll td{
+  text-align:left; padding:9px 12px; border-bottom:1px solid var(--border);
+  vertical-align:top;
+}
+.table-scroll thead th{
+  background:var(--surface-2); color:var(--text); font-weight:700; font-size:.8rem;
+  letter-spacing:.03em; white-space:nowrap;
+}
+.table-scroll tbody tr:last-child td{border-bottom:none;}
+.table-scroll tbody tr:hover{background:var(--surface-2);}
+.table-scroll td .mono, .table-scroll td code{font-size:.8rem;}
+.nowrap{white-space:nowrap;}
+/* ============ Code blocks ============ */
+.code-card{
+  margin:16px 0; background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; overflow:hidden; box-shadow:var(--shadow);
+}
+.code-head{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:8px 12px; background:var(--surface-2); border-bottom:1px solid var(--border);
+}
+.code-lang{
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size:.72rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--accent-2);
+}
+.code-title{font-size:.78rem; color:var(--muted);}
+.copy-btn{
+  font:inherit; font-size:.75rem; font-weight:600; color:var(--muted);
+  background:transparent; border:1px solid var(--border-strong); border-radius:8px;
+  padding:4px 12px; cursor:pointer; transition:color .12s ease, border-color .12s ease;
+}
+.copy-btn:hover{color:var(--accent); border-color:var(--accent);}
+.code-scroll{overflow-x:auto;}
+.code-scroll pre{margin:0; padding:14px 16px;}
+.code-scroll code{
+  font-size:.82rem; line-height:1.55; color:var(--text);
+  white-space:pre; tab-size:4;
+}
+/* ============ Badges ============ */
+.badge{
+  display:inline-flex; align-items:center; gap:5px; padding:2px 10px;
+  border-radius:999px; font-size:.72rem; font-weight:750; letter-spacing:.03em;
+  border:1px solid transparent; white-space:nowrap;
+}
+.badge.sev-critical{color:#b91c1c;}
+.badge.sev-high{color:#c2410c;}
+.badge.sev-medium{color:#a16207;}
+.badge.sev-low{color:#15803d;}
+html[data-theme="dark"] .badge.sev-critical{color:#fca5a5;}
+html[data-theme="dark"] .badge.sev-high{color:#fdba74;}
+html[data-theme="dark"] .badge.sev-medium{color:#fcd34d;}
+html[data-theme="dark"] .badge.sev-low{color:#86efac;}
+.badge.sev-critical{background:rgba(220,38,38,.10); border-color:rgba(220,38,38,.45);}
+.badge.sev-high{background:rgba(194,65,12,.10); border-color:rgba(194,65,12,.45);}
+.badge.sev-medium{background:rgba(180,83,9,.12); border-color:rgba(180,83,9,.45);}
+.badge.sev-low{background:rgba(21,128,61,.10); border-color:rgba(21,128,61,.45);}
+html[data-theme="dark"] .badge.sev-critical{background:rgba(248,113,113,.14); border-color:rgba(248,113,113,.5);}
+html[data-theme="dark"] .badge.sev-high{background:rgba(251,146,60,.14); border-color:rgba(251,146,60,.5);}
+html[data-theme="dark"] .badge.sev-medium{background:rgba(251,191,36,.14); border-color:rgba(251,191,36,.5);}
+html[data-theme="dark"] .badge.sev-low{background:rgba(74,222,128,.14); border-color:rgba(74,222,128,.5);}
+.cat{
+  display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px;
+  font-size:.72rem; font-weight:650; white-space:nowrap;
+  background:var(--surface-2); border:1px solid var(--border-strong); color:var(--muted);
+}
+.cat.c-id{color:var(--violet); border-color:var(--violet);}
+.cat.c-cloud{color:var(--accent-2); border-color:var(--accent-2);}
+.cat.c-net{color:var(--warning); border-color:var(--warning);}
+.cat.c-ep{color:var(--accent); border-color:var(--accent);}
+.cat.c-win{color:var(--accent); border-color:var(--accent);}
+.cat.c-linux{color:var(--success); border-color:var(--success);}
+.cat.c-saas{color:var(--high); border-color:var(--high);}
+/* ============ Key/value lists ============ */
+.kv-list{list-style:none; margin:14px 0; padding:0;}
+.kv{
+  display:grid; grid-template-columns:190px minmax(0,1fr); gap:14px;
+  padding:10px 2px; border-bottom:1px dashed var(--border); font-size:.92rem;
+}
+.kv:last-child{border-bottom:none;}
+.kv .k{font-weight:700; color:var(--text);}
+.kv .v{color:var(--muted);}
+.kv .v strong, .kv .v code{color:var(--text);}
+@media (max-width:640px){ .kv{grid-template-columns:1fr; gap:3px;} }
+/* ============ Timeline ============ */
+.timeline{position:relative; margin:18px 0; padding-left:6px; list-style:none;}
+.timeline::before{
+  content:""; position:absolute; left:11px; top:8px; bottom:8px; width:2px;
+  background:var(--border-strong); border-radius:2px;
+}
+.tl-item{position:relative; padding:0 0 20px 34px;}
+.tl-item:last-child{padding-bottom:4px;}
+.tl-item::before{
+  content:""; position:absolute; left:6px; top:6px; width:12px; height:12px;
+  border-radius:50%; background:var(--accent);
+  box-shadow:0 0 0 3px rgba(79,140,255,.18);
+}
+.tl-item.tl-warn::before{background:var(--warning); box-shadow:0 0 0 3px rgba(251,191,36,.18);}
+.tl-item.tl-danger::before{background:var(--danger); box-shadow:0 0 0 3px rgba(248,113,113,.18);}
+.tl-item.tl-success::before{background:var(--success); box-shadow:0 0 0 3px rgba(52,211,153,.18);}
+.tl-time{
+  display:block; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size:.76rem; font-weight:700; color:var(--accent-2); margin-bottom:2px;
+}
+.tl-item .tl-body{font-size:.93rem; color:var(--text); max-width:74ch;}
+.tl-item .tl-body .muted, .tl-note{color:var(--muted); font-size:.86rem;}
+/* ============ Simulation ============ */
+.sim-panel{
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  padding:16px; box-shadow:var(--shadow); margin:18px 0;
+}
+.sim-canvas-wrap{
+  position:relative; border:1px solid var(--border); border-radius:12px;
+  background:var(--bg); overflow:hidden;
+}
+.sim-canvas-wrap canvas{display:block; width:100%; touch-action:pan-y;}
+.sim-tooltip{
+  position:absolute; z-index:6; pointer-events:none; display:none;
+  max-width:230px; padding:7px 10px; border-radius:8px;
+  background:var(--elevated); border:1px solid var(--border-strong);
+  box-shadow:var(--shadow); font-size:.78rem; line-height:1.45;
+}
+.sim-tooltip .tt-name{display:block; font-weight:750; color:var(--text);}
+.sim-tooltip .tt-role{display:block; color:var(--muted);}
+.sim-controls{
+  display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:13px;
+}
+.sim-btn, .sim-controls select, .sim-controls label{font:inherit; font-size:.86rem;}
+.sim-btn{
+  color:var(--text); background:var(--surface-2); border:1px solid var(--border-strong);
+  border-radius:9px; padding:8px 16px; font-weight:650; cursor:pointer;
+  transition:border-color .12s ease, color .12s ease;
+}
+.sim-btn:hover{border-color:var(--accent); color:var(--accent);}
+.sim-controls label{color:var(--muted);}
+.sim-controls select{
+  color:var(--text); background:var(--surface-2); border:1px solid var(--border-strong);
+  border-radius:9px; padding:7px 10px; cursor:pointer;
+}
+.sim-controls .ctrl-note{font-size:.78rem; color:var(--muted);}
+.sim-steps{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+.sim-step-chip{
+  font:inherit; font-size:.78rem; font-weight:600; color:var(--muted);
+  background:var(--surface-2); border:1px solid var(--border);
+  border-radius:999px; padding:5px 12px; cursor:pointer; white-space:nowrap;
+}
+.sim-step-chip:hover{color:var(--text); border-color:var(--border-strong);}
+.sim-step-chip[aria-current="true"]{
+  color:var(--accent); border-color:var(--accent);
+  background:rgba(79,140,255,.10);
+}
+.sim-caption{
+  margin-top:13px; padding:12px 15px; border:1px solid var(--border);
+  border-radius:10px; background:var(--surface-2); font-size:.93rem; min-height:4.6em;
+}
+.sim-caption .sim-step-title{display:block; font-weight:750; color:var(--accent); margin-bottom:4px;}
+.sim-defender{
+  margin-top:10px; padding:10px 15px; border:1px solid var(--border);
+  border-left:4px solid var(--success); border-radius:10px;
+  background:var(--surface-2); font-size:.88rem; color:var(--muted);
+}
+.sim-defender strong{color:var(--success);}
+.sim-legend{
+  display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:12px;
+  font-size:.78rem; color:var(--muted);
+}
+.sim-legend .lg-item{display:inline-flex; align-items:center; gap:7px;}
+.lg-swatch{display:inline-block; width:11px; height:11px; border-radius:3px; border:1px solid var(--border-strong);}
+.lg-line{display:inline-block; width:16px; height:2px; border-radius:2px;}
+/* ============ Attack chain ribbon ============ */
+.ribbon-wrap{margin:18px 0; padding:14px; background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow-x:auto;}
+.ribbon-wrap svg{display:block; min-width:620px; margin:0 auto;}
+/* ============ Floating controls ============ */
+.toc-fab, .back-top, .theme-toggle{
+  position:fixed; z-index:60; width:46px; height:46px; border-radius:12px;
+  display:flex; align-items:center; justify-content:center; cursor:pointer;
+  background:var(--surface); color:var(--text); border:1px solid var(--border-strong);
+  box-shadow:var(--shadow); font:inherit; font-size:.9rem; font-weight:700;
+  transition:border-color .12s ease, color .12s ease;
+}
+.toc-fab:hover, .back-top:hover, .theme-toggle:hover{border-color:var(--accent); color:var(--accent);}
+.toc-fab{left:16px; bottom:16px; display:none;}
+.back-top{right:16px; bottom:16px;}
+.theme-toggle{top:14px; right:14px;}
+.back-top[hidden]{display:none;}
+/* ============ Mobile overlay ============ */
+.mobile-overlay{
+  position:fixed; inset:0; z-index:80; display:none;
+  background:rgba(4,8,18,.62);
+}
+.mobile-overlay.open{display:block;}
+.mobile-overlay-panel{
+  position:absolute; left:0; top:0; bottom:0; width:min(320px, 88vw);
+  background:var(--surface); border-right:1px solid var(--border);
+  padding:18px; overflow:auto; box-shadow:var(--shadow);
+}
+.mobile-overlay-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+.mobile-overlay-close{
+  font:inherit; font-size:.85rem; font-weight:700; color:var(--text);
+  background:var(--surface-2); border:1px solid var(--border-strong);
+  border-radius:8px; padding:6px 12px; cursor:pointer;
+}
+/* ============ Misc helpers ============ */
+.muted{color:var(--muted);}
+.small{font-size:.85rem;}
+.mono-sm{
+  font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size:.8rem;
+}
+.link-list{list-style:none; padding:0; margin:10px 0;}
+.link-list li{margin:7px 0;}
+.link-list a{font-weight:600;}
+.link-list .desc{color:var(--muted); font-size:.86rem;}
+/* ============ Responsive ============ */
+@media (max-width:1040px){
+  .layout{grid-template-columns:1fr; gap:0;}
+  .toc-sidebar{display:none;}
+  .toc-fab{display:flex;}
+  .fact-grid{grid-template-columns:repeat(2, minmax(0,1fr));}
+}
+@media (max-width:640px){
+  body{font-size:16px;}
+  .hero{padding:36px 16px 24px;}
+  .layout{padding:4px 14px 80px;}
+  .fact-grid, .grid-2, .grid-3{grid-template-columns:1fr;}
+  .section{padding:36px 0 18px;}
+  .sim-controls .sim-btn, .sim-controls select{flex:1 1 auto;}
+  .sim-btn{padding:10px 14px;}
+  .theme-toggle{top:auto; bottom:74px; right:16px;}
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto;}
+  *,*::before,*::after{
+    animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+  }
+}
+/* ============ Print ============ */
+@media print{
+  body{background:#fff; color:#000; font-size:11pt;}
+  .toc-sidebar, .toc-fab, .back-top, .theme-toggle, .mobile-overlay,
+  .page-progress, .sim-controls, .sim-steps, .copy-btn, .skip-link,
+  .sim-tooltip{display:none !important;}
+  .layout{display:block; padding:0; max-width:none;}
+  .hero{padding:12pt 0;}
+  .card, .fact-card, .code-card, .sim-panel, .table-scroll, .callout, .ribbon-wrap{
+    box-shadow:none; break-inside:avoid;
+  }
+  .section{padding:14pt 0; border-top:1px solid #999;}
+  .table-scroll{overflow:visible;}
+  .table-scroll table{min-width:0; font-size:9pt;}
+  .code-scroll{overflow:visible;}
+  .code-scroll pre{white-space:pre-wrap; word-break:break-word;}
+  a{color:#000; text-decoration:underline;}
+  .title-id{background:none; border:1px solid #666; color:#000;}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1078"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip-link" href="#main-content">Skip to content</a>
+<div class="page-progress" id="page-progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="page-progress-fill" id="page-progress-fill"></div></div>
+<div class="hero">
+  <p class="kicker">MITRE ATT&amp;CK · ENTERPRISE · TECHNIQUE</p>
+  <h1 class="page-title"><span class="title-id">T1078</span> Valid Accounts</h1>
+  <p class="hero-intro">Attackers log in instead of breaking in. This technique covers every use of a real account by someone who is not its owner. The account can be a bought password, a phished token, or a shared login that should have been removed.</p>
+  <div class="chips">
+    <span class="chip"><strong>Tactics:</strong> Initial Access · Persistence · Privilege Escalation · Stealth (formerly Defense Evasion)</span>
+    <span class="chip"><strong>Platforms:</strong> Containers · ESXi · IaaS · Identity Provider · Linux · macOS · Network Devices · Office Suite · SaaS · Windows</span>
+    <span class="chip"><strong>Typical log sources (curated picks, not an official ATT&amp;CK mapping):</strong> Logon sessions · Account management events · VPN and IdP auth logs · Cloud sign-in logs</span>
+  </div>
+  <div class="fact-grid">
+    <div class="fact-card">
+      <span class="fact-label">ATT&amp;CK ID</span>
+      <span class="fact-value accent mono-sm">T1078</span>
+      <span class="fact-note">Technique — parent of four sub-techniques (T1078.001–.004)</span>
+    </div>
+    <div class="fact-card">
+      <span class="fact-label">Tactics</span>
+      <span class="fact-value">4</span>
+      <span class="fact-note">Initial Access · Persistence · Privilege Escalation · Stealth (formerly Defense Evasion)</span>
+    </div>
+    <div class="fact-card">
+      <span class="fact-label">Platforms</span>
+      <span class="fact-value">10</span>
+      <span class="fact-note">Containers · ESXi · IaaS · Identity Provider · Linux · macOS · Network Devices · Office Suite · SaaS · Windows</span>
+    </div>
+    <div class="fact-card">
+      <span class="fact-label">Detection difficulty</span>
+      <span class="fact-value">Moderate</span>
+      <span class="fact-note">Real credentials make malicious sessions look normal. Context and baselines beat single events.</span>
+    </div>
+  </div>
+</div>
+<div class="layout">
+  <aside class="toc-sidebar" aria-label="Table of contents">
+    <p class="toc-title">Contents</p>
+    <ol class="toc-list" id="toc-list">
+      <li><a href="#s1-overview">1 · Overview</a></li>
+      <li><a href="#s2-simulation">2 · Animated Simulation</a></li>
+      <li><a href="#s3-red-team">3 · Red Team / Hacker Perspective</a></li>
+      <li><a href="#s4-blue-team">4 · Blue Team / SOC Perspective</a></li>
+      <li><a href="#s5-detection">5 · Detection Engineering Deep Dive</a>
+        <ol class="toc-sub">
+          <li><a href="#s5-1-regulation">5.1 Regulation Mapping</a></li>
+          <li><a href="#s5-2-threat-intel">5.2 Threat Intelligence</a></li>
+          <li><a href="#s5-3-threat-ranking">5.3 Threats Ranking and Categorization</a></li>
+          <li><a href="#s5-4-logs-patterns">5.4 Logs and Patterns</a></li>
+          <li><a href="#s5-5-sigma-spl">5.5 Sigma Rules and Splunk SPL</a></li>
+        </ol>
+      </li>
+      <li><a href="#s6-case-study">6 · Real-World Case Study</a></li>
+      <li><a href="#s7-mitigation">7 · Mitigation and Defense</a></li>
+      <li><a href="#s8-mistakes">8 · Common Mistakes and Best Practices</a></li>
+      <li><a href="#s9-cheatsheet">9 · Cheat Sheet and Quick Reference</a></li>
+    </ol>
+  </aside>
+  <main class="content" id="main-content">
+<section class="section" id="s1-overview">
+    <div class="section-head">
+      <span class="section-num">01</span>
+      <h2>Overview</h2>
+      <p class="section-intro">What "valid accounts" means, why attackers love it, and what this guide teaches you.</p>
+    </div>
+
+    <p>A <strong>valid account</strong> is a real username with a working password, key, or token. The attacker does not need a software bug or a special exploit. They simply log in as someone the system already trusts. From the network's point of view, their traffic looks ordinary. It <em>is</em> ordinary employee traffic — just sent by the wrong person.</p>
+
+    <p>This is why T1078 matters so much. Almost every security control trusts identity. A firewall may block a random scanner, but it welcomes a real user. An email gateway may stop malware, but it happily delivers the mailbox of a paid account. That is why valid account use appears in almost every real intrusion, from simple password attacks to ransomware and cloud data theft.</p>
+
+    <h3>The same technique, four different jobs</h3>
+    <p>Valid Accounts is unusual: it is listed under four tactics, because the same stolen login does different work at different stages of an attack. One tactic has a new name. It is now called Stealth, formerly Defense Evasion. This page writes "Stealth (formerly Defense Evasion)" at first mention so older reports stay easy to match.</p>
+    <div class="grid-2">
+      <div class="card">
+        <h4 class="card-head">Initial Access</h4>
+        <p class="small">The attacker buys or phishes credentials and uses them to get their first way in. The door is often a VPN, an SSO portal, or a webmail login. No exploit touches the target; the front door simply opens.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Persistence</h4>
+        <p class="small">A login that keeps working is a way back in that survives reboots and password scans. Attackers keep using (or quietly refresh) the account, especially if it is dormant, shared, or rarely reviewed.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Privilege Escalation</h4>
+        <p class="small">The attacker switches to a stronger account: a local admin, a domain admin, or a cloud admin. The extra power often comes from reused passwords or credentials dumped from memory.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Stealth (formerly Defense Evasion)</h4>
+        <p class="small">Malicious actions carried out by a legitimate user account blend into normal work. Many detections ignore "known users", which is exactly what the attacker hopes for. Older ATT&amp;CK versions and most reports from 2024 and earlier use the former tactic name.</p>
+      </div>
+    </div>
+
+    <h3>The four sub-techniques in one line each</h3>
+    <div class="table-scroll">
+      <table class="narrow">
+        <thead><tr><th scope="col">Sub-technique</th><th scope="col">Name</th><th scope="col">What it covers</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-sm nowrap">T1078.001</td><td>Default Accounts</td><td>Built-in or factory accounts that still use their original passwords. The official page names the root user in AWS, the root user in ESXi, and the default service account in Kubernetes.</td></tr>
+          <tr><td class="mono-sm nowrap">T1078.002</td><td>Domain Accounts</td><td>Accounts managed by a central directory such as Active Directory Domain Services — one identity that can reach many systems and services.</td></tr>
+          <tr><td class="mono-sm nowrap">T1078.003</td><td>Local Accounts</td><td>Accounts stored on a single machine, like the built-in Administrator or a local service login.</td></tr>
+          <tr><td class="mono-sm nowrap">T1078.004</td><td>Cloud Accounts</td><td>Accounts in cloud platforms — AWS, Azure, Google Workspace, SaaS apps — where one login can reach huge data sets.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Where valid accounts sit in the attack chain</h3>
+    <div class="ribbon-wrap" role="img" aria-label="Attack chain ribbon: Initial Access, Persistence, Privilege Escalation, and Stealth (formerly Defense Evasion), with a highlighted band showing that Valid Accounts is active at every stage.">
+      <svg viewBox="0 0 760 150" xmlns="http://www.w3.org/2000/svg" width="760" height="150" role="presentation" focusable="false">
+        <g font-family="ui-monospace, Menlo, Consolas, monospace">
+          <rect x="16" y="18" width="160" height="44" rx="10" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+          <text x="96" y="45" text-anchor="middle" font-size="13" fill="var(--muted)">Initial Access</text>
+          <rect x="200" y="18" width="160" height="44" rx="10" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+          <text x="280" y="45" text-anchor="middle" font-size="13" fill="var(--muted)">Persistence</text>
+          <rect x="384" y="18" width="180" height="44" rx="10" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+          <text x="474" y="45" text-anchor="middle" font-size="13" fill="var(--muted)">Privilege Escalation</text>
+          <rect x="588" y="18" width="156" height="44" rx="10" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+          <text x="666" y="37" text-anchor="middle" font-size="13" fill="var(--muted)">Stealth</text>
+          <text x="666" y="53" text-anchor="middle" font-size="9" fill="var(--muted)">(formerly Defense Evasion)</text>
+          <g stroke="var(--muted)" stroke-width="1.5" fill="var(--muted)">
+            <line x1="176" y1="40" x2="194" y2="40"/><polygon points="194,36 200,40 194,44"/>
+            <line x1="360" y1="40" x2="378" y2="40"/><polygon points="378,36 384,40 378,44"/>
+            <line x1="564" y1="40" x2="582" y2="40"/><polygon points="582,36 588,40 582,44"/>
+          </g>
+          <rect x="16" y="86" width="728" height="44" rx="10" fill="var(--accent)" opacity="0.14"/>
+          <rect x="16" y="86" width="728" height="44" rx="10" fill="none" stroke="var(--accent)" stroke-width="2"/>
+          <text x="380" y="113" text-anchor="middle" font-size="14" font-weight="bold" fill="var(--accent)">T1078 Valid Accounts — active at every stage of the chain</text>
+        </g>
+      </svg>
+    </div>
+
+    <h3>What you will learn on this page</h3>
+    <ul>
+      <li>How a valid account is obtained, tested, and used across the whole attack chain.</li>
+      <li>Which log events a login leaves behind on Windows, Linux, VPN, and cloud platforms.</li>
+      <li>The five most realistic threats built on this technique, ranked with severity and preconditions.</li>
+      <li>Five complete Sigma rules and matching Splunk SPL queries you can adapt and tune.</li>
+      <li>Which controls — MFA, conditional access, offboarding, monitoring — reduce the risk the most.</li>
+    </ul>
+
+    <h3>Key facts at a glance</h3>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <span class="fact-label">Technique</span>
+        <span class="fact-value accent mono-sm">T1078</span>
+        <span class="fact-note">Valid Accounts — use of real credentials belonging to someone else</span>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Sub-techniques</span>
+        <span class="fact-value">4</span>
+        <span class="fact-note">Default · Domain · Local · Cloud accounts</span>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Typical log sources</span>
+        <span class="fact-value mono-sm">4624 / 4625</span>
+        <span class="fact-note">Windows logon events, VPN and IdP auth logs, cloud sign-in logs — curated practical picks, not an official mapping</span>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Cheapest defense</span>
+        <span class="fact-value">Phishing-resistant MFA</span>
+        <span class="fact-note">Plus dormant-account cleanup and central logon logging</span>
+      </div>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-title">Scope note</span>
+      <p>This page covers the parent technique T1078. Four sibling pages cover the sub-techniques (default, domain, local, and cloud accounts) with platform-specific detail. Everything here is defensive and educational; all command examples are lab-only, with placeholders like <code>&lt;target-ip&gt;</code> instead of real addresses.</p>
+    </div>
+  </section>
+<section class="section" id="s2-simulation">
+    <div class="section-head">
+      <span class="section-num">02</span>
+      <h2>Animated Simulation</h2>
+      <p class="section-intro">Watch a complete stolen-credential attack, step by step. Each step shows what the attacker does and what the defender can see at the same moment.</p>
+    </div>
+
+    <div class="sim-panel" id="sim-panel">
+      <div class="sim-canvas-wrap" id="sim-wrap">
+        <canvas id="sim-canvas" role="img" aria-label="Animated diagram: an attacker buys an employee's VPN credentials on a criminal market, logs into the company VPN, looks around, copies files from a file server, moves to a second server, and is detected and stopped by the SOC."></canvas>
+        <div class="sim-tooltip" id="sim-tooltip" aria-hidden="true"><span class="tt-name"></span><span class="tt-role"></span></div>
+      </div>
+      <div class="sim-controls">
+        <button class="sim-btn" id="sim-play" type="button" aria-pressed="false">Play</button>
+        <button class="sim-btn" id="sim-restart" type="button">Restart</button>
+        <label for="sim-speed">Speed</label>
+        <select id="sim-speed" aria-label="Simulation speed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+        </select>
+        <span class="ctrl-note">Hover or tap a node for details.</span>
+      </div>
+      <div class="sim-steps" id="sim-steps" role="group" aria-label="Jump to a simulation step"></div>
+      <div class="sim-caption" id="sim-caption" aria-live="polite"></div>
+      <div class="sim-defender" id="sim-defender"></div>
+      <div class="sim-legend" id="sim-legend">
+        <span class="lg-item"><span class="lg-swatch" style="background:var(--danger)"></span>Attacker side</span>
+        <span class="lg-item"><span class="lg-swatch" style="background:var(--accent)"></span>Company asset</span>
+        <span class="lg-item"><span class="lg-swatch" style="background:var(--violet)"></span>Identity</span>
+        <span class="lg-item"><span class="lg-swatch" style="background:var(--success)"></span>Defender / SOC</span>
+        <span class="lg-item"><span class="lg-line" style="background:var(--accent-2)"></span>Data flow</span>
+        <span class="lg-item"><span class="lg-swatch" style="background:var(--warning)"></span>Evidence chip</span>
+      </div>
+    </div>
+    <noscript><div class="callout warn"><span class="callout-title">JavaScript is disabled</span><p>The animation needs JavaScript. The full written story below covers every step, so you do not miss anything.</p></div></noscript>
+
+    <h3>The story, step by step</h3>
+    <ol>
+      <li><strong>Buying access.</strong> The attacker visits a criminal market and buys the VPN credentials of an employee, "j.wilson". The seller stole them in an earlier phishing campaign. This trade happens on an outside forum, so your network sees nothing yet.</li>
+      <li><strong>Credential test.</strong> The attacker opens the company VPN portal from their own laptop and tries the password. It works on the first try. The VPN log records a new country and a new device fingerprint for this user — the first weak signal.</li>
+      <li><strong>Valid login accepted.</strong> The VPN grants access because this account has no MFA on remote access. A successful VPN authentication now appears from an unusual network provider. A GeoIP and new-device check would flag this login.</li>
+      <li><strong>Quiet look around.</strong> Inside the session, the attacker runs simple discovery commands such as <code>whoami</code> and <code>net view</code> to map shares and permissions. The EDR agent sees rare commands running in a normal user session — another soft signal.</li>
+      <li><strong>Reaching the file server.</strong> Using the same valid account, the attacker opens a file share and copies a small folder of documents. File server audit logs show unusual mass reads for a user who normally opens two folders a day.</li>
+      <li><strong>Lateral use.</strong> The attacker tries the same password on a second server, and it works, because the employee reused the password. The same source IP has now logged into two hosts within minutes — a strong correlation signal.</li>
+      <li><strong>SOC alert.</strong> An anomaly rule fires: first VPN login from this country for this user. The analyst opens the session timeline and links the VPN record, the EDR process events, and the file audit line into one incident.</li>
+      <li><strong>Response.</strong> The analyst disables the account, resets the password, and kills the live VPN session. The attacker loses access within minutes of the alert, before any real damage is done.</li>
+    </ol>
+    <p class="muted small">Evidence chips drawn in the animation: VPN auth log line, Windows 4624, EDR process event, file audit line. In real incidents each chip stands for a log record you can pull, store, and query.</p>
+  </section>
+
+  <section class="section" id="s3-red-team">
+    <div class="section-head">
+      <span class="section-num">03</span>
+      <h2>Red Team / Hacker Perspective</h2>
+      <p class="section-intro">How attackers think about valid accounts — written for defenders, so you can predict and detect the behavior.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4 class="card-head">Why attackers choose a login over an exploit</h4>
+        <ul class="small">
+          <li>No exploit crash, no malware sample, no unusual process tree.</li>
+          <li>Encryption and zero-trust tunnels work <em>for</em> the attacker once they are inside them.</li>
+          <li>A phished session token or a pushed MFA approval defeats second factors.</li>
+          <li>Remote access portals are, by design, reachable from anywhere.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Where the technique applies</h4>
+        <ul class="small">
+          <li>VPN and SSO portals — the classic first way in.</li>
+          <li>Cloud consoles and APIs — broad reach from one login.</li>
+          <li>RDP, SSH, and SMB inside the network for lateral movement — attacker shorthand for spreading from one machine to the next with the same credentials.</li>
+          <li>Email and SaaS — mailbox rules, OAuth grants, data theft.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Prerequisites an attacker needs</h3>
+    <div class="card">
+      <ul class="checklist small">
+        <li>A working credential for an enabled account — password, SSH key, or session token.</li>
+        <li>A network path to the login surface (public VPN portal, exposed RDP, cloud console).</li>
+        <li>No MFA on that path, or a second factor the attacker can phish, push, or reuse.</li>
+        <li>Some knowledge of usernames — from LinkedIn, leaked lists, or easy naming patterns.</li>
+        <li>Patience: testing credentials slowly to avoid lockouts and rate limits.</li>
+      </ul>
+    </div>
+
+    <h3>Common ways credentials become "valid"</h3>
+    <div class="grid-3">
+      <div class="card">
+        <h4 class="card-head">Bought from a broker</h4>
+        <p class="small">Initial access brokers sell working VPN and SSO logins. This is the fastest path and the one shown in the simulation.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Stuffed or sprayed</h4>
+        <p class="small">Password lists from old breaches are replayed against portals. This guessing method is called credential stuffing or password spraying. Reused passwords make it work far too often.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Phished directly</h4>
+        <p class="small">Fake login pages and MFA relay kits capture passwords, one-time codes, and sometimes whole sessions.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Dumped from a host</h4>
+        <p class="small">After one working login, credentials stored in memory or files give access to more systems (see T1003, OS Credential Dumping).</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Left behind</h4>
+        <p class="small">Dormant accounts, ex-employee logins, shared team passwords, and vendor default accounts never removed.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Asked for politely</h4>
+        <p class="small">Social engineering of IT help desks — pretending to be a locked-out employee — produces fresh, fully working credentials.</p>
+      </div>
+    </div>
+
+    <h3>Generating safe test telemetry (lab only)</h3>
+    <p>Detections are only real if you have replayed them. In a lab you own, you can produce the exact log events used in Section 5.4 without touching any real target.</p>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">windows-cmd</span><span class="code-title">Create a network logon event in your lab — Lab only</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>:: Lab only — run on a Windows lab host you own
+:: 1) Create a type 3 (network) logon on the lab file server FS-01
+net use \\FS-01\public /user:CORP\j.wilson &lt;lab-password&gt;
+dir \\FS-01\public
+net use \\FS-01\public /delete
+
+:: Expected evidence on FS-01:
+::   Event 4624  LogonType=3, TargetUserName=j.wilson
+::   Event 5140  share \\FS-01\public was accessed
+::   Event 5145  network share object was checked</code></pre></div>
+    </figure>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">bash</span><span class="code-title">Create a Linux accepted-password event in your lab — Lab only</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code># Lab only — run from a lab workstation toward a lab host
+ssh j.wilson@&lt;lab-host&gt;
+whoami
+exit
+
+# Expected evidence in /var/log/auth.log on &lt;lab-host&gt;:
+#   "Accepted password for j.wilson from &lt;your-ip&gt; port 51444 ssh2"
+#   "pam_unix(sshd:session): session opened for user j.wilson"</code></pre></div>
+    </figure>
+    <div class="callout danger">
+      <span class="callout-title">Ethics and legality</span>
+      <p>Never test credentials against systems you do not own, and never use accounts that are not yours — even "just to see if it works". That is unauthorized access in most jurisdictions. All examples here use placeholders like <code>&lt;lab-host&gt;</code> inside an isolated lab.</p>
+    </div>
+
+    <h3>Common variations and attacker mistakes</h3>
+    <div class="grid-2">
+      <div class="card">
+        <h4 class="card-head">Variations you will meet</h4>
+        <ul class="small">
+          <li><strong>Low and slow:</strong> one login, tiny data volume, long gaps — built to stay under thresholds.</li>
+          <li><strong>Only built-in tools:</strong> the attacker runs commands a normal user could plausibly run, so nothing unusual is installed.</li>
+          <li><strong>Session hijack:</strong> stealing the cookie or token instead of the password (relates to T1550).</li>
+          <li><strong>Help-desk social engineering:</strong> turning humans into a credential factory (see the case study).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Mistakes attackers still make</h4>
+        <ul class="small">
+          <li>Wrong time zone — logins at 03:00 local time for a day-shift employee.</li>
+          <li>New device and user agent with zero history for that user.</li>
+          <li>Password spray noise — bursts of 4625 / failed events before a success.</li>
+          <li>Password reuse — the same source IP logging into many hosts in minutes.</li>
+          <li>Forgetting the geo — a "new country" for a user who never travels.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+<section class="section" id="s4-blue-team">
+    <div class="section-head">
+      <span class="section-num">04</span>
+      <h2>Blue Team / SOC Perspective</h2>
+      <p class="section-intro">A valid login is not invisible — it is everywhere. Here is where to look, what it leaves behind, and how to triage it fast.</p>
+    </div>
+
+    <p>Defenders cannot stop a login from looking "normal" by itself, but a login is one of the most logged actions in IT. Every successful use of a valid account creates session records. The VPN or identity provider logs the entry. So do the hosts it touched and the cloud services it reached. The defender's job is to join those records into a timeline and compare it with what that user normally does.</p>
+
+    <h3>Where defenders can see it</h3>
+    <div class="grid-3">
+      <div class="card">
+        <h4 class="card-head">Windows Security log</h4>
+        <p class="small">4624 (logon success), 4625 (failure), 4648 (explicit credentials), 4672 (admin logon rights), 4768–4771 (Kerberos tickets). Logon type 3 = network, type 10 = RDP.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Identity provider sign-ins</h4>
+        <p class="small">Entra ID and Okta record every portal login with source IP, device, MFA method, and result. Best single source for cloud and SSO sessions.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">VPN concentrator logs</h4>
+        <p class="small">Authentication results, source IP, geo, and device posture. The entry door for most remote attacks with bought credentials.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">EDR telemetry</h4>
+        <p class="small">Process events inside a valid session: <code>whoami</code>, <code>net view</code>, archive tools, or first-time commands for that user.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">File and share audit</h4>
+        <p class="small">Events 4663 / 5140 / 5145 show which shares were touched and how much was read. Mass reads from a quiet user stand out.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Cloud audit logs</h4>
+        <p class="small">AWS CloudTrail ConsoleLogin (MFAUsed field), Office 365 unified audit log, Google Workspace login events.</p>
+      </div>
+    </div>
+
+    <h3>Artifacts a valid-account session leaves behind</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Artifact</th><th scope="col">Where it appears</th><th scope="col">What it tells you</th></tr></thead>
+        <tbody>
+          <tr><td>Logon success, type 2/3/10</td><td>Windows 4624, Linux <code>auth.log</code>, VPN auth log</td><td>When and from where the account was used, and through which path.</td></tr>
+          <tr><td>Admin privileges assigned</td><td>Windows 4672</td><td>The session held elevated rights — important when the account should not have them.</td></tr>
+          <tr><td>Failed logins, then success</td><td>Windows 4625, VPN / IdP logs, 4740 lockouts</td><td>Password guessing or stuffing that ended in a working login.</td></tr>
+          <tr><td>New device / new country</td><td>Entra ID, Okta, VPN geo fields</td><td>The session came from hardware and places with no history for this user.</td></tr>
+          <tr><td>Mass file reads</td><td>4663 / 5140 / 5145, file server audit</td><td>Collection behavior — many files opened in a short window.</td></tr>
+          <tr><td>Same source, many hosts</td><td>4624 type 3 across hosts, SSH accepted logins</td><td>Lateral movement with reused credentials from one workstation or admin system.</td></tr>
+          <tr><td>ConsoleLogin without MFA</td><td>AWS CloudTrail, O365 audit</td><td>Cloud console access that skipped the second factor.</td></tr>
+          <tr><td>Account state changes</td><td>4722 (enable), 4725 (disable), 4740 (lockout), IdP audit</td><td>Someone is switching accounts on or off — attackers and responders both do this.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Why this matters for the whole chain</h3>
+    <p>A valid-account session is rarely the goal — it is the vehicle. It carries the attacker from initial access through discovery, collection, and, in the worst cases, ransomware staging. If you detect the session early, you break the chain before payload deployment. If you only detect the payload, you are already late. This is why identity telemetry has some of the highest return on investment in a SOC.</p>
+
+    <h3>Six-step triage flow for a suspicious valid login</h3>
+    <ol class="timeline">
+      <li class="tl-item">
+        <span class="tl-time">Step 1 — Identify</span>
+        <span class="tl-body">Confirm the account owner, their team, and their expected location, devices, and working hours. A "suspicious" login for a frequent traveler may be routine.</span>
+      </li>
+      <li class="tl-item">
+        <span class="tl-time">Step 2 — Pull the session record</span>
+        <span class="tl-body">Get time, source IP, geo, device ID, user agent, and MFA method from the VPN or IdP log. Note whether MFA was satisfied, pushed, or skipped.</span>
+      </li>
+      <li class="tl-item">
+        <span class="tl-time">Step 3 — Correlate</span>
+        <span class="tl-body">Join the session with EDR process events, file audit records, and any other logins from the same source IP in the last 24 hours. One timeline, all sources.</span>
+      </li>
+      <li class="tl-item tl-warn">
+        <span class="tl-time">Step 4 — Check how far it reached</span>
+        <span class="tl-body">Was the account privileged? Did it touch other hosts? Any new group memberships, mailbox rules, or OAuth grants (app permissions a user hands to an application) created during the session?</span>
+      </li>
+      <li class="tl-item tl-danger">
+        <span class="tl-time">Step 5 — Score and decide</span>
+        <span class="tl-body">Privileged + new geo + mass reads = likely intrusion. Low-privilege + home country + normal apps = likely safe. Document the reasoning either way.</span>
+      </li>
+      <li class="tl-item tl-success">
+        <span class="tl-time">Step 6 — Contain and preserve</span>
+        <span class="tl-body">Before disabling: snapshot the evidence (logs, session records). Then disable or reset the account, revoke sessions and tokens, and notify the user through a known-good channel.</span>
+      </li>
+    </ol>
+
+    <h3>Worked example: one session, three sources</h3>
+    <p class="small muted">The same j.wilson incident from the simulation, assembled as an analyst would see it after correlation.</p>
+    <ol class="timeline">
+      <li class="tl-item">
+        <span class="tl-time">02:16:31 UTC · VPN concentrator</span>
+        <span class="tl-body"><code>user=j.wilson src_ip=198.51.100.87 geo="Lagos, NG" result=success mfa=none</code> — successful VPN login, no second factor, first-ever session from this country and device. <span class="muted">Signal: unusual entry.</span></span>
+      </li>
+      <li class="tl-item">
+        <span class="tl-time">02:18–02:26 UTC · EDR on VPN-assigned workstation</span>
+        <span class="tl-body"><code>whoami</code>, <code>net view \\corp\projects</code>, <code>net use</code> — first-time commands for this user account; nothing malicious by signature, everything unusual by baseline. <span class="muted">Signal: discovery in a valid session.</span></span>
+      </li>
+      <li class="tl-item tl-warn">
+        <span class="tl-time">02:27–02:34 UTC · File server audit on fs-01</span>
+        <span class="tl-body">Event 4663, 214 read operations against <code>\\fs-01\projects\</code> — versus a 30-day average of 6 per day for this account. <span class="muted">Signal: collection.</span></span>
+      </li>
+      <li class="tl-item tl-danger">
+        <span class="tl-time">02:31 UTC · Windows 4624 on srv-02</span>
+        <span class="tl-body">LogonType 3 from <code>10.20.4.51</code> (fs-01's internal address) — the same external session has now touched two hosts within 15 minutes. <span class="muted">Signal: lateral movement with reused credentials.</span></span>
+      </li>
+      <li class="tl-item tl-success">
+        <span class="tl-time">02:41 UTC · SOC decision</span>
+        <span class="tl-body">Four weak signals, one account, one source chain. Verdict: probable account compromise. Disable, reset, revoke; call the employee on their registered number. <span class="muted">Total time from entry: 25 minutes.</span></span>
+      </li>
+    </ol>
+  </section>
+
+  <section class="section" id="s5-detection">
+    <div class="section-head">
+      <span class="section-num">05</span>
+      <h2>Detection Engineering Deep Dive</h2>
+      <p class="section-intro">Regulations, threat intelligence, ranked threats, raw log patterns, and ready-to-adapt Sigma rules with matching Splunk SPL.</p>
+    </div>
+
+    <h3 id="s5-1-regulation">5.1 Regulation Mapping</h3>
+    <p>Identity controls and their logging are not optional paperwork. Most security frameworks require you to prove that only the right people can log in. They also expect evidence you can show when something goes wrong. Use this mapping to justify budget for identity logging and MFA, or when an auditor asks what T1078 means for compliance.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Framework</th><th scope="col">Specific control reference</th><th scope="col">Why it applies to this technique</th><th scope="col">Expected evidence</th></tr></thead>
+        <tbody>
+          <tr><td>GDPR</td><td>Art. 32 — security of processing</td><td>Stolen valid credentials are a leading path to personal data breaches; strong authentication is an expected safeguard.</td><td>MFA coverage report, authentication policy, breach risk assessments.</td></tr>
+          <tr><td>GDPR</td><td>Art. 33 — 72-hour breach notification</td><td>You must detect unauthorized account use quickly enough to notify on time.</td><td>Detection alerts, triage notes, incident timeline records.</td></tr>
+          <tr><td>HIPAA Security Rule</td><td>§164.312(d) — person or entity authentication</td><td>Systems holding ePHI must verify identity; MFA gaps make valid-account attacks easy.</td><td>Access control policy, MFA enforcement evidence per system.</td></tr>
+          <tr><td>HIPAA Security Rule</td><td>§164.312(b) — audit controls</td><td>Logon audit trails are required to review access to ePHI systems.</td><td>Retained 4624 / VPN / IdP logs with review records.</td></tr>
+          <tr><td>ISO/IEC 27001:2022</td><td>Annex A 5.16, 5.17, 5.18; A.8.2; A.8.15; A.8.16</td><td>Identity lifecycle (joiners/leavers), privileged access, logging, and monitoring directly counter dormant and stolen accounts.</td><td>Offboarding checklists, privileged access reviews, monitoring procedures.</td></tr>
+          <tr><td>SOC 2</td><td>CC6.1–CC6.3 (logical access); CC7.2–CC7.3 (monitoring)</td><td>Auditors test whether access is granted, changed, and removed correctly — and whether anomalies are evaluated.</td><td>Access reviews, alert-to-response records, deprovisioning evidence.</td></tr>
+          <tr><td>PCI DSS v4.0</td><td>Requirements 8.2–8.5 (accounts and MFA); 10.2 (audit logging)</td><td>Shared accounts and missing MFA are direct non-compliance; all access to cardholder data must be logged and reviewed.</td><td>Unique-ID policy, MFA on cardholder data environment, daily log review records.</td></tr>
+          <tr><td>NIST CSF 2.0</td><td>PR.AA (identity and access); DE.CM (monitoring); RS.MA (response)</td><td>The framework's identity, monitoring, and response functions map one-to-one onto valid-account defense.</td><td>Access policy documents, monitoring coverage matrix, IR runbooks.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s5-2-threat-intel">5.2 Threat Intelligence</h3>
+    <p>Intelligence helps you decide <em>which</em> valid-account behaviors to hunt first. Below: where to get it, which actors rely on this technique, and how confidence should change what you do with it.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Source type</th><th scope="col">Examples</th><th scope="col">What to take from it</th><th scope="col">Typical confidence</th></tr></thead>
+        <tbody>
+          <tr><td>MITRE ATT&amp;CK</td><td>T1078 pages and sub-techniques</td><td>Canonical behavior, sub-technique breakdown, and detection ideas to build rules from.</td><td>High (curated)</td></tr>
+          <tr><td>Vendor reporting</td><td>EDR and IdP vendor blogs, threat reports</td><td>Named campaigns, TTPs, and indicators verified against real telemetry.</td><td>High to Moderate</td></tr>
+          <tr><td>OSINT</td><td>Security research blogs, social media, leak-site tracking</td><td>Early signals: new access brokers, phishing kits, pricing trends.</td><td>Moderate — verify before acting</td></tr>
+          <tr><td>Commercial feeds</td><td>Threat intel platforms, curated IOC feeds</td><td>Machine-readable indicators; useful for matching known-bad infrastructure.</td><td>Moderate — quality varies</td></tr>
+          <tr><td>ISACs / sector groups</td><td>Sector ISAC bulletins, government advisories (for example CISA)</td><td>Peer-reported attacks on organizations like yours; often includes mitigations.</td><td>High for sector relevance</td></tr>
+          <tr><td>Internal telemetry</td><td>Your own VPN, IdP, EDR, and cloud logs</td><td>The most reliable input for your baselines; the only source that knows your naming and your normal.</td><td>High for your environment</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Actors and campaigns known for valid-account abuse</h4>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Actor / activity</th><th scope="col">Confidence</th><th scope="col">Why it applies to T1078</th></tr></thead>
+        <tbody>
+          <tr><td>Scattered Spider (UNC3944)</td><td><span class="badge sev-critical">High</span></td><td>Repeated 2022–2024 public reporting of help-desk social engineering and identity abuse to obtain working credentials (hotels, telecom, retail).</td></tr>
+          <tr><td>ALPHV / BlackCat affiliates</td><td><span class="badge sev-critical">High</span></td><td>Ransomware operations routinely start from bought or phished valid credentials, then reuse them laterally.</td></tr>
+          <tr><td>Initial access brokers (commodity)</td><td><span class="badge sev-critical">High</span></td><td>Criminal markets openly sell VPN, RDP, and SSO logins; this supply chain feeds most other intrusion crews.</td></tr>
+          <tr><td>APT29</td><td><span class="badge sev-high">High</span></td><td>Multiple vendor reports of credential theft and token abuse against cloud identities and diplomatic targets.</td></tr>
+          <tr><td>Lapsus$ activity</td><td><span class="badge sev-medium">Moderate</span></td><td>2022 reporting of credential phishing and paying insiders for logins; high-profile cloud and telecom intrusions.</td></tr>
+          <tr><td>FIN7</td><td><span class="badge sev-medium">Moderate</span></td><td>Long history of using legitimate remote tools and purchased access against retail and hospitality.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-title">How confidence changes your action</span>
+      <p><strong>High</strong> confidence (several independent credible sources, or vendor-verified telemetry): build a detection and deploy it now. <strong>Moderate</strong> (one credible vendor report or consistent OSINT): write the hunt query and watch for matches before alerting. <strong>Low</strong> (a single unverified post): note it in the intel log and re-check after a second source appears. Acting on low-confidence intel usually means wasted tuning time and alert fatigue.</p>
+    </div>
+<h3 id="s5-3-threat-ranking">5.3 Threats Ranking and Categorization</h3>
+    <p>Not all valid-account threats are equal. This ranking assumes a <strong>typical mid-size enterprise</strong>. Picture a few thousand users, VPN or SSO remote access, mostly Windows endpoints with some Linux servers, at least one cloud platform, and partial MFA coverage. Ranks shift with your reality — a cloud-only company would push Threat 5 up; a company with strict PAM would push Threat 1 down.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Threat #</th><th scope="col">Name</th><th scope="col">Platform</th><th scope="col">What happens</th><th scope="col">Preconditions</th><th scope="col">Impact</th><th scope="col">Why this rank</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="nowrap"><span class="badge sev-critical">Critical</span><br><span class="mono-sm">T1</span></td>
+            <td><strong>Privileged account compromise</strong> (admin or service account used on VPN / SSO)</td>
+            <td><span class="cat c-id">Identity</span> <span class="cat c-win">Windows</span></td>
+            <td>An attacker logs in with a privileged identity — domain admin, cloud admin, or a powerful service account — and moves straight to domain or tenant takeover.</td>
+            <td>Working credentials for a privileged account; MFA missing or phishable on that path; no just-in-time elevation.</td>
+            <td>Domain or cloud takeover; ransomware-scale damage across the whole estate.</td>
+            <td>One login gives broad access, and attackers go where the power is. No other threat on this page causes more damage from a single event.</td>
+          </tr>
+          <tr>
+            <td class="nowrap"><span class="badge sev-high">High</span><br><span class="mono-sm">T2</span></td>
+            <td><strong>Credential stuffing against VPN / SSO portals</strong></td>
+            <td><span class="cat c-net">Network</span> <span class="cat c-id">Identity</span></td>
+            <td>Breached password lists are replayed against the remote-access portal until a reused password matches, then the attacker logs in as a real user.</td>
+            <td>Breached password lists; no MFA or rate limiting on the portal; users reuse passwords.</td>
+            <td>A quiet way in as a legitimate user — initial access completed without any exploit.</td>
+            <td>The most common real-world initial access path we see; attempts are constant, and one hit is enough.</td>
+          </tr>
+          <tr>
+            <td class="nowrap"><span class="badge sev-high">High</span><br><span class="mono-sm">T3</span></td>
+            <td><strong>Valid account used for lateral movement</strong> (RDP / SSH / WMI / SMB)</td>
+            <td><span class="cat c-win">Windows</span> <span class="cat c-linux">Linux</span></td>
+            <td>From the first valid login, the attacker reuses valid credentials to open network logons on many internal hosts, mapping the network and seeking privilege.</td>
+            <td>Valid credentials (often dumped or reused); network reach between hosts; shared local admin passwords.</td>
+            <td>Spread across servers, privilege discovery, staging for encryption or exfiltration.</td>
+            <td>Near-universal in real intrusions; every serious intrusion report includes credential-based lateral movement.</td>
+          </tr>
+          <tr>
+            <td class="nowrap"><span class="badge sev-high">High</span><br><span class="mono-sm">T4</span></td>
+            <td><strong>Dormant account reactivation</strong> (unused 90+ days)</td>
+            <td><span class="cat c-id">Identity</span></td>
+            <td>An account nobody has used for months — often an ex-employee or a forgotten contractor — suddenly signs in and nobody is watching.</td>
+            <td>Weak offboarding; dormant accounts left enabled; no last-sign-in monitoring.</td>
+            <td>Stealthy persistence with a trusted history; months of dwell time if unnoticed.</td>
+            <td>Rarely watched, carries real history (group memberships, access), and never triggers "new account" alerts.</td>
+          </tr>
+          <tr>
+            <td class="nowrap"><span class="badge sev-medium">Medium</span><br><span class="mono-sm">T5</span></td>
+            <td><strong>Shared or guest account abuse</strong></td>
+            <td><span class="cat c-cloud">Cloud</span> <span class="cat c-saas">SaaS</span></td>
+            <td>Several people share one login, or external guest accounts linger after projects end — so activity cannot be tied to a person, and stale guests keep access.</td>
+            <td>Shared logins in use; weak guest governance; no periodic guest access review.</td>
+            <td>Broken attribution during incidents; unintended data access; audit failures.</td>
+            <td>The damage one shared account can cause is limited, but the gap is very common and it weakens every other detection.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout note">
+      <span class="callout-title">Severity legend</span>
+      <p><span class="badge sev-critical">Critical</span> — direct path to estate-wide takeover. <span class="badge sev-high">High</span> — likely intrusion step with major impact. <span class="badge sev-medium">Medium</span> — serious hygiene and visibility problem with limited reach. <span class="badge sev-low">Low</span> — nuisance or edge case in most environments. Numbers T1–T5 are used consistently in 5.4 and 5.5 below.</p>
+    </div>
+
+    <h3 id="s5-4-logs-patterns">5.4 Logs and Patterns</h3>
+    <p>For each ranked threat, this part lists the log sources and key fields. It shows what normal looks like, what suspicious looks like, and the detection logic in one sentence. Then a realistic event example follows, with a field-by-field explanation.</p>
+
+    <h4>Threat 1 — Privileged account compromise</h4>
+    <div class="grid-2">
+      <div class="card">
+        <h4 class="card-head">Log sources and key fields</h4>
+        <ul class="small">
+          <li><strong>Sources:</strong> Windows Security (4624 / 4672 / 4648), Entra ID sign-in logs, AWS CloudTrail ConsoleLogin, VPN logs.</li>
+          <li><strong>Key fields:</strong> TargetUserName, LogonType, IpAddress, WorkstationName, TargetSid, MFAUsed.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Normal vs suspicious</h4>
+        <ul class="small">
+          <li><strong>Normal:</strong> privileged logons from jump hosts or bastions, during business hours, from known admin networks.</li>
+          <li><strong>Suspicious:</strong> privileged logon over VPN or RDP from an external or unknown network, at night, from a device with no history.</li>
+          <li><strong>Detection logic:</strong> alert when a member of a privileged group authenticates remotely from outside the approved admin path.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">json</span><span class="code-title">Windows Security 4624 — privileged account, remote interactive logon (example)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>{"EventTime":"2025-04-14T02:13:44.118Z","EventID":4624,
+ "Computer":"FS-01.corp.local","TargetUserName":"svc_backup_adm",
+ "TargetDomainName":"CORP","TargetSid":"S-1-5-21-3623811015-3361044348-30300820-1120",
+ "LogonType":10,"AuthenticationPackageName":"Negotiate",
+ "ProcessName":"C:\\Windows\\System32\\winlogon.exe",
+ "IpAddress":"203.0.113.44","WorkstationName":"KIOSK-7",
+ "ElevatedToken":"%%1842"}</code></pre></div>
+    </figure>
+    <div class="table-scroll">
+      <table class="narrow">
+        <thead><tr><th scope="col">Field</th><th scope="col">Meaning here</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-sm">EventID 4624</td><td>Successful logon. Always join it with 4672 (special privileges) to confirm admin rights in the session.</td></tr>
+          <tr><td class="mono-sm">TargetUserName</td><td><code>svc_backup_adm</code> — an admin-suffixed service account; it should never log in interactively.</td></tr>
+          <tr><td class="mono-sm">LogonType 10</td><td>Remote interactive (RDP). Type 3 would mean a network logon; both matter here.</td></tr>
+          <tr><td class="mono-sm">IpAddress</td><td>203.0.113.44 — an external address at 02:13 local time; the red flag.</td></tr>
+          <tr><td class="mono-sm">WorkstationName</td><td><code>KIOSK-7</code> — not an approved jump host for this account.</td></tr>
+          <tr><td class="mono-sm">ElevatedToken</td><td>%%1842 means the token is elevated — the session has admin rights.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Threat 2 — Credential stuffing against VPN / SSO</h4>
+    <div class="grid-2">
+      <div class="card">
+        <h4 class="card-head">Log sources and key fields</h4>
+        <ul class="small">
+          <li><strong>Sources:</strong> VPN concentrator auth logs, identity provider sign-in logs, portal logs. Watch for 4625 bursts followed by a 4624 success.</li>
+          <li><strong>Key fields:</strong> src_ip, user, result, reason, geo.country, device_id, attempts.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Normal vs suspicious</h4>
+        <ul class="small">
+          <li><strong>Normal:</strong> one or two failures per user, then success from the usual device and country.</li>
+          <li><strong>Suspicious:</strong> 10+ failures across many usernames from one source IP, then a success from that same IP.</li>
+          <li><strong>Detection logic:</strong> correlate authentication failures and the next success by source IP within a short window.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">text</span><span class="code-title">VPN concentrator auth lines — stuffing burst then success (example)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>timestamp=2025-04-14 02:14:03 UTC device=gp-portal-01 user=j.wilson src_ip=198.51.100.87 geo="Lagos, NG" auth=LDAP result=failed reason="invalid password" attempts=9
+timestamp=2025-04-14 02:14:31 UTC device=gp-portal-01 user=j.wilson src_ip=198.51.100.87 geo="Lagos, NG" auth=LDAP result=failed reason="invalid password" attempts=10
+timestamp=2025-04-14 02:16:31 UTC device=gp-portal-01 user=j.wilson src_ip=198.51.100.87 geo="Lagos, NG" auth=LDAP result=success mfa=none</code></pre></div>
+    </figure>
+    <div class="table-scroll">
+      <table class="narrow">
+        <thead><tr><th scope="col">Field</th><th scope="col">Meaning here</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-sm">src_ip</td><td>The same external address across all lines — the stuffing source.</td></tr>
+          <tr><td class="mono-sm">result / reason</td><td>Repeated "invalid password" failures, then success. Failure-then-success from one IP is the pattern.</td></tr>
+          <tr><td class="mono-sm">attempts</td><td>Counter climbing 9 → 10 — shows guessing, not a typo.</td></tr>
+          <tr><td class="mono-sm">geo</td><td>A country with no history for this user; feeds GeoIP enrichment.</td></tr>
+          <tr><td class="mono-sm">mfa</td><td><code>none</code> — the success needed no second factor. This is the control gap.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Threat 3 — Valid account used for lateral movement</h4>
+    <div class="grid-2">
+      <div class="card">
+        <h4 class="card-head">Log sources and key fields</h4>
+        <ul class="small">
+          <li><strong>Sources:</strong> Windows 4624 LogonType 3 + 4672 on each target host, Linux <code>secure</code> / <code>auth.log</code> accepted logins, EDR network-logon events.</li>
+          <li><strong>Key fields:</strong> Source_Network_Address, Computer, TargetUserName, LogonType, AuthenticationPackageName.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Normal vs suspicious</h4>
+        <ul class="small">
+          <li><strong>Normal:</strong> each workstation reaches a handful of familiar servers; admin traffic comes from designated jump hosts.</li>
+          <li><strong>Suspicious:</strong> one source address creates type 3 logons on 10+ unique hosts in minutes, especially with NTLM.</li>
+          <li><strong>Detection logic:</strong> count unique destination hosts per source address over a 10-minute window and alert on high counts.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">json</span><span class="code-title">Windows Security 4624 — network logon during lateral movement (example)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>{"EventTime":"2025-04-14T02:29:52.004Z","EventID":4624,
+ "Computer":"SRV-02.corp.local","TargetUserName":"j.wilson",
+ "TargetDomainName":"CORP","LogonType":3,
+ "AuthenticationPackageName":"NTLM","LmPackageName":"NTLM V2",
+ "ProcessName":"C:\\Windows\\System32\\svchost.exe",
+ "IpAddress":"10.20.4.51","WorkstationName":"FS-01"}</code></pre></div>
+    </figure>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">text</span><span class="code-title">Linux auth.log — accepted password over SSH (example)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>Apr 14 02:31:07 srv-02 sshd[8412]: Accepted password for j.wilson from 10.20.4.51 port 51444 ssh2
+Apr 14 02:31:07 srv-02 sshd[8412]: pam_unix(sshd:session): session opened for user j.wilson by (uid=0)</code></pre></div>
+    </figure>
+    <div class="table-scroll">
+      <table class="narrow">
+        <thead><tr><th scope="col">Field</th><th scope="col">Meaning here</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-sm">LogonType 3</td><td>Network logon — someone connected to this host over the network (SMB, WMI, WinRM).</td></tr>
+          <tr><td class="mono-sm">IpAddress 10.20.4.51</td><td>The source is another internal host (FS-01), not a user workstation — classic pivot.</td></tr>
+          <tr><td class="mono-sm">WorkstationName</td><td>Names the machine that originated the connection; join it with the source host's own logs.</td></tr>
+          <tr><td class="mono-sm">AuthenticationPackageName</td><td>NTLM instead of Kerberos often means the attacker used raw credentials or pass-the-hash style access.</td></tr>
+          <tr><td class="mono-sm">sshd Accepted password</td><td>Same pattern on Linux: the reused password now opens a second server.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Threat 4 — Dormant account reactivation</h4>
+    <div class="grid-2">
+      <div class="card">
+        <h4 class="card-head">Log sources and key fields</h4>
+        <ul class="small">
+          <li><strong>Sources:</strong> identity provider last-sign-in attributes, Entra ID sign-in logs, Windows 4624 history, account management events 4722 / 4725 / 4740.</li>
+          <li><strong>Key fields:</strong> userPrincipalName, last successful sign-in date, ipAddress, deviceDetail, isInteractive.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Normal vs suspicious</h4>
+        <ul class="small">
+          <li><strong>Normal:</strong> no sign-ins for months; the account stays disabled or untouched.</li>
+          <li><strong>Suspicious:</strong> a successful interactive sign-in on an account dormant for 90+ days, often right after a re-enable event.</li>
+          <li><strong>Detection logic:</strong> enrich sign-in events with a "days since last success" field and alert when it exceeds your threshold.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">json</span><span class="code-title">Entra ID SignInLogs — dormant account signs in (example)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>{"time":"2025-04-14T03:02:11.882Z","category":"SignInLogs",
+ "operationName":"Sign-in activity","resultType":"0",
+ "properties":{"id":"8f3e2c1a-77b4-4d0e-9a51-c2f8d4b6e901",
+  "userPrincipalName":"m.reyes@corp.example",
+  "appDisplayName":"Windows Azure Active Directory",
+  "status":{"errorCode":0,"failureReason":""},
+  "ipAddress":"203.0.113.201",
+  "location":{"city":"Bucharest","countryOrRegion":"RO"},
+  "deviceDetail":{"displayName":"","operatingSystem":"Windows 11",
+   "browser":"Chrome 124"},"isInteractive":true,
+  "user_dormant_90d":true}}</code></pre></div>
+    </figure>
+    <div class="table-scroll">
+      <table class="narrow">
+        <thead><tr><th scope="col">Field</th><th scope="col">Meaning here</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-sm">resultType / errorCode 0</td><td>The sign-in succeeded; only successes can start a session.</td></tr>
+          <tr><td class="mono-sm">userPrincipalName</td><td><code>m.reyes</code> — per your HR feed, this employee left 14 months ago. The account was never disabled.</td></tr>
+          <tr><td class="mono-sm">location</td><td>A country with zero sign-in history for this user.</td></tr>
+          <tr><td class="mono-sm">deviceDetail.displayName</td><td>Empty — an unregistered device, no compliance posture.</td></tr>
+          <tr><td class="mono-sm">user_dormant_90d</td><td>Enrichment field (assumption: a daily lookup job adds it) — true means no successful sign-in for 90+ days.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Threat 5 — Shared or guest account abuse</h4>
+    <div class="grid-2">
+      <div class="card">
+        <h4 class="card-head">Log sources and key fields</h4>
+        <ul class="small">
+          <li><strong>Sources:</strong> SaaS admin logs, Office 365 management activity, guest invitation and conversion events, shared mailbox audit.</li>
+          <li><strong>Key fields:</strong> Operation, UserId, ClientIP, ClientInfoString, UserAgent, device-first-seen.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Normal vs suspicious</h4>
+        <ul class="small">
+          <li><strong>Normal:</strong> guests invited through an approval workflow; shared mailboxes accessed from the team's known devices.</li>
+          <li><strong>Suspicious:</strong> a guest activated outside the process, or a shared mailbox login from a device never seen for that account.</li>
+          <li><strong>Detection logic:</strong> alert on guest-add operations without a ticket reference, or shared-account logins from a first-seen device.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">json</span><span class="code-title">AWS CloudTrail ConsoleLogin — shared account, no MFA (example)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>{"eventVersion":"1.09","eventTime":"2025-04-14T03:22:40Z",
+ "eventSource":"signin.amazonaws.com","eventName":"ConsoleLogin",
+ "awsRegion":"us-east-1","sourceIPAddress":"198.51.100.23",
+ "userIdentity":{"type":"IAMUser","principalId":"AIDAEXAMPLE1234",
+  "arn":"arn:aws:iam::123456789012:user/shared-analytics",
+  "accountId":"123456789012","userName":"shared-analytics"},
+ "additionalEventData":{"MFAUsed":"No",
+  "LoginTo":"https://console.aws.amazon.com/s3/"},
+ "responseElements":{"ConsoleLogin":"Success"}}</code></pre></div>
+    </figure>
+    <div class="table-scroll">
+      <table class="narrow">
+        <thead><tr><th scope="col">Field</th><th scope="col">Meaning here</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-sm">eventName ConsoleLogin</td><td>Someone opened the AWS web console — check who and from where.</td></tr>
+          <tr><td class="mono-sm">userName shared-analytics</td><td>A shared account with five past users; attribution for this action is now impossible.</td></tr>
+          <tr><td class="mono-sm">MFAUsed "No"</td><td>The login skipped the second factor — a policy violation on any cloud account.</td></tr>
+          <tr><td class="mono-sm">sourceIPAddress</td><td>An address with no history for this account in the last 90 days.</td></tr>
+          <tr><td class="mono-sm">LoginTo .../s3/</td><td>The console went straight to storage — worth checking S3 data events for the same session.</td></tr>
+        </tbody>
+      </table>
+    </div>
+<h3 id="s5-5-sigma-spl">5.5 Sigma Rules and Splunk SPL</h3>
+    <p>Each ranked threat gets one Sigma rule and one matching Splunk query — five pairs in all. After them you get one extra cross-check query that has no paired Sigma rule. Field names are realistic but you must adapt them to your own schema — mapping assumptions are noted under each pair. Validate every rule by replaying the log examples from 5.4 before you turn on alerting.</p>
+
+    <h4>Detection 1 — Privileged account logs in remotely (Threat 1, severity: critical)</h4>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">sigma</span><span class="code-title">Sigma — privileged remote logon</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>title: Remote Logon by Privileged Account Outside Approved Path
+id: 7c3e1f2a-9b4d-4e08-a6c1-2f5d8b0e9a74
+status: stable
+description: &gt;
+  Detects a network (type 3) or remote interactive (type 10) logon where the
+  target account is privileged. Privilege is known in two ways: an account
+  name suffix convention (-adm / _admin), or a daily SIEM enrichment lookup
+  that adds IsPrivilegedAccount from group membership. Privileged accounts
+  should log in from jump hosts, not from arbitrary remote sources.
+references:
+  - https://attack.mitre.org/techniques/T1078/
+  - https://attack.mitre.org/techniques/T1078/003/
+author: Security Detection Engineering Team
+date: 2025/02/10
+modified: 2025/05/19
+logsource:
+  product: windows
+  service: security
+detection:
+  selection_logon:
+    EventID: 4624
+    LogonType:
+      - 3
+      - 10
+  selection_suffix:
+    TargetUserName|endswith:
+      - '-adm'
+      - '_admin'
+  selection_enriched:
+    IsPrivilegedAccount: 'true'
+  condition: selection_logon and (selection_suffix or selection_enriched)
+fields:
+  - EventID
+  - TargetUserName
+  - TargetSid
+  - LogonType
+  - IpAddress
+  - WorkstationName
+  - Computer
+falsepositives:
+  - Documented break-glass logons of built-in admin accounts
+  - Administrative work from approved jump hosts that match the suffix
+level: critical
+tags:
+  - attack.t1078
+  - attack.t1078.003
+  - attack.initial_access
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.defense_evasion</code></pre></div>
+    </figure>
+    <p class="small"><strong>Mapping assumptions:</strong> the enrichment key <code>IsPrivilegedAccount</code> is added by your SIEM (assumption: a daily lookup of Domain Admins, Enterprise Admins, and sensitive service accounts). Splunk maps <code>TargetUserName</code> and <code>LogonType</code> via the Splunk Add-on for Windows; group membership can also come from a lookup join instead of a field.</p>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">spl</span><span class="code-title">Splunk SPL — privileged remote logon</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>index=wineventlog source="WinEventLog:Security" EventCode=4624 LogonType IN (3, 10)
+[| inputlookup privileged_accounts.csv | fields account | rename account as TargetUserName]
+| stats count values(Computer) as hosts values(LogonType) as logon_types dc(IpAddress) as source_count values(IpAddress) as sources by TargetUserName
+| sort - count</code></pre></div>
+    </figure>
+    <p class="small muted">Field assumptions: the lookup subsearch emulates the Sigma <code>selection_suffix or selection_enriched</code> logic. So <code>privileged_accounts.csv</code> must list every privileged account: both the <code>-adm</code>/<code>_admin</code> suffixed names and the accounts your enrichment marks as privileged. No extra threshold filter is applied, exactly like the Sigma rule. The Splunk Add-on for Windows maps Sigma's <code>EventID</code> to <code>EventCode</code> and provides <code>TargetUserName</code>, <code>LogonType</code>, and <code>Computer</code>; join on SID instead if your accounts are renamed.</p>
+
+    <h4>Detection 2 — Stuffing burst then success on VPN (Threat 2, severity: high)</h4>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">sigma</span><span class="code-title">Sigma — VPN failures followed by success</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>title: VPN Authentication Failures Followed by Success from One Source
+id: e9a2c8d4-1f3b-4c67-b5e0-8d7a6f2c4b19
+status: stable
+description: &gt;
+  Detects repeated VPN authentication failures from one source address
+  followed by a success within 15 minutes. This matches credential stuffing
+  and password spraying against remote access, and catches the moment the
+  guessing succeeded. The matching SPL implements "repeated" as ten or
+  more failures in the same 15-minute window; tune that number to your portal.
+references:
+  - https://attack.mitre.org/techniques/T1078/
+  - https://attack.mitre.org/techniques/T1133/
+author: Security Detection Engineering Team
+date: 2025/02/17
+modified: 2025/06/02
+logsource:
+  category: network
+  product: vpn
+  service: auth
+detection:
+  selection_fail:
+    action: failed
+  selection_success:
+    action: success
+  timeframe: 15m
+  condition: selection_fail | near selection_success
+fields:
+  - src_ip
+  - user
+  - geo.country
+  - device_id
+  - action
+  - reason
+falsepositives:
+  - A user mistyping a new password several times before succeeding
+  - Mobile clients retrying on unstable network links
+level: high
+tags:
+  - attack.t1078
+  - attack.initial_access
+  - attack.persistence
+  - attack.defense_evasion</code></pre></div>
+    </figure>
+    <p class="small"><strong>Mapping assumptions:</strong> fields assume VPN logs normalized to <code>action</code> (failed/success), <code>src_ip</code>, <code>user</code>, and <code>geo.country</code>. The <code>near</code> operator needs event timestamps. On platforms without it, use a fail-count-plus-success aggregation as in the SPL. That query counts failures per <code>src_ip</code> per 15-minute block and needs <code>failures &gt;= 10</code> plus one success.</p>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">spl</span><span class="code-title">Splunk SPL — stuffing burst then success</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>index=vpn sourcetype="pan:globalprotect" (action="failure" OR action="success")
+| bin _time span=15m
+| stats count(eval(action="failure")) as failures count(eval(action="success")) as successes values(user) as users by src_ip, _time
+| where failures &gt;= 10 AND successes &gt;= 1
+| sort - failures</code></pre></div>
+    </figure>
+    <p class="small muted">Field assumptions: Palo Alto GlobalProtect Add-on fields <code>action</code>, <code>src_ip</code>, <code>user</code>; rename for other VPN vendors (for example <code>FortiGate</code> or <code>Cisco AnyConnect</code>).</p>
+
+    <h4>Detection 3 — One source, many hosts (Threat 3, severity: high)</h4>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">sigma</span><span class="code-title">Sigma — lateral network logon spread</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>title: Single Source Creates Network Logons on Many Unique Hosts
+id: 4b8f6e2c-7a1d-4935-9c2e-6f0b3d8a1e57
+status: stable
+description: &gt;
+  Detects one source address creating type 3 (network) logons on ten or more
+  unique Windows hosts within ten minutes. This is typical of lateral
+  movement with reused or stolen valid credentials. IPv4-only matching
+  excludes local placeholder sources like '-'.
+references:
+  - https://attack.mitre.org/techniques/T1078/
+author: Security Detection Engineering Team
+date: 2025/02/24
+modified: 2025/04/30
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    EventID: 4624
+    LogonType: 3
+    IpAddress|contains: '.'
+  timeframe: 10m
+  condition: selection | count(Computer) by IpAddress &gt; 9
+fields:
+  - EventID
+  - Computer
+  - TargetUserName
+  - LogonType
+  - IpAddress
+  - WorkstationName
+  - AuthenticationPackageName
+falsepositives:
+  - Software deployment or patching servers that authenticate to many hosts
+  - Monitoring and vulnerability scanners using dedicated service accounts
+level: high
+tags:
+  - attack.t1078
+  - attack.t1078.002
+  - attack.t1078.003
+  - attack.lateral_movement
+  - attack.persistence
+  - attack.defense_evasion</code></pre></div>
+    </figure>
+    <p class="small"><strong>Mapping assumptions:</strong> Sigma cannot count unique values natively on every backend; the aggregation <code>count(Computer) by IpAddress</code> is a common SIEM translation and mirrors the SPL below. <code>IpAddress|contains: '.'</code> keeps IPv4 sources only — tune to your environment and add scanner exclusions.</p>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">spl</span><span class="code-title">Splunk SPL — lateral spread by source</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>index=wineventlog source="WinEventLog:Security" EventCode=4624 LogonType=3 Source_Network_Address!="-" Source_Network_Address!="::1"
+| stats dc(Computer) as unique_hosts values(TargetUserName) as accounts values(WorkstationName) as workstations by Source_Network_Address
+| where unique_hosts &gt;= 10
+| sort - unique_hosts</code></pre></div>
+    </figure>
+    <p class="small muted">Field assumptions: <code>Source_Network_Address</code> is the Splunk Add-on name for the 4624 source IP; add a lookup to exclude known jump hosts and scanners.</p>
+<h4>Detection 4 — Dormant account signs in (Threat 4, severity: high)</h4>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">sigma</span><span class="code-title">Sigma — dormant cloud account sign-in</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>title: Successful Interactive Sign-In by an Account Dormant 90+ Days
+id: 2d6a9c4f-8e3b-4a71-b0d5-1c9f7e4b2d83
+status: stable
+description: &gt;
+  Detects a successful interactive sign-in for a cloud identity with no
+  successful interactive sign-in for at least 90 days. The boolean enrichment
+  field user_dormant_90d is filled by a daily SIEM lookup job that compares
+  each account's last successful sign-in with the current date. Dormant
+  accounts are favorite persistence spots because nobody watches them.
+references:
+  - https://attack.mitre.org/techniques/T1078/
+  - https://attack.mitre.org/techniques/T1078/004/
+author: Security Detection Engineering Team
+date: 2025/03/03
+modified: 2025/06/10
+logsource:
+  product: azure
+  service: signinlogs
+detection:
+  selection:
+    properties.status.errorCode: 0
+    properties.isInteractive: 'true'
+    user_dormant_90d: 'true'
+  condition: selection
+fields:
+  - properties.userPrincipalName
+  - properties.ipAddress
+  - properties.location.city
+  - properties.location.countryOrRegion
+  - properties.deviceDetail.operatingSystem
+  - properties.deviceDetail.browser
+  - properties.appDisplayName
+falsepositives:
+  - Emergency or break-glass accounts used rarely on purpose
+  - Returning seasonal staff whose accounts were intentionally kept enabled
+level: high
+tags:
+  - attack.t1078
+  - attack.t1078.004
+  - attack.initial_access
+  - attack.persistence
+  - attack.defense_evasion</code></pre></div>
+    </figure>
+    <p class="small"><strong>Mapping assumptions:</strong> <code>user_dormant_90d</code> is an enrichment field (assumption: your pipeline joins SignInLogs with a last-sign-in lookup and flags 90+ quiet days). Entra field paths use the <code>properties.*</code> structure of <code>azure:aad:signinlogs</code>; adjust to your normalizer (for example <code>Identity</code> vs <code>UPN</code>).</p>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">spl</span><span class="code-title">Splunk SPL — dormant sign-in</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>index=azure sourcetype="azure:aad:signinlogs" properties.status.errorCode=0 properties.isInteractive=true user_dormant_90d=true
+| stats count first(_time) as first_seen latest(properties.ipAddress) as last_ip values(properties.location.countryOrRegion) as countries by properties.userPrincipalName
+| sort - first_seen</code></pre></div>
+    </figure>
+    <p class="small muted">Field assumptions: <code>user_dormant_90d</code> is the same enrichment field the Sigma rule expects. Your pipeline must add it — a daily job that joins SignInLogs with last-sign-in data and flags 90+ quiet days. Without that field, filter with a lookup subsearch instead: <code>[| inputlookup dormant_accounts_90d.csv | fields userPrincipalName | rename userPrincipalName as properties.userPrincipalName]</code>. Keep the list fresh, or the alert will fire for accounts that were cleaned up last week.</p>
+
+    <h4>Detection 5 — Guest activation or shared login from a new device (Threat 5, severity: medium)</h4>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">sigma</span><span class="code-title">Sigma — guest activation / shared mailbox new device</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>title: Guest Activation or Shared Account Login from a New Device
+id: a5f1d8c3-6b2e-4d90-8f4a-3e7c1b9d5f62
+status: stable
+description: &gt;
+  Detects two hygiene risks in SaaS estates: a guest account activated
+  outside the normal collaboration workflow, or a login to a shared account
+  from a device never seen for that account. Shared logins break attribution;
+  stale guests keep data access alive after projects end. The boolean field
+  device_new_for_user is filled by a first-seen-device enrichment.
+references:
+  - https://attack.mitre.org/techniques/T1078/
+  - https://attack.mitre.org/techniques/T1078/004/
+author: Security Detection Engineering Team
+date: 2025/03/12
+modified: 2025/05/28
+logsource:
+  product: m365
+  service: o365
+detection:
+  selection_guest:
+    Operation:
+      - 'Add Guest.'
+      - 'Add member to group.'
+  selection_shared_login:
+    Operation: 'UserLoggedIn'
+    device_new_for_user: 'true'
+  condition: 1 of selection_*
+fields:
+  - Operation
+  - UserId
+  - ClientIP
+  - ClientInfoString
+  - UserAgent
+  - Workload
+falsepositives:
+  - Approved external collaborations set up by the business side
+  - A legitimate user signing in from a new laptop after a hardware refresh
+level: medium
+tags:
+  - attack.t1078
+  - attack.t1078.004
+  - attack.persistence
+  - attack.defense_evasion</code></pre></div>
+    </figure>
+    <p class="small"><strong>Mapping assumptions:</strong> operation names follow Office 365 management activity strings; <code>device_new_for_user</code> is an enrichment flag from a first-seen device baseline (assumption: built per <code>UserId</code> + <code>ClientInfoString</code>). Suppress with a business-approved guest list.</p>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">spl</span><span class="code-title">Splunk SPL — guest and shared-account activity</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>index=o365 sourcetype="o365:management:activity" (Operation IN ("Add Guest.", "Add member to group.") OR (Operation="UserLoggedIn" device_new_for_user="true"))
+| stats count values(Operation) as operations dc(ClientIP) as source_count values(UserAgent) as agents by UserId
+| sort - count</code></pre></div>
+    </figure>
+    <p class="small muted">Field assumptions: <code>o365:management:activity</code> provides <code>Operation</code>, <code>UserId</code>, <code>ClientIP</code>, <code>UserAgent</code>; <code>device_new_for_user</code> comes from your enrichment pipeline, not from Microsoft.</p>
+
+    <h4>Extra cross-check query — Cloud console login without MFA (Threats 1 and 5)</h4>
+    <p class="small muted">This is a bonus hunt, not one of the five pairs: it has no paired Sigma rule above. A Sigma twin would use <code>category: cloud, product: aws, service: cloudtrail</code> and the same two field conditions.</p>
+    <figure class="code-card">
+      <figcaption class="code-head"><span class="code-lang">cross-check · spl</span><span class="code-title">Extra cross-check SPL — ConsoleLogin without MFA (no paired Sigma rule)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <div class="code-scroll"><pre><code>index=cloudtrail sourcetype="aws:cloudtrail" eventName=ConsoleLogin additionalEventData.MFAUsed="No"
+| stats count dc(sourceIPAddress) as sources values(userIdentity.userName) as users by userIdentity.accountId, sourceIPAddress
+| sort - count</code></pre></div>
+    </figure>
+    <p class="small muted">Field assumptions: CloudTrail JSON is parsed by <code>aws:cloudtrail</code> sourcetype. Add an exception list for documented break-glass accounts that log in without MFA during incidents.</p>
+
+    <div class="callout warn">
+      <span class="callout-title">Tuning guidance</span>
+      <p>Deploy each rule in <strong>search-only mode first</strong> for one to two weeks. Expect most false positives from: patching and deployment tools (rule 3), users who mistype new passwords (rule 2), and seasonal staff (rule 4). Suppress by identity and system, never by disabling the rule. Re-validate after every log-source change, and record the validation date in the rule's ticket.</p>
+    </div>
+
+    <h4>Coverage matrix</h4>
+    <p class="small">Where the five detections stand against the ranked threats, and the residual gaps you should plan for.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Threat</th><th scope="col">Rule</th><th scope="col">Primary source</th><th scope="col">Coverage</th><th scope="col">Residual gap to plan for</th></tr></thead>
+        <tbody>
+          <tr><td>T1 Privileged compromise</td><td>Rule 1 (critical)</td><td>Windows Security 4624/4672</td><td>Strong</td><td>Credential-dumping paths that skip interactive logons (covered by T1003 detections, not this page).</td></tr>
+          <tr><td>T2 Credential stuffing</td><td>Rule 2 (high)</td><td>VPN / IdP auth logs</td><td>Strong with failures logged</td><td>Slow spray below thresholds — needs per-user baselines and rate-limit telemetry.</td></tr>
+          <tr><td>T3 Lateral movement</td><td>Rule 3 (high)</td><td>Windows 4624 type 3</td><td>Strong</td><td>WMI/WinRM over exotic channels and Linux lateral paths — add SSH and sudo log rules.</td></tr>
+          <tr><td>T4 Dormant reactivation</td><td>Rule 4 (high)</td><td>Entra SignInLogs + enrichment</td><td>Good if lookup stays fresh</td><td>On-prem-only dormant accounts — build the same flag for Active Directory 4624 history.</td></tr>
+          <tr><td>T5 Shared / guest abuse</td><td>Rule 5 (medium)</td><td>O365 management activity</td><td>Partial</td><td>Non-Microsoft SaaS apps — extend to their admin logs or accept the blind spot explicitly.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="section" id="s6-case-study">
+    <div class="section-head">
+      <span class="section-num">06</span>
+      <h2>Real-World Case Study</h2>
+      <p class="section-intro">MGM Resorts, September 2023 — how one help-desk call turned valid credentials into a multi-day outage.</p>
+    </div>
+    <div class="callout note">
+      <span class="callout-title">Sources and caution</span>
+      <p>This case study uses publicly reported facts only: MGM's own 8-K filing to the U.S. SEC (October 2023), statements from the ALPHV/BlackCat ransomware group, and reporting by major security news outlets. Some details were never officially confirmed, so the wording below stays cautious ("publicly reported", "widely reported").</p>
+    </div>
+    <h3>Context</h3>
+    <p>MGM Resorts International runs hotels and casinos in Las Vegas and elsewhere. In September 2023, attackers gained access to MGM's environment. Researchers later tracked them as <strong>Scattered Spider</strong> (also UNC3944), working with the <strong>ALPHV/BlackCat</strong> ransomware operation. Public reporting says they did not break in through software. They called the IT help desk, pretended to be an employee, and talked their way into valid credentials and an MFA reset. Widely reported accounts describe that vishing call as lasting roughly ten minutes. That is T1078 in its purest form: the "hack" was a phone call that produced a working account.</p>
+    <h3>Timeline (publicly reported)</h3>
+    <ol class="timeline">
+      <li class="tl-item"><span class="tl-time">Before 8 Sep 2023</span><span class="tl-body">Reconnaissance: public reporting describes research on employees and the organization's structure, gathering names and details needed to sound convincing.</span></li>
+      <li class="tl-item tl-warn"><span class="tl-time">~8 Sep 2023</span><span class="tl-body">The help-desk call, widely reported as about ten minutes: an attacker posing as an employee obtained valid credentials and, reportedly, passed a further identity check. The account now worked like any real employee account.</span></li>
+      <li class="tl-item tl-warn"><span class="tl-time">8–10 Sep 2023</span><span class="tl-body">Valid access was used to reach identity infrastructure, and the activity escalated to privileged cloud identity access. Public reporting names misuse of Okta and Microsoft Entra ID (Azure AD).</span></li>
+      <li class="tl-item tl-danger"><span class="tl-time">~10 Sep 2023</span><span class="tl-body">ALPHV/BlackCat ransomware was deployed, reportedly on ESXi virtualization hosts. Major hotel and casino systems were taken offline; some operations moved to pen and paper.</span></li>
+      <li class="tl-item"><span class="tl-time">10–14 Sep 2023</span><span class="tl-body">Disruption continued for days: room keys, casino floors, reservations, and payment systems were widely reported as affected. MGM published customer notices.</span></li>
+      <li class="tl-item tl-success"><span class="tl-time">Following weeks</span><span class="tl-body">Phased restoration of systems; MGM's 8-K later estimated an approximately 100-million-dollar negative impact on quarterly results, plus legal and security-hardening costs.</span></li>
+    </ol>
+    <h3>Attack chain (as reconstructed from public reporting)</h3>
+    <ol>
+      <li><strong>Research</strong> — identify the organization's help-desk process and a suitable employee identity to impersonate.</li>
+      <li><strong>Social engineering</strong> — call the help desk, pass basic identity checks, and obtain working credentials plus an MFA reset. The credential abuse itself maps to T1078.002 and T1078.004.</li>
+      <li><strong>Identity access</strong> — use the valid account to reach SSO and identity administration surfaces.</li>
+      <li><strong>Privilege escalation</strong> — reportedly gain access to privileged identity roles and infrastructure management.</li>
+      <li><strong>Impact</strong> — deploy ransomware on ESXi hosts and trigger mass shutdowns.</li>
+    </ol>
+    <div class="callout tip">
+      <span class="callout-title">The detection point that mattered</span>
+      <p>Public post-incident discussion highlighted anomalous identity activity and unusual admin actions in the hours before encryption. The practical lesson for a SOC: watch the identity plane (new-session anomalies, MFA resets, privileged role changes) with the same care as endpoint telemetry. A valid-account session with unusual admin actions <em>was</em> the intrusion.</p>
+    </div>
+    <div class="grid-3">
+      <div class="card">
+        <h4 class="card-head">Containment</h4>
+        <p class="small">Reported response steps included disabling compromised accounts, shutting down remote access, and isolating affected systems to stop the spread.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Eradication</h4>
+        <p class="small">Domain-wide credential resets and system rebuilds were needed to remove attacker access, because valid credentials had touched many systems.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Recovery</h4>
+        <p class="small">Systems were restored in phases over days to weeks, with manual workarounds in hotels while core services came back.</p>
+      </div>
+    </div>
+    <h3>Impact, team response, and communication</h3>
+    <p>The widely reported financial impact was about 100 million US dollars against the quarter, plus legal exposure and hardening costs. The compromise began with identity, not malware, and that shaped the whole response.</p>
+    <p><strong>Team response (as public reporting describes it):</strong> response steps included disabling compromised accounts, shutting down remote access, and isolating affected systems. Identity work came first, because stolen-but-valid credentials kept working until every session and token was revoked. Site staff ran hotels with manual workarounds while security teams cleared systems one by one.</p>
+    <p><strong>Communication:</strong> MGM published customer notices about which services were affected, dealt with sustained media coverage, and filed an 8-K with the U.S. SEC in October 2023 describing the estimated impact. Public communication stayed active for weeks. The visible lesson: identity incidents need a communication plan for guests, staff, and regulators from day one.</p>
+    <p class="small muted">Reported team roles and exact timings vary between sources. The steps above are the pattern worth copying, not a verified minute-by-minute record.</p>
+    <h3>Lessons learned</h3>
+    <ol>
+      <li><strong>Verify callers out of band.</strong> Help desks need strong, rehearsed identity verification for resets — never the data an attacker can find online.</li>
+      <li><strong>Use phishing-resistant MFA.</strong> Push approvals and one-time codes can be socially engineered; FIDO2 keys and number matching raise the bar sharply.</li>
+      <li><strong>Guard privileged access.</strong> Admin roles should sit behind PAM, just-in-time elevation, and step-up verification — not behind a reset phone call.</li>
+      <li><strong>Detect on identity anomalies.</strong> New-device admin actions, unusual MFA activity, and rare sign-ins deserve the same alerting budget as endpoint events.</li>
+      <li><strong>Rehearse the playbook.</strong> Account disable, session revocation, and credential-reset drills must be tested before the day you need them at domain scale.</li>
+    </ol>
+  </section>
+<section class="section" id="s7-mitigation">
+    <div class="section-head">
+      <span class="section-num">07</span>
+      <h2>Mitigation and Defense</h2>
+      <p class="section-intro">Controls that make stolen credentials useless, and monitoring that catches the ones that still work.</p>
+    </div>
+
+    <h3>Enterprise controls by domain</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Domain</th><th scope="col">Control</th><th scope="col">How it helps</th><th scope="col">What "good" looks like</th></tr></thead>
+        <tbody>
+          <tr><td>Policy</td><td>Account lifecycle policy</td><td>Accounts are disabled within hours of leaving, and reviews catch dormant ones before attackers find them.</td><td>Joiner/mover/leaver workflow with SLAs; quarterly access reviews with sign-off.</td></tr>
+          <tr><td>Identity</td><td>Phishing-resistant MFA</td><td>Stolen passwords alone no longer work; FIDO2 keys and number matching resist relay phishing.</td><td>Enforced (not optional) on VPN, SSO, email, cloud consoles; coverage reported monthly.</td></tr>
+          <tr><td>Identity</td><td>Conditional access</td><td>Logins from new devices, countries, or risky networks face extra checks or are blocked.</td><td>Device-compliance and location conditions on all privileged and remote-access apps.</td></tr>
+          <tr><td>Identity</td><td>Privileged access management (PAM)</td><td>Admin rights are checked out just-in-time, so a stolen standing admin password is worthless most of the time.</td><td>No standing domain admin accounts; vaulted credentials; session recording on jump hosts.</td></tr>
+          <tr><td>Endpoint</td><td>EDR + local admin cleanup + LAPS</td><td>Fewer reusable local credentials; endpoint agents see commands run inside valid sessions.</td><td>Unique rotated local admin passwords (LAPS); EDR on 100% of servers and laptops.</td></tr>
+          <tr><td>Network</td><td>VPN hardening: device posture, GeoIP risk, rate limiting</td><td>Stops stuffing bursts and lowers the odds that a bought credential gets a clean session.</td><td>Device certificates or posture checks required; failed-login rate limits; geo risk scoring.</td></tr>
+          <tr><td>Cloud</td><td>Cloud session policies and cloud UEBA</td><td>Impossible-travel, new-device, and no-MFA console logins are flagged or blocked in the tenant.</td><td>Conditional access in the tenant; alerts on ConsoleLogin without MFA; guest access reviews.</td></tr>
+          <tr><td>Logging / monitoring</td><td>Central identity log collection + UEBA</td><td>4624/4625/4768–4771, VPN, and IdP logs in one place make correlation rules possible at all.</td><td>All identity sources indexed within minutes; per-user baselines; canary accounts deployed.</td></tr>
+          <tr><td>Backup</td><td>Identity-aware recovery planning</td><td>After credential compromise you must restore identity trust, not just files.</td><td>Documented KRBTGT (the core Kerberos account) and tenant-wide reset runbook; offline copies of key configurations.</td></tr>
+          <tr><td>Response</td><td>Identity incident runbooks + revocation drills</td><td>Killing sessions and resetting credentials happens in minutes, not hours.</td><td>Quarterly drills: disable account, revoke refresh tokens, kill VPN sessions — timed and measured.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Home and small-office advice</h3>
+    <p class="small muted">If you run a small network or your family's accounts, the same ideas shrink to six habits.</p>
+    <div class="grid-3">
+      <div class="card"><h4 class="card-head">One password per site</h4><p class="small">Use a password manager so a leak at one site cannot open your other accounts.</p></div>
+      <div class="card"><h4 class="card-head">MFA on everything</h4><p class="small">Turn on multi-factor authentication for email, banking, and social accounts. App-based codes are fine; hardware keys are better.</p></div>
+      <div class="card"><h4 class="card-head">Disable guest accounts</h4><p class="small">Turn off the built-in guest account on your computers, and remove accounts of people who moved out or left the company.</p></div>
+      <div class="card"><h4 class="card-head">Change router defaults</h4><p class="small">Default router passwords are public knowledge. Set a unique admin password and firmware updates on.</p></div>
+      <div class="card"><h4 class="card-head">Spot the phish</h4><p class="small">Fake login pages create most "valid accounts". Check the address bar before typing a password, and never approve an MFA prompt you did not start.</p></div>
+      <div class="card"><h4 class="card-head">Watch for surprises</h4><p class="small">If you get a "new login" email you cannot explain, change that password first and check active sessions in the account settings.</p></div>
+    </div>
+
+    <h3>Prioritized actions</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">#</th><th scope="col">Action</th><th scope="col">Effort</th><th scope="col">Owner</th><th scope="col">Expected risk reduction</th><th scope="col">How to verify it works</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Phishing-resistant MFA on all remote access and admin paths</td><td>Medium</td><td>IAM team</td><td>Cuts the value of every stolen password; blocks most T1078 initial access.</td><td>Conditional access report shows 100% coverage; a lab login with password only fails.</td></tr>
+          <tr><td>2</td><td>Central identity log collection (4624/4625/4768–4771, VPN, IdP)</td><td>Medium</td><td>SOC engineering</td><td>Every detection on this page becomes possible.</td><td>Search finds yesterday's test logins for each source within minutes.</td></tr>
+          <tr><td>3</td><td>Privileged account tiering and just-in-time elevation</td><td>High</td><td>IT / IAM</td><td>A stolen admin password has almost no standing power to abuse.</td><td>No permanent members of admin groups; PAM check-out logs show approvals.</td></tr>
+          <tr><td>4</td><td>Dormant account cleanup with automated offboarding</td><td>Low</td><td>IAM team</td><td>Removes the quiet persistence path of Threat 4.</td><td>Monthly report: zero accounts enabled with no sign-in for 90+ days.</td></tr>
+          <tr><td>5</td><td>UEBA rules for logon anomalies + canary accounts</td><td>Medium</td><td>SOC engineering</td><td>Catches low-and-slow use that threshold rules miss.</td><td>Canary account triggers an alert within minutes during a scheduled drill.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<section class="section" id="s8-mistakes">
+    <div class="section-head">
+      <span class="section-num">08</span>
+      <h2>Common Mistakes and Best Practices</h2>
+      <p class="section-intro">Twelve concrete blue-team mistakes around valid-account detection — each with symptom, root cause, fix, and prevention.</p>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4 class="card-head">1. Collecting 4624 without 4625</h4>
+        <p class="small"><strong>Symptom:</strong> no visibility into guessing; stuffing attacks look like a single clean login.<br>
+        <strong>Root cause:</strong> the failure event (4625) was never enabled in the audit policy or forwarder.<br>
+        <strong>Fix:</strong> enable failure auditing and forward 4625, 4771, and VPN failures today.<br>
+        <strong>Prevention:</strong> a coverage matrix listing every identity log source and its enabled event IDs, checked quarterly.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">2. Ignoring VPN and IdP logs</h4>
+        <p class="small"><strong>Symptom:</strong> the SOC sees the internal spread but never the entry door.<br>
+        <strong>Root cause:</strong> remote-access appliances are owned by the network team, not the SOC.<br>
+        <strong>Fix:</strong> route VPN and IdP auth logs into the SIEM and give the SOC read access.<br>
+        <strong>Prevention:</strong> onboarding checklist requires an authentication log source for every external-facing service.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">3. Trusting "known user" means safe</h4>
+        <p class="small"><strong>Symptom:</strong> analysts dismiss alerts because the account belongs to a real employee.<br>
+        <strong>Root cause:</strong> identity is treated as proof of legitimacy rather than as the thing being attacked.<br>
+        <strong>Fix:</strong> retrain triage to score sessions on context: device, geo, time, and behavior.<br>
+        <strong>Prevention:</strong> triage runbooks list "valid user" as a non-factor; context fields are mandatory in the alert view.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">4. No per-user baseline</h4>
+        <p class="small"><strong>Symptom:</strong> a login from another country is only "suspicious" if a rule author thought of it.<br>
+        <strong>Root cause:</strong> thresholds are global, not per identity; quiet users hide inside noisy averages.<br>
+        <strong>Fix:</strong> build per-user profiles (usual countries, devices, hours) and compare sessions to them.<br>
+        <strong>Prevention:</strong> UEBA or a scheduled SPL baseline job is part of the detection backlog, not an optional extra.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">5. Single-event alerts with no context (alert fatigue)</h4>
+        <p class="small"><strong>Symptom:</strong> analysts auto-close hundreds of identical 4624 alerts a day.<br>
+        <strong>Root cause:</strong> one event per alert; no correlation, no context panel, no grouping.<br>
+        <strong>Fix:</strong> correlate into behavior-level alerts (source + user + activity) and add context enrichment.<br>
+        <strong>Prevention:</strong> a rule cannot go to production unless it includes context fields and a documented response action.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">6. No dormant-account tracking</h4>
+        <p class="small"><strong>Symptom:</strong> ex-employee and service accounts wake up with nobody noticing (Threat 4).<br>
+        <strong>Root cause:</strong> nobody owns "accounts nobody uses"; offboarding only covers current staff.<br>
+        <strong>Fix:</strong> generate a daily dormant-account list (90+ days) and alert on any sign-in from it.<br>
+        <strong>Prevention:</strong> monthly sweep job plus disable-without-delay policy for departures.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">7. MFA gaps on legacy protocols</h4>
+        <p class="small"><strong>Symptom:</strong> attackers log in via IMAP, SMTP AUTH, or old VPN clients and skip MFA entirely.<br>
+        <strong>Root cause:</strong> MFA is enforced on the modern portal but legacy paths bypass conditional access.<br>
+        <strong>Fix:</strong> inventory legacy auth, migrate or block it, and monitor remaining exceptions.<br>
+        <strong>Prevention:</strong> quarterly report of authentications by protocol; alerts on legacy-protocol successes.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">8. Shared accounts breaking attribution</h4>
+        <p class="small"><strong>Symptom:</strong> during an incident, nobody can say who did what on the shared admin account.<br>
+        <strong>Root cause:</strong> convenience won over individual accountability years ago.<br>
+        <strong>Fix:</strong> replace shared logins with named accounts plus PAM check-out; audit remaining ones.<br>
+        <strong>Prevention:</strong> policy bans new shared accounts; exceptions need CISO approval and expiry dates.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">9. Detections never validated with replayed logs</h4>
+        <p class="small"><strong>Symptom:</strong> rules "work" in theory but silently match nothing (or everything) in production.<br>
+        <strong>Root cause:</strong> field names and formats differ between the rule author's notes and your real pipeline.<br>
+        <strong>Fix:</strong> replay the 5.4-style event samples through the rule; fix the mappings before enabling alerts.<br>
+        <strong>Prevention:</strong> a small test-event set per rule, run in CI or manually after every source change.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">10. No owner for identity detections</h4>
+        <p class="small"><strong>Symptom:</strong> stale thresholds, old lookups, and rules nobody has tuned since 2023.<br>
+        <strong>Root cause:</strong> detections have projects but no ongoing owner.<br>
+        <strong>Fix:</strong> assign each rule an owner, a review cadence, and a ticket for tuning history.<br>
+        <strong>Prevention:</strong> detection-as-code reviews; ownership is a field on every rule, checked monthly.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">11. Weak tuning driven by noise</h4>
+        <p class="small"><strong>Symptom:</strong> a rule that fired once too often gets its threshold raised until it detects nothing.<br>
+        <strong>Root cause:</strong> tuning is done by threshold alone, without scoping by identity or system.<br>
+        <strong>Fix:</strong> suppress by specific jump hosts, scanners, and approved accounts — never by raising global limits.<br>
+        <strong>Prevention:</strong> every suppression is time-boxed, documented, and re-reviewed each quarter.</p>
+      </div>
+      <div class="card">
+        <h4 class="card-head">12. False positives treated as failure</h4>
+        <p class="small"><strong>Symptom:</strong> teams chase a zero-alert state and quietly disarm useful but noisy rules.<br>
+        <strong>Root cause:</strong> false positives are part of detection on normal networks; the goal is triage efficiency, not silence.<br>
+        <strong>Fix:</strong> measure precision and analyst time saved; keep rules that surface one true positive among ten benign ones when that true positive matters.<br>
+        <strong>Prevention:</strong> monthly tuning reviews discuss trade-offs instead of demanding zero noise.</p>
+      </div>
+    </div>
+
+    <h3>Habits for a detection engineer</h3>
+    <div class="grid-3">
+      <div class="card">
+        <h4 class="card-head">Daily</h4>
+        <ul class="small">
+          <li>Review privileged logons (4672, type 3/10) from the last 24 hours.</li>
+          <li>Check VPN and IdP alerts for failure-then-success patterns.</li>
+          <li>Skim new alerts for context quality — can you triage from the alert alone?</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Weekly</h4>
+        <ul class="small">
+          <li>Tuning review: pick the noisiest rule and fix its root cause, not its threshold.</li>
+          <li>Verify all identity log sources are fresh (no silent forwarder failures).</li>
+          <li>Run one hunt query against a hypothesis (for example, new-device RDP).</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4 class="card-head">Quarterly</h4>
+        <ul class="small">
+          <li>Dormant-account sweep with the IAM team; disable what has no owner.</li>
+          <li>Rule validation: replay the test-event set through every identity rule.</li>
+          <li>Access review of service, guest, and shared accounts; run one revocation drill.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+<section class="section" id="s9-cheatsheet">
+    <div class="section-head">
+      <span class="section-num">09</span>
+      <h2>Cheat Sheet and Quick Reference</h2>
+      <p class="section-intro">Everything important from this page, condensed for the moment you need it fast.</p>
+    </div>
+
+    <h3>Key facts</h3>
+    <dl class="kv-list">
+      <div class="kv"><dt class="k">Technique</dt><dd class="v"><strong>T1078 — Valid Accounts.</strong> Using a real account that belongs to someone else; parent of T1078.001–.004.</dd></div>
+      <div class="kv"><dt class="k">Tactics</dt><dd class="v">Initial Access, Persistence, Privilege Escalation, Stealth (formerly Defense Evasion) — one login serves all four.</dd></div>
+      <div class="kv"><dt class="k">Core events</dt><dd class="v">Windows <strong>4624</strong> (success), <strong>4625</strong> (failure), <strong>4672</strong> (admin rights), <strong>4648</strong>, <strong>4768–4771</strong> (Kerberos), <strong>4722/4725/4740</strong> (account state).</dd></div>
+      <div class="kv"><dt class="k">Cloud events</dt><dd class="v">Entra SignInLogs, AWS <strong>ConsoleLogin</strong> (<code>MFAUsed</code>), O365 management activity (<code>UserLoggedIn</code>, guest operations).</dd></div>
+      <div class="kv"><dt class="k">Weakest link</dt><dd class="v">Remote access without MFA: VPN portals, legacy mail protocols, help-desk resets.</dd></div>
+      <div class="kv"><dt class="k">Strongest signal</dt><dd class="v">Correlation across sources: new geo + new device + rare commands + mass file reads in one session timeline.</dd></div>
+      <div class="kv"><dt class="k">First response</dt><dd class="v">Preserve evidence, disable the account, reset the password, revoke sessions and tokens, kill VPN sessions.</dd></div>
+      <div class="kv"><dt class="k">Top prevention</dt><dd class="v">Phishing-resistant MFA, conditional access, dormant-account cleanup, PAM for privileged identities.</dd></div>
+    </dl>
+
+    <h3>Top detections</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Detection</th><th scope="col">Log source</th><th scope="col">Why it works</th></tr></thead>
+        <tbody>
+          <tr><td>Remote logon by privileged account</td><td>Windows Security 4624 + 4672, enrichment lookup</td><td>Privileged accounts rarely log in remotely; when they do, it is worth a look every time.</td></tr>
+          <tr><td>Failures then success from one source IP</td><td>VPN / IdP auth logs</td><td>Catches the exact moment password guessing succeeds.</td></tr>
+          <tr><td>One source, many unique hosts in 10 minutes</td><td>Windows 4624 type 3 across hosts; Linux auth.log</td><td>Password reuse turns one stolen login into lateral movement you can measure.</td></tr>
+          <tr><td>Sign-in by a 90+ day dormant account</td><td>Entra SignInLogs + last-sign-in enrichment</td><td>Dormant accounts have no recent history, so any use is unusual by definition.</td></tr>
+          <tr><td>ConsoleLogin without MFA / shared account from new device</td><td>AWS CloudTrail, O365 audit</td><td>Policy violations that double as attacker behavior.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Response checklist for a confirmed valid-account intrusion</h3>
+    <ul class="checklist">
+      <li>Preserve evidence first: export the session records, EDR events, and audit logs you based the decision on.</li>
+      <li>Disable or reset the compromised account; if it is privileged, do the same for paired or delegated accounts.</li>
+      <li>Revoke sessions, refresh tokens, OAuth grants, and active VPN tunnels for that identity.</li>
+      <li>Sweep for what the session touched: hosts, shares, mailboxes, cloud resources, and any persistence created.</li>
+      <li>Check for sibling compromise: same password or same source IP used by other accounts.</li>
+      <li>Reset credentials for exposed systems, starting with privileged and service accounts.</li>
+      <li>Notify the account owner through a known-good channel (in person or via their manager, not the possibly-forwarded mailbox).</li>
+      <li>Write the timeline, update the detections that should have caught it earlier, and schedule the drill.</li>
+    </ul>
+
+    <h3>Official and related references</h3>
+    <ul class="link-list">
+      <li><a href="https://attack.mitre.org/techniques/T1078/">T1078 Valid Accounts — official ATT&amp;CK page</a><span class="desc"> — canonical description, sub-technique list, and detection notes.</span></li>
+      <li><a href="https://attack.mitre.org/techniques/T1078/001/">T1078.001 Default Accounts</a><span class="desc"> — built-in and factory accounts that kept their original passwords.</span></li>
+      <li><a href="https://attack.mitre.org/techniques/T1078/002/">T1078.002 Domain Accounts</a><span class="desc"> — central-directory identities with the widest reach.</span></li>
+      <li><a href="https://attack.mitre.org/techniques/T1078/003/">T1078.003 Local Accounts</a><span class="desc"> — single-machine accounts, including the built-in Administrator.</span></li>
+      <li><a href="https://attack.mitre.org/techniques/T1078/004/">T1078.004 Cloud Accounts</a><span class="desc"> — cloud and SaaS identities with broad data reach.</span></li>
+      <li><a href="https://attack.mitre.org/techniques/T1110/">T1110 Brute Force</a><span class="desc"> — the guessing that produces many valid credentials in the first place.</span></li>
+      <li><a href="https://attack.mitre.org/techniques/T1550/">T1550 Use Alternate Authentication Material</a><span class="desc"> — session tokens, pass-the-hash, and web cookies instead of passwords.</span></li>
+      <li><a href="https://attack.mitre.org/techniques/T1003/">T1003 OS Credential Dumping</a><span class="desc"> — where attackers harvest more valid credentials after their first working login.</span></li>
+      <li><a href="https://attack.mitre.org/techniques/T1098/">T1098 Account Manipulation</a><span class="desc"> — adding accounts and permissions to keep access.</span></li>
+      <li><a href="https://attack.mitre.org/techniques/T1133/">T1133 External Remote Services</a><span class="desc"> — the VPN and remote-access doors that valid accounts open.</span></li>
+    </ul>
+  </section>
+  </main>
+</div>
+<button class="toc-fab" id="toc-fab" type="button" aria-expanded="false" aria-controls="mobile-overlay" aria-label="Open contents">☰</button>
+<button class="back-top" id="back-top" type="button" aria-label="Back to top" hidden>↑</button>
+<button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false" aria-label="Switch color theme">◐</button>
+<div class="mobile-overlay" id="mobile-overlay" role="dialog" aria-modal="true" aria-label="Contents">
+  <div class="mobile-overlay-panel">
+    <div class="mobile-overlay-head">
+      <p class="toc-title" style="margin:0">Contents</p>
+      <button class="mobile-overlay-close" id="mobile-overlay-close" type="button">Close ✕</button>
+    </div>
+    <div id="mobile-toc" role="navigation" aria-label="Mobile contents"></div>
+  </div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var doc = document, root = doc.documentElement;
+  var reducedMQ = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ============ Theme toggle (persisted in atk-theme) ============ */
+  var themeBtn = doc.getElementById('theme-toggle');
+  function syncThemeBtn(){
+    if (!themeBtn){ return; }
+    var t = root.getAttribute('data-theme') || 'dark';
+    themeBtn.setAttribute('aria-pressed', t === 'light' ? 'true' : 'false');
+    themeBtn.setAttribute('title', t === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
+  }
+  if (themeBtn){
+    syncThemeBtn();
+    themeBtn.addEventListener('click', function(){
+      var next = (root.getAttribute('data-theme') === 'light') ? 'dark' : 'light';
+      root.setAttribute('data-theme', next);
+      try{ localStorage.setItem('atk-theme', next); }catch(e){}
+      syncThemeBtn();
+      try{ window.dispatchEvent(new CustomEvent('atk-themechange', {detail:{theme:next}})); }catch(e){}
+    });
+  }
+
+  /* ============ Reading progress + back-to-top ============ */
+  var bar = doc.getElementById('page-progress');
+  var fill = doc.getElementById('page-progress-fill');
+  var topBtn = doc.getElementById('back-top');
+  function onScroll(){
+    var max = root.scrollHeight - window.innerHeight;
+    var p = max > 0 ? Math.min(100, Math.max(0, (window.scrollY / max) * 100)) : 0;
+    if (fill){ fill.style.width = p.toFixed(2) + '%'; }
+    if (bar){ bar.setAttribute('aria-valuenow', String(Math.round(p))); }
+    if (topBtn){ topBtn.hidden = window.scrollY < 500; }
+  }
+  var scrollScheduled = false;
+  window.addEventListener('scroll', function(){
+    if (scrollScheduled){ return; }
+    scrollScheduled = true;
+    window.requestAnimationFrame(function(){ scrollScheduled = false; onScroll(); });
+  }, {passive:true});
+  onScroll();
+  if (topBtn){
+    topBtn.addEventListener('click', function(){
+      window.scrollTo({top:0, behavior: reducedMQ.matches ? 'auto' : 'smooth'});
+    });
+  }
+
+  /* ============ TOC: rebuild from real headings + active highlight ============ */
+  var tocList = doc.getElementById('toc-list');
+  var headings = [];
+  doc.querySelectorAll('.content .section').forEach(function(sec){
+    var h = sec.querySelector('.section-head h2');
+    if (h && sec.id){ headings.push({id: sec.id, text: h.textContent, sub: false}); }
+  });
+  doc.querySelectorAll('.content h3[id]').forEach(function(h){
+    headings.push({id: h.id, text: h.textContent, sub: true});
+  });
+  function buildTocList(){
+    if (!tocList || !headings.length){ return; }
+    var ol = doc.createElement('ol');
+    ol.className = 'toc-list';
+    ol.id = 'toc-list';
+    var lastLi = null, subOl = null;
+    headings.forEach(function(h){
+      var li = doc.createElement('li');
+      var a = doc.createElement('a');
+      a.href = '#' + h.id;
+      a.textContent = h.text;
+      a.setAttribute('data-toc-target', h.id);
+      li.appendChild(a);
+      if (h.sub && lastLi){
+        if (!subOl){ subOl = doc.createElement('ol'); subOl.className = 'toc-sub'; lastLi.appendChild(subOl); }
+        subOl.appendChild(li);
+      } else {
+        ol.appendChild(li);
+        lastLi = li; subOl = null;
+      }
+    });
+    tocList.parentNode.replaceChild(ol, tocList);
+    tocList = ol;
+  }
+  buildTocList();
+  var mobileToc = doc.getElementById('mobile-toc');
+  if (mobileToc && tocList){
+    var clone = tocList.cloneNode(true);
+    clone.removeAttribute('id');
+    mobileToc.appendChild(clone);
+  }
+  var tocLinks = [];
+  function refreshTocLinks(){
+    tocLinks = [];
+    doc.querySelectorAll('.toc-list a[data-toc-target]').forEach(function(a){ tocLinks.push(a); });
+  }
+  refreshTocLinks();
+  function markActive(){
+    var current = '';
+    var probe = window.scrollY + 140;
+    headings.forEach(function(h){
+      var el = doc.getElementById(h.id);
+      if (el && el.offsetTop <= probe){ current = h.id; }
+    });
+    if (!current && headings.length){ current = headings[0].id; }
+    tocLinks.forEach(function(a){
+      var on = a.getAttribute('data-toc-target') === current;
+      if (on){ a.classList.add('active'); a.setAttribute('aria-current', 'true'); }
+      else { a.classList.remove('active'); a.removeAttribute('aria-current'); }
+    });
+  }
+
+  /* ============ Mobile contents overlay ============ */
+  var fab = doc.getElementById('toc-fab');
+  var overlay = doc.getElementById('mobile-overlay');
+  var overlayClose = doc.getElementById('mobile-overlay-close');
+  function openOverlay(){
+    if (!overlay){ return; }
+    overlay.classList.add('open');
+    if (fab){ fab.setAttribute('aria-expanded', 'true'); }
+    if (overlayClose){ overlayClose.focus(); }
+  }
+  function closeOverlay(){
+    if (!overlay){ return; }
+    overlay.classList.remove('open');
+    if (fab){ fab.setAttribute('aria-expanded', 'false'); fab.focus(); }
+  }
+  if (fab){ fab.addEventListener('click', openOverlay); }
+  if (overlayClose){ overlayClose.addEventListener('click', closeOverlay); }
+  if (overlay){
+    overlay.addEventListener('click', function(e){ if (e.target === overlay){ closeOverlay(); } });
+    overlay.querySelectorAll('a').forEach(function(a){ a.addEventListener('click', closeOverlay); });
+  }
+  doc.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && overlay && overlay.classList.contains('open')){ closeOverlay(); }
+  });
+
+  /* ============ Copy buttons for code blocks ============ */
+  doc.querySelectorAll('.copy-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var card = btn.closest('.code-card');
+      var code = card ? card.querySelector('code') : null;
+      if (!code){ return; }
+      var text = code.innerText;
+      function done(){
+        var old = btn.textContent;
+        btn.textContent = 'Copied!';
+        window.setTimeout(function(){ btn.textContent = old; }, 1600);
+      }
+      function fallback(){
+        try{
+          var ta = doc.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', 'readonly');
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          doc.body.appendChild(ta);
+          ta.select();
+          doc.execCommand('copy');
+          doc.body.removeChild(ta);
+          done();
+        }catch(err){ /* clipboard unavailable in this context */ }
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else { fallback(); }
+    });
+  });
+
+  /* ============ Simulation ============ */
+  var simCanvas = doc.getElementById('sim-canvas');
+  if (simCanvas && simCanvas.getContext){
+    var simWrap = doc.getElementById('sim-wrap');
+    var tip = doc.getElementById('sim-tooltip');
+    var capEl = doc.getElementById('sim-caption');
+    var defEl = doc.getElementById('sim-defender');
+    var stepsEl = doc.getElementById('sim-steps');
+    var playBtn = doc.getElementById('sim-play');
+    var restartBtn = doc.getElementById('sim-restart');
+    var speedSel = doc.getElementById('sim-speed');
+    var simCtx = simCanvas.getContext('2d');
+    var VW = 900, VH = 400, STEP_DUR = 5200;
+
+    var NODES = [
+      {id:'mkt',  label:'Credential Market', role:'Criminal market selling stolen logins', x:128, y:64,  kind:'threat'},
+      {id:'atk',  label:'Attacker Laptop',   role:'Threat actor workstation',              x:128, y:196, kind:'threat'},
+      {id:'idp',  label:'Account: j.wilson', role:'Employee identity — VPN login, no MFA', x:430, y:64,  kind:'identity'},
+      {id:'vpn',  label:'VPN Gateway',       role:'Company remote-access portal',          x:430, y:196, kind:'asset'},
+      {id:'fs',   label:'File Server fs-01', role:'Internal file share with project data', x:742, y:120, kind:'asset'},
+      {id:'srv2', label:'Server srv-02',     role:'Second host — same reused password',    x:742, y:288, kind:'asset'},
+      {id:'soc',  label:'SOC Console',       role:'Analyst console for detection and response', x:430, y:322, kind:'soc'}
+    ];
+    var NODE_MAP = {};
+    NODES.forEach(function(n){ NODE_MAP[n.id] = n; });
+    var NODE_W = 172, NODE_H = 46;
+
+    var EVIDENCE = {
+      'vpn-log':'VPN auth log line',
+      'edr-proc':'EDR process event',
+      'file-audit':'File audit line',
+      'win-4624':'Windows 4624',
+      'anomaly':'Anomaly alert'
+    };
+
+    var STEPS = [
+      { title:"Step 1 · Buying access",
+        caption:"The attacker visits a criminal market and buys the VPN credentials of employee \"j.wilson\". The seller captured them weeks earlier in a phishing campaign. Nothing touches your network yet, so this step is invisible to defenders.",
+        defender:"Nothing to see yet. The first evidence appears only when the bought credentials are used against your VPN portal.",
+        flows:[['atk','mkt']], nodes:['mkt','atk'], evidence:[] },
+      { title:"Step 2 · Credential test",
+        caption:"The attacker opens the company VPN portal and types the bought password. It works on the first attempt. The VPN log quietly records a new country and a new device fingerprint for j.wilson.",
+        defender:"The VPN log shows a new country and a new device fingerprint for j.wilson. A first-seen check would already flag this session.",
+        flows:[['atk','vpn']], nodes:['atk','vpn'], evidence:[] },
+      { title:"Step 3 · Valid login accepted",
+        caption:"The VPN grants access because this account has no MFA on remote access. From this moment the attacker sits inside your encrypted tunnel as a fully trusted user.",
+        defender:"Successful VPN authentication from an unusual network provider with no second factor. Add GeoIP and new-device checks on this path.",
+        flows:[['atk','vpn'],['vpn','idp']], nodes:['atk','vpn','idp'], evidence:['vpn-log'] },
+      { title:"Step 4 · Quiet look around",
+        caption:"Inside the session the attacker runs simple discovery commands: whoami, net view, and a listing of network shares. Each command is small and unremarkable on its own.",
+        defender:"EDR sees rare commands (whoami, net view) inside a normal user session — commands this user has never run before.",
+        flows:[['atk','vpn']], nodes:['atk','vpn'], evidence:['vpn-log','edr-proc'] },
+      { title:"Step 5 · Reaching the file server",
+        caption:"Using the same valid account, the attacker connects to the share on fs-01 and copies a small folder of project documents. The transfer stays well below exfiltration thresholds.",
+        defender:"File server audit shows unusual mass reads: many files opened within minutes by a user who normally opens two folders a day.",
+        flows:[['vpn','fs']], nodes:['vpn','fs'], evidence:['vpn-log','edr-proc','file-audit'] },
+      { title:"Step 6 · Lateral use",
+        caption:"The attacker tries the same password on srv-02, and it works, because the employee reused that password. One stolen secret is now a key to two servers.",
+        defender:"The same source IP has logged into two hosts within minutes. Correlating 4624 events by source exposes the spread.",
+        flows:[['fs','srv2'],['vpn','srv2']], nodes:['fs','srv2'], evidence:['vpn-log','edr-proc','file-audit','win-4624'] },
+      { title:"Step 7 · SOC alert",
+        caption:"An anomaly rule fires: first VPN login from this country for this user. The analyst opens the session timeline and links the VPN record, the EDR process events, and the file audit line into one incident.",
+        defender:"The correlation view pays off: VPN, EDR, and file audit in one timeline turn four weak signals into one strong case.",
+        flows:[['vpn','soc'],['fs','soc']], nodes:['vpn','fs','soc'], evidence:['vpn-log','edr-proc','file-audit','win-4624','anomaly'] },
+      { title:"Step 8 · Response",
+        caption:"The analyst disables the account, resets the password, and kills the live VPN session. The attacker loses access minutes after the alert, before any real damage is done.",
+        defender:"Account disabled, password reset, session revoked. Every minute between alert and revocation is the metric to improve.",
+        flows:[['soc','idp'],['soc','vpn']], nodes:['soc','idp','vpn'], evidence:['vpn-log','edr-proc','file-audit','win-4624','anomaly'] }
+    ];
+
+    var simColors = {};
+    function cssVar(name, fallback){
+      var v = getComputedStyle(root).getPropertyValue(name).trim();
+      return v || fallback || '#888888';
+    }
+    function readSimColors(){
+      simColors = {
+        bg: cssVar('--bg','#0b0f1a'), surface: cssVar('--surface','#121a2e'),
+        surface2: cssVar('--surface-2','#172138'), text: cssVar('--text','#e7edf8'),
+        muted: cssVar('--muted','#9aa8c0'), border: cssVar('--border','#24314e'),
+        borderStrong: cssVar('--border-strong','#2f4066'), accent: cssVar('--accent','#4f8cff'),
+        accent2: cssVar('--accent-2','#22d3ee'), violet: cssVar('--violet','#a78bfa'),
+        success: cssVar('--success','#34d399'), warning: cssVar('--warning','#fbbf24'),
+        danger: cssVar('--danger','#f87171')
+      };
+      drawFrame();
+    }
+    function kindColor(kind){
+      if (kind === 'threat'){ return simColors.danger; }
+      if (kind === 'identity'){ return simColors.violet; }
+      if (kind === 'soc'){ return simColors.success; }
+      return simColors.accent;
+    }
+
+    var stepIndex = 0, stepT = 0, playing = false, speed = 1, lastTs = 0, rafId = 0, stepTimer = 0, simScale = 1;
+
+    function setCaption(i){
+      if (!capEl || !defEl){ return; }
+      var s = STEPS[i];
+      capEl.innerHTML = '<span class="sim-step-title"></span>';
+      capEl.firstChild.textContent = s.title;
+      var p = doc.createElement('span');
+      p.textContent = s.caption;
+      capEl.appendChild(p);
+      defEl.textContent = '';
+      var strong = doc.createElement('strong');
+      strong.textContent = 'Defender view: ';
+      defEl.appendChild(strong);
+      defEl.appendChild(doc.createTextNode(s.defender));
+      var chips = stepsEl ? stepsEl.querySelectorAll('.sim-step-chip') : [];
+      for (var k = 0; k < chips.length; k++){
+        if (k === i){ chips[k].setAttribute('aria-current', 'true'); }
+        else { chips[k].removeAttribute('aria-current'); }
+      }
+    }
+
+    function resizeSim(){
+      if (!simWrap){ return; }
+      var w = simWrap.clientWidth || 900;
+      var h = Math.max(250, Math.round(w * VH / VW));
+      var dpr = window.devicePixelRatio || 1;
+      simCanvas.style.height = h + 'px';
+      simCanvas.width = Math.round(w * dpr);
+      simCanvas.height = Math.round(h * dpr);
+      simScale = w / VW;
+      drawFrame();
+    }
+
+    function roundRect(c, x, y, w, h, r){
+      c.beginPath();
+      c.moveTo(x + r, y);
+      c.lineTo(x + w - r, y); c.arcTo(x + w, y, x + w, y + r, r);
+      c.lineTo(x + w, y + h - r); c.arcTo(x + w, y + h, x + w - r, y + h, r);
+      c.lineTo(x + r, y + h); c.arcTo(x, y + h, x, y + h - r, r);
+      c.lineTo(x, y + r); c.arcTo(x, y, x + r, y, r);
+      c.closePath();
+    }
+
+    function drawFrame(){
+      if (!simCtx || !simCanvas.width){ return; }
+      var c = simCtx, dpr = window.devicePixelRatio || 1;
+      c.setTransform(dpr * simScale, 0, 0, dpr * simScale, 0, 0);
+      c.clearRect(0, 0, VW, VH);
+      c.fillStyle = simColors.bg;
+      c.fillRect(0, 0, VW, VH);
+
+      /* step label */
+      c.font = '700 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+      c.fillStyle = simColors.muted;
+      c.textAlign = 'left'; c.textBaseline = 'top';
+      c.fillText('T1078 simulation — ' + (stepIndex + 1) + '/8', 16, 12);
+
+      /* flows */
+      var step = STEPS[stepIndex];
+      step.flows.forEach(function(f, fi){
+        var a = NODE_MAP[f[0]], b = NODE_MAP[f[1]];
+        if (!a || !b){ return; }
+        c.strokeStyle = simColors.accent2;
+        c.globalAlpha = 0.55;
+        c.lineWidth = 2;
+        c.setLineDash([6, 5]);
+        c.beginPath(); c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.stroke();
+        c.setLineDash([]);
+        c.globalAlpha = 1;
+        if (!reducedMQ.matches && playing){
+          var t1 = (stepT + fi * 0.33) % 1;
+          var t2 = (t1 + 0.5) % 1;
+          [t1, t2].forEach(function(t){
+            var px = a.x + (b.x - a.x) * t;
+            var py = a.y + (b.y - a.y) * t;
+            c.beginPath(); c.arc(px, py, 4.5, 0, Math.PI * 2);
+            c.fillStyle = simColors.accent2; c.fill();
+          });
+        } else {
+          var tt = playing ? stepT : 0.5;
+          var px2 = a.x + (b.x - a.x) * tt;
+          var py2 = a.y + (b.y - a.y) * tt;
+          c.beginPath(); c.arc(px2, py2, 4, 0, Math.PI * 2);
+          c.fillStyle = simColors.accent2; c.fill();
+        }
+      });
+
+      /* nodes */
+      NODES.forEach(function(n){
+        var active = step.nodes.indexOf(n.id) !== -1;
+        var col = kindColor(n.kind);
+        if (active){
+          c.globalAlpha = 0.18;
+          c.fillStyle = col;
+          roundRect(c, n.x - NODE_W/2 - 7, n.y - NODE_H/2 - 7, NODE_W + 14, NODE_H + 14, 16);
+          c.fill();
+          c.globalAlpha = 1;
+        }
+        c.fillStyle = simColors.surface;
+        c.strokeStyle = active ? col : simColors.borderStrong;
+        c.lineWidth = active ? 2.2 : 1.2;
+        roundRect(c, n.x - NODE_W/2, n.y - NODE_H/2, NODE_W, NODE_H, 12);
+        c.fill(); c.stroke();
+        c.fillStyle = active ? col : simColors.muted;
+        c.fillRect(n.x - NODE_W/2, n.y - NODE_H/2 + NODE_H - 4, NODE_W, 4);
+        c.fillStyle = simColors.text;
+        c.font = '650 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(n.label, n.x, n.y - 6, NODE_W - 12);
+        c.fillStyle = simColors.muted;
+        c.font = '400 10px -apple-system, Segoe UI, Roboto, Arial, sans-serif';
+        var role = n.role.length > 34 ? n.role.slice(0, 33) + '…' : n.role;
+        c.fillText(role, n.x, n.y + 11, NODE_W - 14);
+      });
+
+      /* evidence chips */
+      var ev = step.evidence;
+      if (ev.length){
+        c.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+        c.textAlign = 'left'; c.textBaseline = 'middle';
+        var cx = 14, cy = VH - 20;
+        for (var i = 0; i < ev.length; i++){
+          var label = EVIDENCE[ev[i]] || ev[i];
+          var tw = c.measureText(label).width;
+          var bw = tw + 30;
+          c.fillStyle = 'rgba(251,191,36,0.12)';
+          c.strokeStyle = simColors.warning;
+          c.lineWidth = 1;
+          roundRect(c, cx, cy - 10, bw, 20, 10);
+          c.fill(); c.stroke();
+          c.fillStyle = simColors.warning;
+          c.fillText('■', cx + 8, cy);
+          c.fillStyle = simColors.text;
+          c.fillText(label, cx + 20, cy);
+          cx += bw + 8;
+          if (cx > VW - 120){ break; }
+        }
+        c.fillStyle = simColors.muted;
+        c.fillText('Evidence', 14, cy - 22);
+      }
+    }
+
+    function tick(ts){
+      rafId = 0;
+      var dt = lastTs ? Math.min(100, ts - lastTs) : 16;
+      lastTs = ts;
+      if (playing && !doc.hidden && !reducedMQ.matches){
+        stepT += dt * speed / STEP_DUR;
+        if (stepT >= 1){
+          if (stepIndex < STEPS.length - 1){ stepIndex++; stepT = 0; setCaption(stepIndex); }
+          else { stepT = 0; setPlaying(false); }
+        }
+      }
+      drawFrame();
+      if (playing && !reducedMQ.matches){ rafId = window.requestAnimationFrame(tick); }
+    }
+    function setPlaying(p){
+      playing = p;
+      if (playBtn){
+        playBtn.textContent = p ? 'Pause' : 'Play';
+        playBtn.setAttribute('aria-pressed', p ? 'true' : 'false');
+      }
+      window.clearInterval(stepTimer);
+      if (p && reducedMQ.matches){
+        stepTimer = window.setInterval(function(){
+          if (stepIndex < STEPS.length - 1){ applyStep(stepIndex + 1); }
+          else { setPlaying(false); }
+        }, Math.max(1600, 6200 / speed));
+      } else if (p){
+        lastTs = 0;
+        if (!rafId){ rafId = window.requestAnimationFrame(tick); }
+      } else if (rafId){
+        window.cancelAnimationFrame(rafId); rafId = 0;
+      }
+    }
+    function applyStep(i){
+      stepIndex = Math.max(0, Math.min(STEPS.length - 1, i));
+      stepT = 0;
+      setCaption(stepIndex);
+      drawFrame();
+    }
+    function buildStepChips(){
+      if (!stepsEl){ return; }
+      STEPS.forEach(function(s, i){
+        var b = doc.createElement('button');
+        b.type = 'button';
+        b.className = 'sim-step-chip';
+        b.textContent = s.title.split('·')[1] ? s.title.split('·')[1].trim() : String(i + 1);
+        b.setAttribute('aria-label', 'Go to ' + s.title);
+        b.addEventListener('click', function(){ applyStep(i); });
+        stepsEl.appendChild(b);
+      });
+    }
+
+    /* tooltips: hover + click/tap */
+    function nodeAt(vx, vy){
+      for (var i = 0; i < NODES.length; i++){
+        var n = NODES[i];
+        if (vx >= n.x - NODE_W/2 && vx <= n.x + NODE_W/2 && vy >= n.y - NODE_H/2 && vy <= n.y + NODE_H/2){
+          return n;
+        }
+      }
+      return null;
+    }
+    function showTip(n, offsetX, offsetY){
+      if (!tip){ return; }
+      tip.querySelector('.tt-name').textContent = n.label;
+      tip.querySelector('.tt-role').textContent = n.role;
+      tip.style.display = 'block';
+      var tx = Math.min(offsetX + 12, (simWrap.clientWidth || 300) - 240);
+      var ty = Math.max(4, offsetY - 46);
+      tip.style.left = Math.max(4, tx) + 'px';
+      tip.style.top = ty + 'px';
+    }
+    function hideTip(){ if (tip){ tip.style.display = 'none'; } }
+    function handlePointer(e, sticky){
+      var rect = simCanvas.getBoundingClientRect();
+      var vx = (e.clientX - rect.left) / simScale;
+      var vy = (e.clientY - rect.top) / (rect.height / VH);
+      var n = nodeAt(vx, vy);
+      if (n){ showTip(n, e.clientX - rect.left, e.clientY - rect.top); }
+      else if (!sticky){ hideTip(); }
+    }
+    simCanvas.addEventListener('mousemove', function(e){ handlePointer(e, false); });
+    simCanvas.addEventListener('click', function(e){ handlePointer(e, true); });
+    simCanvas.addEventListener('mouseleave', hideTip);
+
+    if (playBtn){ playBtn.addEventListener('click', function(){ setPlaying(!playing); }); }
+    if (restartBtn){ restartBtn.addEventListener('click', function(){ setPlaying(false); applyStep(0); }); }
+    if (speedSel){
+      speedSel.addEventListener('change', function(){
+        speed = parseFloat(speedSel.value) || 1;
+        if (playing){ setPlaying(true); }
+      });
+    }
+    doc.addEventListener('visibilitychange', function(){
+      if (doc.hidden){ if (playing){ setPlaying(false); simWasPlaying = true; } }
+      else if (simWasPlaying){ simWasPlaying = false; setPlaying(true); }
+    });
+    var simWasPlaying = false;
+
+    buildStepChips();
+    readSimColors();
+    setCaption(0);
+    resizeSim();
+    if (window.ResizeObserver){
+      new ResizeObserver(function(){ resizeSim(); }).observe(simWrap);
+    } else {
+      window.addEventListener('resize', resizeSim);
+    }
+    window.addEventListener('atk-themechange', readSimColors);
+    try{
+      new MutationObserver(function(){ readSimColors(); }).observe(root, {attributes:true, attributeFilter:['data-theme']});
+    }catch(err){ /* MutationObserver unavailable */ }
+    if (reducedMQ.addEventListener){
+      reducedMQ.addEventListener('change', function(){ if (playing){ setPlaying(true); } drawFrame(); });
+    }
+  }
+
+  /* ============ Active TOC on scroll ============ */
+  window.addEventListener('scroll', function(){
+    window.requestAnimationFrame(markActive);
+  }, {passive:true});
+  markActive();
+})();
+</script>
+</body>
+</html>

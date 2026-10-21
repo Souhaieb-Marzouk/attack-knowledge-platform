@@ -1,0 +1,2525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>(function(){try{var t=localStorage.getItem('atk-theme');if(t!=='dark'&&t!=='light'){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>T1055.014 - VDSO Hijacking (Guide v2.0) - ATT&amp;CK Sub-Technique Guide</title>
+<meta name="description" content="Detection engineering guide for MITRE ATT&amp;CK T1055.014 VDSO Hijacking: how attackers patch the Linux vDSO to run code inside trusted daemons, and how defenders detect and stop it.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1055-Process-Injection/014-VDSO-Hijacking.html">
+<style>
+/* =========================================================
+   ATT&CK guide — shared page CSS (kit). Embed VERBATIM.
+   Add page-specific rules only after the PAGE-SPECIFIC marker.
+   ========================================================= */
+:root[data-theme="dark"]{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --shadow:0 1px 3px rgba(2,8,23,.35), 0 8px 24px rgba(2,8,23,.25);
+  --tint-danger:rgba(248,113,113,.14); --tint-high:rgba(251,146,60,.14);
+  --tint-warning:rgba(251,191,36,.14); --tint-low:rgba(74,222,128,.14);
+  --tint-accent:rgba(79,140,255,.14); --tint-violet:rgba(167,139,250,.14);
+  --tint-cyan:rgba(34,211,238,.14);
+}
+:root[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 1px 3px rgba(24,34,56,.08), 0 8px 24px rgba(24,34,56,.08);
+  --tint-danger:rgba(220,38,38,.10); --tint-high:rgba(194,65,12,.10);
+  --tint-warning:rgba(180,83,9,.10); --tint-low:rgba(21,128,61,.10);
+  --tint-accent:rgba(47,111,228,.10); --tint-violet:rgba(124,92,224,.10);
+  --tint-cyan:rgba(8,145,178,.10);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  font-size:16.5px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+code,pre,kbd,samp,.mono{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+h1,h2,h3,h4{line-height:1.2; margin:0 0 .5em; font-weight:700}
+p{max-width:72ch}
+a{color:var(--accent)}
+a:hover{color:var(--accent-2)}
+img,video{max-width:100%}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+::selection{background:var(--tint-accent)}
+.skip-link{
+  position:absolute; left:-9999px; top:0; z-index:100; background:var(--accent);
+  color:#fff; padding:8px 14px; border-radius:0 0 8px 0; font-weight:600; text-decoration:none;
+}
+.skip-link:focus{left:0}
+
+/* progress bar */
+#progress-bar{
+  position:fixed; top:0; left:0; height:3px; width:0; z-index:80;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+}
+
+/* hero */
+.hero{max-width:1280px; margin:0 auto; padding:48px 32px 6px}
+.kicker{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent-2); margin:0 0 14px;
+}
+.hero-title{font-size:clamp(1.9rem,4.2vw,2.9rem); letter-spacing:-.02em; margin-bottom:14px}
+.tech-id{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color:var(--accent); background:var(--tint-accent);
+  border:1px solid var(--accent); border-radius:10px; padding:.08em .38em; margin-right:.35em;
+  font-size:.78em; vertical-align:.08em; white-space:nowrap;
+}
+.hero-intro{color:var(--muted); font-size:17px; max-width:70ch; margin:0 0 18px}
+.chip-row{display:flex; flex-wrap:wrap; gap:8px; list-style:none; margin:0 0 20px; padding:0}
+.chip{
+  font-size:12.5px; font-weight:600; padding:5px 11px; border-radius:999px;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--muted);
+}
+.fact-grid{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
+.fact-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:4px;
+}
+.fact-label{
+  font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+}
+.fact-value{font-weight:700; font-size:14.5px; overflow-wrap:anywhere}
+
+/* two-column layout */
+.layout{
+  max-width:1280px; margin:26px auto 0; padding:0 32px 72px;
+  display:grid; grid-template-columns:260px minmax(0,1fr); gap:40px; align-items:start;
+}
+.sidebar{position:sticky; top:24px; max-height:calc(100vh - 48px); overflow:auto; padding-bottom:8px}
+.toc-title{
+  font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); margin:6px 0 10px; font-weight:700;
+}
+.toc-list{list-style:none; margin:0; padding:0; font-size:14px}
+.toc-list a{
+  display:block; padding:6px 10px; border-left:2px solid transparent;
+  color:var(--muted); text-decoration:none; border-radius:6px;
+}
+.toc-list a:hover{color:var(--text); background:var(--surface-2)}
+.toc-list a.active{color:var(--text); background:var(--surface-2); border-left-color:var(--accent)}
+.toc-sub{list-style:none; margin:2px 0 6px; padding:0}
+.toc-sub a{padding-left:26px; font-size:13px}
+
+/* sections */
+main > section{margin:0 0 56px; scroll-margin-top:24px}
+.section-head{margin-bottom:8px}
+.section-head h2{
+  display:flex; align-items:center; gap:12px;
+  font-size:clamp(1.35rem,2.4vw,1.8rem); letter-spacing:-.01em;
+}
+.section-num{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.62em; font-weight:700; color:var(--accent); background:var(--tint-accent);
+  border:1px solid var(--accent); border-radius:8px; padding:.22em .5em; white-space:nowrap;
+}
+main h3{
+  display:flex; align-items:center; gap:10px;
+  font-size:1.18rem; margin:28px 0 10px; scroll-margin-top:24px;
+}
+.section-intro{color:var(--muted); margin:0 0 20px; max-width:70ch}
+main p{margin:0 0 14px}
+main,main > section{min-width:0}
+p code,li code,td code,dd code,dt code,.card code,.callout code,.fact-value{overflow-wrap:anywhere}
+
+/* cards & grids */
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:18px 20px; box-shadow:var(--shadow); margin:0 0 16px;
+}
+.card h4{margin:0 0 8px; font-size:15.5px}
+.card > :last-child{margin-bottom:0}
+.grid-2{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:0 0 16px}
+.grid-3{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:0 0 16px}
+.grid-2 .card,.grid-3 .card{margin:0}
+
+/* callouts */
+.callout{
+  border:1px solid var(--border); border-left:4px solid var(--accent);
+  background:var(--surface-2); border-radius:10px; padding:14px 16px; margin:0 0 16px;
+}
+.callout .callout-label{
+  display:inline-block; font-size:11px; font-weight:700; letter-spacing:.1em;
+  text-transform:uppercase; padding:2px 8px; border-radius:6px; margin-bottom:8px;
+  background:var(--tint-accent); color:var(--accent);
+}
+.callout.tip{border-left-color:var(--success)}
+.callout.tip .callout-label{background:var(--tint-low); color:var(--success)}
+.callout.warning{border-left-color:var(--warning)}
+.callout.warning .callout-label{background:var(--tint-warning); color:var(--warning)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .callout-label{background:var(--tint-danger); color:var(--danger)}
+.callout > :last-child{margin-bottom:0}
+.callout p{margin-bottom:8px}
+
+/* badges */
+.badge{
+  display:inline-block; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:999px;
+  border:1px solid var(--border-strong); color:var(--muted); background:var(--surface-2);
+  white-space:nowrap;
+}
+.badge.sev-critical{color:var(--danger); border-color:var(--danger); background:var(--tint-danger)}
+.badge.sev-high{color:var(--high); border-color:var(--high); background:var(--tint-high)}
+.badge.sev-medium{color:var(--warning); border-color:var(--warning); background:var(--tint-warning)}
+.badge.sev-low{color:var(--low); border-color:var(--low); background:var(--tint-low)}
+.badge.plat-windows{color:var(--accent); border-color:var(--accent); background:var(--tint-accent)}
+.badge.plat-linux{color:var(--violet); border-color:var(--violet); background:var(--tint-violet)}
+.badge.plat-macos{color:var(--accent-2); border-color:var(--accent-2); background:var(--tint-cyan)}
+.badge.plat-cloud{color:var(--accent-2); border-color:var(--accent-2); background:var(--tint-cyan)}
+.badge.plat-network{color:var(--warning); border-color:var(--warning); background:var(--tint-warning)}
+.badge.plat-identity{color:var(--danger); border-color:var(--danger); background:var(--tint-danger)}
+
+/* key/value list */
+.kv-list{
+  border:1px solid var(--border); border-radius:12px; overflow:hidden;
+  background:var(--surface); margin:0 0 16px; box-shadow:var(--shadow);
+}
+.kv-row{display:grid; grid-template-columns:220px 1fr; border-top:1px solid var(--border)}
+.kv-row:first-child{border-top:0}
+.kv-key{
+  padding:10px 14px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+  background:var(--surface-2);
+}
+.kv-val{padding:10px 14px; font-size:14.5px; overflow-wrap:anywhere}
+
+/* tables */
+.table-wrap{
+  overflow-x:auto; border:1px solid var(--border); border-radius:12px;
+  background:var(--surface); margin:0 0 16px; box-shadow:var(--shadow);
+}
+.table-wrap table{border-collapse:collapse; width:100%; min-width:640px}
+.table-wrap th{
+  background:var(--surface-2); text-align:left; padding:10px 12px;
+  font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+  border-bottom:1px solid var(--border); white-space:nowrap;
+}
+.table-wrap td{padding:10px 12px; border-top:1px solid var(--border); font-size:14.5px; vertical-align:top}
+.table-wrap tbody tr:hover{background:var(--surface-2)}
+
+/* code blocks */
+figure.code-block{
+  margin:0 0 16px; border:1px solid var(--border); border-radius:12px;
+  overflow:hidden; background:var(--surface-2); box-shadow:var(--shadow);
+}
+figure.code-block figcaption{
+  display:flex; justify-content:space-between; align-items:center; gap:10px;
+  padding:8px 12px; border-bottom:1px solid var(--border); background:var(--elevated);
+}
+.code-title{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+  overflow-wrap:anywhere;
+}
+.copy-btn{
+  appearance:none; border:1px solid var(--border-strong); background:var(--surface-2);
+  color:var(--text); border-radius:8px; padding:4px 10px; font-size:12px; font-weight:600;
+  cursor:pointer; white-space:nowrap;
+}
+.copy-btn:hover{border-color:var(--accent); color:var(--accent)}
+figure.code-block pre{margin:0; padding:14px 16px; overflow:auto; max-height:540px}
+figure.code-block code{font-size:13.5px; line-height:1.55; white-space:pre}
+
+/* simulation */
+.sim-shell{
+  position:relative; background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 0 8px;
+}
+#sim-canvas{display:block; width:100%; height:440px; touch-action:pan-y}
+#sim-tooltip{
+  position:absolute; z-index:5; pointer-events:none; opacity:0; transition:opacity .15s;
+  background:var(--elevated); border:1px solid var(--border-strong); border-radius:8px;
+  padding:8px 10px; font-size:12.5px; max-width:250px; color:var(--text); box-shadow:var(--shadow);
+}
+#sim-tooltip .tt-name{font-weight:700; margin-bottom:2px}
+.sim-controls{
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+  padding:12px; border-top:1px solid var(--border); background:var(--surface-2);
+}
+.sim-steps{display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+.sim-step{
+  appearance:none; border:1px solid var(--border-strong); background:var(--surface);
+  color:var(--muted); border-radius:8px; min-width:32px; padding:5px 8px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px;
+  font-weight:700; cursor:pointer;
+}
+.sim-step:hover{color:var(--text); border-color:var(--accent)}
+.sim-step[aria-current="true"]{background:var(--accent); border-color:var(--accent); color:#fff}
+.sim-spacer{flex:1}
+#sim-caption{margin:14px 0 8px; font-size:15.5px}
+#sim-defender{
+  margin:0 0 16px; padding:10px 14px; border:1px dashed var(--border-strong);
+  border-radius:10px; background:var(--surface-2); color:var(--muted); font-size:14px;
+}
+#sim-defender strong{color:var(--accent-2)}
+
+/* buttons */
+.btn{
+  appearance:none; border:1px solid var(--border-strong); background:var(--surface-2);
+  color:var(--text); border-radius:8px; padding:7px 13px; font-size:13px; font-weight:600;
+  cursor:pointer; font-family:inherit;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+.btn.primary:hover{background:var(--accent-2); border-color:var(--accent-2); color:#fff}
+.btn:disabled{opacity:.5; cursor:not-allowed}
+
+/* floating action buttons */
+.fab{
+  position:fixed; z-index:60; width:44px; height:44px; border-radius:999px;
+  display:grid; place-items:center; border:1px solid var(--border-strong);
+  background:var(--elevated); color:var(--text); cursor:pointer; font-weight:700; font-size:12px;
+  box-shadow:var(--shadow); font-family:inherit; padding:0;
+}
+.fab:hover{border-color:var(--accent); color:var(--accent)}
+#btn-top{right:18px; bottom:18px; opacity:0; pointer-events:none; transition:opacity .2s}
+#btn-top.show{opacity:1; pointer-events:auto}
+#theme-toggle{right:18px; bottom:70px; width:auto; min-width:44px; padding:0 12px; height:36px}
+#btn-contents{left:18px; bottom:18px; width:auto; padding:0 14px; height:36px; display:none}
+
+/* mobile overlay */
+#toc-overlay{position:fixed; inset:0; z-index:90; display:none; background:rgba(4,8,18,.6)}
+#toc-overlay.open{display:block}
+.overlay-panel{
+  position:absolute; left:0; right:0; bottom:0; max-height:80vh; overflow:auto;
+  background:var(--elevated); border-top:1px solid var(--border-strong);
+  border-radius:16px 16px 0 0; padding:18px 18px 28px; box-shadow:var(--shadow);
+}
+.overlay-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
+.overlay-head .toc-title{margin:0}
+
+/* timeline */
+.timeline{list-style:none; margin:0 0 16px; padding:0 0 0 26px; border-left:2px solid var(--border-strong)}
+.timeline li{position:relative; padding:0 0 18px 16px}
+.timeline li::before{
+  content:""; position:absolute; left:-33px; top:5px; width:12px; height:12px;
+  border-radius:50%; background:var(--accent); border:2px solid var(--bg);
+}
+.time-label{
+  display:block; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px; color:var(--accent-2); font-weight:700; margin-bottom:2px;
+}
+
+/* checklist */
+.check-list{list-style:none; margin:0 0 16px; padding:0}
+.check-list li{position:relative; padding:6px 0 6px 30px; border-bottom:1px solid var(--border)}
+.check-list li::before{
+  content:""; position:absolute; left:4px; top:11px; width:12px; height:12px;
+  border:2px solid var(--border-strong); border-radius:3px;
+}
+
+/* generic lists */
+main ul,main ol{margin:0 0 14px; padding-left:24px}
+main li{margin-bottom:6px}
+
+/* responsive */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr); gap:0}
+  .sidebar{display:none}
+  #btn-contents{display:grid; place-items:center}
+  .fact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  .hero{padding:36px 16px 4px}
+  .layout{padding:0 16px 64px}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .fact-grid{grid-template-columns:1fr}
+  #sim-canvas{height:340px}
+  .kv-row{grid-template-columns:1fr}
+  .kv-key{padding-bottom:2px}
+  .kv-val{padding-top:2px}
+  #btn-top{right:12px; bottom:12px}
+  #theme-toggle{right:12px; bottom:60px}
+  #btn-contents{left:12px; bottom:12px}
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001s !important; transition-duration:.001s !important}
+}
+
+/* print */
+@media print{
+  :root[data-theme="dark"],:root[data-theme="light"]{
+    --bg:#ffffff; --surface:#ffffff; --surface-2:#ffffff; --elevated:#ffffff;
+    --text:#000000; --muted:#333333; --border:#bbbbbb; --border-strong:#888888;
+    --accent:#000000; --accent-2:#000000; --shadow:none;
+    --tint-danger:#f5f5f5; --tint-high:#f5f5f5; --tint-warning:#f5f5f5; --tint-low:#f5f5f5;
+    --tint-accent:#f5f5f5; --tint-violet:#f5f5f5; --tint-cyan:#f5f5f5;
+  }
+  body{background:#fff; color:#000; font-size:12pt}
+  .sidebar,#btn-contents,#btn-top,#theme-toggle,#progress-bar,#toc-overlay,
+  .copy-btn,.sim-controls,#sim-tooltip,.skip-link{display:none !important}
+  .layout{display:block; max-width:none; padding:0}
+  .sim-shell{border:1px solid #bbb}
+  figure.code-block pre{white-space:pre-wrap; word-break:break-word; max-height:none}
+  .table-wrap{overflow:visible}
+  .table-wrap table{min-width:0}
+  .card,.callout,.fact-card,.timeline li,.table-wrap,figure.code-block{break-inside:avoid}
+  a{color:#000; text-decoration:underline}
+}
+/* ==== PAGE-SPECIFIC CSS ==== */
+.tt-body{font-size:12px; color:var(--muted); margin-top:2px}
+.sim-legend{display:flex; flex-wrap:wrap; gap:14px; list-style:none; margin:0 0 14px; padding:0; font-size:12.5px; color:var(--muted)}
+.sim-legend li{display:flex; align-items:center; gap:6px}
+.dot{width:10px; height:10px; border-radius:50%; display:inline-block; border:1px solid var(--border-strong); flex:0 0 auto}
+.dot-a{background:var(--danger)}
+.dot-v{background:var(--violet)}
+.dot-s{background:var(--accent)}
+.dot-e{background:var(--warning)}
+.dot-g{background:var(--success)}
+.muted-note{color:var(--muted); font-size:13.5px}
+.story-soc{display:block; color:var(--muted); font-size:14px}
+select.btn{padding:5px 8px}
+@media print{.sim-shell,.sim-legend{display:none}}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1055.014"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip-link" href="#main">Skip to content</a>
+<div id="progress-bar" aria-hidden="true"></div>
+
+<section class="hero" id="top">
+  <p class="kicker">MITRE ATT&amp;CK · PROCESS INJECTION · T1055.014</p>
+  <h1 class="hero-title"><span class="tech-id">T1055.014</span> VDSO Hijacking</h1>
+  <p class="hero-intro">VDSO hijacking is a Linux process injection method. The attacker overwrites a small, kernel-mapped code page called the vDSO (virtual dynamic shared object) inside a running process. When that process next asks for the time, the attacker's code runs inside it. This page explains the attack, the evidence it leaves behind, and how to detect, contain, and prevent it.</p>
+  <ul class="chip-row" role="list">
+    <li class="chip">Platform: Linux</li>
+    <li class="chip">Tactics: Stealth (formerly Defense Evasion), Privilege Escalation</li>
+    <li class="chip">Parent technique: T1055 Process Injection</li>
+    <li class="chip">Data sources: auditd, eBPF sensors, memory integrity scanning</li>
+    <li class="chip">Guide v2.0</li>
+  </ul>
+  <div class="fact-grid">
+    <div class="fact-card"><span class="fact-label">ATT&amp;CK ID</span><span class="fact-value">T1055.014</span></div>
+    <div class="fact-card"><span class="fact-label">Platforms</span><span class="fact-value">Linux (ATT&amp;CK lists Linux only)</span></div>
+    <div class="fact-card"><span class="fact-label">Tactics</span><span class="fact-value">Stealth (formerly Defense Evasion), Privilege Escalation</span></div>
+    <div class="fact-card"><span class="fact-label">Detection + data sources</span><span class="fact-value">Hard — one of the hardest techniques to detect. Needs auditd syscall rules, eBPF-based sensors, and vDSO memory-integrity checks. Auth and network logs show only the edges of the attack.</span></div>
+  </div>
+</section>
+
+<div class="layout">
+  <nav class="sidebar" id="toc" aria-label="Table of contents">
+    <p class="toc-title">Contents</p>
+    <ul class="toc-list">
+      <li><a href="#s1-overview">1. Overview</a></li>
+      <li><a href="#s2-simulation">2. Animated Simulation</a></li>
+      <li><a href="#s3-redteam">3. Red Team / Hacker Perspective</a></li>
+      <li><a href="#s4-blueteam">4. Blue Team / SOC Perspective</a></li>
+      <li><a href="#s5-detection">5. Detection Engineering Deep Dive</a>
+        <ul class="toc-sub">
+          <li><a href="#s5-1-regulations">5.1 Regulation Mapping</a></li>
+          <li><a href="#s5-2-threatintel">5.2 Threat Intelligence</a></li>
+          <li><a href="#s5-3-ranking">5.3 Threats Ranking and Categorization</a></li>
+          <li><a href="#s5-4-logs">5.4 Logs and Patterns</a></li>
+          <li><a href="#s5-5-sigma">5.5 Sigma Rules and Splunk SPL</a></li>
+        </ul>
+      </li>
+      <li><a href="#s6-casestudy">6. Real-World Case Study</a></li>
+      <li><a href="#s7-mitigation">7. Mitigation and Defense</a></li>
+      <li><a href="#s8-mistakes">8. Common Mistakes and Best Practices</a></li>
+      <li><a href="#s9-cheatsheet">9. Cheat Sheet and Quick Reference</a></li>
+    </ul>
+  </nav>
+  <main id="main">
+
+  <section id="s1-overview" aria-labelledby="s1-overview-title">
+    <div class="section-head">
+      <h2 id="s1-overview-title"><span class="section-num" aria-hidden="true">1</span><span class="section-title">Overview</span></h2>
+    </div>
+    <p class="section-intro">A short, plain-language tour of vDSO hijacking: what the vDSO is, why attackers patch it, and what you will learn on this page.</p>
+
+    <p>The vDSO (virtual dynamic shared object) is a tiny shared library that the Linux kernel maps into every process. Programs use it to answer time questions such as <code>clock_gettime</code>, <code>gettimeofday</code>, and <code>time</code>. Because the kernel maps this code directly into process memory, the C standard library (libc) can read the clock without a syscall (system call), which is a slow switch into kernel mode. Almost every program calls these time functions constantly, often many times per second.</p>
+
+    <p>VDSO hijacking turns this convenience into an attack path. An attacker who can already write memory in a victim process finds the <code>[vdso]</code> mapping in <code>/proc/&lt;pid&gt;/maps</code>. The attacker then overwrites the vDSO code, usually the <code>clock_gettime</code> function, with small bootstrap code (shellcode). The next time the process asks for the time, the shellcode runs inside the victim. The attacker never creates a new process or thread, so there is no new PID (process identifier) to notice.</p>
+
+    <p>ATT&amp;CK also notes why attackers pick this route. Memory protections may block the direct path: writing executable code into a process through ptrace (see T1055.008 Ptrace System Calls). The patched vDSO stub does not need that direct write. The stub can run syscall instructions itself, so it can open and map a malicious shared object into the process. Attackers can then steer the process to that code by patching GOT (Global Offset Table) entries. The GOT is the table that holds the absolute addresses of the library functions a process has mapped.</p>
+
+    <p>Skilled attackers go one step further. After the bootstrap code downloads and starts the real payload, the attacker restores the original vDSO bytes. A memory scanner that hashes (fingerprint) the vDSO will now see a clean page. This trick is called a self-healing hook, and it is the main reason this technique is hard to detect after the fact.</p>
+
+    <div class="callout note">
+      <span class="callout-label">Why attackers like it</span>
+      <p>The vDSO is called automatically and often, so the payload runs quickly and reliably. Execution needs no thread creation and no new process. The code runs inside a trusted, long-lived daemon. Restoring the original bytes defeats naive memory hashing. The price is that the attacker needs a memory-write primitive first, which normally comes from ptrace (the Linux debugging interface) or from a write to <code>/proc/&lt;pid&gt;/mem</code>.</p>
+    </div>
+
+    <div class="card">
+      <h4>What you will learn on this page</h4>
+      <ul class="check-list">
+        <li>How the attack chain works step by step, from foothold to payload.</li>
+        <li>Which logs and alerts a vDSO hijack leaves behind, and which ones it hides.</li>
+        <li>Six ready-to-adapt Sigma rules with matching Splunk SPL queries.</li>
+        <li>How to build vDSO integrity baselines per kernel version and respond when one breaks.</li>
+      </ul>
+    </div>
+
+    <p>A note on naming: in ATT&amp;CK v17 (2025) the Defense Evasion tactic was renamed to Stealth. This page writes "Stealth (formerly Defense Evasion)" at first use and "Stealth" after that.</p>
+
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">ATT&amp;CK ID</div><div class="kv-val">T1055.014 — VDSO Hijacking, sub-technique of T1055 Process Injection</div></div>
+      <div class="kv-row"><div class="kv-key">Tactics</div><div class="kv-val">Stealth (formerly Defense Evasion), Privilege Escalation</div></div>
+      <div class="kv-row"><div class="kv-key">Platform</div><div class="kv-val">Linux (all current kernels map a vDSO; 64-bit and 32-bit layouts differ)</div></div>
+      <div class="kv-row"><div class="kv-key">Preconditions</div><div class="kv-val">An existing memory-write primitive in the target: same-UID (user identifier) access, root, permissive <code>yama.ptrace_scope</code>, or the CAP_SYS_PTRACE capability</div></div>
+      <div class="kv-row"><div class="kv-key">Typical targets</div><div class="kv-val">Long-running daemons: web servers, monitoring agents, database helpers, container runtimes</div></div>
+      <div class="kv-row"><div class="kv-key">Key artifacts</div><div class="kv-val">auditd records of ptrace attach or process_vm_writev, reads of <code>/proc/&lt;pid&gt;/maps</code>, eBPF (extended Berkeley Packet Filter) write-into-vdso alerts, later CPU and network anomalies</div></div>
+      <div class="kv-row"><div class="kv-key">Related techniques</div><div class="kv-val">T1055.008 Ptrace System Calls and T1055.009 Proc Memory (the usual write primitives)</div></div>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-label">Good to know</span>
+      <p>The vDSO is not a normal file on disk. The kernel builds it at boot and maps it into each process, so there is no file hash to check. Integrity checks must compare the bytes mapped in memory against a clean copy saved for the same kernel version.</p>
+    </div>
+  </section>
+
+  <section id="s2-simulation" aria-labelledby="s2-simulation-title">
+    <div class="section-head">
+      <h2 id="s2-simulation-title"><span class="section-num" aria-hidden="true">2</span><span class="section-title">Animated Simulation</span></h2>
+    </div>
+    <p class="section-intro">Watch the attack in eight steps. The attacker sits on the left. The Linux victim host, with its resident daemon and [vdso] page, sits in the middle. The SOC (Security Operations Center) panel on the right fills with evidence as alerts fire. Hover or tap any node for details. The story below the canvas repeats the same steps in text form.</p>
+
+    <div class="sim-shell">
+      <canvas id="sim-canvas" role="img" aria-label="Animated diagram of vDSO hijacking. An attacker gets a shell on a Linux server through an exposed service, uses ptrace to open a resident daemon's memory, reads /proc/2041/maps to find the vDSO page, patches clock_gettime with bootstrap code, the daemon runs the code when it asks for the time, the payload downloads and the original vDSO bytes are restored, the payload beacons out and CPU spikes, and finally defenders isolate the host, compare the vDSO with a clean baseline, and hunt the fleet."></canvas>
+      <div id="sim-tooltip" role="status"><div class="tt-name"></div><div class="tt-body"></div></div>
+      <div class="sim-controls">
+        <button id="sim-play" class="btn primary" type="button">Play</button>
+        <button id="sim-pause" class="btn" type="button">Pause</button>
+        <button id="sim-restart" class="btn" type="button">Restart</button>
+        <label class="muted-note" for="sim-speed">Speed</label>
+        <select id="sim-speed" class="btn">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+        </select>
+        <span class="sim-spacer"></span>
+        <div class="sim-steps" id="sim-steps" role="group" aria-label="Simulation steps">
+          <button class="sim-step" data-step="0" type="button" aria-current="true">1</button>
+          <button class="sim-step" data-step="1" type="button">2</button>
+          <button class="sim-step" data-step="2" type="button">3</button>
+          <button class="sim-step" data-step="3" type="button">4</button>
+          <button class="sim-step" data-step="4" type="button">5</button>
+          <button class="sim-step" data-step="5" type="button">6</button>
+          <button class="sim-step" data-step="6" type="button">7</button>
+          <button class="sim-step" data-step="7" type="button">8</button>
+        </div>
+      </div>
+    </div>
+    <ul class="sim-legend">
+      <li><span class="dot dot-a"></span> Attacker</li>
+      <li><span class="dot dot-v"></span> Victim host and daemon</li>
+      <li><span class="dot dot-s"></span> SOC panel and evidence</li>
+      <li><span class="dot dot-e"></span> Warning-level evidence</li>
+      <li><span class="dot dot-g"></span> Defender action</li>
+    </ul>
+
+    <p id="sim-caption">Step 1 of 8 — The attacker logs in to the Linux server through an exposed management service. They now run commands as a service account on a trusted host.</p>
+    <p id="sim-defender"><strong>SOC view:</strong> A service account that never logs in interactively started a shell on a web server. Auditd shows a new execve with an unset loginuid.</p>
+
+    <div class="card">
+      <h4>The same attack in text form</h4>
+      <ol id="sim-story">
+        <li><strong>Step 1 — Foothold.</strong> The attacker reaches a Linux server through an exposed management service and gets a shell as a service account. Nothing unusual is visible yet, because the login looks like normal automation.
+          <span class="story-soc">SOC view: a new execve by a service account that never logs in interactively is the first weak signal.</span></li>
+        <li><strong>Step 2 — Write primitive.</strong> The attacker picks a daemon that runs for months and will not restart. Using ptrace, the Linux debugging interface, they attach to the process and gain the ability to read and write its memory.
+          <span class="story-soc">SOC view: auditd records a successful ptrace attach. Long-running daemons are almost never debugged in production.</span></li>
+        <li><strong>Step 3 — Locate the vDSO.</strong> The attacker reads <code>/proc/2041/maps</code>. This file lists every memory mapping of the process, including the line marked <code>[vdso]</code> with its exact address range.
+          <span class="story-soc">SOC view: an unusual process opened another process's memory map. This is rare outside debuggers and performance tools.</span></li>
+        <li><strong>Step 4 — Patch the time function.</strong> The attacker writes small bootstrap shellcode over the <code>clock_gettime</code> function inside the [vdso] page. The daemon calls this function many times per second, so the trap will trigger at once.
+          <span class="story-soc">SOC view: the eBPF sensor fires the critical alert, a memory write landed inside the [vdso] mapping.</span></li>
+        <li><strong>Step 5 — Trigger.</strong> The daemon asks for the time. The patched function runs the bootstrap code inside the trusted daemon. No new process or thread was created, so process-list based tools see nothing new.
+          <span class="story-soc">SOC view: execution from the vDSO region is flagged and pairs with the write alert from the previous step.</span></li>
+        <li><strong>Step 6 — Payload and cleanup.</strong> The bootstrap code downloads the real payload, starts it inside or beside the daemon, and then restores the original vDSO bytes. A memory scanner now sees a clean page. This is the self-healing hook.
+          <span class="story-soc">SOC view: the integrity scanner reports a matching hash. Do not close the case; correlate with the earlier write alert.</span></li>
+        <li><strong>Step 7 — Beacon and load.</strong> The payload beacons to attacker infrastructure and starts mining or staging. The daemon's CPU time climbs, and new outbound traffic leaves the server.
+          <span class="story-soc">SOC view: netflow beaconing plus CPU saturation give two independent anomalies that agree.</span></li>
+        <li><strong>Step 8 — Response.</strong> Defenders isolate the host, hash the vDSO against a clean baseline saved for the same kernel version, harden ptrace settings, and hunt every server for the same pattern.
+          <span class="story-soc">SOC view: containment and a fleet-wide hunt turn one alert into a full scope check.</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="s3-redteam" aria-labelledby="s3-redteam-title">
+    <div class="section-head">
+      <h2 id="s3-redteam-title"><span class="section-num" aria-hidden="true">3</span><span class="section-title">Red Team / Hacker Perspective</span></h2>
+    </div>
+    <p class="section-intro">How an attacker thinks about vDSO hijacking, when the technique makes sense, and where it usually fails. Everything here is described for defense and lab practice only.</p>
+
+    <div class="callout danger">
+      <span class="callout-label">Ethics and scope</span>
+      <p>This page is educational and defensive. Perform injection experiments only on lab machines you own, with written permission. Running these techniques on systems you do not own is illegal in most jurisdictions. No weaponized code is provided here; the steps below describe behavior so defenders can recognize it.</p>
+    </div>
+
+    <h3>When and why attackers use it</h3>
+    <p>An attacker chooses vDSO hijacking when they already have code execution on a Linux host but want their payload to run inside a trusted, long-lived process. A daemon that has run for months has no suspicious parent process, no new binary on disk, and no new entry in the process table. Injecting through the vDSO adds: automatic and frequent triggering (time queries happen constantly), no thread or process creation, and a clean memory story after the bytes are restored. The trade is that the technique is harder to spot but more fragile. It depends on exact vDSO offsets, and those change with kernel and libc versions.</p>
+
+    <h3>How it is performed, step by step</h3>
+    <ol>
+      <li><strong>Gain a foothold.</strong> The attacker gets a shell as a service account or user on the Linux host, often through an exposed service or stolen credentials.</li>
+      <li><strong>Confirm write access.</strong> The attacker checks <code>yama.ptrace_scope</code>, group membership, and capabilities to see which local processes they can attach to or write via <code>/proc/&lt;pid&gt;/mem</code>.</li>
+      <li><strong>Pick a resident victim.</strong> A good target is a daemon with a long uptime, steady network role, and no restarts planned: web servers, monitoring agents, or helper daemons.</li>
+      <li><strong>Read the memory map.</strong> The attacker parses <code>/proc/&lt;pid&gt;/maps</code> and finds the line ending in <code>[vdso]</code>. The vDSO is an ELF (Executable and Linkable Format) image, so its symbol table reveals where <code>clock_gettime</code> lives; advanced attackers cache these offsets per kernel build.</li>
+      <li><strong>Patch the time function.</strong> The attacker writes small bootstrap shellcode over the function entry. The code must be position-independent because the vDSO address changes with ASLR (Address Space Layout Randomization, which moves code in memory on every boot).</li>
+      <li><strong>Wait for the trigger.</strong> On the next time query, the bootstrap runs inside the victim. The injected stub can also execute syscall instructions directly, so it can open and map a malicious shared object without calling the library functions the process normally uses.</li>
+      <li><strong>Redirect execution through the GOT.</strong> Some attackers patch GOT (Global Offset Table) entries instead of relying on the patched time function alone. The GOT stores the absolute addresses of mapped library functions, so a patched entry sends the next library call to the injected code.</li>
+      <li><strong>Restore and clean.</strong> The bootstrap copies the original vDSO bytes back so memory-integrity scanners see a clean page, then keeps the payload running elsewhere in the process or as injected memory regions.</li>
+    </ol>
+
+    <div class="card">
+      <h4>Prerequisites and conditions</h4>
+      <ul class="check-list">
+        <li>A memory-write primitive in the target process (ptrace attach, <code>process_vm_writev</code>, or <code>/proc/&lt;pid&gt;/mem</code> access).</li>
+        <li>Permission context: same user, root, permissive Yama scope, or CAP_SYS_PTRACE.</li>
+        <li>Knowledge of vDSO layout: parse ELF symbols at runtime or use offsets cached per kernel version.</li>
+        <li>A victim that calls time functions often, which is nearly every daemon.</li>
+      </ul>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Common variations</h4>
+        <ul>
+          <li>Write the shellcode through <code>/proc/&lt;pid&gt;/mem</code> instead of ptrace, which avoids some attach telemetry.</li>
+          <li>Hook <code>gettimeofday</code> or <code>time</code> instead of <code>clock_gettime</code> if the target calls those more often.</li>
+          <li>Restore the vDSO bytes immediately after the first trigger instead of after payload start.</li>
+          <li>Use a saved clean vDSO copy to restore byte-perfect, defeating strict baselines.</li>
+          <li>Redirect execution by patching GOT entries only, leaving the vDSO bytes clean so a vDSO hash check alone passes.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Where the technique fails</h4>
+        <ul>
+          <li>Hardened Yama settings (<code>ptrace_scope=2</code> or <code>3</code>) and dropped capabilities remove the write primitive.</li>
+          <li>eBPF sensors see the write into the [vdso] region even after the bytes are restored.</li>
+          <li>Offsets drift after kernel updates, so stale offsets crash the victim and create noise.</li>
+          <li>Strict per-kernel baselines catch even a short-lived patch window.</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="muted-note">The commands below are read-only checks that defenders and red teamers can run on a lab machine they own. They show what an attacker would enumerate, so blue teams can see the same surface.</p>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Lab-only: read-only vDSO and ptrace checks on your own machine</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-bash"># LAB-ONLY: run these read-only checks on a machine you own.
+
+# 1) Show where the kernel mapped the vDSO in your own shell process.
+awk '/vdso/ {print "vDSO range: " $1 "  (" $NF ")"}' /proc/self/maps
+
+# 2) Check the current Yama ptrace restriction on the host.
+sysctl kernel.yama.ptrace_scope
+
+# 3) List ptrace-related auditd records from today (needs auditd).
+ausearch --start today -sc ptrace | tail -n 20
+
+# 4) Confirm your eBPF sensor (Falco) is running and collecting events.
+systemctl is-active falco
+
+# 5) Save a clean copy of the vDSO image for your kernel version so you
+#    can build an integrity baseline later. Copy it only from a
+#    freshly booted, trusted lab host.</code></pre>
+    </figure>
+  </section>
+
+  <section id="s4-blueteam" aria-labelledby="s4-blueteam-title">
+    <div class="section-head">
+      <h2 id="s4-blueteam-title"><span class="section-num" aria-hidden="true">4</span><span class="section-title">Blue Team / SOC Perspective</span></h2>
+    </div>
+    <p class="section-intro">What defenders see when vDSO hijacking happens, which artifacts matter, and a short triage flow for the moment an alert fires.</p>
+
+    <p>The defining event is simple: something wrote into a kernel-mapped code page. On a healthy server, nothing but the kernel ever places the vDSO, and nothing in user space should ever modify it after boot. So a write into the <code>[vdso]</code> region is a very high-signal alert, even though the attacker later restores the bytes. Everything else in the attack chain is supporting evidence: the write primitive before the patch, and resource or network anomalies after the payload starts.</p>
+
+    <h3>Artifacts it leaves behind</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Artifact</th><th>Where</th><th>Why it matters</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Successful ptrace attach or <code>process_vm_writev</code> against a daemon</td><td>auditd SYSCALL records, shipped by Auditbeat or similar agents</td><td>Shows the memory-write primitive that vDSO hijacking depends on</td></tr>
+          <tr><td>Open or read of <code>/proc/&lt;pid&gt;/maps</code> by a non-debug tool</td><td>auditd file syscalls (open, openat)</td><td>The attacker must locate the [vdso] line before patching</td></tr>
+          <tr><td>Memory write into the [vdso] address range</td><td>eBPF sensors such as Falco, Tracee, or Tetragon</td><td>The single strongest signal; fires during the patch, before cleanup</td></tr>
+          <tr><td>Execution origin in the vDSO region</td><td>eBPF sensors with execution tracing</td><td>Proves the patched function actually ran inside the victim</td></tr>
+          <tr><td>vDSO hash mismatch, later matching again</td><td>Memory integrity scanner or kernel baseline check</td><td>A restore-after-patch pattern; the pair of events is the tell</td></tr>
+          <tr><td>Payload binary run from /tmp, /dev/shm, or /var/tmp</td><td>auditd execve records</td><td>The bootstrap usually stages the payload in an ephemeral directory</td></tr>
+          <tr><td>CPU saturation and new outbound connections from a daemon</td><td>Metrics and netflow</td><td>Miners and beacons show up as resource and network drift</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Where to look</h3>
+    <div class="grid-2">
+      <div class="card">
+        <h4>Telemetry sources</h4>
+        <ul>
+          <li><strong>auditd:</strong> SYSCALL records for ptrace, process_vm_writev, and access to <code>/proc/*/maps</code> and <code>/proc/*/mem</code>.</li>
+          <li><strong>eBPF sensors:</strong> Falco, Tracee, or Tetragon rules for writes into vDSO, vvar, or other kernel-mapped regions.</li>
+          <li><strong>SIEM (Security Information and Event Management):</strong> join auditd and eBPF events with asset lists so daemon targets stand out.</li>
+          <li><strong>Metrics and netflow:</strong> per-process CPU from node agents, plus flow records for beacon timing.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Host memory checks during response</h4>
+        <ul>
+          <li>Dump the [vdso] range from a suspect process and compare it to a clean copy for the same kernel version.</li>
+          <li>Look for anonymous executable regions that appeared recently inside the daemon.</li>
+          <li>Check <code>/proc/&lt;pid&gt;/maps</code> for unexpected writable-plus-executable pages.</li>
+          <li>Remember: a matching hash alone does not clear the host, because of the self-healing hook.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Why it matters and where it sits in the attack chain</h3>
+    <p>VDSO hijacking maps to two tactics. As Privilege Escalation, code written into a more privileged or more trusted process runs with that process's context. As Stealth, the payload hides inside a legitimate process and the restored vDSO defeats memory checks. The write primitive usually comes from T1055.008 Ptrace System Calls or T1055.009 Proc Memory, and the initial access is typically an exposed service or stolen credentials, not the injection itself.</p>
+
+    <div class="card">
+      <h4>Triage flow when the vDSO-write alert fires</h4>
+      <ol>
+        <li>Confirm the alert fields: source process, target PID, address range, and host.</li>
+        <li>Check auditd for the preceding ptrace or <code>process_vm_writev</code> record and the maps read.</li>
+        <li>Pull per-process CPU and netflow for the target daemon over the last 24 hours.</li>
+        <li>Run the vDSO integrity check against the clean baseline for that kernel version; a match does not clear the host.</li>
+        <li>Isolate the host if two or more signals agree; capture memory before reboot if possible.</li>
+        <li>Open a fleet hunt with the SPL queries in section 5.5 to find the same pattern elsewhere.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="s5-detection" aria-labelledby="s5-detection-title">
+    <div class="section-head">
+      <h2 id="s5-detection-title"><span class="section-num" aria-hidden="true">5</span><span class="section-title">Detection Engineering Deep Dive</span></h2>
+    </div>
+    <p class="section-intro">The core of this guide: control mappings, threat intelligence with honest confidence labels, a ranked threat model, real event shapes, and six Sigma rules with matching Splunk SPL. Everything is written so you can adapt it to your own SIEM (Security Information and Event Management) in an afternoon.</p>
+
+    <p>Detecting vDSO hijacking is a timing problem. The strongest event, the write into the <code>[vdso]</code> region, exists for seconds or minutes before the attacker restores the bytes. Your detection stack must therefore watch the write itself (eBPF sensors), the write primitive that enabled it (auditd), and the aftermath (resource and network telemetry). No single source is enough. The subsections below build the full picture: why the controls exist, who abuses this technique, what to prioritize, what the events actually look like, and ready-made rules.</p>
+
+    <h3 id="s5-1-regulations"><span class="section-num" aria-hidden="true">5.1</span>Regulation Mapping</h3>
+    <p>Audit and compliance teams ask for evidence, not alerts. The table below maps the controls that a vDSO-hijacking detection program satisfies to well-known frameworks. Use it when a control owner asks why ptrace logging or vDSO baselining deserves budget.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Framework</th><th>Control reference</th><th>Why it applies</th><th>Expected evidence</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GDPR</td>
+            <td>Art. 32 security of processing</td>
+            <td>A silent injection into a server daemon can expose personal data. Processors must prevent and detect such compromise.</td>
+            <td>eBPF vDSO-write alerts. Auditd ptrace records. Tested incident response playbooks.</td>
+          </tr>
+          <tr>
+            <td>HIPAA Security Rule</td>
+            <td>164.308(a)(1) risk analysis; 164.312(b) audit controls</td>
+            <td>Systems that handle electronic protected health information need audit controls. The controls must record and examine activity on those systems.</td>
+            <td>A centralized linux_audit index. Alert triage records. Quarterly rule tuning notes.</td>
+          </tr>
+          <tr>
+            <td>ISO/IEC 27001:2022</td>
+            <td>A.8.15 logging; A.8.16 monitoring activities</td>
+            <td>Annex A requires logging and monitoring of deployed systems. That includes Linux servers and containers.</td>
+            <td>A coverage matrix of auditd and eBPF sensors per host group. Monitored dashboards.</td>
+          </tr>
+          <tr>
+            <td>SOC 2</td>
+            <td>CC7.2, CC7.3</td>
+            <td>Trust services criteria expect anomaly detection for production systems. They also expect incident evaluation.</td>
+            <td>Alert definitions. Triage SLA (service level agreement) metrics. Hunt reports.</td>
+          </tr>
+          <tr>
+            <td>PCI DSS 4.0</td>
+            <td>10.2 audit logging; 11.5.1 anti-malware and integrity</td>
+            <td>Cardholder data environments must log access to critical processes. They must also detect integrity changes in code.</td>
+            <td>vDSO integrity baseline results per kernel version. Change-linked exceptions.</td>
+          </tr>
+          <tr>
+            <td>NIST CSF 2.0</td>
+            <td>PR.PS platform security; DE.CM continuous monitoring</td>
+            <td>The functions cover hardened platform configuration. They also cover monitoring for malicious activity.</td>
+            <td>yama.ptrace_scope baselines. eBPF rollout status. Detection coverage reports.</td>
+          </tr>
+          <tr>
+            <td>NIST SP 800-53 Rev.5</td>
+            <td>AU-6 audit record review; SI-4 system monitoring</td>
+            <td>Control families require reviewing audit records. They also require monitoring for indicators of attack.</td>
+            <td>Saved SPL hunts. Alert-to-owner mapping. Annual control test results.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Turning controls into evidence is a pipeline, not a document. Start from the control text. Write the technical check that proves it. An example is "every Linux host ships auditd rules 1 to 4". Schedule that check, and store the output where auditors can read it. For this technique the three workhorse checks are: eBPF sensor coverage per host group, auditd rule deployment per host, and vDSO baseline age per kernel version. Attach sample alerts and a completed hunt report to each control. The next audit becomes a search, not a scramble.</p>
+
+    <h3 id="s5-2-threatintel"><span class="section-num" aria-hidden="true">5.2</span>Threat Intelligence</h3>
+    <p>Threat intelligence for this technique is thin, and honest teams should say so. The official ATT&amp;CK page lists no procedure examples for this technique. That absence is notable, and it is not an omission in this guide. Public reporting describes the mechanics well, but confirmed in-the-wild use by named groups is rare. Treat the technique as a realistic Linux threat driven mostly by commodity toolkits, and keep every attribution claim labeled with its confidence level.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Sources and collection</h4>
+        <ul>
+          <li><strong>MITRE ATT&amp;CK:</strong> the free technique definition, data sources, and detection notes for T1055.014 are the baseline.</li>
+          <li><strong>Vendor reporting:</strong> endpoint and cloud security vendors publish Linux injection tradecraft; collect the ones that touch ptrace, proc-mem, and vDSO behavior.</li>
+          <li><strong>OSINT (open source intelligence):</strong> research blogs and public proof-of-concept repositories show the technique is implementable, which raises real-world likelihood.</li>
+          <li><strong>Commercial feeds:</strong> useful for infrastructure indicators, rarely for technique-level detail on Linux injection.</li>
+          <li><strong>ISACs (Information Sharing and Analysis Centers):</strong> sector peers may share sightings of resident-process injection on shared platforms.</li>
+          <li><strong>Internal telemetry:</strong> your own auditd and eBPF data is the highest-value source; it tells you prevalence in your fleet.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Analysis and application</h4>
+        <ul>
+          <li><strong>Analysis:</strong> score the technique on relevance (Linux servers present?), feasibility (write primitive obtainable?), and observability (can you see it?).</li>
+          <li><strong>Application:</strong> feed the ranked threats in 5.3 into backlog priority, tune the rules in 5.5 with your asset lists, and report coverage gaps to the platform team.</li>
+          <li><strong>Feedback loop:</strong> every true or false positive updates the tuning notes in 5.5, so the rules get cheaper to run each quarter.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Claim</th><th>Source class</th><th>What it supports</th><th>Confidence</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>The vDSO abuse mechanics are real and reproducible</td>
+            <td>vDSO integrity research and public injection writeups</td>
+            <td>Detection design in this guide</td>
+            <td><span class="badge sev-high">High</span> (research facts)</td>
+          </tr>
+          <tr>
+            <td>Linux cloud-miner toolkits use resident-process injection on servers</td>
+            <td>Public vendor reporting, generic</td>
+            <td>Threat ranking in 5.3</td>
+            <td><span class="badge sev-medium">Medium</span> (class-level, not technique-specific)</td>
+          </tr>
+          <tr>
+            <td>A named group uses T1055.014 in a confirmed campaign</td>
+            <td>None found in public reporting</td>
+            <td>Attribution claims</td>
+            <td><span class="badge sev-low">Low</span> (do not assert actor attribution)</td>
+          </tr>
+          <tr>
+            <td>The case study in section 6 describes a real incident</td>
+            <td>This guide</td>
+            <td>Training and playbook design</td>
+            <td><span class="badge sev-medium">Composite</span> (clearly labeled, not verified fact)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout warning">
+      <span class="callout-label">Attribution discipline</span>
+      <p>Publishing or briefing an actor name for this technique without solid reporting invites false leads. Say "Linux miner toolkit, unattributed, medium confidence" instead of a group name. If your feed vendor asserts attribution, record the vendor, date, and their stated basis, then downgrade it in your own tracker until you can verify it.</p>
+    </div>
+  
+    <h3 id="s5-3-ranking"><span class="section-num" aria-hidden="true">5.3</span>Threats Ranking and Categorization</h3>
+    <p>The ranking below orders realistic threats that use or resemble T1055.014. Rank one is what you should build for first. Each row lists the preconditions the threat needs, the impact if it succeeds, and the one-line reason for its rank.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Threat</th><th>Rank</th><th>Platforms</th><th>Description</th><th>Preconditions</th><th>Impact</th><th>Why this rank</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Cryptominer injected into a resident daemon via vDSO hijacking</td>
+            <td><span class="badge sev-critical">Critical</span></td>
+            <td><span class="badge plat-linux">Linux</span> <span class="badge plat-cloud">Cloud</span></td>
+            <td>A miner payload runs inside a long-lived server daemon after a vDSO patch.</td>
+            <td>Foothold on host. A ptrace or proc-mem write primitive. A resident daemon is present.</td>
+            <td>Stolen compute and cost spikes. Detection is delayed. The daemon becomes a base for lateral movement.</td>
+            <td>Most common real-world payload class and the stealthiest delivery. Cost impact is immediate.</td>
+          </tr>
+          <tr>
+            <td>Backdoor staged through a vDSO bootstrap inside a system daemon</td>
+            <td><span class="badge sev-high">High</span></td>
+            <td><span class="badge plat-linux">Linux</span></td>
+            <td>The patched stub maps a malicious shared object that gives durable access inside the daemon.</td>
+            <td>The same write primitive. The attacker wants access without new binaries on disk.</td>
+            <td>Persistent access inside a trusted process. Scoping during response is hard.</td>
+            <td>Lower frequency than miners but far deeper access and persistence.</td>
+          </tr>
+          <tr>
+            <td>Container escape follow-on: hijack the vDSO of a node-level daemon</td>
+            <td><span class="badge sev-high">High</span></td>
+            <td><span class="badge plat-linux">Linux</span> <span class="badge plat-cloud">Cloud</span></td>
+            <td>A compromised container patches the vDSO of a host daemon to reach the node.</td>
+            <td>A container with weak seccomp (secure computing mode) filters or a privileged runtime.</td>
+            <td>Code runs in node context. The blast radius spreads cluster-wide.</td>
+            <td>Kubernetes fleets concentrate value. One node compromise spreads fast.</td>
+          </tr>
+          <tr>
+            <td>Legacy hosts with yama.ptrace_scope=0 and exposed services</td>
+            <td><span class="badge sev-high">High</span></td>
+            <td><span class="badge plat-linux">Linux</span></td>
+            <td>Old images keep the default ptrace setting and expose management services.</td>
+            <td>An old image. The default sysctl value. An internet-facing management port.</td>
+            <td>Any local foothold becomes any-process injection.</td>
+            <td>Trivial preconditions. These hosts exist somewhere in most estates.</td>
+          </tr>
+          <tr>
+            <td>Red team emulation of T1055.014 to test eBPF coverage</td>
+            <td><span class="badge sev-medium">Medium</span></td>
+            <td><span class="badge plat-linux">Linux</span></td>
+            <td>An authorized exercise injects into a lab daemon to measure sensor coverage.</td>
+            <td>An approved purple-team scope. Scoped lab hosts only.</td>
+            <td>Controlled. The value is the detection gap report it produces.</td>
+            <td>Deliberate, visible, and scheduled. The risk is process failure, not breach.</td>
+          </tr>
+          <tr>
+            <td>Insider misuse: administrator injects tooling into a daemon to hide actions</td>
+            <td><span class="badge sev-medium">Medium</span></td>
+            <td><span class="badge plat-linux">Linux</span> <span class="badge plat-identity">Identity</span></td>
+            <td>A privileged administrator hides their activity by injecting from a trusted daemon.</td>
+            <td>A legitimate root or CAP_SYS_PTRACE holder acting outside policy.</td>
+            <td>Evidence tampering. Audit trail confusion during investigations.</td>
+            <td>Rare but high-trust. Identity analytics must pair with injection alerts.</td>
+          </tr>
+          <tr>
+            <td>Benign lookalikes: debuggers, profilers, kernel updates changing vDSO bytes</td>
+            <td><span class="badge sev-low">Low</span></td>
+            <td><span class="badge plat-linux">Linux</span></td>
+            <td>Legitimate tools produce the same auditd records as the injection steps.</td>
+            <td>Normal engineering activity or scheduled patching.</td>
+            <td>Alert noise, analyst fatigue, wasted triage hours.</td>
+            <td>Not malicious, but it must be tuned out or real alerts get ignored.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 id="s5-4-logs"><span class="section-num" aria-hidden="true">5.4</span>Logs and Patterns</h3>
+    <p>Three sources carry this technique: auditd for syscalls, eBPF sensors for region-level memory events, and metrics plus netflow for aftermath. The table shows the field-level view; the JSON samples show what real events look like in a flat, Auditbeat-style schema (field names from the auditd records, shipped to your SIEM).</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Log source</th><th>Key fields</th><th>Normal behavior</th><th>Suspicious behavior</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>auditd SYSCALL (via Auditbeat)</td>
+            <td>syscall, proc.name, exe, auid, uid, exit, pid, a0, a1</td>
+            <td>Ptrace appears only from debuggers and profilers during change windows. Test tools produce known exit codes.</td>
+            <td>A successful ptrace or process_vm_writev call against a long-running daemon, with an unset loginuid (auid=4294967295).</td>
+          </tr>
+          <tr>
+            <td>auditd file syscalls</td>
+            <td>name, syscall, proc.name, exe, auid</td>
+            <td>Debug tools read /proc/pid/maps. Monitoring agents read their own maps.</td>
+            <td>A non-debug tool opens /proc/pid/maps for a daemon PID it does not own.</td>
+          </tr>
+          <tr>
+            <td>eBPF sensor (Falco, Tracee, Tetragon)</td>
+            <td>rule, evt.type, proc.name, target.pid, region</td>
+            <td>No writes into kernel-mapped regions, ever.</td>
+            <td>Any write into the [vdso] range. Execution that originates from it.</td>
+          </tr>
+          <tr>
+            <td>Metrics and netflow</td>
+            <td>host, pid, cpu, bytes_out, dest_ip, dest_port</td>
+            <td>Daemon CPU stays within its historical band. Egress destinations are known.</td>
+            <td>CPU saturation on a previously idle daemon. A periodic beacon to a new IP on port 443.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><strong>Detection logic in one line each:</strong></p>
+    <ul class="check-list">
+      <li>Alert when a write lands in the [vdso] region.</li>
+      <li>Alert when a successful cross-process memory write targets a resident daemon.</li>
+      <li>Alert when a non-debug tool reads another process's maps.</li>
+      <li>Alert when a daemon executes a binary from an ephemeral directory.</li>
+      <li>Treat a clean vDSO hash with no earlier write alert as normal.</li>
+      <li>Treat a clean hash right after a write alert as the self-healing hook, not as an all-clear.</li>
+    </ul>
+
+    <h4>Sample event 1: auditd record of the ptrace attach</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Auditbeat-style JSON — ptrace attach on daemon PID 2041</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-json">{
+  "@timestamp": "2025-03-18T02:41:07.312Z",
+  "event": { "module": "auditd", "dataset": "audit", "action": "ptrace-attach", "host": "app-web-04" },
+  "syscall": "ptrace",
+  "exit": "0",
+  "auid": "4294967295",
+  "uid": "48",
+  "pid": "18102",
+  "proc": { "name": "python3", "exe": "/usr/bin/python3", "ppid": "18044" },
+  "a0": "10",
+  "a1": "2041",
+  "key": "t1055_014_watch"
+}</code></pre>
+    </figure>
+    <ul>
+      <li><code>syscall</code> and <code>exit</code>: the call was ptrace and it succeeded, so the attacker now holds a write primitive.</li>
+      <li><code>auid</code> (audit user ID): 4294967295 means the loginuid is unset, typical for a service account shell rather than a logged-in engineer.</li>
+      <li><code>uid</code>: 48 is the Apache service user, confirming a daemon context is doing the attaching.</li>
+      <li><code>proc</code>: the acting process is a plain python3 interpreter, not gdb or strace, which is the anomaly.</li>
+      <li><code>a0</code> and <code>a1</code>: request 10 is PTRACE_ATTACH and 2041 is the target daemon PID.</li>
+      <li><code>key</code>: auditd rule tag added by the detection engineering team for fast filtering.</li>
+    </ul>
+
+    <h4>Sample event 2: auditd record of the maps read</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Auditbeat-style JSON — openat of /proc/2041/maps</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-json">{
+  "@timestamp": "2025-03-18T02:43:19.104Z",
+  "event": { "module": "auditd", "dataset": "audit", "action": "openat", "host": "app-web-04" },
+  "syscall": "openat",
+  "name": "/proc/2041/maps",
+  "exit": "3",
+  "auid": "4294967295",
+  "uid": "48",
+  "pid": "18102",
+  "proc": { "name": "python3", "exe": "/usr/bin/python3", "ppid": "18044" },
+  "key": "t1055_014_watch"
+}</code></pre>
+    </figure>
+    <ul>
+      <li><code>name</code>: the file argument shows the attacker enumerating the target's memory map to find the [vdso] line.</li>
+      <li><code>exit</code>: a file descriptor number, so the open succeeded and the contents were readable.</li>
+      <li>Same <code>pid</code> and <code>auid</code> as sample 1: the two records chain into one attacker story, two minutes apart.</li>
+    </ul>
+
+    <h4>Sample event 3: eBPF sensor alert for the vDSO write</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Falco-style JSON — write into the [vdso] mapping</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-json">{
+  "time": "2025-03-18T02:44:52.881Z",
+  "rule": "vdso_region_write_detected",
+  "priority": "Critical",
+  "output": "Memory write into [vdso] mapping by /usr/bin/python3 (pid=18102) against target pid=2041",
+  "hostname": "app-web-04",
+  "evt.type": "process_vm_writev",
+  "proc.name": "python3",
+  "proc.exepath": "/usr/bin/python3",
+  "target.pid": "2041",
+  "target.region": "7ffd9a1c1000-7ffd9a1d0000 [vdso]"
+}</code></pre>
+    </figure>
+    <ul>
+      <li><code>rule</code>: a custom sensor rule name; keep the word vdso in your own rule names so the Sigma rule in 5.5 matches.</li>
+      <li><code>evt.type</code>: the kernel call that delivered the write, here process_vm_writev.</li>
+      <li><code>target.region</code>: the address range and its kernel label, proving the write landed inside the vDSO page and not nearby heap.</li>
+      <li><code>priority</code>: Critical, because on a healthy host nothing ever writes into this region.</li>
+    </ul>
+
+    <h4>Sample event 4: aftermath, payload execution from an ephemeral directory</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Auditbeat-style JSON — execve of staged payload</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-json">{
+  "@timestamp": "2025-03-18T02:46:31.220Z",
+  "event": { "module": "auditd", "dataset": "audit", "action": "execve", "host": "app-web-04" },
+  "syscall": "execve",
+  "exe": "/dev/shm/.cache/kworker4",
+  "exit": "-13",
+  "auid": "4294967295",
+  "uid": "48",
+  "pid": "23310",
+  "proc": { "name": "kworker4", "exe": "/dev/shm/.cache/kworker4", "ppid": "2041" },
+  "key": "t1055_014_watch"
+}</code></pre>
+    </figure>
+    <ul>
+      <li><code>exe</code>: the payload path hides in /dev/shm (a memory-backed scratch filesystem) under a fake kernel-worker name.</li>
+      <li><code>proc.ppid</code>: 2041 is the daemon, so the daemon itself spawned the payload after the vDSO trigger.</li>
+      <li><code>exit</code>: -13 (permission denied) here would still be worth triage; repeated attempts show persistence, and one success shows compromise.</li>
+    </ul>
+
+    <h3 id="s5-5-sigma"><span class="section-num" aria-hidden="true">5.5</span>Sigma Rules and Splunk SPL</h3>
+    <p>Six rules cover the technique end to end: the write primitive, the maps reconnaissance, the vDSO write itself, service-account abuse, payload staging, and ptrace scope tampering. Each rule is followed by a matching Splunk SPL query, a mapping note, false positives, tuning guidance, and severity. All queries assume a flat Auditbeat-style schema in <code>index=linux_audit sourcetype="linux_audit"</code> and Falco events in <code>index=ebpf_sensors sourcetype="falco"</code>. Adjust index and sourcetype names to your environment. The Sigma tags below keep <code>attack.defense_evasion</code>, because the Sigma tag vocabulary predates ATT&amp;CK's rename of Defense Evasion to Stealth.</p>
+
+    <h4>Sigma 1 — Ptrace Attach or Cross-Process Memory Write to a Resident Daemon</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Sigma — Ptrace or process_vm_writev against a daemon</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-yaml">title: Ptrace Attach or Cross-Process Memory Write Targeting a Resident Daemon
+id: a3f7c2e1-4b8d-4e29-9c51-7d0a6f2b8e34
+status: experimental
+description: &gt;
+  Detects successful ptrace, process_vm_writev, or process_vm_readv calls that
+  did not come from a known debug tool. VDSO hijacking needs an existing
+  memory-write primitive inside the victim process, and this is how attackers
+  get one. The daemon-target refinement is applied in the SPL via an asset list.
+references:
+  - https://attack.mitre.org/techniques/T1055/014/
+  - https://attack.mitre.org/techniques/T1055/008/
+author: Detection Engineering Team
+date: 2025-02-11
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection_syscall:
+    syscall:
+      - ptrace
+      - process_vm_writev
+      - process_vm_readv
+  selection_success:
+    exit: '0'
+  filter_debug_tools:
+    exe|startswith:
+      - /usr/bin/gdb
+      - /usr/bin/strace
+      - /usr/bin/perf
+      - /usr/bin/ltrace
+      - /usr/bin/valgrind
+  condition: selection_syscall and selection_success and not filter_debug_tools
+fields:
+  - syscall
+  - proc.name
+  - exe
+  - auid
+  - uid
+  - exit
+falsepositives:
+  - Debuggers, profilers, and tracing tools used by engineers
+  - Crash handlers and performance agents that use ptrace legitimately
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.014</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Splunk SPL — ptrace primitive against daemon assets</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-7d (syscall=ptrace OR syscall=process_vm_writev OR syscall=process_vm_readv) exit=0
+| search NOT exe IN ("/usr/bin/gdb*", "/usr/bin/strace*", "/usr/bin/perf*", "/usr/bin/ltrace*", "/usr/bin/valgrind*")
+| lookup daemon_assets host OUTPUT roles
+| search roles IN ("app_server", "database", "middleware")
+| stats count AS events, values(syscall) AS syscalls, values(proc.name) AS callers by host, exe, auid, uid
+| sort - events</code></pre>
+    </figure>
+    <div class="card">
+      <h4>Mapping note, false positives, tuning</h4>
+      <ul>
+        <li><strong>Mapping:</strong> Sigma <code>syscall</code>, <code>exe</code>, and <code>exit</code> map one to one to SPL fields. Sigma's <code>not filter_debug_tools</code> becomes the SPL <code>search NOT exe IN (...)</code> with wildcards. The "resident daemon" intent is enforced in SPL by the <code>daemon_assets</code> lookup, which Sigma cannot express.</li>
+        <li><strong>False positives:</strong> performance agents, crash collectors, and engineers debugging during incidents.</li>
+        <li><strong>Tuning:</strong> maintain the debug-tool list and the asset roles lookup quarterly; add an allow-list keyed on change tickets for known profiling windows; keep <code>earliest=-7d</code> for hunting, run live at <code>earliest=-15m</code>.</li>
+        <li><strong>Severity:</strong> high. A successful cross-process memory write on a server is rarely legitimate.</li>
+      </ul>
+    </div>
+
+    <h4>Sigma 2 — Memory Map Enumeration by a Non-Debug Tool</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Sigma — /proc map access outside tooling list</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-yaml">title: Proc Memory Map Access by a Process Outside the Debug Tooling List
+id: b81d5f60-9c2a-4f37-8e64-1a9c4d7e5b23
+status: experimental
+description: &gt;
+  Detects reads of /proc/pid/maps by a process that is not a known debug or
+  monitoring tool. Attackers read the maps to locate the [vdso] mapping before
+  patching it.
+references:
+  - https://attack.mitre.org/techniques/T1055/014/
+author: Detection Engineering Team
+date: 2025-02-11
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection_base:
+    name|startswith: '/proc/'
+  selection_maps:
+    name|endswith: '/maps'
+  filter_tools:
+    proc.name:
+      - gdb
+      - strace
+      - perf
+      - ltrace
+      - pmap
+      - lsof
+      - systemd-coredump
+      - conmon
+      - containerd
+  condition: selection_base and selection_maps and not filter_tools
+fields:
+  - name
+  - syscall
+  - proc.name
+  - exe
+  - auid
+falsepositives:
+  - Support tooling and health agents that inspect process maps
+  - Container runtimes enumerating maps of workloads they manage
+level: medium
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.014</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Splunk SPL — maps reads by unexpected tools</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-7d (syscall=open OR syscall=openat) name="/proc/*/maps"
+| search NOT proc.name IN ("gdb", "strace", "perf", "ltrace", "pmap", "lsof", "systemd-coredump", "conmon", "containerd")
+| stats count AS map_reads, dc(name) AS targets, values(name) AS sample_names by host, proc.name, exe, auid
+| where map_reads &gt; 5
+| sort - map_reads</code></pre>
+    </figure>
+    <div class="card">
+      <h4>Mapping note, false positives, tuning</h4>
+      <ul>
+        <li><strong>Mapping:</strong> Sigma <code>name|startswith</code> and <code>|endswith</code> collapse into the SPL wildcard <code>name="/proc/*/maps"</code>; the filter list matches exactly on both sides.</li>
+        <li><strong>False positives:</strong> support tools, node agents, and runtimes that inspect workloads; add them to the filter with a comment and an owner.</li>
+        <li><strong>Tuning:</strong> raise the <code>map_reads</code> threshold only after measuring a week of baseline noise; alert faster when the reader runs under an unset loginuid.</li>
+        <li><strong>Severity:</strong> medium. Reconnaissance alone, but it chains directly into rule 1 and rule 3.</li>
+      </ul>
+    </div>
+
+    <h4>Sigma 3 — Write into the vDSO Mapping (eBPF sensor)</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Sigma — Falco/eBPF write into the vDSO region</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-yaml">title: eBPF Sensor Reported a Memory Write into the vDSO Mapping
+id: c45e9a12-7f3b-4d86-a2b0-9e6c1f8a4d57
+status: experimental
+description: &gt;
+  Matches Falco or similar eBPF sensor events for writes into the kernel-mapped
+  vDSO region. Nothing in user space should ever modify this page after boot,
+  so any hit is a strong T1055.014 signal even if bytes are restored later.
+references:
+  - https://attack.mitre.org/techniques/T1055/014/
+author: Detection Engineering Team
+date: 2025-02-18
+logsource:
+  product: linux
+  service: falco
+detection:
+  selection_rule:
+    rule|contains: vdso
+  selection_evt:
+    evt.type:
+      - write
+      - openat
+      - process_vm_writev
+      - ptrace
+  condition: selection_rule and selection_evt
+fields:
+  - rule
+  - priority
+  - evt.type
+  - proc.name
+  - proc.exepath
+  - target.pid
+  - hostname
+falsepositives:
+  - Kernel or glibc upgrade tooling that rewrites vDSO content on live systems (rare and patchable)
+  - A lab sensor rule name that contains vdso but checks unrelated behavior
+level: critical
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.014</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Splunk SPL — Falco vDSO region writes</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-spl">index=ebpf_sensors sourcetype="falco" earliest=-7d rule="*vdso*"
+| search evt.type IN ("write", "openat", "process_vm_writev", "ptrace")
+| stats count AS vdso_events, values(rule) AS rules, values(priority) AS priorities, values(output) AS sample_output by host, proc.name
+| sort - vdso_events</code></pre>
+    </figure>
+    <div class="card">
+      <h4>Mapping note, false positives, tuning</h4>
+      <ul>
+        <li><strong>Mapping:</strong> Sigma <code>rule|contains: vdso</code> becomes the SPL wildcard <code>rule="*vdso*"</code>; <code>evt.type</code> maps directly; the custom sensor rule on your side must contain "vdso" in its name, which is the convention this pack assumes.</li>
+        <li><strong>False positives:</strong> your own lab rules; kernel live-patching tools that touch mapped pages on exotic setups.</li>
+        <li><strong>Tuning:</strong> route this rule straight to page severity with a 15-minute triage SLA; never auto-close on a later clean hash, because restored bytes are the self-healing hook, not an all-clear.</li>
+        <li><strong>Severity:</strong> critical. On a healthy host this event has no legitimate source.</li>
+      </ul>
+    </div>
+
+    <h4>Sigma 4 — Ptrace from a Service Account with Unset Loginuid</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Sigma — daemon-context ptrace with unset auid</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-yaml">title: Ptrace or Cross-Process Write from a Daemon Context with Unset Loginuid
+id: d92b3c74-58a1-4e0f-b6c3-2f7d9e1a6c48
+status: experimental
+description: &gt;
+  Detects ptrace or process_vm_writev issued by a process whose audit loginuid
+  is unset (auid 4294967295), which means a daemon or service account context.
+  Daemons attaching to other processes is abnormal and is exactly the context a
+  vDSO hijacker creates after compromising a service.
+references:
+  - https://attack.mitre.org/techniques/T1055/014/
+author: Detection Engineering Team
+date: 2025-03-04
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection_syscall:
+    syscall:
+      - ptrace
+      - process_vm_writev
+  selection_auid:
+    auid: '4294967295'
+  selection_success:
+    exit: '0'
+  filter_crash_handlers:
+    proc.name:
+      - systemd-coredump
+      - abrt-hook-ccpp
+      - apport
+  condition: selection_syscall and selection_auid and selection_success and not filter_crash_handlers
+fields:
+  - syscall
+  - proc.name
+  - exe
+  - auid
+  - uid
+  - exit
+falsepositives:
+  - Crash handlers and health agents that inspect other processes
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.014</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Splunk SPL — daemon-context ptrace with unset auid</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-7d (syscall=ptrace OR syscall=process_vm_writev) auid=4294967295 exit=0
+| search NOT proc.name IN ("systemd-coredump", "abrt-hook-ccpp", "apport")
+| stats count AS events, values(proc.name) AS callers, values(exe) AS paths by host, uid
+| sort - events</code></pre>
+    </figure>
+    <div class="card">
+      <h4>Mapping note, false positives, tuning</h4>
+      <ul>
+        <li><strong>Mapping:</strong> Sigma string <code>auid: '4294967295'</code> matches auditd's textual field; in SPL the same value is searched numerically; everything else maps directly.</li>
+        <li><strong>False positives:</strong> crash handlers; some container health probes on hardened images.</li>
+        <li><strong>Tuning:</strong> add known crash handlers per distro; if your estate runs monitoring agents that ptrace, move them to a dedicated auid so this rule stays clean.</li>
+        <li><strong>Severity:</strong> high. A daemon context doing ptrace is the exact scenario this technique needs.</li>
+      </ul>
+    </div>
+
+    <h4>Sigma 5 — Payload Executed from an Ephemeral Directory</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Sigma — execve from /tmp, /dev/shm, /var/tmp after injection</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-yaml">title: Daemon Spawns a Binary from an Ephemeral Directory
+id: e17a6d25-3c9f-4b52-8d07-6b4e2a9f1c30
+status: experimental
+description: &gt;
+  Detects execve of binaries stored in /tmp, /dev/shm, or /var/tmp. After a
+  vDSO trigger, bootstrap code commonly stages the payload in an ephemeral,
+  memory-backed location and starts it from the compromised daemon.
+references:
+  - https://attack.mitre.org/techniques/T1055/014/
+author: Detection Engineering Team
+date: 2025-03-04
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection_exec:
+    syscall: execve
+  selection_path:
+    exe|startswith:
+      - /tmp/
+      - /dev/shm/
+      - /var/tmp/
+  condition: selection_exec and selection_path
+fields:
+  - exe
+  - syscall
+  - proc.name
+  - proc.ppid
+  - auid
+  - uid
+falsepositives:
+  - Build jobs and package installation on CI runners that execute from /tmp
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.014</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Splunk SPL — ephemeral directory executions</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-7d syscall=execve (exe="/tmp/*" OR exe="/dev/shm/*" OR exe="/var/tmp/*")
+| stats count AS exec_events, values(exe) AS payloads, values(proc.ppid) AS parent_pids by host, proc.name, uid
+| sort - exec_events</code></pre>
+    </figure>
+    <div class="card">
+      <h4>Mapping note, false positives, tuning</h4>
+      <ul>
+        <li><strong>Mapping:</strong> Sigma <code>exe|startswith</code> list becomes three ORed SPL wildcards; <code>proc.ppid</code> in Sigma matches the flat <code>proc.ppid</code> field shipped by the agent.</li>
+        <li><strong>False positives:</strong> CI (continuous integration) runners and build tooling; scope the rule per asset class to keep it sharp.</li>
+        <li><strong>Tuning:</strong> on build servers demote to informational; on production daemons keep high; join with rule 3 by host within 10 minutes for automatic case creation.</li>
+        <li><strong>Severity:</strong> high, with the highest value when the parent PID belongs to a long-running daemon.</li>
+      </ul>
+    </div>
+
+    <h4>Sigma 6 — Access to the Yama ptrace_scope Control</h4>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Sigma — yama ptrace_scope touched outside change windows</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-yaml">title: Access to Yama ptrace_scope Control Outside Change Windows
+id: f6c0b839-2e5d-4a17-9f84-0d3c7e5b2a91
+status: test
+description: &gt;
+  Detects opens of /proc/sys/kernel/yama/ptrace_scope by anything other than
+  configuration management. Attackers weaken or verify this control to enable
+  or extend ptrace-based write primitives; defenders touch it while hardening.
+references:
+  - https://attack.mitre.org/techniques/T1055/014/
+author: Detection Engineering Team
+date: 2025-03-04
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection_path:
+    name: /proc/sys/kernel/yama/ptrace_scope
+  selection_calls:
+    syscall:
+      - open
+      - openat
+  filter_puppet:
+    proc.name:
+      - puppet
+      - chef-client
+      - ansible
+      - salt-minion
+  condition: selection_path and selection_calls and not filter_puppet
+fields:
+  - name
+  - syscall
+  - proc.name
+  - exe
+  - auid
+  - uid
+falsepositives:
+  - Health checks and hardening scripts that read the value during maintenance
+level: medium
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.014</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption>
+        <span class="code-title">Splunk SPL — yama ptrace_scope access</span>
+        <button class="copy-btn" type="button">Copy</button>
+      </figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-7d name="/proc/sys/kernel/yama/ptrace_scope"
+| search NOT proc.name IN ("puppet", "chef-client", "ansible", "salt-minion")
+| stats count AS touches, values(proc.name) AS tools, values(exe) AS paths by host, auid, uid
+| sort - touches</code></pre>
+    </figure>
+    <div class="card">
+      <h4>Mapping note, false positives, tuning</h4>
+      <ul>
+        <li><strong>Mapping:</strong> exact field match on <code>name</code> on both sides; the filter list matches the configuration management agents your estate actually uses.</li>
+        <li><strong>False positives:</strong> hardening scripts and health checks during maintenance windows.</li>
+        <li><strong>Tuning:</strong> suppress during the patching window per host group; a write to this path (compare file content before and after) deserves escalation, because it directly weakens the control that blocks this technique.</li>
+        <li><strong>Severity:</strong> medium; pairs with the mitigation work in section 7.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="s6-casestudy" aria-labelledby="s6-casestudy-title">
+    <div class="section-head">
+      <h2 id="s6-casestudy-title"><span class="section-num" aria-hidden="true">6</span><span class="section-title">Real-World Case Study</span></h2>
+    </div>
+    <p class="section-intro">A complete incident walkthrough for training: timeline, detection point, containment, eradication, recovery, impact, communications, and lessons learned.</p>
+
+    <div class="callout warning">
+      <span class="callout-label">Composite scenario</span>
+      <p>This case study is a labeled composite. It blends public research on vDSO abuse with common patterns from Linux miner campaigns. Hostnames, times, and numbers are invented for teaching. Do not quote it as a real incident, and do not treat any detail as verified fact.</p>
+    </div>
+
+    <h3>Context</h3>
+    <p>A mid-size software company runs a small Linux estate: web servers, build runners, and internal tooling on cloud virtual machines. The platform team is three engineers. Detection coverage was auditd shipped to a SIEM, plus one eBPF sensor (Falco) piloted on 20 percent of hosts. A config-management breach started the story: a deployment key was copied off a build runner after a toolchain compromise, and the key allowed shell access to app servers as a service account.</p>
+
+    <h3>Timeline</h3>
+    <ul class="timeline">
+      <li><span class="time-label">Day 0, 09:10</span><strong>Config-management breach.</strong> An attacker extracts a deployment key from a build runner through a dependency-script weakness. No security control fires, because the runner is outside the sensor pilot.</li>
+      <li><span class="time-label">Day 1, 23:02</span><strong>Foothold.</strong> The key is used from a new network to reach an internal management endpoint on app-web-04 that should not have been reachable. The service account gets a shell. Auditd logs the unusual execve, but the alert waits in the queue.</li>
+      <li><span class="time-label">Day 2, 02:41</span><strong>Write primitive.</strong> The attacker enumerates processes and attaches to PID 2041, a resident web daemon (httpd) that has run for 91 days, using ptrace. Auditd records the syscall with an unset loginuid.</li>
+      <li><span class="time-label">Day 2, 02:43</span><strong>Recon in memory.</strong> The attacker opens /proc/2041/maps and locates the [vdso] mapping, then confirms the clock_gettime offset for that kernel build.</li>
+      <li><span class="time-label">Day 2, 02:44</span><strong>The detection point.</strong> app-web-04 is in the eBPF pilot. The sensor fires the critical rule: a process_vm_writev landed inside the [vdso] region. The alert pages the on-call analyst.</li>
+      <li><span class="time-label">Day 2, 02:46</span><strong>Payload start and cleanup.</strong> The patched time function runs bootstrap code, which downloads a miner from 203.0.113.10 and starts it from /dev/shm under a fake kernel-worker name. The bootstrap then restores the original vDSO bytes.</li>
+      <li><span class="time-label">Day 2, 02:52</span><strong>Triage.</strong> The analyst correlates three records: the ptrace attach, the vDSO write, and a new execve from /dev/shm. The host is isolated through the management plane within eleven minutes of the first page.</li>
+      <li><span class="time-label">Day 2, 04:30</span><strong>Scope check.</strong> A fleet-wide SPL hunt over linux_audit finds the same ptrace-plus-maps pattern on one more host, a stale test server. It is isolated too.</li>
+      <li><span class="time-label">Day 3 to 5</span><strong>Eradication and recovery.</strong> Both hosts are rebuilt, the deployment key family is rotated, Yama scope is enforced fleet-wide, and the eBPF rollout is accelerated to 100 percent.</li>
+    </ul>
+
+    <h3>Detection point, response, and impact</h3>
+    <div class="grid-2">
+      <div class="card">
+        <h4>Detection point</h4>
+        <p>The eBPF vDSO-write alert was the single event that converted a quiet incident into an active response. The auditd records alone (ptrace, maps read) looked like noise until joined with the sensor alert by host and PID. This is the key lesson of the composite: the strongest signal exists only for a short window, so it must page a human, not wait for a daily review.</p>
+      </div>
+      <div class="card">
+        <h4>Containment</h4>
+        <p>Containment came first, forensics second. The management plane quarantined the host and cut its egress to the management network only. The analyst captured memory of PID 2041 before shutdown, which preserved the injected payload region and the beacon configuration.</p>
+      </div>
+      <div class="card">
+        <h4>Eradication and recovery</h4>
+        <p>Eradication was rebuild-from-image rather than clean-in-place: both hosts were reprovisioned, the key family rotated, and the exposed endpoint removed. Recovery returned service in four hours. The vDSO integrity check on neighboring hosts matched clean per-kernel baselines, which supported the two-host scope conclusion.</p>
+      </div>
+      <div class="card">
+        <h4>Impact and communications</h4>
+        <p>Impact was limited to compute theft: roughly three days of CPU saturation on one host before detection, an estimated low hundreds of dollars of wasted compute, and no evidence of data theft. Communications stayed internal. Engineering leadership received a plain-language update within two hours. The service owner was notified with the isolation rationale. A customer-facing status note was judged unnecessary, because no customer data was in scope.</p>
+      </div>
+    </div>
+
+    <h3>Lessons learned</h3>
+    <div class="grid-3">
+      <div class="card">
+        <h4>vDSO baselining</h4>
+        <p>Save a clean vDSO image per kernel version at boot from a trusted reference host. Check baselines on a schedule and after every kernel update, and never treat a single clean hash as an all-clear.</p>
+      </div>
+      <div class="card">
+        <h4>eBPF rollout</h4>
+        <p>The pilot found what auditd could not. Region-level memory telemetry pays for itself; expand it to every internet-reachable Linux host first, then everywhere.</p>
+      </div>
+      <div class="card">
+        <h4>ptrace hardening</h4>
+        <p>Setting yama.ptrace_scope=2 and dropping CAP_SYS_PTRACE from service units would have broken the attack chain before the injection step. Hardening beat detection on cost and speed.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s7-mitigation" aria-labelledby="s7-mitigation-title">
+    <div class="section-head">
+      <h2 id="s7-mitigation-title"><span class="section-num" aria-hidden="true">7</span><span class="section-title">Mitigation and Defense</span></h2>
+    </div>
+    <p class="section-intro">Controls that break the vDSO hijacking chain, ordered by what they actually prevent. The cheapest wins are configuration, not purchases.</p>
+
+    <p>The attack chain has three doors: the foothold, the write primitive, and the patch itself. Close the write primitive first. A host with <code>yama.ptrace_scope=2</code> and daemons that run without CAP_SYS_PTRACE is a poor target, whatever the attacker's initial access was. Detection then covers the residual risk: eBPF sensors for the patch event, auditd for the primitive, and integrity baselines for verification.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Control</th><th>Scope</th><th>Priority</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Enforce kernel.yama.ptrace_scope=2 (or 3) via configuration management</td><td>All Linux servers</td><td><span class="badge sev-high">High</span></td><td>Low</td><td>Platform team</td><td>Removes the ptrace write primitive for same-UID attackers; blocks most commodity toolkits</td></tr>
+          <tr><td>Drop CAP_SYS_PTRACE and other capabilities from service units</td><td>Service definitions</td><td><span class="badge sev-high">High</span></td><td>Medium</td><td>Platform team</td><td>Daemons can no longer be used as injectors even if compromised</td></tr>
+          <tr><td>Patch exposed services; put management planes behind a VPN (virtual private network) and MFA (multi-factor authentication)</td><td>Network and identity</td><td><span class="badge sev-high">High</span></td><td>Medium</td><td>IT security</td><td>Cuts the foothold that starts the chain</td></tr>
+          <tr><td>Deploy eBPF sensors with a vDSO-region-write rule</td><td>Monitoring</td><td><span class="badge sev-high">High</span></td><td>Medium</td><td>Detection engineering</td><td>Detects the patch event itself, the highest-signal moment</td></tr>
+          <tr><td>vDSO integrity baseline per kernel version, checked on schedule</td><td>Monitoring</td><td><span class="badge sev-high">High</span></td><td>Medium</td><td>Detection engineering</td><td>Verifies the memory story and supports scoping during response</td></tr>
+          <tr><td>auditd rules for ptrace, process_vm_writev, and /proc map access</td><td>Logging</td><td><span class="badge sev-high">High</span></td><td>Low</td><td>Detection engineering</td><td>Records the write primitive; enables the SPL hunts in 5.5</td></tr>
+          <tr><td>SELinux or AppArmor confinement for daemons</td><td>Endpoint</td><td><span class="badge sev-medium">Medium</span></td><td>Medium</td><td>Platform team</td><td>Policy layer that limits what an injected process can do</td></tr>
+          <tr><td>Egress filtering with default-deny from server segments</td><td>Network</td><td><span class="badge sev-medium">Medium</span></td><td>Medium</td><td>Network team</td><td>Blocks beaconing and payload download, creates its own alert</td></tr>
+          <tr><td>Container and Kubernetes hardening: seccomp profiles, no CAP_SYS_PTRACE in containers, restricted host mounts</td><td>Cloud</td><td><span class="badge sev-high">High</span></td><td>Medium</td><td>Platform team</td><td>Cuts the container-escape path to node daemons described in 5.3</td></tr>
+          <tr><td>Periodic memory scans on tier-0 and internet-facing hosts</td><td>Endpoint</td><td><span class="badge sev-medium">Medium</span></td><td>High</td><td>Incident response</td><td>Finds injected regions the vDSO check may miss</td></tr>
+          <tr><td>Alert triage SLA of 15 minutes for critical eBPF alerts</td><td>Process</td><td><span class="badge sev-high">High</span></td><td>Low</td><td>SOC lead</td><td>Catches the short-lived patch window that defines this technique</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h4>ATT&amp;CK mitigation mapping</h4>
+      <ul class="check-list">
+        <li><strong>M1040 Behavior Prevention on Endpoint</strong> (<a href="https://attack.mitre.org/mitigations/M1040/" target="_blank" rel="noopener">https://attack.mitre.org/mitigations/M1040/</a>) is the official ATT&amp;CK mitigation for this technique. Some endpoint security tools can block process injection by recognizing common behavior sequences during the injection process. On Linux this maps to the endpoint rows above. It covers SELinux or AppArmor confinement for daemons. It also covers eBPF-based runtime sensors that alert or block on the write into the [vdso] region. Capability removal that denies the write primitive belongs to the same mapping.</li>
+      </ul>
+      <p>ATT&amp;CK also publishes a detection strategy for this technique, DET0448 (Detection Strategy for VDSO Hijacking on Linux). This page does not restate its contents; the analytics in section 5 are a practical starting point.</p>
+    </div>
+
+    <div class="grid-3">
+      <div class="card">
+        <h4>Home and small office</h4>
+        <p>Turn on automatic updates so kernel fixes land quickly. Run only services you need, and close management ports to the internet. A single Raspberry Pi or home server with default Yama settings and updated packages is already a hard target for this technique.</p>
+      </div>
+      <div class="card">
+        <h4>Small team without a SOC</h4>
+        <p>Install one eBPF sensor with the vDSO rule, ship auditd to a free log service, and set a daily review habit. Enable MFA on every admin surface. Two hours of setup covers most of the detection value described on this page.</p>
+      </div>
+      <div class="card">
+        <h4>Cloud-only estate</h4>
+        <p>Prefer managed runtimes where you cannot ptrace at all, use the provider's host-level threat detection, and treat any write into kernel-mapped memory as a page. Keep host login restricted to a brokered, logged path.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h4>Do these first</h4>
+      <ul class="check-list">
+        <li>Set kernel.yama.ptrace_scope=2 across the fleet and verify with configuration management drift checks.</li>
+        <li>Remove CAP_SYS_PTRACE from every service unit that does not provably need it.</li>
+        <li>Deploy the six auditd rules from section 5.5 and confirm records arrive in your SIEM.</li>
+        <li>Stand up one eBPF sensor rule for writes into the [vdso] region with paging severity.</li>
+        <li>Build the per-kernel vDSO baseline store and a scheduled check job.</li>
+        <li>Write the one-page triage runbook that joins ptrace, maps, and vDSO alerts by host and PID.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="s8-mistakes" aria-labelledby="s8-mistakes-title">
+    <div class="section-head">
+      <h2 id="s8-mistakes-title"><span class="section-num" aria-hidden="true">8</span><span class="section-title">Common Mistakes and Best Practices</span></h2>
+    </div>
+    <p class="section-intro">Ten concrete blue-team mistakes around this technique, each with the symptom you will notice, the root cause, the fix, and the prevention habit. The section ends with a simple operating rhythm: daily, weekly, monthly.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td>Closing the vDSO-write alert as "someone debugging"</td><td>A real incident was reopened weeks later as a miner case.</td><td>Ownership gap. Nobody verified caller and target against an asset list.</td><td>Re-triage with the join in 5.5. Check the target PID uptime.</td><td>Keep a runbook that names the escalation owner per alert class.</td></tr>
+          <tr><td>2</td><td>Hash baseline built once, never refreshed</td><td>Every kernel update floods the team with false mismatches.</td><td>The baseline job did not track kernel releases.</td><td>Rebuild baselines per kernel version. Alert on baseline age.</td><td>Automate baseline refresh inside the patching pipeline.</td></tr>
+          <tr><td>3</td><td>auditd not deployed on half the fleet</td><td>Scope questions during incidents have no answer.</td><td>Golden image drift. New hosts missed the rule set.</td><td>Push the rule pack via configuration management.</td><td>Run a coverage check that fails the build when rules are missing.</td></tr>
+          <tr><td>4</td><td>Tuning that filters out the whole python3 binary</td><td>The attacker ran everything through python3 unnoticed.</td><td>The filter matched the process name, not the exe path and parent.</td><td>Narrow filters to full paths plus asset context.</td><td>Quarterly filter review with recorded justification.</td></tr>
+          <tr><td>5</td><td>Alert fatigue from profilers during release week</td><td>Analysts mute the ptrace rule, exactly when it matters.</td><td>Tuning has no maintenance-window concept.</td><td>Use time-boxed suppressions keyed to change tickets.</td><td>Document known tooling in the asset lookup table.</td></tr>
+          <tr><td>6</td><td>Treating a clean vDSO hash as an all-clear</td><td>The host was cleared while the injected payload kept running.</td><td>The self-healing hook was not understood.</td><td>Correlate hash checks with the eBPF write history.</td><td>Train analysts on restore-after-patch behavior.</td></tr>
+          <tr><td>7</td><td>No fleet hunt after the first confirmed host</td><td>The same implant was found on more hosts a week later.</td><td>Hunting was not part of the incident checklist.</td><td>Run the 5.5 SPL pack across all of linux_audit.</td><td>Attach the hunt playbook to the technique page.</td></tr>
+          <tr><td>8</td><td>Trusting process names and parents in detections</td><td>Detections were bypassed by renamed binaries.</td><td>Names are user-controlled and easy to spoof.</td><td>Key detections on exe path, inode, and hashes.</td><td>Run multi-signal rule design reviews.</td></tr>
+          <tr><td>9</td><td>Killing the daemon as the containment step</td><td>The payload respawned, or evidence was lost.</td><td>No containment decision matrix existed.</td><td>Isolate the network first. Capture memory. Then stop processes.</td><td>Keep a containment matrix per platform with the runbook.</td></tr>
+          <tr><td>10</td><td>Isolating a host without telling its service owner</td><td>Emergency change conflicts and trust damage followed.</td><td>The communications plan was missing.</td><td>Notify the owner channel in parallel with action.</td><td>Maintain an on-call rotation plus a standing status channel.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid-3">
+      <div class="card">
+        <h4>Daily habits</h4>
+        <ul>
+          <li>Review every critical eBPF alert within the SLA, including vDSO-region events.</li>
+          <li>Check new execve records from /tmp, /dev/shm, and /var/tmp on production hosts.</li>
+          <li>Skim ptrace and process_vm_writev records against the daemon asset list.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Weekly habits</h4>
+        <ul>
+          <li>Verify eBPF sensor health fleet-wide; a silent sensor is a detection gap.</li>
+          <li>Review the debug-tool and crash-handler filter lists for drift.</li>
+          <li>Run one hunt from section 5.5 and record the result, even when empty.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Monthly habits</h4>
+        <ul>
+          <li>Refresh vDSO baselines for every new kernel version in the fleet.</li>
+          <li>Purple-team one injection technique and file the detection gaps.</li>
+          <li>Review the daemon asset lookup table and the control coverage matrix.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="s9-cheatsheet" aria-labelledby="s9-cheatsheet-title">
+    <div class="section-head">
+      <h2 id="s9-cheatsheet-title"><span class="section-num" aria-hidden="true">9</span><span class="section-title">Cheat Sheet and Quick Reference</span></h2>
+    </div>
+    <p class="section-intro">The page in one screen: key facts, the top detections, a response checklist, and links that go deeper.</p>
+
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">Technique</div><div class="kv-val">T1055.014 VDSO Hijacking — patch clock_gettime in the kernel-mapped vDSO so attacker code runs on the next time query</div></div>
+      <div class="kv-row"><div class="kv-key">Parent</div><div class="kv-val">T1055 Process Injection</div></div>
+      <div class="kv-row"><div class="kv-key">Platform</div><div class="kv-val">Linux</div></div>
+      <div class="kv-row"><div class="kv-key">Tactics</div><div class="kv-val">Stealth (formerly Defense Evasion), Privilege Escalation</div></div>
+      <div class="kv-row"><div class="kv-key">Needs first</div><div class="kv-val">A memory-write primitive: ptrace, process_vm_writev, or /proc/pid/mem access</div></div>
+      <div class="kv-row"><div class="kv-key">Best signal</div><div class="kv-val">eBPF alert for a write into the [vdso] mapping; exists only during the patch window</div></div>
+      <div class="kv-row"><div class="kv-key">Trap</div><div class="kv-val">Restored original bytes afterwards; a clean hash alone never clears a host</div></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Detection</th><th>Log source</th><th>When it fires</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Write into the [vdso] region</td><td>eBPF sensor (Falco, Tracee, Tetragon)</td><td>During the patch window, seconds before bytes are restored</td></tr>
+          <tr><td>Successful ptrace or process_vm_writev on a daemon</td><td>auditd via Auditbeat</td><td>When the attacker gains the write primitive</td></tr>
+          <tr><td>Non-debug tool reads /proc/pid/maps</td><td>auditd file syscalls</td><td>While the attacker locates the [vdso] line</td></tr>
+          <tr><td>Daemon spawns a binary from /tmp, /dev/shm, or /var/tmp</td><td>auditd execve</td><td>Right after the vDSO trigger runs the bootstrap</td></tr>
+          <tr><td>CPU saturation plus new egress beacon from a daemon</td><td>Metrics and netflow</td><td>Minutes after payload start, and ongoing</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h4>Response checklist</h4>
+      <ul class="check-list">
+        <li>Confirm the alert fields: source process, target PID, address range, host.</li>
+        <li>Join auditd ptrace, maps read, and eBPF write events by host and PID.</li>
+        <li>Isolate the host at the network layer; capture memory before reboot.</li>
+        <li>Hash the vDSO against the clean baseline for that exact kernel version.</li>
+        <li>Run the 5.5 SPL hunts fleet-wide and list every host with the pattern.</li>
+        <li>Rotate credentials reachable from the affected hosts, including deployment keys.</li>
+        <li>Verify yama.ptrace_scope and capability settings fleet-wide before recovery.</li>
+        <li>Write the incident note: timeline, detection point, impact, and fixes shipped.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h4>References and related techniques</h4>
+      <ul>
+        <li><a href="https://attack.mitre.org/techniques/T1055/014/" target="_blank" rel="noopener">Official ATT&amp;CK page for T1055.014 VDSO Hijacking</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1055/" target="_blank" rel="noopener">Parent technique: T1055 Process Injection</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1055/008/" target="_blank" rel="noopener">T1055.008 Ptrace System Calls — the usual write primitive</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1055/009/" target="_blank" rel="noopener">T1055.009 Proc Memory — the alternative write primitive</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1190/" target="_blank" rel="noopener">T1190 Exploit Public-Facing Application — the usual foothold before this chain</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1547/006/" target="_blank" rel="noopener">T1547.006 Kernel Modules and Extensions — a different Linux persistence path</a></li>
+      </ul>
+    </div>
+
+    <p class="muted-note">All SPL queries on this page assume the example index and sourcetype names used here. Adjust index and sourcetype names to your environment before running them.</p>
+  </section>
+
+  </main>
+</div>
+
+<button id="btn-contents" class="fab" aria-haspopup="dialog" aria-expanded="false" aria-controls="toc-overlay">Contents</button>
+<button id="theme-toggle" class="fab" type="button">Dark</button>
+<button id="btn-top" class="fab" type="button" aria-label="Back to top">Top</button>
+
+<div id="toc-overlay" role="dialog" aria-modal="true" aria-label="Contents">
+  <div class="overlay-panel">
+    <div class="overlay-head">
+      <p class="toc-title">Contents</p>
+      <button id="overlay-close" class="btn" type="button">Close</button>
+    </div>
+    <ul class="toc-list">
+      <li><a href="#s1-overview">1. Overview</a></li>
+      <li><a href="#s2-simulation">2. Animated Simulation</a></li>
+      <li><a href="#s3-redteam">3. Red Team / Hacker Perspective</a></li>
+      <li><a href="#s4-blueteam">4. Blue Team / SOC Perspective</a></li>
+      <li><a href="#s5-detection">5. Detection Engineering Deep Dive</a>
+        <ul class="toc-sub">
+          <li><a href="#s5-1-regulations">5.1 Regulation Mapping</a></li>
+          <li><a href="#s5-2-threatintel">5.2 Threat Intelligence</a></li>
+          <li><a href="#s5-3-ranking">5.3 Threats Ranking and Categorization</a></li>
+          <li><a href="#s5-4-logs">5.4 Logs and Patterns</a></li>
+          <li><a href="#s5-5-sigma">5.5 Sigma Rules and Splunk SPL</a></li>
+        </ul>
+      </li>
+      <li><a href="#s6-casestudy">6. Real-World Case Study</a></li>
+      <li><a href="#s7-mitigation">7. Mitigation and Defense</a></li>
+      <li><a href="#s8-mistakes">8. Common Mistakes and Best Practices</a></li>
+      <li><a href="#s9-cheatsheet">9. Cheat Sheet and Quick Reference</a></li>
+    </ul>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   ATT&CK guide — shared page JS (kit). Embed VERBATIM.
+   Add page-specific JS (simulation etc.) after the marker.
+   Exposes: window.atkToken(name), window.ATK_REDUCED,
+   and a 'atkthemechange' CustomEvent on document.
+   ========================================================= */
+(function () {
+  'use strict';
+
+  var REDUCED = false;
+  try { REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { REDUCED = false; }
+  window.ATK_REDUCED = REDUCED;
+
+  window.atkToken = function (name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  };
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* ---- theme toggle ---- */
+  var themeBtn = document.getElementById('theme-toggle');
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') || 'dark';
+  }
+  function applyThemeLabel() {
+    if (!themeBtn) return;
+    var t = currentTheme();
+    themeBtn.textContent = t === 'dark' ? 'Dark' : 'Light';
+    themeBtn.setAttribute('aria-label', 'Color theme: ' + t + '. Activate to switch to ' + (t === 'dark' ? 'light' : 'dark') + '.');
+    themeBtn.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false');
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function () {
+      var next = currentTheme() === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('atk-theme', next); } catch (e) {}
+      applyThemeLabel();
+      document.dispatchEvent(new CustomEvent('atkthemechange', { detail: { theme: next } }));
+    });
+    applyThemeLabel();
+  }
+
+  /* ---- back to top + reading progress ---- */
+  var topBtn = document.getElementById('btn-top');
+  var bar = document.getElementById('progress-bar');
+  var ticking = false;
+  function onScrollFrame() {
+    ticking = false;
+    var doc = document.documentElement;
+    var y = window.scrollY || doc.scrollTop || 0;
+    var max = doc.scrollHeight - window.innerHeight;
+    var p = max > 0 ? Math.min(1, Math.max(0, y / max)) : 0;
+    if (bar) bar.style.width = (p * 100).toFixed(2) + '%';
+    if (topBtn) {
+      if (y > 600) { topBtn.classList.add('show'); } else { topBtn.classList.remove('show'); }
+    }
+  }
+  window.addEventListener('scroll', function () {
+    if (!ticking) { ticking = true; window.requestAnimationFrame(onScrollFrame); }
+  }, { passive: true });
+  if (topBtn) {
+    topBtn.addEventListener('click', function () {
+      window.scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' });
+    });
+  }
+
+  /* ---- TOC build from real headings (cannot drift) ---- */
+  function labelFromHeading(h) {
+    var clone = h.cloneNode(true);
+    var nums = clone.querySelectorAll('.section-num');
+    var numText = '';
+    for (var i = 0; i < nums.length; i++) { numText = nums[i].textContent; nums[i].remove(); }
+    var title = clone.textContent.replace(/\s+/g, ' ').trim();
+    return numText ? numText + '. ' + title : title;
+  }
+  function buildTocList(ul) {
+    if (!ul) return;
+    var out = '';
+    var secs = document.querySelectorAll('main > section[id]');
+    for (var i = 0; i < secs.length; i++) {
+      var s = secs[i];
+      var h = s.querySelector('h2');
+      if (!h) continue;
+      out += '<li><a href="#' + s.id + '">' + esc(labelFromHeading(h)) + '</a>';
+      var subs = s.querySelectorAll('h3[id]');
+      if (subs.length) {
+        out += '<ul class="toc-sub">';
+        for (var j = 0; j < subs.length; j++) {
+          out += '<li><a href="#' + subs[j].id + '">' + esc(labelFromHeading(subs[j])) + '</a></li>';
+        }
+        out += '</ul>';
+      }
+      out += '</li>';
+    }
+    ul.innerHTML = out;
+  }
+  var tocLists = document.querySelectorAll('.toc-list');
+  for (var t = 0; t < tocLists.length; t++) { buildTocList(tocLists[t]); }
+
+  /* ---- active TOC highlighting ---- */
+  var activeId = null;
+  function setActive(id) {
+    if (id === activeId) return;
+    activeId = id;
+    var links = document.querySelectorAll('.toc-list a');
+    for (var i = 0; i < links.length; i++) {
+      var href = links[i].getAttribute('href') || '';
+      var on = href === '#' + id;
+      links[i].classList.toggle('active', on);
+      if (on) { links[i].setAttribute('aria-current', 'true'); } else { links[i].removeAttribute('aria-current'); }
+    }
+  }
+  var headingEls = document.querySelectorAll('main > section[id], main h3[id]');
+  if ('IntersectionObserver' in window) {
+    var visible = [];
+    var io = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        var en = entries[i];
+        if (en.isIntersecting) {
+          if (visible.indexOf(en.target.id) === -1) visible.push(en.target.id);
+        } else {
+          visible = visible.filter(function (x) { return x !== en.target.id; });
+        }
+      }
+      if (visible.length) setActive(visible[visible.length - 1]);
+    }, { rootMargin: '-12% 0px -68% 0px', threshold: 0 });
+    for (var k = 0; k < headingEls.length; k++) { io.observe(headingEls[k]); }
+  } else {
+    var scrollTick = false;
+    window.addEventListener('scroll', function () {
+      if (scrollTick) return;
+      scrollTick = true;
+      window.requestAnimationFrame(function () {
+        scrollTick = false;
+        var best = null;
+        for (var i = 0; i < headingEls.length; i++) {
+          if (headingEls[i].getBoundingClientRect().top < 140) best = headingEls[i].id;
+        }
+        if (best) setActive(best);
+      });
+    }, { passive: true });
+  }
+
+  /* ---- mobile contents overlay ---- */
+  var overlay = document.getElementById('toc-overlay');
+  var openBtn = document.getElementById('btn-contents');
+  var closeBtn = document.getElementById('overlay-close');
+  function openOverlay() {
+    if (!overlay) return;
+    overlay.classList.add('open');
+    if (openBtn) openBtn.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+    if (closeBtn) closeBtn.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    if (openBtn) {
+      openBtn.setAttribute('aria-expanded', 'false');
+      openBtn.focus();
+    }
+    document.body.style.overflow = '';
+  }
+  if (openBtn && overlay) {
+    openBtn.addEventListener('click', openOverlay);
+    if (closeBtn) closeBtn.addEventListener('click', closeOverlay);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closeOverlay();
+      else if (e.target.closest && e.target.closest('a[href^="#"]')) closeOverlay();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && overlay.classList.contains('open')) closeOverlay();
+    });
+  }
+
+  /* ---- copy buttons (event delegation) ---- */
+  document.addEventListener('click', function (e) {
+    if (!e.target || !e.target.closest) return;
+    var btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    var fig = btn.closest('figure');
+    var code = fig ? fig.querySelector('pre code') : null;
+    if (!code) return;
+    var text = code.textContent || '';
+    function done(ok) {
+      var old = btn.getAttribute('data-label') || btn.textContent;
+      btn.setAttribute('data-label', old);
+      btn.textContent = ok ? 'Copied!' : 'Copy failed';
+      setTimeout(function () { btn.textContent = old; }, 1600);
+    }
+    function fallback() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        done(ok);
+      } catch (err) { done(false); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    } else { fallback(); }
+  });
+})();
+/* ==== PAGE-SPECIFIC JS ==== */
+(function () {
+  'use strict';
+  var canvas = document.getElementById('sim-canvas');
+  if (!canvas || !canvas.getContext) return;
+  var ctx = canvas.getContext('2d');
+  var tooltip = document.getElementById('sim-tooltip');
+  var captionEl = document.getElementById('sim-caption');
+  var defenderEl = document.getElementById('sim-defender');
+  var playBtn = document.getElementById('sim-play');
+  var pauseBtn = document.getElementById('sim-pause');
+  var restartBtn = document.getElementById('sim-restart');
+  var speedSel = document.getElementById('sim-speed');
+  var chipsWrap = document.getElementById('sim-steps');
+  var REDUCED = !!window.ATK_REDUCED;
+
+  /* ---- palette (theme tokens only, no hardcoded colors) ---- */
+  var PAL = {};
+  function refreshPalette() {
+    var keys = ['--bg','--surface','--surface-2','--elevated','--text','--muted','--border','--border-strong',
+      '--accent','--accent-2','--violet','--success','--warning','--danger','--high','--low',
+      '--tint-accent','--tint-danger','--tint-warning','--tint-low','--tint-cyan','--tint-violet','--tint-high'];
+    for (var i = 0; i < keys.length; i++) {
+      PAL[keys[i]] = window.atkToken ? (window.atkToken(keys[i]) || 'gray') : 'gray';
+    }
+  }
+
+  /* ---- 8 steps: caption, SOC view, evidence rows ---- */
+  var STEPS = [
+    { cap: 'Step 1 of 8 — The attacker logs in to the Linux server through an exposed management service. They now run commands as a service account on a trusted host.',
+      soc: 'A service account that never logs in interactively started a shell on a web server. Auditd shows a new execve with an unset loginuid.',
+      ev: [['auditd: execve by svc_deploy (unset auid)', 'warn'], ['netflow: new session to mgmt port', 'warn']] },
+    { cap: 'Step 2 of 8 — The attacker picks a daemon that runs for months. They use ptrace, the Linux debugging interface, to open the daemon memory and gain a write primitive.',
+      soc: 'Auditd logged a successful ptrace attach against PID 2041 from a non-debug tool. Long-running daemons are almost never debugged in production.',
+      ev: [['auditd: ptrace attach exit=0', 'danger'], ['auditd: auid unset (service context)', 'warn']] },
+    { cap: 'Step 3 of 8 — The attacker reads /proc/2041/maps. This file lists every memory mapping of the process and shows where the kernel placed the [vdso] page.',
+      soc: 'A process opened /proc/2041/maps. Reading another process memory map is rare outside debuggers and performance tools.',
+      ev: [['auditd: openat /proc/2041/maps', 'warn']] },
+    { cap: 'Step 4 of 8 — The attacker patches clock_gettime inside the [vdso] page. Small bootstrap code now sits where the fast time query used to be.',
+      soc: 'The eBPF sensor fired the critical alert: a memory write landed inside the [vdso] mapping. This is the strongest single signal for this technique.',
+      ev: [['eBPF: process_vm_writev into [vdso]', 'crit'], ['Falco rule: vdso_region_write_detected', 'crit']] },
+    { cap: 'Step 5 of 8 — The daemon calls clock_gettime, as it does many times per second. The bootstrap code runs inside the trusted daemon. No new process or thread was created.',
+      soc: 'The sensor flags code execution that started in the vDSO region. Pair it with the write alert from the previous step.',
+      ev: [['sensor: exec origin = vDSO region', 'danger']] },
+    { cap: 'Step 6 of 8 — The bootstrap code downloads the payload, starts it, and then restores the original [vdso] bytes. A memory scanner now sees a clean page. This is the self-healing hook.',
+      soc: 'The integrity scanner reports a matching hash. Do not close the case. Correlate with the earlier write alert; the attacker restored the bytes.',
+      ev: [['scanner: vDSO hash matches baseline', 'ok'], ['note: restored bytes = self-healing hook', 'info']] },
+    { cap: 'Step 7 of 8 — The payload beacons to attacker infrastructure and starts mining. The daemon CPU time climbs, and new outbound traffic leaves the server.',
+      soc: 'Netflow shows beaconing to 203.0.113.10:443, and metrics show CPU saturation in the daemon. Two independent anomalies now agree.',
+      ev: [['netflow: beacon to 203.0.113.10:443', 'danger'], ['metrics: CPU 96% on pid 2041', 'warn']] },
+    { cap: 'Step 8 of 8 — Defenders isolate the host, compare the vDSO bytes with a clean baseline for the same kernel version, harden ptrace settings, and hunt every server for the same pattern.',
+      soc: 'Containment and a fleet-wide hunt start. Hash the vDSO on every host against clean per-kernel baselines and review ptrace scope settings.',
+      ev: [['action: host isolated at NACL', 'ok'], ['action: vDSO hashed vs clean baseline', 'ok'], ['action: fleet hunt launched (SPL)', 'ok']] }
+  ];
+  var KIND_COLOR = { warn: '--warning', danger: '--danger', crit: '--danger', info: '--accent', ok: '--success' };
+
+  /* ---- design-space layout (960 x 440, scaled to fit) ---- */
+  var DW = 960, DH = 440;
+  var R_ATT = { x: 28, y: 168, w: 150, h: 104 };
+  var R_HOST = { x: 246, y: 74, w: 356, h: 296 };
+  var R_DAEMON = { x: 264, y: 112, w: 320, h: 118 };
+  var R_VDSO = { x: 264, y: 244, w: 320, h: 104 };
+  var R_SOC = { x: 648, y: 74, w: 284, h: 296 };
+  var R_C2 = { x: 566, y: 16, w: 150, h: 44 };
+  var CELL_CLOCK = { x: 278, y: 282, w: 180, h: 26 };
+
+  var view = { w: 960, h: 440, k: 1, ox: 0, oy: 0, dpr: 1 };
+  function resize() {
+    var dpr = window.devicePixelRatio || 1;
+    var w = canvas.clientWidth || DW;
+    var h = canvas.clientHeight || DH;
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    view.dpr = dpr; view.w = w; view.h = h;
+    view.k = Math.min(w / DW, h / DH);
+    view.ox = (w - DW * view.k) / 2;
+    view.oy = (h - DH * view.k) / 2;
+  }
+
+  /* ---- state ---- */
+  var cur = 0, prog = 1, playing = false, speed = 1, lastTs = 0, raf = 0;
+  var STEP_MS = 3200;
+  var pinned = null;
+
+  function ease(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+  function lerp(a, b, p) { return a + (b - a) * p; }
+
+  /* ---- text helpers ---- */
+  function setFont(px, bold, mono) {
+    var w = bold ? '700 ' : '400 ';
+    ctx.font = w + px + 'px ' + (mono ? 'Menlo, Consolas, monospace' : '"Segoe UI", Arial, sans-serif');
+  }
+  function drawLabel(text, x, y, color, px, bold, mono, align) {
+    setFont(px || 12, bold, mono);
+    ctx.fillStyle = color;
+    ctx.textAlign = align || 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(text, x, y);
+  }
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function arrow(x1, y1, x2, y2, color, dash) {
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2;
+    if (dash) ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    var a = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - 9 * Math.cos(a - 0.42), y2 - 9 * Math.sin(a - 0.42));
+    ctx.lineTo(x2 - 9 * Math.cos(a + 0.42), y2 - 9 * Math.sin(a + 0.42));
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  function packet(x1, y1, x2, y2, p, color) {
+    var px = lerp(x1, x2, p), py = lerp(y1, y2, p);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(px, py, 5, 0, Math.PI * 2);
+    ctx.fill();
+    return { x: px, y: py };
+  }
+
+  /* ---- scene ---- */
+  function draw() {
+    var i, e;
+    ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+    ctx.fillStyle = PAL['--bg'];
+    ctx.fillRect(0, 0, view.w, view.h);
+    ctx.setTransform(view.dpr * view.k, 0, 0, view.dpr * view.k, view.dpr * view.ox, view.dpr * view.oy);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+
+    var st = STEPS[cur];
+    var pe = ease(Math.min(1, prog));
+
+    /* step indicator */
+    drawLabel('STEP ' + (cur + 1) + '/8', 24, 32, PAL['--muted'], 12, true, true);
+
+    /* ---- attacker node ---- */
+    ctx.fillStyle = PAL['--surface'];
+    ctx.strokeStyle = PAL['--danger'];
+    ctx.lineWidth = 1.6;
+    rr(R_ATT.x, R_ATT.y, R_ATT.w, R_ATT.h, 12);
+    ctx.fill();
+    ctx.stroke();
+    drawLabel('ATTACKER', R_ATT.x + 14, R_ATT.y + 26, PAL['--danger'], 12, true, true);
+    drawLabel('foothold: exposed', R_ATT.x + 14, R_ATT.y + 48, PAL['--muted'], 10.5, false, false);
+    drawLabel('management service', R_ATT.x + 14, R_ATT.y + 62, PAL['--muted'], 10.5, false, false);
+    drawLabel('runs as svc_deploy', R_ATT.x + 14, R_ATT.y + 84, PAL['--text'], 10.5, false, false);
+    if (cur >= 1) {
+      ctx.save();
+      ctx.strokeStyle = PAL['--danger'];
+      ctx.setLineDash([4, 4]);
+      ctx.globalAlpha = 0.65;
+      ctx.beginPath();
+      ctx.moveTo(R_ATT.x + R_ATT.w, R_ATT.y + 20);
+      ctx.lineTo(R_HOST.x, R_ATT.y + 20);
+      ctx.stroke();
+      ctx.restore();
+      drawLabel('foothold', (R_ATT.x + R_ATT.w + R_HOST.x) / 2, R_ATT.y + 12, PAL['--muted'], 9.5, false, false, 'center');
+    }
+
+    /* ---- victim host ---- */
+    var hostFlash = (cur === 0 && pe > 0.6) || cur === 1 || cur === 3 || cur === 4;
+    ctx.fillStyle = PAL['--surface'];
+    ctx.strokeStyle = cur === 7 && pe > 0.4 ? PAL['--success'] : (hostFlash ? PAL['--warning'] : PAL['--violet']);
+    ctx.lineWidth = cur === 7 && pe > 0.4 ? 3 : 1.8;
+    rr(R_HOST.x, R_HOST.y, R_HOST.w, R_HOST.h, 14);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = PAL['--elevated'];
+    rr(R_HOST.x, R_HOST.y, R_HOST.w, 26, 14);
+    ctx.fill();
+    drawLabel('LINUX SERVER app-web-04', R_HOST.x + 14, R_HOST.y + 18, PAL['--violet'], 12, true, true);
+    if (cur === 7 && pe > 0.4) {
+      drawLabel('ISOLATED', R_HOST.x + R_HOST.w - 14, R_HOST.y + 18, PAL['--success'], 11, true, true, 'right');
+    }
+
+    /* daemon card */
+    ctx.fillStyle = PAL['--surface-2'];
+    ctx.strokeStyle = (cur === 1 || cur === 4) ? PAL['--danger'] : PAL['--border-strong'];
+    ctx.lineWidth = 1.4;
+    rr(R_DAEMON.x, R_DAEMON.y, R_DAEMON.w, R_DAEMON.h, 10);
+    ctx.fill();
+    ctx.stroke();
+    drawLabel('PID 2041 httpd (resident daemon)', R_DAEMON.x + 14, R_DAEMON.y + 24, PAL['--text'], 12, true, true);
+    drawLabel('up 91 days, calls time functions constantly', R_DAEMON.x + 14, R_DAEMON.y + 44, PAL['--muted'], 10.5, false, false);
+
+    var cpu = 6;
+    if (cur === 6) cpu = 6 + 90 * pe;
+    else if (cur === 7) cpu = pe < 0.5 ? 96 : 3;
+    ctx.strokeStyle = PAL['--border-strong'];
+    ctx.lineWidth = 1;
+    ctx.strokeRect(R_DAEMON.x + 14, R_DAEMON.y + 62, 180, 12);
+    ctx.fillStyle = PAL['--tint-accent'];
+    ctx.fillRect(R_DAEMON.x + 15, R_DAEMON.y + 63, 178, 10);
+    ctx.fillStyle = cpu > 80 ? PAL['--danger'] : (cpu > 40 ? PAL['--warning'] : PAL['--success']);
+    ctx.fillRect(R_DAEMON.x + 15, R_DAEMON.y + 63, Math.max(4, 178 * cpu / 100), 10);
+    drawLabel(cpu > 80 ? 'CPU ' + Math.round(cpu) + '% (saturation)' : 'CPU ' + Math.round(cpu) + '%', R_DAEMON.x + 204, R_DAEMON.y + 73, PAL['--muted'], 10.5, false, true);
+    if (cur === 6) drawLabel('payload mining inside daemon', R_DAEMON.x + 14, R_DAEMON.y + 96, PAL['--danger'], 10.5, false, false);
+    if (cur === 7 && pe >= 0.5) drawLabel('quarantined: forensic capture', R_DAEMON.x + 14, R_DAEMON.y + 96, PAL['--success'], 10.5, false, false);
+
+    /* vDSO page box */
+    ctx.fillStyle = PAL['--elevated'];
+    ctx.strokeStyle = PAL['--accent'];
+    ctx.lineWidth = 1.6;
+    rr(R_VDSO.x, R_VDSO.y, R_VDSO.w, R_VDSO.h, 10);
+    ctx.fill();
+    ctx.stroke();
+    drawLabel('[vdso] page (kernel-mapped code)', R_VDSO.x + 14, R_VDSO.y + 20, PAL['--accent'], 11.5, true, true);
+
+    function drawCell(b, text, fill, stroke, tcolor) {
+      ctx.fillStyle = fill;
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.3;
+      rr(b.x, b.y, b.w, b.h, 6);
+      ctx.fill();
+      ctx.stroke();
+      drawLabel(text, b.x + 10, b.y + b.h / 2 + 4, tcolor, 10.5, false, true);
+    }
+    var clockFill = PAL['--surface'];
+    var clockStroke = PAL['--border-strong'];
+    var clockText = PAL['--text'];
+    if (cur === 3 && pe > 0.55) { clockFill = PAL['--tint-danger']; clockStroke = PAL['--danger']; clockText = PAL['--danger']; }
+    else if (cur === 4) { clockFill = PAL['--tint-danger']; clockStroke = PAL['--danger']; clockText = PAL['--danger']; }
+    else if (cur >= 5) { clockFill = PAL['--tint-low']; clockStroke = PAL['--success']; clockText = PAL['--text']; }
+    drawCell(CELL_CLOCK, cur >= 3 && cur < 5 ? 'clock_gettime() + shellcode' : 'clock_gettime()', clockFill, clockStroke, clockText);
+    if (cur >= 5) {
+      ctx.save();
+      ctx.strokeStyle = PAL['--success'];
+      ctx.setLineDash([3, 3]);
+      rr(CELL_CLOCK.x, CELL_CLOCK.y, CELL_CLOCK.w, CELL_CLOCK.h, 6);
+      ctx.stroke();
+      ctx.restore();
+      drawLabel('restored', CELL_CLOCK.x + CELL_CLOCK.w + 8, CELL_CLOCK.y + 17, PAL['--success'], 9.5, true, true);
+    }
+    drawCell({ x: 466, y: 282, w: 104, h: 26 }, 'gettimeofday()', PAL['--surface'], PAL['--border-strong'], PAL['--text']);
+    drawCell({ x: 278, y: 316, w: 130, h: 22 }, 'time()', PAL['--surface'], PAL['--border-strong'], PAL['--text']);
+    drawLabel('called many times per second', 420, 332, PAL['--muted'], 10, false, false);
+
+    /* ---- SOC panel ---- */
+    ctx.fillStyle = PAL['--surface-2'];
+    ctx.strokeStyle = PAL['--accent'];
+    ctx.lineWidth = 1.8;
+    rr(R_SOC.x, R_SOC.y, R_SOC.w, R_SOC.h, 14);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = PAL['--elevated'];
+    rr(R_SOC.x, R_SOC.y, R_SOC.w, 26, 14);
+    ctx.fill();
+    drawLabel('SOC / DEFENDER VIEW', R_SOC.x + 14, R_SOC.y + 18, PAL['--accent'], 12, true, true);
+    var evRows = [];
+    for (i = 0; i <= cur; i++) {
+      for (e = 0; e < STEPS[i].ev.length; e++) {
+        evRows.push({ txt: STEPS[i].ev[e][0], kind: STEPS[i].ev[e][1], fresh: i === cur });
+      }
+    }
+    var MAXROWS = 13;
+    var startIdx = Math.max(0, evRows.length - MAXROWS);
+    var skipped = startIdx;
+    if (skipped > 0) {
+      drawLabel('+' + skipped + ' earlier', R_SOC.x + 14, R_SOC.y + 44, PAL['--muted'], 10, false, false);
+    }
+    var rowY = R_SOC.y + (skipped > 0 ? 62 : 46);
+    for (i = startIdx; i < evRows.length; i++) {
+      var row = evRows[i];
+      ctx.globalAlpha = row.fresh && prog < 1 ? 0.35 + 0.65 * pe : 1;
+      ctx.fillStyle = PAL[KIND_COLOR[row.kind] || '--accent'];
+      ctx.beginPath();
+      ctx.arc(R_SOC.x + 20, rowY - 4, 4, 0, Math.PI * 2);
+      ctx.fill();
+      drawLabel(row.txt, R_SOC.x + 32, rowY, PAL['--text'], 10.5, row.fresh, true);
+      ctx.globalAlpha = 1;
+      rowY += 17;
+    }
+    if (cur === 7 && pe > 0.4) {
+      ctx.fillStyle = PAL['--tint-low'];
+      ctx.strokeStyle = PAL['--success'];
+      ctx.lineWidth = 1.4;
+      rr(R_SOC.x + 14, R_SOC.y + R_SOC.h - 30, R_SOC.w - 28, 22, 6);
+      ctx.fill();
+      ctx.stroke();
+      drawLabel('CONTAINED - hunt running', R_SOC.x + R_SOC.w / 2, R_SOC.y + R_SOC.h - 15, PAL['--success'], 11, true, true, 'center');
+    }
+
+    /* ---- C2 node (appears from step 6) ---- */
+    if (cur >= 5) {
+      ctx.fillStyle = PAL['--surface'];
+      ctx.strokeStyle = PAL['--warning'];
+      ctx.lineWidth = 1.4;
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      rr(R_C2.x, R_C2.y, R_C2.w, R_C2.h, 10);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+      drawLabel('C2 + MINER POOL', R_C2.x + 14, R_C2.y + 19, PAL['--warning'], 11, true, true);
+      drawLabel('203.0.113.10:443', R_C2.x + 14, R_C2.y + 35, PAL['--muted'], 10, false, true);
+    }
+
+    /* ---- step flows ---- */
+    var AX = R_ATT.x + R_ATT.w, AY = 220;
+    if (cur === 0) {
+      arrow(AX, AY, R_HOST.x, AY, PAL['--border-strong'], true);
+      var p0 = packet(AX, AY, R_HOST.x, AY, pe, PAL['--warning']);
+      drawLabel('shell via exposed service', p0.x + 8, p0.y - 8, PAL['--warning'], 10, false, false);
+    } else if (cur === 1) {
+      arrow(AX, AY, R_DAEMON.x + 40, R_DAEMON.y + 30, PAL['--border-strong'], true);
+      var p1 = packet(AX, AY, R_DAEMON.x + 40, R_DAEMON.y + 30, pe, PAL['--danger']);
+      drawLabel('ptrace attach', p1.x + 8, p1.y - 8, PAL['--danger'], 10, false, false);
+    } else if (cur === 2) {
+      arrow(AX, AY, R_HOST.x, AY, PAL['--border-strong'], true);
+      var p2 = packet(AX, AY, R_HOST.x, AY, pe, PAL['--accent']);
+      drawLabel('read /proc/2041/maps', p2.x + 8, p2.y - 8, PAL['--accent'], 10, false, false);
+      ctx.globalAlpha = 0.4 + 0.4 * Math.sin(pe * Math.PI);
+      drawLabel('found [vdso] line', R_VDSO.x + 190, R_VDSO.y - 6, PAL['--accent'], 10, true, true);
+      ctx.globalAlpha = 1;
+    } else if (cur === 3) {
+      arrow(AX, AY, CELL_CLOCK.x, CELL_CLOCK.y + 12, PAL['--border-strong'], true);
+      var p3 = packet(AX, AY, CELL_CLOCK.x, CELL_CLOCK.y + 12, pe, PAL['--danger']);
+      drawLabel('patch clock_gettime', p3.x + 8, p3.y + 14, PAL['--danger'], 10, false, false);
+    } else if (cur === 4) {
+      var rad = 8 + 26 * pe;
+      ctx.strokeStyle = PAL['--danger'];
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 1 - pe * 0.7;
+      ctx.beginPath();
+      ctx.arc(CELL_CLOCK.x + 40, CELL_CLOCK.y + 13, rad, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      arrow(CELL_CLOCK.x + 90, CELL_CLOCK.y, R_DAEMON.x + 160, R_DAEMON.y + R_DAEMON.h, PAL['--danger'], true);
+      drawLabel('clock_gettime() runs shellcode inside the daemon', R_VDSO.x + 14, R_VDSO.y - 8, PAL['--danger'], 10.5, true, false);
+    } else if (cur === 5) {
+      var cx = R_DAEMON.x + 160, cy = R_DAEMON.y + 60;
+      var tx = R_C2.x + 75, ty = R_C2.y + R_C2.h;
+      if (pe < 0.5) {
+        var q = ease(pe / 0.5);
+        var p5 = packet(cx, cy, tx, ty, q, PAL['--warning']);
+        drawLabel('fetch + start payload', p5.x + 8, p5.y - 8, PAL['--warning'], 10, false, false);
+        arrow(cx, cy, tx, ty, PAL['--border-strong'], true);
+      } else {
+        var s = (pe - 0.5) / 0.5;
+        ctx.save();
+        ctx.strokeStyle = PAL['--success'];
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(CELL_CLOCK.x + CELL_CLOCK.w * s, CELL_CLOCK.y - 3);
+        ctx.lineTo(CELL_CLOCK.x + CELL_CLOCK.w * s, CELL_CLOCK.y + CELL_CLOCK.h + 3);
+        ctx.stroke();
+        ctx.restore();
+      }
+    } else if (cur === 6) {
+      arrow(R_DAEMON.x + 160, R_DAEMON.y, R_C2.x + 75, R_C2.y + R_C2.h, PAL['--border-strong'], true);
+      for (i = 0; i < 3; i++) {
+        var bp = ((prog * 1.4) + i * 0.33) % 1;
+        packet(R_DAEMON.x + 160, R_DAEMON.y, R_C2.x + 75, R_C2.y + R_C2.h, bp, PAL['--danger']);
+      }
+      drawLabel('beacon + mining traffic', R_C2.x + R_C2.w + 8, R_C2.y + 27, PAL['--danger'], 10, false, false);
+    } else if (cur === 7) {
+      arrow(R_SOC.x, R_SOC.y + 120, R_HOST.x + R_HOST.w, R_HOST.y + 120, PAL['--success'], false);
+      var p7 = packet(R_SOC.x, R_SOC.y + 120, R_HOST.x + R_HOST.w, R_HOST.y + 120, pe, PAL['--success']);
+      drawLabel('isolate + hash + hunt', p7.x - 10, p7.y - 10, PAL['--success'], 10, false, false, 'right');
+    }
+  }
+
+  /* ---- step machinery ---- */
+  function updateChips() {
+    if (!chipsWrap) return;
+    var chips = chipsWrap.querySelectorAll('.sim-step');
+    for (var i = 0; i < chips.length; i++) {
+      var n = parseInt(chips[i].getAttribute('data-step'), 10);
+      if (n === cur) chips[i].setAttribute('aria-current', 'true');
+      else chips[i].removeAttribute('aria-current');
+    }
+  }
+  function applyStepTexts() {
+    if (captionEl) captionEl.textContent = STEPS[cur].cap;
+    if (defenderEl) {
+      defenderEl.textContent = '';
+      var strong = document.createElement('strong');
+      strong.textContent = 'SOC view: ';
+      defenderEl.appendChild(strong);
+      defenderEl.appendChild(document.createTextNode(STEPS[cur].soc));
+    }
+  }
+  function syncControls() {
+    if (playBtn) playBtn.disabled = playing || (REDUCED && cur === 7);
+    if (pauseBtn) pauseBtn.disabled = !playing || REDUCED;
+  }
+  function setStep(i, done) {
+    cur = Math.max(0, Math.min(7, i));
+    prog = (REDUCED || done) ? 1 : 0;
+    applyStepTexts();
+    updateChips();
+    syncControls();
+  }
+
+  function frame(ts) {
+    if (!lastTs) lastTs = ts;
+    var dt = Math.min(64, ts - lastTs);
+    lastTs = ts;
+    if (playing && !REDUCED) {
+      prog += (dt / STEP_MS) * speed;
+      if (prog >= 1) {
+        if (cur < 7) {
+          cur += 1;
+          prog = 0;
+          applyStepTexts();
+          updateChips();
+        } else {
+          prog = 1;
+          playing = false;
+          syncControls();
+        }
+      }
+    }
+    draw();
+    raf = window.requestAnimationFrame(frame);
+  }
+
+  /* ---- controls ---- */
+  if (playBtn) {
+    if (REDUCED) playBtn.textContent = 'Next';
+    playBtn.addEventListener('click', function () {
+      if (REDUCED) {
+        setStep(cur < 7 ? cur + 1 : 0, true);
+        return;
+      }
+      if (cur === 7 && prog >= 1) { setStep(0, false); }
+      playing = true;
+      syncControls();
+    });
+  }
+  if (pauseBtn) {
+    pauseBtn.addEventListener('click', function () {
+      playing = false;
+      syncControls();
+    });
+  }
+  if (restartBtn) {
+    restartBtn.addEventListener('click', function () {
+      playing = false;
+      setStep(0, REDUCED);
+    });
+  }
+  if (speedSel) {
+    speedSel.addEventListener('change', function () {
+      speed = parseFloat(speedSel.value) || 1;
+    });
+  }
+  if (chipsWrap) {
+    chipsWrap.addEventListener('click', function (e) {
+      var btn = e.target && e.target.closest ? e.target.closest('.sim-step') : null;
+      if (!btn) return;
+      playing = false;
+      setStep(parseInt(btn.getAttribute('data-step'), 10), true);
+    });
+  }
+
+  /* ---- tooltips (hover + click/tap) ---- */
+  var NODES = [
+    { r: R_DAEMON, name: 'PID 2041 httpd (resident daemon)', desc: 'Runs for months and calls time functions constantly. That makes it the ideal trigger for patched vDSO code.' },
+    { r: R_VDSO, name: '[vdso] page', desc: 'Kernel-mapped code for fast time queries (clock_gettime, gettimeofday, time). Nothing in user space should ever write here.' },
+    { r: R_ATT, name: 'Attacker', desc: 'An intruder with a shell on the server, running as a service account. The scenario shows behavior, not real tooling.' },
+    { r: R_SOC, name: 'SOC panel', desc: 'Security Operations Center evidence board. Rows appear as auditd records, eBPF alerts, and metrics anomalies arrive.' },
+    { r: R_HOST, name: 'Linux server app-web-04', desc: 'The victim host. Network isolation and a memory capture are the defender first moves here.' },
+    { r: R_C2, name: 'C2 and mining pool', desc: 'Attacker infrastructure at 203.0.113.10:443, a documentation address. Egress filtering blocks it during containment.', cond: 5 }
+  ];
+  function nodeAt(dx, dy) {
+    for (var i = 0; i < NODES.length; i++) {
+      var n = NODES[i];
+      if (n.cond !== undefined && cur < n.cond) continue;
+      if (dx >= n.r.x && dx <= n.r.x + n.r.w && dy >= n.r.y && dy <= n.r.y + n.r.h) return n;
+    }
+    return null;
+  }
+  function showTip(node, cx, cy) {
+    if (!tooltip) return;
+    var shell = tooltip.parentElement;
+    var rect = shell.getBoundingClientRect();
+    var x = cx - rect.left + 14;
+    var y = cy - rect.top + 14;
+    if (x + 270 > rect.width) x = Math.max(6, cx - rect.left - 264);
+    if (y + 120 > rect.height) y = Math.max(6, y - 130);
+    tooltip.querySelector('.tt-name').textContent = node.name;
+    tooltip.querySelector('.tt-body').textContent = node.desc;
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+    tooltip.style.opacity = '1';
+  }
+  function hideTip() {
+    if (tooltip) tooltip.style.opacity = '0';
+  }
+  canvas.addEventListener('mousemove', function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var dx = (e.clientX - rect.left - view.ox) / view.k;
+    var dy = (e.clientY - rect.top - view.oy) / view.k;
+    var n = nodeAt(dx, dy);
+    if (n) showTip(n, e.clientX, e.clientY);
+    else if (!pinned) hideTip();
+  });
+  canvas.addEventListener('mouseleave', function () {
+    if (!pinned) hideTip();
+  });
+  canvas.addEventListener('click', function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var dx = (e.clientX - rect.left - view.ox) / view.k;
+    var dy = (e.clientY - rect.top - view.oy) / view.k;
+    var n = nodeAt(dx, dy);
+    if (n) { pinned = n; showTip(n, e.clientX, e.clientY); }
+    else { pinned = null; hideTip(); }
+  });
+
+  /* ---- theme changes: repaint with fresh tokens ---- */
+  document.addEventListener('atkthemechange', function () {
+    refreshPalette();
+  });
+
+  /* ---- boot ---- */
+  refreshPalette();
+  resize();
+  if (window.ResizeObserver) {
+    var ro = new window.ResizeObserver(function () { resize(); });
+    ro.observe(canvas);
+  }
+  window.addEventListener('resize', resize);
+  setStep(0, true);
+  raf = window.requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

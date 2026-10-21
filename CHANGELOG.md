@@ -4,21 +4,21 @@
 
 ### Added
 
-- 56 new technique guides covering T1584, T1585, T1586, T1587, T1589, T1591,
-  T1593, T1594, T1595, T1596, T1597, T1598 and T1681–T1683, including 41
-  sub-techniques.
-- 56 new Sigma rules extracted from the new detection sections, with 56
-  positive and 56 negative log fixtures.
+- 104 new technique guides covering T1055, T1078, T1190, T1195, T1199,
+  T1200, T1566, T1583, T1584–T1589, T1591, T1593–T1598, T1608, T1659,
+  T1669 and T1681–T1683, including 80 sub-techniques.
+- 104 new Sigma rules extracted from the new detection sections, with 104
+  positive and 104 negative log fixtures.
 - Canonical URLs for every newly added guide.
 - The new guides are wired into the technique catalogue, sitemap, search,
   hub pages and ATT&CK Explorer.
-- Rebuilt `data/sigma-index.json` to 197 rules and updated library statistics.
+- Rebuilt `data/sigma-index.json` to 245 rules and updated library statistics.
 
 ### Changed
 
 - ATT&CK Explorer now defaults to Live + planned, with green `Live` and gray
   `Planned` badges, a status legend, and live/planned counts per tactic.
-- Set all 197 Sigma rules to author `Souhaieb Marzouk`, status
+- Set all 245 Sigma rules to author `Souhaieb Marzouk`, status
   `experimental`, and practical descriptions and tuning notes.
 - Normalized every rule description to one physical YAML line.
 
@@ -27,7 +27,7 @@
 - Renamed the earlier batch of new sub-technique pages to `00N-Name.html` and
   updated the catalogue, sitemap, canonical URLs and internal links.
 - Replaced legacy `*-v2.0.html` internal links with the real page paths.
-- Updated README live-guide counts from 20 to 76.
+- Updated README live-guide counts from 20 to 124.
 
 ## v1.2 — 2026-10-19
 

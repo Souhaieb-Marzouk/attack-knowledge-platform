@@ -1,0 +1,1833 @@
+<!DOCTYPE html>
+<!-- ATT&CK Technique Detection Guide v2.0 — audited & corrected against MITRE ATT&CK v20, 2026-10-21 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1055.005 - Thread Local Storage | Detection Guide</title>
+<meta name="description" content="Educational, defensive guide to MITRE ATT&amp;CK T1055.005 (Thread Local Storage): how TLS callbacks run before main, how attackers abuse them, and how to detect them with static PE analysis, AV/EDR verdicts, Sigma rules, and Splunk SPL.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1055-Process-Injection/005-Thread-Local-Storage.html">
+<script>(function(){try{var t=localStorage.getItem('atk-theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<style>
+/* ATK-SHARED-CSS v1 — MITRE ATT&CK technique guide design system.
+   Shared by every technique page. Do not fork or re-theme per page. */
+
+:root{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --radius:14px; --radius-sm:9px;
+  --shadow:0 8px 28px rgba(2,6,18,.35);
+  --accent-soft:rgba(79,140,255,.14);
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 8px 24px rgba(23,35,64,.10);
+  --accent-soft:rgba(47,111,228,.10);
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16.5px;line-height:1.65;overflow-wrap:break-word;-webkit-font-smoothing:antialiased}
+img,svg,canvas{max-width:100%}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{line-height:1.2;font-weight:700;margin:0 0 .5em;letter-spacing:-.01em}
+p{margin:0 0 1em}
+code,kbd,samp{font-family:var(--mono);font-size:.88em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:.08em .35em}
+pre code{background:none;border:none;padding:0;font-size:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent-soft)}
+#atk-header:empty{display:none}
+
+/* ---------- progress bar ---------- */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:80;pointer-events:none}
+.progress-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+/* ---------- hero ---------- */
+.hero{border-bottom:1px solid var(--border);background:var(--bg);background:linear-gradient(180deg,var(--accent-soft),transparent 64%)}
+.hero-inner{max-width:1280px;margin:0 auto;padding:56px 28px 36px;position:relative}
+.kicker{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);margin:0 0 14px}
+.hero-title{font-size:clamp(1.9rem,4.4vw,2.75rem);letter-spacing:-.015em;max-width:26ch;margin-bottom:.45em}
+.tech-id{display:inline-block;vertical-align:middle;font-family:var(--mono);font-size:.44em;font-weight:700;color:var(--accent);border:1px solid var(--accent);background:var(--accent-soft);border-radius:10px;padding:.18em .5em;margin-right:.55rem;letter-spacing:.04em}
+.hero-intro{max-width:72ch;color:var(--muted);font-size:1.04rem;margin:0 0 20px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0 0 26px;padding:0}
+.chip{font-size:.76rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:5px 12px}
+.chip-mono{font-family:var(--mono);font-size:.71rem;color:var(--accent-2);border-color:var(--border-strong)}
+.facts-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.fact-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.fact-label{display:block;font-family:var(--mono);font-size:.67rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-2);margin-bottom:6px}
+.fact-card p{margin:0;font-size:.9rem;color:var(--muted);line-height:1.55;overflow-wrap:anywhere}
+.theme-toggle{position:absolute;top:24px;right:28px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-size:1.05rem;line-height:1;cursor:pointer}
+.theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- layout ---------- */
+.layout{max-width:1280px;margin:0 auto;padding:44px 28px 110px;display:grid;grid-template-columns:262px minmax(0,1fr);gap:38px;align-items:start}
+.sidebar{position:sticky;top:20px;max-height:calc(100vh - 40px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 14px;box-shadow:var(--shadow)}
+.toc-heading{font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:2px 6px 10px}
+.toc{display:flex;flex-direction:column;gap:2px}
+.toc a{display:block;padding:7px 10px;border-radius:8px;color:var(--muted);font-size:.86rem;border-left:2px solid transparent}
+.toc a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent);font-weight:600}
+.toc a.toc-sub{padding-left:26px;font-size:.8rem;border-left:2px solid var(--border)}
+.toc a.toc-sub.active{border-left-color:var(--accent)}
+.main-content{min-width:0}
+
+/* ---------- sections ---------- */
+.section{margin:0 0 60px;scroll-margin-top:22px}
+.section-head{margin-bottom:22px}
+.section h2{display:flex;align-items:center;gap:12px;font-size:clamp(1.35rem,2.4vw,1.8rem);margin-bottom:.4em}
+.section-num{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:34px;border-radius:10px;font-family:var(--mono);font-size:.85rem;font-weight:700;color:var(--accent);background:var(--accent-soft);border:1px solid var(--border-strong)}
+.section-intro{color:var(--muted);max-width:75ch;margin:0}
+h3.subsec{display:flex;align-items:center;gap:10px;font-size:1.12rem;margin:36px 0 14px;scroll-margin-top:22px}
+.subsec-num{flex:none;font-family:var(--mono);font-size:.72rem;font-weight:700;color:var(--accent-2);border:1px solid var(--border-strong);border-radius:8px;padding:3px 8px;background:var(--surface-2)}
+h4{font-size:1rem}
+
+/* ---------- cards, grids, callouts ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);margin:0 0 16px}
+.card h3,.card h4{margin-top:0}
+.card p:last-child{margin-bottom:0}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.grid-2 .card,.grid-3 .card{margin:0}
+.callout{border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:12px;background:var(--surface-2);padding:14px 16px;margin:0 0 16px}
+.callout .callout-title{display:block;font-weight:700;font-size:.85rem;margin-bottom:6px}
+.callout p{margin:0 0 .5em;font-size:.93rem}
+.callout p:last-child{margin:0}
+.callout.note{border-left-color:var(--accent)}   .callout.note .callout-title{color:var(--accent)}
+.callout.good{border-left-color:var(--success)}  .callout.good .callout-title{color:var(--success)}
+.callout.warning{border-left-color:var(--warning)}.callout.warning .callout-title{color:var(--warning)}
+.callout.danger{border-left-color:var(--danger)} .callout.danger .callout-title{color:var(--danger)}
+
+/* ---------- badges ---------- */
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid currentColor;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}
+.badge.critical{color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.badge.high{color:var(--high);background:color-mix(in srgb,var(--high) 12%,transparent)}
+.badge.medium{color:var(--warning);background:color-mix(in srgb,var(--warning) 14%,transparent)}
+.badge.low{color:var(--low);background:color-mix(in srgb,var(--low) 12%,transparent)}
+.badge.cat{color:var(--accent-2);background:var(--accent-soft);text-transform:none;letter-spacing:.02em}
+
+/* ---------- key/value list ---------- */
+.kv{display:grid;grid-template-columns:minmax(150px,max-content) minmax(0,1fr);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--surface)}
+.kv>div{padding:10px 14px;font-size:.9rem;border-top:1px solid var(--border);overflow-wrap:anywhere}
+.kv>div:nth-child(-n+2){border-top:none}
+.kv .k{background:var(--surface-2);font-weight:600;color:var(--muted);font-family:var(--mono);font-size:.76rem}
+
+/* ---------- timeline ---------- */
+.timeline{list-style:none;margin:0 0 16px;padding:4px 0 4px 24px;border-left:2px solid var(--border-strong)}
+.timeline li{position:relative;padding:0 0 16px 14px}
+.timeline li:last-child{padding-bottom:2px}
+.timeline li::before{content:"";position:absolute;left:-31px;top:7px;width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--bg),0 0 0 4px var(--border-strong)}
+.tl-when{font-family:var(--mono);font-size:.74rem;color:var(--accent-2);display:block;margin-bottom:2px}
+
+/* ---------- tables ---------- */
+.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:0 0 16px;background:var(--surface);-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.88rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+thead th{background:var(--surface-2);font-size:.76rem;text-transform:uppercase;letter-spacing:.06em;font-family:var(--mono)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+
+/* ---------- code blocks ---------- */
+.code-block{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--surface-2)}
+.code-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 8px 8px 14px;background:var(--surface);border-bottom:1px solid var(--border)}
+.code-head .lang{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.copy-btn{flex:none;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);font-family:var(--mono);font-size:.72rem;padding:5px 12px;border-radius:8px;cursor:pointer}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.code-block pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12.8px;line-height:1.6;tab-size:2}
+
+/* ---------- simulation ---------- */
+.sim{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);margin:0 0 16px}
+.sim-canvas-wrap{position:relative;aspect-ratio:16/9;min-height:280px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+.sim-canvas{display:block;width:100%;height:100%}
+.sim-tooltip{position:absolute;z-index:5;pointer-events:none;background:var(--elevated);color:var(--text);border:1px solid var(--border-strong);border-radius:10px;padding:8px 11px;font-size:.78rem;line-height:1.45;max-width:230px;box-shadow:var(--shadow)}
+.sim-tooltip strong{display:block;color:var(--accent-2);margin-bottom:2px}
+.sim-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.sim-btn{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);border-radius:9px;padding:8px 16px;font-size:.85rem;font-weight:600;cursor:pointer}
+.sim-btn:hover{border-color:var(--accent)}
+.sim-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.sim-speed-label{display:inline-flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted)}
+.sim-speed{background:var(--surface-2);color:var(--text);border:1px solid var(--border-strong);border-radius:8px;padding:6px 8px;font-size:.85rem}
+.sim-status{margin-left:auto;font-family:var(--mono);font-size:.74rem;color:var(--muted)}
+.step-chips{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.step-chip{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--muted);font-family:var(--mono);font-size:.71rem;border-radius:999px;padding:5px 11px;cursor:pointer}
+.step-chip:hover{color:var(--text)}
+.step-chip.active{color:#fff;background:var(--accent);border-color:var(--accent);font-weight:600}
+.sim-caption{padding:14px 16px 16px}
+.sim-step-title{font-weight:700;margin:0 0 6px;font-size:1rem}
+.sim-caption-text{font-size:.93rem;margin:0 0 12px;max-width:75ch}
+.sim-defender{border-left:3px solid var(--accent-2);background:var(--surface-2);border-radius:0 10px 10px 0;padding:10px 14px;margin:0 0 12px}
+.sim-defender-label{display:block;font-family:var(--mono);font-size:.66rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-2);margin-bottom:4px}
+.sim-defender-text{margin:0;font-size:.88rem}
+.sim-evidence{display:flex;flex-wrap:wrap;gap:8px}
+.sim-story{padding-left:22px;margin:0}
+.sim-story li{margin-bottom:10px;font-size:.93rem}
+.sim-story em{color:var(--accent-2);font-style:normal;font-weight:600}
+
+/* ---------- mobile controls + overlay ---------- */
+.mobile-toc-btn,.back-top{position:fixed;z-index:60;border-radius:999px;cursor:pointer;font-family:var(--sans)}
+.mobile-toc-btn{right:18px;bottom:18px;display:none;background:var(--accent);border:1px solid var(--accent);color:#fff;font-weight:700;font-size:.85rem;padding:12px 18px;box-shadow:var(--shadow)}
+.back-top{right:18px;bottom:74px;width:44px;height:44px;background:var(--surface);border:1px solid var(--border-strong);color:var(--text);font-size:1.15rem;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity .2s,transform .2s}
+.back-top.show{opacity:1;pointer-events:auto;transform:none}
+.toc-overlay{position:fixed;inset:0;z-index:90;background:rgba(4,8,18,.6)}
+.toc-overlay-panel{position:absolute;top:0;left:0;bottom:0;width:min(330px,88vw);background:var(--surface);border-right:1px solid var(--border);padding:18px 16px;overflow:auto;box-shadow:var(--shadow)}
+.toc-close{display:block;margin:0 0 14px auto;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);border-radius:8px;padding:6px 12px;font-size:.8rem;cursor:pointer}
+.toc-overlay .toc a{font-size:.95rem;padding:9px 12px}
+
+/* ---------- utilities ---------- */
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.small{font-size:.85rem}
+
+/* ---------- responsive ---------- */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0;padding-top:28px}
+  .sidebar{display:none}
+  .mobile-toc-btn{display:inline-block}
+  .facts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .hero-inner{padding:40px 18px 26px}
+  .hero-intro{font-size:.98rem}
+  .theme-toggle{top:14px;right:14px}
+  .facts-grid{grid-template-columns:minmax(0,1fr)}
+  .grid-2,.grid-3{grid-template-columns:minmax(0,1fr)}
+  .layout{padding:24px 14px 130px}
+  .sim-canvas-wrap{aspect-ratio:4/3;min-height:240px}
+  .sim-status{margin-left:0;width:100%}
+  .sim-toolbar .sim-btn{flex:1 1 auto}
+  table{min-width:560px}
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto!important}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+/* ---------- print ---------- */
+@media print{
+  .progress-bar,.sidebar,.mobile-toc-btn,.back-top,.toc-overlay,.theme-toggle,.sim-toolbar,.step-chips,.copy-btn,.sim-tooltip{display:none!important}
+  html,body{background:#fff!important;color:#000!important}
+  .card,.fact-card,.code-block,.table-scroll,.callout,.sim,.kv{border-color:#bbb!important;box-shadow:none!important;background:#fff!important}
+  a{color:#000;text-decoration:none}
+  pre,.code-block pre{white-space:pre-wrap;word-break:break-word;overflow:visible}
+  .table-scroll{overflow:visible}
+  table{min-width:0}
+  .section{break-inside:auto}
+  h2,h3{break-after:avoid}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1055.005"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div class="progress-bar" aria-hidden="true"><span id="progressFill"></span></div>
+
+<main>
+  <header class="hero">
+    <div class="hero-inner">
+      <button id="pageThemeToggle" class="theme-toggle" type="button" aria-label="Switch color theme">☀</button>
+      <p class="kicker">MITRE ATT&amp;CK · Sub-technique of T1055 · Stealth · Privilege Escalation</p>
+      <h1 class="hero-title"><span class="tech-id">T1055.005</span> Thread Local Storage</h1>
+      <p class="hero-intro">Thread local storage (TLS) is a Windows feature that gives each thread its own private data slots. Every program can also register TLS callback functions, and the Windows loader runs them <strong>before</strong> the program's main entry point. Attackers abuse these callbacks so their code executes very early — before most security tools attach — or to inject code into other processes.</p>
+      <ul class="chips" aria-label="Technique metadata">
+        <li class="chip chip-mono">ID · T1055.005</li>
+        <li class="chip">Tactics · Stealth / Privilege Escalation (TA0005 / TA0004)</li>
+        <li class="chip">Platform · Windows</li>
+        <li class="chip">Parent · T1055 Process Injection</li>
+        <li class="chip">Domain · Enterprise</li>
+        <li class="chip chip-mono">Guide v2.0</li>
+      </ul>
+      <div class="facts-grid">
+        <div class="fact-card"><span class="fact-label">What it is</span><p>Malicious code placed in a program's TLS directory runs before the program's main function. The visible program logic looks untouched, yet the attacker's code executes first.</p></div>
+        <div class="fact-card"><span class="fact-label">Why attackers use it</span><p>Early execution, anti-analysis, and quiet staging. Code that runs before monitoring starts can hide itself, check for research tools, or prepare a payload in peace.</p></div>
+        <div class="fact-card"><span class="fact-label">Main risks</span><p>Loaders that start before monitoring; hidden staging inside files that look normal; a modified executable sitting on disk that nobody notices.</p></div>
+        <div class="fact-card"><span class="fact-label">Detection focus</span><p>Static PE inspection, antivirus (AV) and EDR (endpoint detection and response) verdicts, and memory scanning. Native Windows logs are sparse — they do not show callback execution directly.</p></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Table of contents">
+      <p class="toc-heading">Contents</p>
+      <nav id="tocNav" class="toc" aria-label="Sections"></nav>
+      <noscript>
+        <nav class="toc" aria-label="Sections (static fallback)">
+          <a href="#overview">Overview</a>
+          <a href="#simulation">Animated simulation</a>
+          <a href="#red-team">Red team perspective</a>
+          <a href="#blue-team">Blue team perspective</a>
+          <a href="#detection-engineering">Detection engineering deep dive</a>
+          <a class="toc-sub" href="#regulation-mapping">5.1 Regulation mapping</a>
+          <a class="toc-sub" href="#threat-intelligence">5.2 Threat intelligence</a>
+          <a class="toc-sub" href="#threats-ranking">5.3 Threats ranking</a>
+          <a class="toc-sub" href="#logs-and-patterns">5.4 Logs and patterns</a>
+          <a class="toc-sub" href="#sigma-and-spl">5.5 Sigma rules and Splunk SPL</a>
+          <a href="#case-study">Real-world case study</a>
+          <a href="#mitigation">Mitigation and defense</a>
+          <a href="#mistakes">Common mistakes and best practices</a>
+          <a href="#cheat-sheet">Cheat sheet and quick reference</a>
+        </nav>
+      </noscript>
+    </aside>
+
+    <div class="main-content">
+      <section id="overview" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">1</span><span class="section-title">Overview</span></h2>
+    <p class="section-intro">Windows gives every thread private data slots called thread local storage (TLS). A program file can also list small functions — TLS callbacks — that the Windows loader runs before the program's main entry point. This section explains that mechanism in plain language and shows the two main ways attackers abuse it.</p>
+  </header>
+
+  <div class="card">
+    <h3>TLS and TLS callbacks in plain language</h3>
+    <p>A Windows program is made of threads, and each thread needs its own private scratch space. Thread local storage (TLS) provides that space: a set of data slots that only one thread can see. That part is normal and harmless.</p>
+    <p>The interesting part is in the file format. Every executable or DLL on Windows is a PE file (Portable Executable). A PE file can carry a small table in its header called the <strong>TLS directory</strong>. This table lists the addresses of callback functions. When Windows loads the file, its loader (the <code>ntdll</code> library) maps the image — the file laid out in memory — reads the headers, and finds the TLS directory. It then calls every listed callback <strong>before the program's main entry point</strong>. That means the callbacks run before <code>main()</code> and before the first line of normal code. The loader calls them on process start and again on every new thread attaching or detaching, with a reason code such as <code>DLL_PROCESS_ATTACH</code> or <code>DLL_THREAD_ATTACH</code>.</p>
+    <p>Think of it as a "before main()" hook that the loader always honors. Legitimate software uses it for setup work. Attackers use it because whatever they put there runs first — automatically, on every launch, without touching the visible program logic.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Abuse angle 1 — the trojanized executable</h4>
+      <p>The attacker takes a normal, working installer or utility and adds — or redirects — a TLS callback entry in its header. The callback points at code the attacker hid in an extra section of the file.</p>
+      <p>When anyone runs the file, the attacker's code runs first. It can stage an implant, unpack a payload, or run anti-analysis checks. Then the real installer continues on top, so the user sees a program that works and suspects nothing. Security tools that attach to a process later arrive after the callback has already finished.</p>
+    </div>
+    <div class="card">
+      <h4>Abuse angle 2 — hijacking execution through the callback table</h4>
+      <p>The TLS callback table is also an execution hook that can be modified. An attacker who can change a PE's header — on disk or in memory — can point a callback at new code, redirect an existing callback, or add extra entries.</p>
+      <p>Used against another process, this becomes an injection method: the attacker's code gets a guaranteed, early execution slot inside a process they did not start. This is why ATT&amp;CK places T1055.005 under Process Injection (T1055), alongside Stealth and Privilege Escalation. TA0005 was named Defense Evasion before ATT&amp;CK v20.</p>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <span class="callout-title">Note — why some sandboxes and AV missed TLS-first code historically</span>
+    <p>Older sandboxes ran a program and waited for "interesting" behavior from the main code path. Older AV engines sometimes attached their hooks after startup had finished. A payload hidden in a TLS callback finished its work before either tool looked. Modern EDR hooks earlier, scans memory continuously, and inspects file headers statically — which is exactly where this guide's detections focus.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Where it fits in the attack chain</h4>
+      <p>T1055.005 is mainly a <strong>stealth and execution staging</strong> technique. Its official goal is to evade process-based defenses — tools that watch what a process does — and possibly elevate privileges. It gives attacker code an early, quiet ride inside a trusted-looking file. It becomes <strong>persistence</strong> when the trojanized binary is a legitimate program that auto-starts with Windows — then the callback runs again at every boot. It becomes <strong>privilege escalation</strong> when the callback-based injection lands inside a process with higher rights.</p>
+      <p>How it differs from its sibling sub-techniques: T1055.003 (Thread Execution Hijacking) takes over the instruction pointer of an existing thread. T1055.004 (Asynchronous Procedure Call) queues a function to run when a thread becomes available. T1055.005 instead uses the loader's own TLS callback list, so the code runs before the entry point.</p>
+    </div>
+    <div class="card">
+      <h4>What you will learn on this page</h4>
+      <p>How the loader honors TLS callbacks; what a trojanized PE looks like in static inspection; which logs fire and which do not (a key gap); a full simulation of one attack run; a triage flow for the security operations center (SOC); five Sigma rules with matching Splunk SPL; and a prioritized defense plan.</p>
+    </div>
+  </div>
+
+  <div class="kv">
+    <div class="k">ID</div><div>T1055.005 — Process Injection: Thread Local Storage</div>
+    <div class="k">Parent technique</div><div>T1055 Process Injection</div>
+    <div class="k">Platform</div><div>Windows</div>
+    <div class="k">Permissions required</div><div>User</div>
+    <div class="k">Data sources</div><div>File (static analysis), Malware content, Process access, Windows Defender / EDR detections</div>
+    <div class="k">Related techniques</div><div><a href="https://attack.mitre.org/techniques/T1574/">T1574 Hijack Execution Flow</a>, <a href="https://attack.mitre.org/techniques/T1027/">T1027 Obfuscated Files or Information</a>, <a href="https://attack.mitre.org/techniques/T1055/012/">T1055.012 Process Hollowing</a></div>
+  </div>
+</section>
+
+<section id="simulation" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">2</span><span class="section-title">Animated simulation</span></h2>
+    <p class="section-intro">The animation shows one complete attack run: an attacker patches a benign installer with a malicious TLS callback, a user downloads and runs it, the Windows loader calls the callback before the program starts, and the SOC finally catches the chain through verdicts and memory scanning. A written text version follows below the canvas.</p>
+  </header>
+
+  <div class="sim" id="sim">
+    <div class="sim-canvas-wrap">
+      <canvas class="sim-canvas" role="img" aria-label="Diagram of a trojanized installer whose malicious TLS callback runs before the program entry point, with SOC verdicts, memory scanning, and host isolation shown on the right."></canvas>
+      <div class="sim-tooltip" hidden></div>
+    </div>
+    <div class="sim-toolbar">
+      <button class="sim-btn primary sim-play" type="button">Play</button>
+      <button class="sim-btn sim-restart" type="button">Restart</button>
+      <label class="sim-speed-label">Speed
+        <select class="sim-speed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      </label>
+      <span class="sim-status" aria-live="polite">Step 1 of 8</span>
+    </div>
+    <div class="step-chips" role="group" aria-label="Jump to a step"></div>
+    <div class="sim-caption">
+      <p class="sim-step-title"></p>
+      <p class="sim-caption-text" aria-live="polite"></p>
+      <div class="sim-defender">
+        <span class="sim-defender-label">SOC view</span>
+        <p class="sim-defender-text" aria-live="polite"></p>
+      </div>
+      <div class="sim-evidence" aria-label="Evidence produced by this step"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Written story (text alternative for the animation)</h3>
+    <ol class="sim-story">
+      <li><strong>Step 1 — Build payload.</strong> On an isolated lab VM, the attacker patches a benign installer: they add a TLS directory entry that points at their own callback function and hide the payload in an extra section. The file still installs normally. <em>Defender view:</em> nothing has fired yet — only static PE analysis or YARA on the file would flag the unusual TLS directory.</li>
+      <li><strong>Step 2 — Deliver.</strong> The file is hosted on a server behind a phishing-style link. The user clicks the link and downloads <code>installer.exe</code> into the Downloads folder. <em>Defender view:</em> a mail or web gateway with YARA could raise a verdict here; in this run no rule matches, so the download passes.</li>
+      <li><strong>Step 3 — Execute.</strong> The user double-clicks the installer. Windows creates the process from the Downloads folder. <em>Defender view:</em> Sysmon EID 1 records the new process and its path — a weak signal alone, but valuable context later.</li>
+      <li><strong>Step 4 — Loader reads TLS directory.</strong> The Windows loader (<code>ntdll</code>) maps the image, walks the PE headers, finds the TLS directory, and collects the callback addresses. <em>Defender view:</em> this activity is invisible in native logs; no event fires for header parsing.</li>
+      <li><strong>Step 5 — Callback runs before main.</strong> The loader calls the malicious callback before the program's entry point. The callback stages an implant and runs quick anti-analysis checks. <em>Defender view:</em> EDR early-behavior hooks or the AV engine may raise a verdict; Windows Defender can log event 1116.</li>
+      <li><strong>Step 6 — Implant continues.</strong> The real installer keeps running normally on top, so the user sees a working program. The implant now operates from unsigned memory inside the installer process. <em>Defender view:</em> EDR memory scanning finds an unsigned, unrecognized region inside the process.</li>
+      <li><strong>Step 7 — Optional injection.</strong> The callback-based loader injects its payload into another process, such as the file manager, to move the work away from the original program. <em>Defender view:</em> cross-process access with write and execute rights raises an EDR alert; Sysmon EID 10 records the access.</li>
+      <li><strong>Step 8 — SOC triage.</strong> The analyst pulls the file from the host and runs a static YARA check, which confirms a suspicious TLS callback table. The host is isolated and the file is removed. <em>Defender view:</em> YARA match confirmed, host isolated in the EDR console, file hash pushed to the blocklist.</li>
+    </ol>
+  </div>
+</section>
+      <section id="red-team" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">3</span><span class="section-title">Red team perspective</span></h2>
+    <p class="section-intro">This section explains, at a structural and educational level, why attackers pick TLS callbacks, what conditions the trick needs, and where it shows up in real tooling. Everything here is descriptive — no working patcher or payload is provided, and any research belongs on isolated lab machines.</p>
+  </header>
+
+  <div class="card">
+    <h3>Why attackers use TLS callbacks</h3>
+    <p><strong>They run before user-mode sensors hook in.</strong> Many monitoring tools attach to a process after it has started. A TLS callback has already finished by then, so its setup work — mapping payloads, decrypting config, checking for research tools — leaves few live traces.</p>
+    <p><strong>They historically bypassed some sandboxes.</strong> Automated analysis systems that waited for "main program" behavior saw a quiet installer, because the malicious part never touched the main code path.</p>
+    <p><strong>They pair naturally with packing.</strong> A callback can unpack the real payload into memory and hand control over later, which adds an obfuscation layer (see T1027) on top of the early-execution advantage.</p>
+  </div>
+
+  <div class="callout danger">
+    <span class="callout-title">Danger — Lab only. Structural description, not a build guide.</span>
+    <p>Structurally, a PE's TLS directory is a header table that lists the virtual addresses of callback functions. A trojanized build adds a new entry — or redirects an existing one — so that attacker code placed in an extra section of the file runs when the loader honors the table. That is the whole concept; no patcher steps, offsets, or code are given here, and none are needed for defense.</p>
+    <p>Studying this technique is legitimate only on isolated research VMs, with self-made unsigned test binaries, no real user data, and written approval. Modifying and redistributing software you do not own is illegal in most jurisdictions.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Where it applies in real tooling</h4>
+      <p>TLS callbacks are not exotic. Public reporting ties them to several common places:</p>
+      <p><span class="badge cat">Commodity loaders</span> <span class="badge cat">Protectors and packers</span> <span class="badge cat">Anti-analysis packers</span> <span class="badge cat">Staged droppers</span></p>
+      <p>Commercial protectors ship TLS callbacks as a standard feature, which means many packed files — benign or malicious — carry them. That is exactly why static detection needs prevalence and context, not just "has a callback".</p>
+    </div>
+    <div class="card">
+      <h4>Prerequisites and constraints</h4>
+      <p>The attacker must be able to modify and distribute a PE file, which means this technique usually starts with phishing, malvertising, or a supply-chain position. The callback code must also survive loader constraints: it runs while the loader lock may be held, so only a safe subset of API calls works reliably, and anything heavy risks deadlock or a crash on newer Windows builds.</p>
+    </div>
+  </div>
+
+  <h3 class="subsec-mt" style="margin:26px 0 12px;font-size:1.05rem">Common variations</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Variation</th><th>How it differs</th><th>Why it matters to defenders</th></tr></thead>
+      <tbody>
+        <tr><td>Multiple callbacks</td><td>The TLS directory can list several callbacks; the loader runs each one, in order.</td><td>Static analysis must review every entry, not just the first.</td></tr>
+        <tr><td>Callback-only DLLs</td><td>The DLL has no meaningful main code path — all logic lives in the callbacks.</td><td>Behavior looks "empty" except for the callback window; memory scanning helps.</td></tr>
+        <tr><td>Anti-debug callbacks</td><td>Callbacks exist only to check for research tools and change behavior accordingly.</td><td>Analysis results can lie; test on clean, unmodified research VMs.</td></tr>
+        <tr><td>Remote TLS-callback patching</td><td>Rare: the attacker modifies the callback table of a file or process they already reached, to hijack its startup.</td><td>Sudden header changes in previously seen files are a strong static signal.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Common mistakes seen in offensive research</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Mistake</th><th>What happens</th></tr></thead>
+        <tbody>
+          <tr><td>Callback crashes on newer Windows</td><td>Loader lock and API restrictions make heavy calls inside callbacks unreliable across Windows versions.</td></tr>
+          <tr><td>Breaking the loader</td><td>A malformed TLS directory means the process fails to start at all — a very visible failure.</td></tr>
+          <tr><td>No fallback if callbacks are stripped</td><td>Some gateway or EDR filters strip or block unusual TLS directories, and the whole chain then dies silently.</td></tr>
+          <tr><td>Forgetting the artifact</td><td>The modified PE sits on disk. Static evidence — a modified header on a low-prevalence file — is the attacker's biggest exposure.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="blue-team" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">4</span><span class="section-title">Blue team perspective</span></h2>
+    <p class="section-intro">Defenders rarely see the callback itself. They see the file it lives in, the verdict their AV or EDR raises, the memory it occupies, and the injection behavior that sometimes follows. This section maps that visibility and gives a six-step triage flow.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Visibility — static</h4>
+      <p>Static analysis is your strongest ground here. A YARA rule (or any PE parser) can read the TLS directory of a file at rest: how many callbacks it lists, and where they point. Callback addresses that fall outside the file's normal sections, or a brand-new TLS directory in a previously clean file, are concrete, reproducible evidence.</p>
+      <p>Mail and web gateways can run these checks on arrival, before any user is involved.</p>
+    </div>
+    <div class="card">
+      <h4>Visibility — runtime</h4>
+      <p>At runtime, rely on verdicts and memory, not on a "callback ran" event. AV and EDR engines raise verdicts when the early code behaves badly (T1055.005-aligned signatures like loader or injection detections). EDR memory scanning finds unsigned, unrecognized regions inside otherwise normal processes. Cross-process access alerts (Sysmon EID 10) catch the injection follow-up. MITRE's own detection strategy for this technique (DET0467) works the same way: it watches memory changes to PE headers and TLS directory structures, followed by anomalous thread behavior before the main entry point runs.</p>
+    </div>
+  </div>
+
+  <div class="callout warning">
+    <span class="callout-title">Warning — the logging gap you must plan around</span>
+    <p>Sysmon and standard Windows event logs do <strong>not</strong> show TLS callback execution. There is no event that says "callback ran". You will see the file being created (Sysmon EID 11), the process starting (EID 1), AV/EDR verdicts, and memory scan results — but the loader's header parsing and the callback call itself happen inside the loader, unlogged. Build your detections around files, verdicts, and memory, and document this gap explicitly for your auditors and analysts.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Artifacts to collect</h4>
+      <p>The modified PE itself — look for an unusual TLS directory, an unexpected extra section, or unsigned regions inside an otherwise normal file. The quarantine copy your AV already saved. A memory capture from the affected process, if timing allows. If injection followed, the cross-process access records (Sysmon EID 10) naming source and target process.</p>
+    </div>
+    <div class="card">
+      <h4>Where to look</h4>
+      <p>Mail and web gateway logs plus YARA verdicts (delivery trail); the EDR verdict queue and AV operational log (Windows Defender events 1116 and 1121); EDR memory scan results; and, for the injection angle, process access events. A hash lookup against your gateway and endpoint history tells you whether the file arrived anywhere else.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Why it matters</h4>
+      <p>Because the technique defeats timing assumptions. If your playbooks assume "monitoring starts when the process does", TLS-first code breaks that assumption silently. Knowing the gap lets you close it with static inspection and memory scanning instead of waiting for a log that will never arrive.</p>
+    </div>
+    <div class="card">
+      <h4>Fit in the attack chain</h4>
+      <p>Expect T1055.005 early in the chain — right after delivery, before or alongside the first implant actions. It pairs with T1574 (Hijack Execution Flow) and T1027 (Obfuscated Files or Information). Detections here cut the chain before credential theft or movement happens.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Six-step triage flow</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Step</th><th>Action</th><th>Output</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Validate the EDR or AV verdict — confirm it is real malware behavior, not a known benign installer.</td><td>Triage decision: true or false positive.</td></tr>
+          <tr><td>2</td><td>Retrieve the file — pull the sample (quarantine copy or live copy) with its hash and full path.</td><td>Sample + SHA256 hash + delivery path.</td></tr>
+          <tr><td>3</td><td>Run the static YARA / TLS-directory check on the sample to confirm the callback anomaly.</td><td>Confirmed or excluded TLS anomaly.</td></tr>
+          <tr><td>4</td><td>Isolate the host in the EDR console if the verdict or the static check is positive.</td><td>Host contained; spread stopped.</td></tr>
+          <tr><td>5</td><td>Clean the host and block the hash at the EDR, mail proxy, and web proxy.</td><td>Host restored; re-delivery blocked.</td></tr>
+          <tr><td>6</td><td>Hunt the hash, file name, and delivery URLs across the fleet — gateway history first, then endpoints.</td><td>List of any other affected hosts.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+      <section id="detection-engineering" class="section">
+        <header class="section-head">
+          <h2><span class="section-num">5</span><span class="section-title">Detection engineering deep dive</span></h2>
+          <p class="section-intro">This is the longest section. It maps T1055.005 to regulations and threat intelligence, ranks the realistic threats, explains the exact logs and patterns involved, and finishes with five ready-to-adapt Sigma rules plus matching Splunk SPL queries.</p>
+        </header>
+        <h3 class="subsec" id="regulation-mapping"><span class="subsec-num">5.1</span><span class="section-title">Regulation mapping</span></h3>
+<p class="muted">Auditors rarely ask about TLS callbacks by name. They ask whether you detect and prevent malware, monitor endpoints, and keep evidence. The controls below are the ones this technique touches, with the evidence each framework expects you to produce.</p>
+<div class="table-scroll">
+  <table>
+    <thead><tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+    <tbody>
+      <tr><td>GDPR</td><td>Art. 32 + Art. 33</td><td>Security of processing (Art. 32) — requires technical measures appropriate to the risk, including protection against malicious code that steals personal data. Breach notification (Art. 33) — a stolen-session incident must reach the supervisory authority within 72 hours, which only works if detection evidence exists.</td><td>AV/EDR verdict records, gateway scanning logs, incident register entries with notification timelines.</td></tr>
+      <tr><td>HIPAA</td><td>45 CFR §164.312(a)(1) + §164.312(b) + §164.308(a)(1)(ii)(D)</td><td>Access control and audit controls — ePHI systems must limit which code runs and keep reviewable activity logs. Information system activity review — logged events (verdicts, process access) must actually be checked.</td><td>Endpoint verdict workflow records, log retention proof, periodic audit-trail review minutes.</td></tr>
+      <tr><td>ISO 27001:2022</td><td>Annex A 8.15 + 8.16 + 5.24–5.26</td><td>Logging (8.15) and monitoring activities (8.16) — verdict, file, and process-access events must be logged and monitored. Incident management planning, event assessment, and response (5.24–5.26) — a trojanized-installer verdict must follow a defined triage and response path.</td><td>Sigma rules in version control, monitoring review minutes, incident tickets showing triage decisions.</td></tr>
+      <tr><td>SOC 2</td><td>CC7.2 + CC7.3</td><td>Monitoring for anomalies and evaluating security events — the company must show it detects malicious activity and assesses whether each event could cause harm before closing it.</td><td>Detection rule inventory, tuning history, alert triage tickets with documented outcomes.</td></tr>
+      <tr><td>PCI DSS v4.0</td><td>10.2 + 10.5 + 10.7 + 12.10</td><td>Audit-log capture (10.2), log retention (10.5), response to failures of critical security control systems (10.7 — including AV/EDR verdicts on payment systems), and an incident response plan (12.10).</td><td>Defender/Sysmon events in the SIEM within retention windows, hash blocklist change records, IR plan test results.</td></tr>
+      <tr><td>NIST CSF 2.0</td><td>DE.CM-09 + PR.PS-04 + RS.MI-01/02</td><td>Continuous monitoring of computing hardware and software (DE.CM-09); log records generated and available for monitoring (PR.PS-04); incidents contained and eradicated (RS.MI-01/02) — the isolation and rebuild steps in the triage flow.</td><td>Monitoring coverage map, SIEM data-source list, containment and eradication records from real tickets.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3 class="subsec" id="threat-intelligence"><span class="subsec-num">5.2</span><span class="section-title">Threat intelligence</span></h3>
+<p class="muted">TLS-callback abuse is well documented in loader and protector research. These are the sources worth tracking, how to use them, and what public reporting currently says about the actors behind the tooling.</p>
+<div class="grid-3">
+  <div class="card">
+    <h4>MITRE ATT&amp;CK</h4>
+    <p>The official T1055.005 page defines scope and terminology. The parent page T1055 gives the injection context. Start every new detection here so names and IDs stay consistent in your documentation.</p>
+  </div>
+  <div class="card">
+    <h4>Vendor reporting</h4>
+    <p>Microsoft, ESET, Check Point, and Fortinet regularly publish loader-family write-ups. Their reports describe staging quirks — including TLS-callback use — and often release YARA rules and hashes you can adapt.</p>
+  </div>
+  <div class="card">
+    <h4>OSINT repositories</h4>
+    <p>Malpedia indexes loader families with references. MalwareBazaar offers samples and community YARA. Yara-Rules and ReversingLabs feeds provide ready static rules. VirusTotal gives prevalence and verdict context for any hash.</p>
+  </div>
+  <div class="card">
+    <h4>ISACs</h4>
+    <p>Sector ISACs share indicators that already passed relevance filtering for your industry. A loader hash shared by your ISAC often deserves instant blocklisting without full re-analysis.</p>
+  </div>
+  <div class="card">
+    <h4>Commercial feeds</h4>
+    <p>ReversingLabs and similar feeds classify files at scale, including header anomalies. They are useful for the supply-chain watch in threat T4 below: is this signed binary supposed to have a TLS directory?</p>
+  </div>
+  <div class="card">
+    <h4>Internal telemetry</h4>
+    <p>Your own verdict history, hash cache, and gateway logs are the best baselines. Track first-seen dates for hashes in your environment; a "first seen this week" verdict is far more interesting than a year-old one.</p>
+  </div>
+</div>
+<p><strong>Collection → analysis → application:</strong> pull new verdicts and hashes weekly from gateway and EDR queues; analyze whether detections map to T1055.005 by checking the file's TLS directory once; apply by pushing hashes to blocklists, feeding rules back to the gateway, and tuning Sigma rules with the prevalence you observe.</p>
+<div class="table-scroll">
+  <table>
+    <thead><tr><th>Actor / toolset</th><th>How TLS callbacks are used</th><th>Confidence</th></tr></thead>
+    <tbody>
+      <tr><td>Ursnif (S0386) — banking trojan</td><td>Documented in MITRE ATT&amp;CK procedure examples and in 2017 vendor reporting: Ursnif has injected code into target processes via thread local storage callbacks.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>CANONSTAGER (S1237) — loader</td><td>Documented in MITRE ATT&amp;CK procedure examples: it stores function addresses, resolved by its API hashing algorithm, in the TLS array structure and calls them from offsets inside the binary.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Commodity loader families</td><td>TLS-callback staging is documented in public loader write-ups: early setup, payload mapping, then quiet handover.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Commercial protectors and packers</td><td>TLS callbacks are a standard shipping feature — present in benign and malicious packed files alike.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>APT toolsets</td><td>Callbacks used for anti-analysis and early setup in targeted operations; less commonly the main staging path.</td><td><span class="badge medium">Medium</span></td></tr>
+      <tr><td>Red-team tooling</td><td>Public offensive frameworks include callback staging options for adversary simulation.</td><td><span class="badge medium">Medium</span></td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="callout note">
+  <span class="callout-title">Note — how to read these confidence levels</span>
+  <p>Confidence reflects the quality and amount of public documentation, not the real prevalence. Absence of reporting is not absence of use. Treat the documented toolsets and the other High rows as your baseline assumptions for tuning, and the Medium rows as watch items to revisit each quarter.</p>
+</div>
+
+<h3 class="subsec" id="threats-ranking"><span class="subsec-num">5.3</span><span class="section-title">Threats ranking and categorization</span></h3>
+<p class="muted">Five realistic threats built on T1055.005, ranked for a typical Windows enterprise. Severity reflects likely impact combined with how hard the threat is to see with native logging. All five run on Windows only; the summary table at the end lists them in severity order.</p>
+
+<div class="card">
+  <h4>T1 — Trojanized executable with malicious TLS callback <span class="badge critical">Critical</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description:</strong> an attacker patches a benign-looking installer or utility so its TLS directory points at attacker code that stages an implant before the program starts. <strong>Preconditions:</strong> ability to deliver a file users will run (phishing, malvertising, fake updates). <strong>Impact:</strong> full foothold before most tools look; credential theft and further injection. <strong>Justification:</strong> this is the most common, best-documented abuse (documented for the Ursnif banking trojan), it defeats timing-based monitoring, and it needs no prior access to the target. <strong>Primary detection signal:</strong> AV/static verdict on the delivered file.</p>
+</div>
+<div class="card">
+  <h4>T2 — TLS callback used for anti-analysis or sandbox evasion <span class="badge medium">Medium</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description:</strong> the callback checks for research tools and changes behavior — staying quiet in sandboxes, active on real hosts. <strong>Preconditions:</strong> attacker-controlled code in the callback window. <strong>Impact:</strong> delayed or missed detections; analysis results that lie. <strong>Justification:</strong> raises evasion quality of any chain using it, but depends on another technique for delivery. <strong>Primary detection signal:</strong> behavior verdicts on execution.</p>
+</div>
+<div class="card">
+  <h4>T3 — Remote TLS-callback injection into another process <span class="badge high">High</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description:</strong> an implant with existing access modifies or injects through a TLS callback mechanism into a second process, gaining an early execution slot there. <strong>Preconditions:</strong> prior foothold and write access to a target process or its image. <strong>Impact:</strong> stealthy persistence inside trusted processes; hard-to-attribute execution. <strong>Justification:</strong> rare but high impact and it typically indicates an established intrusion. <strong>Primary detection signal:</strong> EDR behavioral verdicts (cross-process access plus injection).</p>
+</div>
+<div class="card">
+  <h4>T4 — Unexpected TLS directory in a signed or expected binary <span class="badge medium">Medium</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description:</strong> a software update or internally expected binary suddenly carries a TLS directory it never had — a sign of tampering or a compromised build pipeline. <strong>Preconditions:</strong> supply-chain compromise or insider modification. <strong>Impact:</strong> signed malware that walks past allow-listing. <strong>Justification:</strong> low frequency, very high trust impact. <strong>Primary detection signal:</strong> static comparison against a known-good baseline.</p>
+</div>
+<div class="card">
+  <h4>T5 — Packed loader executing before the entry point <span class="badge medium">Medium</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description:</strong> a packed payload whose protector unpacks and launches code through TLS callbacks, before any normal program logic. <strong>Preconditions:</strong> delivered packed file; often combined with T1. <strong>Impact:</strong> static signatures miss the real payload; behavior appears only in memory. <strong>Justification:</strong> common in commodity chains but usually caught downstream by memory scanning. <strong>Primary detection signal:</strong> memory-scan verdicts on the host.</p>
+</div>
+
+<div class="table-scroll">
+  <table>
+    <thead><tr><th>ID</th><th>Threat</th><th>Platform</th><th>Severity</th><th>Primary detection signal</th></tr></thead>
+    <tbody>
+      <tr><td>T1</td><td>Trojanized executable with malicious TLS callback</td><td>Windows</td><td><span class="badge critical">Critical</span></td><td>AV/static verdict on delivered file</td></tr>
+      <tr><td>T3</td><td>Remote TLS-callback injection into another process</td><td>Windows</td><td><span class="badge high">High</span></td><td>EDR behavioral (injection) verdicts</td></tr>
+      <tr><td>T2</td><td>TLS callback for anti-analysis / sandbox evasion</td><td>Windows</td><td><span class="badge medium">Medium</span></td><td>Behavior verdicts on execution</td></tr>
+      <tr><td>T4</td><td>Unexpected TLS directory in a signed or expected binary</td><td>Windows</td><td><span class="badge medium">Medium</span></td><td>Static baseline comparison</td></tr>
+      <tr><td>T5</td><td>Packed loader executing before the entry point</td><td>Windows</td><td><span class="badge medium">Medium</span></td><td>Memory-scan verdicts</td></tr>
+    </tbody>
+  </table>
+</div>
+        <h3 class="subsec" id="logs-and-patterns"><span class="subsec-num">5.4</span><span class="section-title">Logs and patterns</span></h3>
+<p class="muted">Remember the core gap: nothing in native Windows logging records the callback itself. Every detection below rides on the file, the verdict, or the memory around it. Use this section to connect the threats from 5.3 to concrete log sources, fields, and example events.</p>
+
+<div class="grid-2">
+  <div class="card">
+    <h4>Log sources that matter</h4>
+    <p><strong>Windows Defender operational log</strong> — events 1116 (detection), 1117 (remediation action succeeded), and 1121 (behavior blocked) carry verdict names you can route on. <strong>EDR product logs</strong> — verdicts, memory-scan findings, cross-process access. <strong>Sysmon events 1, 7, and 11</strong> — process start, image load, and file create; supporting context, not the technique itself. <strong>Static YARA reports</strong> — gateway and endpoint scan outputs that describe PE header anomalies. Pure TLS callback execution leaves few direct event traces, so memory scanning and EDR behavioral telemetry carry the real weight here.</p>
+  </div>
+  <div class="card">
+    <h4>Fields worth routing on</h4>
+    <p><code>EventID</code> — which event fired. <code>DetectionName</code> — the verdict; its keywords drive routing. <code>ProcessName</code> / <code>PathName</code> — who did it and from where. <code>FileHash</code> — the pivot and block key (some Defender builds expose it only in the quarantine record or MPLog — enrich there). <code>ImageLoaded</code> (Sysmon 7) — modules loaded. <code>TargetFilename</code> (Sysmon 11) — where files land. <code>User</code> — account context.</p>
+  </div>
+</div>
+
+<div class="table-scroll">
+  <table>
+    <thead><tr><th>Threat</th><th>Primary log sources</th><th>Normal vs suspicious</th><th>Detection logic</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>T1 Trojanized executable</td>
+        <td>Defender 1116; static YARA reports; gateway verdicts; Sysmon 11/1 for context</td>
+        <td>Normal: installers arrive in Downloads constantly. Suspicious: a <em>Trojan</em>-family verdict on a low-prevalence executable in Downloads or Temp.</td>
+        <td>Defender 1116 + DetectionName contains "Trojan" + executable path in Downloads/Temp (rule R1), then confirm with the static TLS-directory check.</td>
+      </tr>
+      <tr>
+        <td>T2 Anti-analysis callbacks</td>
+        <td>Defender 1121; EDR product logs</td>
+        <td>Normal: behavior detections on legitimate script hosts are noisy. Suspicious: "Behavior" verdicts naming loader, injection, or memory activity from user-writable paths.</td>
+        <td>Defender 1121 + DetectionName contains "Behavior" plus loader/injection keywords (rule R2); verify the source file statically.</td>
+      </tr>
+      <tr>
+        <td>T3 Remote callback injection</td>
+        <td>Defender 1116 (injection families); EDR behavioral; Sysmon 10</td>
+        <td>Normal: debuggers on developer hosts; AV self-protection. Suspicious: "ProcessInject" verdicts, or an unknown process opening explorer/browser with write and execute rights.</td>
+        <td>Defender 1116 + DetectionName contains "ProcessInject" (rule R3), correlated with Sysmon EID 10 on the same host within minutes.</td>
+      </tr>
+      <tr>
+        <td>T4 Unexpected TLS directory in a trusted binary</td>
+        <td>Static YARA at the gateway; file-integrity monitoring; classification feeds</td>
+        <td>Normal: vendors update binaries; some legitimately ship TLS. Suspicious: a known-good hash replaced by a new hash whose image now has a TLS directory it never had.</td>
+        <td>Baseline diff: hash changed + TLS directory present where absent before; route to the supply-chain watch lane.</td>
+      </tr>
+      <tr>
+        <td>T5 Packed loader before entry point</td>
+        <td>EDR memory scan; Defender 1116/1121; Sysmon 7 ImageLoaded context</td>
+        <td>Normal: packed legitimate software (games, install tools). Suspicious: unsigned executable memory inside a user-launched binary from Downloads.</td>
+        <td>Memory-scan verdict on a Downloads-originated process (rules R1/R2 downstream) + unsigned-region confirmation.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="callout note">
+  <span class="callout-title">Note — legitimate TLS callbacks exist in many applications</span>
+  <p>Compilers and frameworks emit TLS callbacks for honest reasons, and commercial protectors add them to benign software. A TLS directory is therefore <em>context</em>, not a verdict by itself. Judge static findings together with: prevalence of the hash, signature state and publisher, section layout anomalies, and whether the file was expected at all. This is why the rules below start from verdicts and delivery paths, and use static checks as confirmation.</p>
+</div>
+
+<div class="card">
+  <h3>Two realistic event examples (illustrative)</h3>
+  <p>Both examples are fictional teaching records written to match real field shapes. Host names, users, and hashes are invented.</p>
+</div>
+
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Windows event log — Defender 1116 (key=value, illustrative)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>Time:            2026-10-20T09:41:22.318Z
+EventID:         1116
+SourceName:      Microsoft-Windows-Windows Defender
+DetectionName:   Trojan:Win32/TlsLoader.A
+DetectionID:     214797
+SeverityName:    High
+CategoryName:    Trojan
+PathName:        C:\Users\bob\Downloads\setup_helper.exe
+FileName:        setup_helper.exe
+FileHash:        9f2c41b7e8a63d5c1044b7f2e3a19c8d6b0f45a2c7e31d9b84f6a0c5d2e8b173 (SHA256)
+ProcessName:     C:\Windows\Explorer.EXE
+ActionSuccess:   True
+ActionName:      quarantine
+ErrorCode:       0x80508023</code></pre>
+</figure>
+
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sysmon XML — EID 11 FileCreate (illustrative)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-c22a-43e0-bf4c-06f5698ffbd9}" /&gt;
+    &lt;EventID&gt;11&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-20T09:41:21.905Z" /&gt;
+    &lt;Computer&gt;WORKSTATION-42.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-20 09:41:21.902&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{A1B2C3D4-11EA-B107-0022481A2B3C}&lt;/Data&gt;
+    &lt;Data Name="ProcessId"&gt;4632&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\explorer.exe&lt;/Data&gt;
+    &lt;Data Name="TargetFilename"&gt;C:\Users\bob\Downloads\setup_helper.exe&lt;/Data&gt;
+    &lt;Data Name="CreationUtcTime"&gt;2026-10-20 09:41:21.902&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=9F2C41B7E8A63D5C1044B7F2E3A19C8D6B0F45A2C7E31D9B84F6A0C5D2E8B173&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+</figure>
+<p class="small muted">Read them together: the Sysmon file-create event (step 2 of the simulation) places the executable in Downloads; the Defender verdict (step 5) names the Trojan family and the quarantine action. The hash joins both, and the same hash is what you block in the triage flow.</p>
+
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">YARA (illustrative, structural)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>rule Edu_T1055_005_Tls_Callback_Outside_Known_Sections
+{
+    meta:
+        author = "Detection Engineering Team"
+        date = "2026-10-20"
+        note = "Illustrative teaching rule. Structural and simplified - not deployable as-is."
+        scope = "static PE inspection for T1055.005 triage"
+    condition:
+        uint16(0) == 0x5A4D and
+        pe.is_pe and
+        pe.tls_callback_rva &gt; 0 and
+        for any i in (0 .. pe.tls_callbacks_count - 1):
+            (not (for any s in (0 .. pe.number_of_sections - 1):
+                (pe.tls_callbacks[i] &gt;= pe.sections[s].virtual_address and
+                 pe.tls_callbacks[i] &lt; pe.sections[s].virtual_address + pe.sections[s].virtual_size)))
+}</code></pre>
+</figure>
+<p class="small muted">The rule reads structurally: for a PE file, take every address in the TLS callback table and flag the file if any callback falls outside the virtual-address ranges of the image's known sections. That pattern matches callbacks parked in header gaps or extra sections — a classic trojanized-build layout. Tune with prevalence before blocking.</p>
+
+<h3 class="subsec" id="sigma-and-spl"><span class="subsec-num">5.5</span><span class="section-title">Sigma rules and Splunk SPL</span></h3>
+<p class="muted">Five rules, one per detection lane, each with a matching Splunk SPL query. Field names for Defender events vary slightly between platform versions — validate <code>FileName</code>, <code>PathName</code>, and <code>FileHash</code> against your own event stream and adjust the SPL field list.</p>
+
+<h4>R1 — Defender Trojan verdict on executable in Downloads or Temp (high)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Windows Defender Trojan Verdict on Executable in Downloads or Temp
+id: 88881413-b110-4e08-b1e0-5658f72b5eec
+status: experimental
+description: Detects Windows Defender malware verdicts whose detection name indicates
+  a trojan family and whose target file is an executable in a user download or
+  temporary directory. Trojanized installers that stage code through TLS callbacks
+  (T1055.005) typically arrive and land exactly this way.
+references:
+  - https://attack.mitre.org/techniques/T1055/005/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: windefend
+detection:
+  selection_event:
+    EventID: 1116
+  selection_trojan:
+    DetectionName|contains: 'Trojan'
+  selection_path:
+    FileName|endswith:
+      - '.exe'
+      - '.dll'
+      - '.scr'
+    PathName|contains:
+      - '\Downloads\'
+      - '\Temp\'
+  condition: selection_event and selection_trojan and selection_path
+fields:
+  - EventID
+  - DetectionName
+  - FileName
+  - PathName
+  - ProcessName
+  - FileHash
+falsepositives:
+  - A user intentionally downloading and keeping a flagged security tool
+  - Red-team test files dropped during authorized exercises
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.execution
+  - attack.t1055
+  - attack.t1055.005</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=wineventlog sourcetype="XmlWinEventLog:Microsoft-Windows-Windows Defender/Operational" EventCode=1116 DetectionName="*Trojan*" (FileName="*.exe" OR FileName="*.dll" OR FileName="*.scr") (PathName="*\\Downloads\\*" OR PathName="*\\Temp\\*")
+| stats count as verdicts values(PathName) as paths values(FileHash) as hashes by host, DetectionName
+| sort - verdicts</code></pre>
+</figure>
+<p class="small"><strong>Mapping note:</strong> XML event rendering exposes Defender fields as <code>EventCode</code>, <code>DetectionName</code>, <code>FileName</code>, <code>PathName</code>; the doubled backslash is SPL escaping for a literal one. Adapt index and sourcetype to your environment. <strong>False positives:</strong> user-initiated downloads of legitimately flagged tools. <strong>Tuning:</strong> add a prevalence lookup on <code>FileHash</code>; suppress known signed publishers; pair every hit with a static YARA confirmation.</p>
+
+<h4>R2 — Defender behavior block with loader or injection keywords (medium)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Windows Defender Behavior Block with Loader or Injection Keywords
+id: ed67bb23-d774-4632-854e-359afb8f1d45
+status: experimental
+description: Detects Windows Defender behavior events (1121) whose detection name
+  contains the word Behavior plus loader, injection, or memory keywords. TLS-callback
+  loaders that stage code early or touch other processes often trigger this class
+  of verdict.
+references:
+  - https://attack.mitre.org/techniques/T1055/005/
+  - https://learn.microsoft.com/microsoft-365/security/intelligence/
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: windefend
+detection:
+  selection_event:
+    EventID: 1121
+  selection_behavior:
+    DetectionName|contains: 'Behavior'
+  selection_keywords:
+    DetectionName|contains:
+      - 'Inject'
+      - 'Loader'
+      - 'Mem'
+  condition: selection_event and selection_behavior and selection_keywords
+fields:
+  - EventID
+  - DetectionName
+  - FileName
+  - PathName
+  - ProcessName
+falsepositives:
+  - Legitimate installers that unpack themselves into memory
+  - Script hosts flagged by behavior signatures during normal office work
+level: medium
+tags:
+  - attack.defense_evasion
+  - attack.execution
+  - attack.t1055
+  - attack.t1055.005</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=wineventlog sourcetype="XmlWinEventLog:Microsoft-Windows-Windows Defender/Operational" EventCode=1121 DetectionName="*Behavior*" (DetectionName="*Inject*" OR DetectionName="*Loader*" OR DetectionName="*Mem*")
+| stats count as blocks dc(host) as hosts values(FileName) as files by DetectionName
+| eval priority=if(hosts &gt;= 3, "P1 - fleet-wide pattern", "P2 - single host review")
+| sort - blocks</code></pre>
+</figure>
+<p class="small"><strong>Mapping note:</strong> the <code>eval</code> turns spread into priority — the same verdict on many hosts at once is rarely one user's mistake. <strong>False positives:</strong> self-unpacking installers. <strong>Tuning:</strong> correlate with Defender 1116 on the same host and hash; add file-path context from Sysmon EID 11.</p>
+
+<h4>R3 — Defender or EDR remote process injection verdict (high)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Windows Defender or EDR Verdict for Remote Process Injection
+id: 0000b526-b8a8-4f11-9991-f24e2393f45f
+status: experimental
+description: Detects verdicts whose detection name contains ProcessInject, the
+  injection-family naming used by Windows Defender and several EDR products.
+  Maps to the remote TLS-callback injection threat (T3) of T1055.005.
+references:
+  - https://attack.mitre.org/techniques/T1055/005/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: windefend
+detection:
+  selection:
+    EventID: 1116
+    DetectionName|contains: 'ProcessInject'
+  condition: selection
+fields:
+  - EventID
+  - DetectionName
+  - FileName
+  - PathName
+  - ProcessName
+  - FileHash
+falsepositives:
+  - Developer tooling that legitimately debugs other processes on developer hosts
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.005</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=wineventlog sourcetype="XmlWinEventLog:Microsoft-Windows-Windows Defender/Operational" EventCode=1116 DetectionName="*ProcessInject*"
+| stats count as verdicts first(FileName) as file first(ProcessName) as parent by host, DetectionName
+| eval next_step="pull memory triage package; check Sysmon EID 10 on the same host"
+| sort - verdicts</code></pre>
+</figure>
+<p class="small"><strong>Mapping note:</strong> in EDR products that do not mirror verdicts into Defender events, run the same logic against the EDR product log index and its detection-name field. <strong>False positives:</strong> developer hosts with debuggers. <strong>Tuning:</strong> allow-list developer subnets, require Sysmon EID 10 corroboration, escalate every hit outside known developer machines.</p>
+
+<h4>R4 — Executable file created in a user Downloads folder (medium)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Executable File Created in a User Downloads Folder
+id: 140afb72-1078-48c8-adc9-f73f30d5ed51
+status: experimental
+description: Detects Sysmon file-create events for executable files landing in a
+  user Downloads folder. Supporting-context rule for T1055.005 — it marks the
+  delivery step that static follow-up (YARA, verdict correlation) should chase.
+references:
+  - https://attack.mitre.org/techniques/T1055/005/
+  - https://learn.microsoft.com/sysinternals/downloads/sysmon
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 11
+    TargetFilename|contains: '\Downloads\'
+    TargetFilename|endswith:
+      - '.exe'
+      - '.dll'
+      - '.scr'
+      - '.msi'
+  condition: selection
+fields:
+  - EventID
+  - TargetFilename
+  - Image
+  - User
+  - Hashes
+falsepositives:
+  - Ordinary user downloads of legitimate software
+level: medium
+tags:
+  - attack.execution
+  - attack.defense_evasion
+  - attack.t1055
+  - attack.t1055.005</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=11 (TargetFilename="*.exe" OR TargetFilename="*.dll" OR TargetFilename="*.scr" OR TargetFilename="*.msi") TargetFilename="*\\Downloads\\*"
+| stats values(TargetFilename) as executables count as events by host, User
+| eval follow_up="run static YARA TLS-callback check on each executable"</code></pre>
+</figure>
+<p class="small"><strong>Mapping note:</strong> this rule is context, not verdict — its job is to give R1/R3 hits a delivery trail. <strong>False positives:</strong> any user downloading software on purpose; expect volume. <strong>Tuning:</strong> keep it at informational routing, feed <code>Hashes</code> into the prevalence cache, and only page when it joins with a Defender verdict within 15 minutes.</p>
+
+<h4>R5 — Process execution from a user Downloads folder (medium)</h4>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Process Execution from a User Downloads Folder
+id: 3ff48bfd-bfda-4f6f-86bb-30a9ebc45427
+status: experimental
+description: Detects Sysmon process-create events where the executed image lives
+  in a user Downloads folder. Supporting execution context for T1055.005 — a
+  trojanized installer runs from exactly this location.
+references:
+  - https://attack.mitre.org/techniques/T1055/005/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 1
+    Image|contains: '\Downloads\'
+  condition: selection
+fields:
+  - EventID
+  - Image
+  - CommandLine
+  - User
+  - Hashes
+falsepositives:
+  - Users legitimately running downloaded installers
+level: medium
+tags:
+  - attack.execution
+  - attack.defense_evasion
+  - attack.t1055
+  - attack.t1055.005</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1 Image="*\\Downloads\\*"
+| stats count as executions dc(Image) as binaries values(Image) as images by host, User
+| eval correlate="join with Defender 1116 and 1121 events by host within 15 minutes"</code></pre>
+</figure>
+<p class="small"><strong>Mapping note:</strong> execution from Downloads is weak alone; the <code>eval</code> reminder documents the join that makes it strong. <strong>False positives:</strong> ordinary installer runs. <strong>Tuning:</strong> never run this as a stand-alone page; use it inside a correlation with Defender verdicts or gateway YARA hits, and drive hash blocking from the joined result.</p>
+
+<div class="callout warning">
+  <span class="callout-title">Warning — tune before you trust</span>
+  <p>Rules R4 and R5 will be noisy on day one. That is expected: they are context rules. Deploy them with correlation to R1–R3, watch two weeks of data, add your legitimate-software allow-list, and record every false positive in the rule notes so the next engineer inherits your tuning, not your noise.</p>
+</div>
+      </section>
+      <section id="case-study" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">6</span><span class="section-title">Real-world case study</span></h2>
+    <p class="section-intro">A complete incident told in incident-response order, from first download to lessons learned. Use it as a walkthrough of the triage flow from section 4 under time pressure.</p>
+  </header>
+
+  <div class="callout note">
+    <span class="callout-title">Note — educational reconstruction</span>
+    <p>This case study is an educational reconstruction based on public reporting of TLS-callback-using loader families (2019–2024). The company, users, hosts, and timestamps are illustrative. No real incident is described.</p>
+  </div>
+
+  <div class="card">
+    <h3>Context</h3>
+    <p>A mid-size company, roughly 1,200 staff, mostly Windows 11 workstations with an EDR agent deployed fleet-wide and a mail/web gateway that does not yet run static YARA. An employee searching for a free PDF tool clicks a sponsored search result. The site serves a polished installer: a real, working PDF utility with a malicious TLS callback added by the attacker. The callback stages an info-stealer before the real program's first line runs.</p>
+  </div>
+
+  <div class="card">
+    <h3>Timeline</h3>
+    <ol class="timeline">
+      <li><span class="tl-when">Day 0 · 09:14</span> The user downloads the "PDF tool" installer from the malvertising link to the Downloads folder.</li>
+      <li><span class="tl-when">Day 0 · 09:16</span> The user runs it. The Windows loader honors the TLS directory; the malicious callback executes before main and stages the loader component in memory.</li>
+      <li><span class="tl-when">Day 0 · 09:17</span> The loader injects the info-stealer into the running browser process via cross-process access.</li>
+      <li><span class="tl-when">Day 0 · 09:40</span> Browser credential theft begins: saved passwords and live session cookies are collected and staged.</li>
+      <li><span class="tl-when">Day 1 · 11:05</span> <strong>DETECTION POINT.</strong> The EDR raises a behavioral verdict: unsigned memory region inside the installer process plus cross-process access to the browser. Windows Defender records a related verdict in the operational log.</li>
+      <li><span class="tl-when">Day 1 · 11:40</span> The analyst validates the verdict, retrieves the file, and runs the static YARA check — the TLS callback table confirms the anomaly. The host is isolated.</li>
+      <li><span class="tl-when">Day 1 · 14:00</span> Response continues: exposed credentials are reset, session cookies are revoked, and the file hash is blocked at the mail and web proxies.</li>
+      <li><span class="tl-when">Day 2 · 09:00</span> The workstation is rebuilt from a clean image. Eradication checks: no further cross-process access, no leftover files, no recurring verdicts.</li>
+      <li><span class="tl-when">Day 2 · 15:00</span> Recovery is verified with the user; monitoring stays elevated for 30 days; the lessons-learned review is scheduled.</li>
+    </ol>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Detection point</h4>
+      <p>EDR behavioral verdict on day 1 — roughly 26 hours after execution. The TLS callback itself never produced a log line; the unsigned memory region and the cross-process access did. This is the expected detection shape for T1055.005.</p>
+    </div>
+    <div class="card">
+      <h4>Containment</h4>
+      <p>Host isolation within 35 minutes of the verdict. Blocking the hash at the proxies stopped three re-delivery attempts on other hosts later the same day.</p>
+    </div>
+    <div class="card">
+      <h4>Eradication</h4>
+      <p>Rebuild instead of cleaning: the implant staged from memory and the artifact chain was simple, but a rebuild removed all doubt. The quarantine copy was kept as evidence.</p>
+    </div>
+    <div class="card">
+      <h4>Recovery</h4>
+      <p>Clean image, restored user data from backup, monitoring elevated for 30 days, and a fleet-wide hunt for the hash and delivery URL across gateway and endpoint history — which found no other affected hosts.</p>
+    </div>
+    <div class="card">
+      <h4>Impact</h4>
+      <p>Stolen session cookies and saved browser passwords; one attempted fraudulent payment from a reused corporate card credential, blocked by the bank. No data-store breach; no lateral movement.</p>
+    </div>
+    <div class="card">
+      <h4>Team response and communication</h4>
+      <p>The SOC led; IT handled the rebuild; identity team reset credentials; leadership got a plain-language note the same afternoon. Users received a short malvertising warning — without naming or blaming the affected employee.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Lessons learned</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Lesson</th><th>What changed</th></tr></thead>
+        <tbody>
+          <tr><td>Malvertising is a first-class delivery channel</td><td>Sponsored search results were added to user-awareness training, and the web proxy began logging the ad category that served the link.</td></tr>
+          <tr><td>Gateway YARA closes the delivery gap</td><td>Static YARA, including the TLS-callback structural rule pattern from 5.4, was deployed at the mail and web gateways — before users ever see the file.</td></tr>
+          <tr><td>Credential reset speed decides impact</td><td>Password resets and session revocation happened within 3 hours; the fraud attempt was blocked. The runbook now targets 1 hour for stealer cases.</td></tr>
+          <tr><td>MFA reduces stolen-credential value</td><td>Phishing-resistant MFA rollout was prioritized for privileged and finance accounts; session cookies alone no longer grant access there.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="mitigation" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">7</span><span class="section-title">Mitigation and defense</span></h2>
+    <p class="section-intro">No single control catches a trojanized installer every time. The controls below overlap on purpose: static inspection sees the file, verdicts see the behavior, allow-listing prevents the run, and identity controls limit what a stolen session is worth.</p>
+  </header>
+
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Control</th><th>How it helps against T1055.005</th><th>Owner</th></tr></thead>
+      <tbody>
+        <tr><td>EDR/AV with static and behavioral coverage</td><td>Static engines inspect PE headers (including the TLS directory); behavioral engines catch staging and injection verdicts.</td><td>Endpoint team</td></tr>
+        <tr><td>Gateway YARA and SSL inspection</td><td>Flags the trojanized file on arrival, before any user executes it.</td><td>Network security</td></tr>
+        <tr><td>Block downloads from untrusted categories</td><td>Removes the malvertising and file-sharing channels that deliver most trojanized installers.</td><td>Network security</td></tr>
+        <tr><td>WDAC application allow-listing</td><td>Only known-good, expected binaries run — a modified installer with a strange TLS directory fails the policy check.</td><td>Endpoint team</td></tr>
+        <tr><td>Browser hardening</td><td>Fewer saved passwords, shorter session lifetimes, and cookie protection shrink what an info-stealer can take.</td><td>IT / endpoint team</td></tr>
+        <tr><td>Remove unnecessary local admin rights</td><td>Standard users cannot install drivers or tamper with system services, limiting what staged code can do.</td><td>IT</td></tr>
+        <tr><td>MFA and session protection</td><td>Stolen passwords and cookies alone stop working; phishing-resistant factors are strongest.</td><td>Identity team</td></tr>
+        <tr><td>Centralized logging</td><td>Defender 1116/1121 and Sysmon events land in one place where the Sigma rules from 5.5 run.</td><td>SOC / detection engineering</td></tr>
+        <tr><td>Incident response runbook</td><td>The six-step triage flow from section 4 becomes muscle memory instead of improvisation.</td><td>SOC</td></tr>
+        <tr><td>Tested backups</td><td>Rebuild-and-restore beats cleaning when a stealer has run on a workstation.</td><td>IT</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Home and small-office advice</h3>
+    <p>Keep the built-in antivirus on — modern Microsoft Defender already inspects PE headers and scores behavior. Download software from the vendor's own site, not from search-engine ads. Install updates quickly. Use a standard (non-admin) account for daily work. Keep an offline or cloud backup of important files. If a download "installs" but the antivirus complains, trust the antivirus and delete the file.</p>
+  </div>
+
+  <div class="card">
+    <h3>Prioritized top five actions</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Priority</th><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Ensure EDR/AV verdicts (1116/1121) flow to the SIEM with hash enrichment</td><td>Low</td><td>SOC</td><td>High — enables R1–R3 entirely</td></tr>
+          <tr><td>2</td><td>Deploy static YARA at mail and web gateways, including the TLS-callback structural pattern</td><td>Medium</td><td>Network security</td><td>High — stops delivery to everyone</td></tr>
+          <tr><td>3</td><td>Restrict download categories at the proxy for standard users</td><td>Medium</td><td>Network security</td><td>Medium–High</td></tr>
+          <tr><td>4</td><td>Runbook: verdict-to-isolation in 30 minutes, credential reset in 24 hours</td><td>Low</td><td>SOC</td><td>High — cuts impact time</td></tr>
+          <tr><td>5</td><td>Phishing-resistant MFA for finance and privileged accounts</td><td>Medium</td><td>Identity team</td><td>High — devalues stolen sessions</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+      <section id="mistakes" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">8</span><span class="section-title">Common mistakes and best practices</span></h2>
+    <p class="section-intro">Twelve concrete blue-team mistakes seen around file-verdict and static-inspection programs — each with the symptom, the root cause, the fix, and the prevention that keeps it from returning.</p>
+  </header>
+
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Assuming Sysmon shows TLS callback execution</td><td>Analysts wait for a "callback ran" event that never exists</td><td>The callback runs inside the loader; no Windows log records it</td><td>Detect via verdicts, memory scans, and static file checks; document the gap</td><td>Per-technique logging-gap notes in detection docs</td></tr>
+        <tr><td>2</td><td>Static YARA only at the mail gateway</td><td>Files from web downloads or synced shares were never scanned</td><td>Gateway-first rollout never extended to other paths</td><td>Deploy the same rules at the web proxy, endpoint scan jobs, and file shares</td><td>A written coverage map of every ingress path</td></tr>
+        <tr><td>3</td><td>Ignoring low-prevalence AV verdicts</td><td>Real detections closed as "probably nothing" without review</td><td>Verdict fatigue from high-volume, low-quality triage</td><td>Triage every verdict on a low-prevalence executable, even at low severity</td><td>Prevalence enrichment shown in the triage queue</td></tr>
+        <tr><td>4</td><td>Treating signed-but-unexpected binaries as safe</td><td>A trojanized signed installer runs everywhere unchallenged</td><td>Signature treated as proof of correctness, not identity</td><td>Verify publisher expectation plus header anomalies, not signature alone</td><td>Allow-list by publisher and expected path, not by signature bit</td></tr>
+        <tr><td>5</td><td>No hash-blocking feedback loop</td><td>The same file keeps landing after detection</td><td>Nobody owns pushing hashes to proxy and EDR blocklists</td><td>Auto-push confirmed hashes; verify blocking with a test download</td><td>Named owner plus a monthly blocking test</td></tr>
+        <tr><td>6</td><td>Download categories allowed for all users</td><td>Malvertising and shady file-share sites reachable fleet-wide</td><td>Flat web policy set once and forgotten</td><td>Restrict risky categories; inspect where policy allows downloads</td><td>Quarterly web-policy review with delivery-channel data</td></tr>
+        <tr><td>7</td><td>No memory triage on verdicts</td><td>Analysts close file verdicts without checking what ran</td><td>Missing tooling and skills for memory work</td><td>Standard triage package (memory + loaded modules) on every real verdict</td><td>Runbook step and an annual memory-triage drill</td></tr>
+        <tr><td>8</td><td>AV exclusions added for "slow antivirus" complaints</td><td>An exclusion later covers the exact folder where payloads landed</td><td>Pressure applied without diagnosis</td><td>Scope exclusions narrowly, time-limit them, and re-baseline performance</td><td>Change control on every exclusion with expiry dates</td></tr>
+        <tr><td>9</td><td>Orphaned detection rules</td><td>Rules fire on log sources that were decommissioned months ago</td><td>No ownership after the original author left</td><td>Assign an owner per rule; retire or repair orphans</td><td>Quarterly rule review with a retire step</td></tr>
+        <tr><td>10</td><td>Untested gateway rules</td><td>A YARA rule silently matches nothing after a format update</td><td>No validation pipeline for gateway content</td><td>Test rules monthly against a small curated sample corpus</td><td>Version-controlled rules with test fixtures</td></tr>
+        <tr><td>11</td><td>No owner for the file-verdict workflow</td><td>Mail team, endpoint team, and SOC each assume another is handling it</td><td>Workflow crosses team borders with no assignment</td><td>Named workflow owner plus an escalation path in the runbook</td><td>A simple RACI for the verdict-to-blocklist pipeline</td></tr>
+        <tr><td>12</td><td>Undocumented false positives</td><td>Each analyst re-learns the same benign installers from scratch</td><td>Local fixes never written down</td><td>Log every false positive in the rule's notes file</td><td>FP review as a standing agenda item in tuning meetings</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Daily habits</h4>
+      <p>Review the verdict queue with prevalence context. Check EDR cross-process access events on hosts that got a file verdict. Confirm any new exclusion requests have a scope and an expiry.</p>
+    </div>
+    <div class="card">
+      <h4>Weekly habits</h4>
+      <p>Check first-seen dates for new hashes. Push confirmed hashes to proxy and EDR blocklists and verify one block actually works. Skim vendor and ISAC reporting for loader-family updates.</p>
+    </div>
+    <div class="card">
+      <h4>Monthly habits</h4>
+      <p>Test gateway YARA against the sample corpus. Review exclusions and expiry dates. Retire or repair orphaned rules. Audit the downloads policy against actual delivery-channel data.</p>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <span class="callout-title">Good practice — make the gap explicit</span>
+    <p>The single highest-leverage habit for this technique: write down, in your detection documentation, that TLS callback execution is invisible to native logs, and list what replaces it — verdicts, memory scanning, static inspection. Teams that document the gap stop waiting for events that never come, and start tuning the signals that do.</p>
+  </div>
+</section>
+
+<section id="cheat-sheet" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">9</span><span class="section-title">Cheat sheet and quick reference</span></h2>
+    <p class="section-intro">Everything important from this page, compressed for use during an incident or a tuning session.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Key facts</h3>
+      <div class="kv">
+        <div class="k">Technique</div><div>T1055.005 — Thread Local Storage (sub-technique of T1055)</div>
+        <div class="k">Tactics</div><div>Stealth / Privilege Escalation (TA0005 / TA0004)</div>
+        <div class="k">Platform</div><div>Windows</div>
+        <div class="k">Permissions</div><div>User</div>
+        <div class="k">Core idea</div><div>Code in a PE's TLS directory runs before main() — attacker code gets the first slot</div>
+        <div class="k">Logging gap</div><div>Native logs never show callback execution; use verdicts, memory, static checks</div>
+        <div class="k">Best early signal</div><div>Static YARA / AV verdict on a low-prevalence executable in Downloads or Temp</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Top five detections</h3>
+      <p>All five rules live in <a href="#sigma-and-spl">section 5.5</a>:</p>
+      <ol>
+        <li>R1 — Defender Trojan verdict on executable in Downloads/Temp (high)</li>
+        <li>R2 — Defender behavior block with loader or injection keywords (medium)</li>
+        <li>R3 — Defender/EDR remote process injection verdict (high)</li>
+        <li>R4 — Executable file created in Downloads (Sysmon 11, context)</li>
+        <li>R5 — Process execution from Downloads (Sysmon 1, context)</li>
+      </ol>
+      <p class="small muted">Correlate R4/R5 with R1–R3 by host within 15 minutes before paging anyone.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Response checklist — first 30 minutes</h3>
+      <ol>
+        <li>Validate the verdict: real behavior or known-benign installer?</li>
+        <li>Isolate the host in the EDR console if the verdict or the static check is positive.</li>
+        <li>Retrieve the file: quarantine copy, SHA256 hash, full path.</li>
+        <li>Run the static YARA / TLS-directory check on the sample.</li>
+        <li>Check Sysmon EID 10 for cross-process access on the same host.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>Response checklist — first 24 hours</h3>
+      <ol>
+        <li>Block the hash at EDR, mail proxy, and web proxy; verify the block.</li>
+        <li>Hunt hash, file name, and delivery URL across gateway and fleet history.</li>
+        <li>Reset exposed credentials and revoke live sessions for affected users.</li>
+        <li>Clean or rebuild the workstation; confirm no recurring verdicts.</li>
+        <li>Record the incident, notify stakeholders, and schedule lessons learned.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Official references and related techniques</h3>
+    <ul>
+      <li><a href="https://attack.mitre.org/techniques/T1055/005/">MITRE ATT&amp;CK — T1055.005 Thread Local Storage (official page)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/">MITRE ATT&amp;CK — T1055 Process Injection (parent)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/001/">T1055.001 Dynamic-Link Library Injection (sibling)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/002/">T1055.002 Portable Executable Injection (sibling)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/003/">T1055.003 Thread Execution Hijacking (sibling — hijacks an existing thread's instruction pointer; different mechanism)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/004/">T1055.004 Asynchronous Procedure Call (sibling — queues execution via APC; different mechanism)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/012/">T1055.012 Process Hollowing (sibling)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1574/">T1574 Hijack Execution Flow (related)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1027/">T1027 Obfuscated Files or Information (related)</a></li>
+      <li><a href="https://learn.microsoft.com/sysinternals/downloads/sysmon">Microsoft Sysmon documentation</a></li>
+      <li><a href="https://github.com/SigmaHQ/sigma">SigmaHQ rule repository</a></li>
+    </ul>
+  </div>
+</section>
+    </div>
+  </div>
+</main>
+
+<button class="mobile-toc-btn" id="mobileTocBtn" type="button" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="back-top" id="backTop" type="button" aria-label="Back to top">↑</button>
+<div class="toc-overlay" id="tocOverlay" hidden>
+  <div class="toc-overlay-panel" role="dialog" aria-modal="true" aria-label="Contents">
+    <button class="toc-close" id="tocClose" type="button" aria-label="Close contents">Close ×</button>
+    <nav id="overlayNav" class="toc" aria-label="Sections"></nav>
+  </div>
+</div>
+
+<script>
+/* ATK-SHARED-JS v1 — shared behavior for ATT&CK technique guide pages.
+   Provides: theme toggle, reading progress, generated TOC, scrollspy,
+   mobile contents overlay, back-to-top, copy buttons, canvas simulation engine. */
+(function () {
+  'use strict';
+  var doc = document, win = window, root = doc.documentElement;
+  var reducedQuery = win.matchMedia('(prefers-reduced-motion: reduce)');
+  function isReduced() { return reducedQuery.matches; }
+
+  /* ---------- helpers ---------- */
+  win.atkColor = function (name) { return getComputedStyle(root).getPropertyValue(name).trim(); };
+
+  /* ---------- theme ---------- */
+  function currentTheme() { return root.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
+  function setTheme(t, store) {
+    root.setAttribute('data-theme', t);
+    if (store) { try { localStorage.setItem('atk-theme', t); } catch (e) {} }
+    doc.dispatchEvent(new CustomEvent('atkthemechange', { detail: t }));
+  }
+  var themeBtn = doc.getElementById('pageThemeToggle');
+  if (themeBtn) {
+    function syncThemeBtn() {
+      var light = currentTheme() === 'light';
+      themeBtn.textContent = light ? '\u263E' : '\u2600';
+      var label = light ? 'Switch to dark theme' : 'Switch to light theme';
+      themeBtn.setAttribute('aria-label', label);
+      themeBtn.title = label;
+    }
+    themeBtn.addEventListener('click', function () { setTheme(currentTheme() === 'light' ? 'dark' : 'light', true); });
+    syncThemeBtn();
+    /* Hide this page-level toggle if the shared site shell already provides one. */
+    function shellCheck() {
+      if (doc.querySelector('[data-shell-theme-toggle],[data-theme-toggle]')) { themeBtn.hidden = true; }
+    }
+    shellCheck();
+    win.addEventListener('load', shellCheck);
+    doc.addEventListener('atkshellready', shellCheck);
+  }
+
+  /* ---------- TOC generated from real section headings ---------- */
+  var main = doc.querySelector('.main-content');
+  var tocItems = [];
+  if (main) {
+    var sections = main.querySelectorAll('section[id]');
+    Array.prototype.forEach.call(sections, function (sec) {
+      var h2 = sec.querySelector('.section-head h2') || sec.querySelector('h2');
+      if (!h2) return;
+      var t = h2.querySelector('.section-title');
+      tocItems.push({ id: sec.id, label: t ? t.textContent : h2.textContent.replace(/^\s*[0-9.]+\s*/, ''), level: 1 });
+      var subs = sec.querySelectorAll('h3.subsec[id]');
+      Array.prototype.forEach.call(subs, function (h3) {
+        var t3 = h3.querySelector('.section-title');
+        tocItems.push({ id: h3.id, label: t3 ? t3.textContent : h3.textContent.replace(/^\s*[0-9.]+\s*/, ''), level: 2 });
+      });
+    });
+  }
+  function renderToc(container) {
+    var frag = doc.createDocumentFragment();
+    tocItems.forEach(function (it) {
+      var a = doc.createElement('a');
+      a.href = '#' + it.id;
+      a.textContent = it.label;
+      if (it.level === 2) a.className = 'toc-sub';
+      a.setAttribute('data-toc-id', it.id);
+      frag.appendChild(a);
+    });
+    container.appendChild(frag);
+  }
+  var tocNav = doc.getElementById('tocNav');
+  var overlayNav = doc.getElementById('overlayNav');
+  if (tocNav && tocItems.length) renderToc(tocNav);
+  if (overlayNav && tocItems.length) renderToc(overlayNav);
+
+  /* ---------- scrollspy + progress + back-to-top visibility ---------- */
+  var fill = doc.getElementById('progressFill');
+  var backTop = doc.getElementById('backTop');
+  var spyEls = [];
+  tocItems.forEach(function (it) {
+    var el = doc.getElementById(it.id);
+    if (el) spyEls.push({ id: it.id, el: el });
+  });
+  function setActive(id) {
+    var links = doc.querySelectorAll('[data-toc-id]');
+    Array.prototype.forEach.call(links, function (a) {
+      var on = a.getAttribute('data-toc-id') === id;
+      a.classList.toggle('active', on);
+      if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+    });
+  }
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    win.requestAnimationFrame(function () {
+      ticking = false;
+      var y = win.scrollY || root.scrollTop || 0;
+      var max = Math.max(1, root.scrollHeight - win.innerHeight);
+      if (fill) fill.style.width = Math.min(100, Math.round((y / max) * 100)) + '%';
+      if (backTop) backTop.classList.toggle('show', y > 480);
+      var pos = y + 150;
+      var cur = spyEls.length ? spyEls[0].id : null;
+      for (var i = 0; i < spyEls.length; i++) {
+        if (spyEls[i].el.getBoundingClientRect().top + y <= pos) cur = spyEls[i].id;
+      }
+      if (spyEls.length && (y + win.innerHeight) >= (root.scrollHeight - 4)) cur = spyEls[spyEls.length - 1].id;
+      if (cur) setActive(cur);
+    });
+  }
+  win.addEventListener('scroll', onScroll, { passive: true });
+  win.addEventListener('resize', onScroll);
+  onScroll();
+
+  /* ---------- mobile contents overlay ---------- */
+  var tocBtn = doc.getElementById('mobileTocBtn');
+  var overlay = doc.getElementById('tocOverlay');
+  var tocClose = doc.getElementById('tocClose');
+  var lastFocus = null;
+  function openOverlay() {
+    if (!overlay) return;
+    lastFocus = doc.activeElement;
+    overlay.hidden = false;
+    if (tocBtn) tocBtn.setAttribute('aria-expanded', 'true');
+    doc.body.style.overflow = 'hidden';
+    if (tocClose) tocClose.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.hidden = true;
+    doc.body.style.overflow = '';
+    if (tocBtn) {
+      tocBtn.setAttribute('aria-expanded', 'false');
+      tocBtn.focus();
+    } else if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+  }
+  if (tocBtn) tocBtn.addEventListener('click', openOverlay);
+  if (tocClose) tocClose.addEventListener('click', closeOverlay);
+  if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) closeOverlay(); });
+  doc.addEventListener('keydown', function (e) { if (e.key === 'Escape' && overlay && !overlay.hidden) closeOverlay(); });
+  [tocNav, overlayNav].forEach(function (nav) {
+    if (!nav) return;
+    nav.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a') : null;
+      if (a && overlay && !overlay.hidden) closeOverlay();
+    });
+  });
+
+  /* ---------- back to top ---------- */
+  if (backTop) backTop.addEventListener('click', function () {
+    win.scrollTo({ top: 0, behavior: isReduced() ? 'auto' : 'smooth' });
+  });
+
+  /* ---------- copy buttons ---------- */
+  function copyText(text, btn) {
+    function done(ok) {
+      if (!btn.getAttribute('data-label')) btn.setAttribute('data-label', btn.textContent);
+      btn.textContent = ok ? 'Copied!' : 'Copy failed';
+      setTimeout(function () { btn.textContent = btn.getAttribute('data-label') || 'Copy'; }, 1600);
+    }
+    function fallback() {
+      var ta = doc.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+      doc.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = doc.execCommand('copy'); } catch (e) {}
+      doc.body.removeChild(ta);
+      done(ok);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    } else { fallback(); }
+  }
+  doc.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('.copy-btn') : null;
+    if (!btn) return;
+    var block = btn.closest('.code-block');
+    var code = block ? block.querySelector('pre code') : null;
+    if (code) copyText(code.innerText.replace(/\n$/, ''), btn);
+  });
+
+  /* ---------- drawing helpers for simulations ---------- */
+  var MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  var SANS = 'system-ui, "Segoe UI", Roboto, Arial, sans-serif';
+  var AtkDraw = {
+    roundRect: function (ctx, x, y, w, h, r) {
+      r = Math.max(0, Math.min(r, w / 2, h / 2));
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    },
+    box: function (ctx, x, y, w, h, opts) {
+      opts = opts || {};
+      ctx.save();
+      AtkDraw.roundRect(ctx, x, y, w, h, opts.radius == null ? 10 : opts.radius);
+      ctx.fillStyle = opts.fill || win.atkColor('--surface');
+      ctx.fill();
+      ctx.lineWidth = opts.lineWidth || 1.4;
+      ctx.strokeStyle = opts.stroke || win.atkColor('--border-strong');
+      ctx.stroke();
+      var lines = (opts.label || '').split('\n');
+      ctx.fillStyle = opts.labelColor || win.atkColor('--text');
+      ctx.font = opts.font || ('600 12px ' + SANS);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var lh = opts.lineHeight || 14;
+      var startY = y + h / 2 - ((lines.length - 1) * lh) / 2;
+      for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], x + w / 2, startY + i * lh);
+      ctx.restore();
+    },
+    arrow: function (ctx, x1, y1, x2, y2, prog, opts) {
+      opts = opts || {};
+      prog = Math.max(0, Math.min(1, prog));
+      var color = opts.color || win.atkColor('--accent');
+      var dx = x2 - x1, dy = y2 - y1, dist = Math.hypot(dx, dy) || 1;
+      var ux = dx / dist, uy = dy / dist;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = opts.width || 1.6;
+      if (opts.dashed) ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (prog > 0 && prog < 1) {
+        var px = x1 + dx * prog, py = y1 + dy * prog;
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(px, py, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(px, py, 4.2, 0, Math.PI * 2); ctx.fill();
+      }
+      if (prog >= 1) {
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - ux * 10 - uy * 5, y2 - uy * 10 + ux * 5);
+        ctx.lineTo(x2 - ux * 10 + uy * 5, y2 - uy * 10 - ux * 5);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+      if (opts.label) {
+        ctx.font = '11px ' + MONO;
+        ctx.fillStyle = opts.labelColor || color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(opts.label, (x1 + x2) / 2, (y1 + y2) / 2 - 6);
+      }
+      ctx.restore();
+    },
+    dot: function (ctx, x, y, r, color, pulse) {
+      ctx.save();
+      if (pulse) {
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    },
+    pill: function (ctx, x, y, text, color) {
+      ctx.save();
+      ctx.font = '10.5px ' + MONO;
+      var w = ctx.measureText(text).width + 14;
+      AtkDraw.roundRect(ctx, x, y, w, 18, 9);
+      ctx.fillStyle = win.atkColor('--elevated');
+      ctx.fill();
+      ctx.strokeStyle = color || win.atkColor('--border-strong');
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = color || win.atkColor('--text');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + w / 2, y + 9.5);
+      ctx.restore();
+      return w;
+    },
+    text: function (ctx, str, x, y, opts) {
+      opts = opts || {};
+      ctx.save();
+      ctx.font = (opts.weight ? opts.weight + ' ' : '') + (opts.size || 12) + 'px ' + (opts.mono ? MONO : SANS);
+      ctx.fillStyle = opts.color || win.atkColor('--text');
+      ctx.textAlign = opts.align || 'left';
+      ctx.textBaseline = opts.baseline || 'alphabetic';
+      ctx.fillText(str, x, y);
+      ctx.restore();
+    }
+  };
+  win.AtkDraw = AtkDraw;
+
+  /* ---------- simulation engine ---------- */
+  win.AtkSim = { mount: mountSim };
+  function mountSim(host, cfg) {
+    if (!host) return;
+    var canvas = host.querySelector('.sim-canvas');
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext('2d');
+    var steps = cfg.steps || [];
+    var N = steps.length;
+    var stepSec = cfg.stepSeconds || 4.5;
+    var st = { i: 0, t: 0, playing: false, speed: 1, raf: 0, lastTs: 0 };
+    var W = 0, H = 0, scene = {};
+    var stepTitle = host.querySelector('.sim-step-title');
+    var capText = host.querySelector('.sim-caption-text');
+    var defText = host.querySelector('.sim-defender-text');
+    var evWrap = host.querySelector('.sim-evidence');
+    var statusEl = host.querySelector('.sim-status');
+    var playBtn = host.querySelector('.sim-play');
+    var restartBtn = host.querySelector('.sim-restart');
+    var speedSel = host.querySelector('.sim-speed');
+    var chipsWrap = host.querySelector('.step-chips');
+    var tooltip = host.querySelector('.sim-tooltip');
+    var wrap = host.querySelector('.sim-canvas-wrap');
+
+    function resize() {
+      var r = canvas.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var dpr = Math.min(win.devicePixelRatio || 1, 2);
+      W = r.width; H = r.height;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      render();
+    }
+    function render() {
+      ctx.clearRect(0, 0, W, H);
+      try { scene = cfg.scene ? (cfg.scene(W, H) || {}) : {}; } catch (e) { scene = {}; }
+      try { if (cfg.draw) cfg.draw(ctx, W, H, scene, st.i, st.t); } catch (e) {}
+    }
+    function syncUI() {
+      var s = steps[st.i] || {};
+      if (stepTitle) stepTitle.textContent = 'Step ' + (st.i + 1) + ' — ' + (s.title || '');
+      if (capText) capText.textContent = s.caption || '';
+      if (defText) defText.textContent = s.defender || '';
+      if (statusEl) statusEl.textContent = 'Step ' + (st.i + 1) + ' of ' + N;
+      if (evWrap) {
+        evWrap.innerHTML = '';
+        var evs = s.evidence || [];
+        for (var i = 0; i < evs.length; i++) {
+          var sp = doc.createElement('span');
+          sp.className = 'chip chip-mono';
+          sp.textContent = evs[i];
+          evWrap.appendChild(sp);
+        }
+      }
+      if (chipsWrap) {
+        for (var j = 0; j < chipsWrap.children.length; j++) {
+          var c = chipsWrap.children[j];
+          var on = j === st.i;
+          c.classList.toggle('active', on);
+          if (on) c.setAttribute('aria-current', 'step'); else c.removeAttribute('aria-current');
+        }
+      }
+      if (playBtn) playBtn.textContent = st.playing ? 'Pause' : 'Play';
+    }
+    function frame(ts) {
+      if (!st.playing) return;
+      if (!st.lastTs) st.lastTs = ts;
+      var dt = Math.min(0.05, (ts - st.lastTs) / 1000);
+      st.lastTs = ts;
+      st.t += (dt * st.speed) / stepSec;
+      if (st.t >= 1) {
+        if (st.i < N - 1) { st.i += 1; st.t = 0; syncUI(); }
+        else { st.t = 1; pause(); }
+      }
+      render();
+      if (st.playing) st.raf = win.requestAnimationFrame(frame);
+    }
+    function play() {
+      if (st.playing) return;
+      if (st.i >= N - 1 && st.t >= 1) { st.i = 0; st.t = 0; }
+      st.playing = true;
+      st.lastTs = 0;
+      syncUI();
+      st.raf = win.requestAnimationFrame(frame);
+    }
+    function pause() {
+      st.playing = false;
+      if (st.raf) win.cancelAnimationFrame(st.raf);
+      st.raf = 0;
+      if (playBtn) playBtn.textContent = 'Play';
+    }
+    function goTo(i) {
+      st.i = Math.max(0, Math.min(N - 1, i));
+      st.t = isReduced() ? 1 : 0;
+      syncUI();
+      render();
+    }
+    if (chipsWrap) {
+      for (var k = 0; k < steps.length; k++) {
+        (function (idx) {
+          var b = doc.createElement('button');
+          b.type = 'button';
+          b.className = 'step-chip';
+          b.textContent = (idx + 1) + '. ' + (steps[idx].title || 'Step');
+          b.title = steps[idx].title || '';
+          b.addEventListener('click', function () { goTo(idx); });
+          chipsWrap.appendChild(b);
+        })(k);
+      }
+    }
+    if (playBtn) playBtn.addEventListener('click', function () { if (st.playing) pause(); else play(); });
+    if (restartBtn) restartBtn.addEventListener('click', function () {
+      st.i = 0;
+      st.t = isReduced() ? 1 : 0;
+      syncUI();
+      render();
+      if (st.playing) st.lastTs = 0;
+    });
+    if (speedSel) speedSel.addEventListener('change', function () { st.speed = parseFloat(speedSel.value) || 1; });
+    function hideTip() { if (tooltip) tooltip.hidden = true; }
+    function showTipAt(mx, my) {
+      if (!cfg.hitTest) return;
+      var hit = null;
+      try { hit = cfg.hitTest(mx, my, W, H, scene); } catch (err) { hit = null; }
+      if (hit) {
+        tooltip.innerHTML = '<strong></strong><span></span>';
+        tooltip.firstChild.textContent = hit.label || '';
+        tooltip.lastChild.textContent = hit.desc || '';
+        tooltip.hidden = false;
+        var tw = tooltip.offsetWidth || 200;
+        var x = Math.max(8, Math.min(mx + 14, (wrap ? wrap.clientWidth : W) - tw - 8));
+        var y = Math.min(my + 14, (wrap ? wrap.clientHeight : H) - 70);
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+      } else { hideTip(); }
+    }
+    if (wrap && tooltip) {
+      canvas.addEventListener('mousemove', function (e) {
+        var r = canvas.getBoundingClientRect();
+        showTipAt(e.clientX - r.left, e.clientY - r.top);
+      });
+      canvas.addEventListener('mouseleave', hideTip);
+      canvas.addEventListener('click', function (e) {
+        var r = canvas.getBoundingClientRect();
+        showTipAt(e.clientX - r.left, e.clientY - r.top);
+      });
+    }
+    doc.addEventListener('atkthemechange', render);
+    if (win.ResizeObserver) { new ResizeObserver(resize).observe(canvas); }
+    else { win.addEventListener('resize', resize); }
+    resize();
+    syncUI();
+    if (cfg.autoplay && !isReduced()) { play(); }
+    else { st.t = 1; render(); syncUI(); }
+  }
+})();
+</script>
+<script>
+(function () {
+  'use strict';
+  var STEPS = [
+    { title: 'Build payload', caption: 'On an isolated lab VM, the attacker patches a benign installer: a TLS directory entry is added that points at their own callback function, and the payload is parked in an extra section. The file still installs normally.', defender: 'Nothing has fired yet. The artifact is static — only static PE analysis or YARA on the file would flag the unusual TLS directory.', evidence: ['PE static analysis would flag'] },
+    { title: 'Deliver', caption: 'The file is hosted behind a phishing-style link. The user clicks, and installer.exe is downloaded into the Downloads folder.', defender: 'A mail or web gateway running YARA could raise a verdict here. In this run no rule matches, so the download passes.', evidence: ['Gateway verdict (optional)'] },
+    { title: 'Execute', caption: 'The user double-clicks installer.exe. Windows creates the process from the Downloads folder.', defender: 'Sysmon EID 1 records the new process and its path — a weak signal alone, but valuable context for correlation later.', evidence: ['Sysmon EID 1'] },
+    { title: 'Loader reads TLS directory', caption: 'The Windows loader (ntdll) maps the image into memory, walks the PE headers, finds the TLS directory, and collects the list of callback addresses.', defender: 'This loader activity is invisible in native logs — no event fires for header parsing or callback collection.', evidence: ['—'] },
+    { title: 'Callback runs before main', caption: 'The loader calls the malicious callback before the program entry point. The callback stages an implant and runs quick anti-analysis checks.', defender: 'EDR early-behavior hooks or the AV engine may raise a verdict here. Windows Defender can log event 1116 with the detection name.', evidence: ['EDR behavioral', 'Defender 1116'] },
+    { title: 'Implant continues', caption: 'The real installer keeps running normally on top of the implant, so the user sees a working program and suspects nothing. The implant now operates from unsigned memory inside the process.', defender: 'EDR memory scanning finds an unsigned, unrecognized region inside the installer.exe process.', evidence: ['EDR memory scan'] },
+    { title: 'Optional injection', caption: 'The callback-based loader injects its payload into another process, such as the file manager, moving the work away from the original program.', defender: 'Cross-process access with write and execute rights raises an EDR verdict. Sysmon EID 10 records the process access.', evidence: ['Sysmon EID 10'] },
+    { title: 'SOC triage', caption: 'The analyst pulls the file from the host and runs the static YARA check, which confirms the suspicious TLS callback table. The host is isolated and the file is removed.', defender: 'YARA confirms the match, the host is isolated in the EDR console, and the file hash goes to the blocklists at EDR, mail, and web proxies.', evidence: ['YARA match', 'Host isolation'] }
+  ];
+  function scene(W, H) {
+    return { nodes: [
+      { id: 'atk', x: W * 0.035, y: H * 0.36, w: W * 0.135, h: H * 0.20, label: 'Attacker\n(lab VM)', desc: 'Isolated research VM where the trojanized installer is built for lab study only.' },
+      { id: 'srv', x: W * 0.215, y: H * 0.10, w: W * 0.15, h: H * 0.17, label: 'File server\n(phishing link)', desc: 'Serves the trojanized installer to the victim through the link.' },
+      { id: 'victim', x: W * 0.415, y: H * 0.05, w: W * 0.35, h: H * 0.90, label: '', desc: 'Victim Windows workstation where the installer runs.' },
+      { id: 'loader', x: W * 0.435, y: H * 0.10, w: W * 0.145, h: H * 0.15, label: 'Windows loader\n(ntdll)', desc: 'Maps the image and runs TLS callbacks before the entry point.' },
+      { id: 'app', x: W * 0.435, y: H * 0.30, w: W * 0.145, h: H * 0.24, label: 'App\n(installer.exe)', desc: 'Trojanized installer whose TLS callback runs before main.' },
+      { id: 'proc2', x: W * 0.615, y: H * 0.62, w: W * 0.13, h: H * 0.15, label: 'Other process\n(explorer.exe)', desc: 'Injection target used in the optional step 7.' },
+      { id: 'soc', x: W * 0.815, y: H * 0.36, w: W * 0.14, h: H * 0.20, label: 'SOC analyst', desc: 'Watches verdicts, memory scans, and file events; isolates the host.' }
+    ] };
+  }
+  function N(s, id) { for (var i = 0; i < s.nodes.length; i++) if (s.nodes[i].id === id) return s.nodes[i]; return { x: 0, y: 0, w: 0, h: 0 }; }
+  function hitTest(x, y, W, H, scene) {
+    var ns = (scene && scene.nodes) || [];
+    for (var i = 0; i < ns.length; i++) {
+      var n = ns[i];
+      if (x >= n.x && x <= n.x + (n.w || 0) && y >= n.y && y <= n.y + (n.h || 0)) return n;
+    }
+    return null;
+  }
+  function draw(ctx, W, H, s, step, t) {
+    ctx.clearRect(0, 0, W, H);
+    /* subtle background grid dots */
+    ctx.save();
+    ctx.fillStyle = atkColor('--border');
+    ctx.globalAlpha = 0.35;
+    for (var gx = 18; gx < W; gx += 44) {
+      for (var gy = 18; gy < H; gy += 44) {
+        ctx.beginPath(); ctx.arc(gx, gy, 1, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    var atk = N(s, 'atk'), srv = N(s, 'srv'), victim = N(s, 'victim'), loader = N(s, 'loader');
+    var app = N(s, 'app'), proc2 = N(s, 'proc2'), soc = N(s, 'soc');
+
+    /* victim host container */
+    AtkDraw.box(ctx, victim.x, victim.y, victim.w, victim.h, { label: '', radius: 14, lineWidth: 1.6, stroke: atkColor('--border-strong') });
+    AtkDraw.text(ctx, 'Victim host', victim.x + 12, victim.y + 20, { size: 11, weight: '700', color: atkColor('--muted') });
+
+    /* inner nodes */
+    AtkDraw.box(ctx, loader.x, loader.y, loader.w, loader.h, { label: 'Windows loader\n(ntdll)' });
+    AtkDraw.box(ctx, app.x, app.y, app.w, app.h, { label: 'App\n(installer.exe)' });
+    var cbActive = step >= 4;
+    var cbW = app.w * 0.84, cbH = Math.min(app.h * 0.32, 30);
+    var cbX = app.x + (app.w - cbW) / 2, cbY = app.y + app.h * 0.56;
+    AtkDraw.box(ctx, cbX, cbY, cbW, cbH, {
+      label: 'TLS callback\n(malicious)', radius: 7,
+      font: '600 9.5px system-ui, sans-serif', lineHeight: 11,
+      stroke: atkColor(cbActive ? '--danger' : '--border-strong'),
+      labelColor: atkColor(cbActive ? '--danger' : '--muted'),
+      fill: atkColor('--elevated')
+    });
+    AtkDraw.box(ctx, proc2.x, proc2.y, proc2.w, proc2.h, {
+      label: 'Other process\n(explorer.exe)',
+      font: '600 10.5px system-ui, sans-serif', lineHeight: 12,
+      stroke: atkColor(step >= 6 ? '--danger' : '--border-strong')
+    });
+
+    /* outer nodes */
+    AtkDraw.box(ctx, atk.x, atk.y, atk.w, atk.h, { label: 'Attacker\n(lab VM)' });
+    AtkDraw.box(ctx, srv.x, srv.y, srv.w, srv.h, { label: 'File server\n(phishing link)' });
+    AtkDraw.box(ctx, soc.x, soc.y, soc.w, soc.h, {
+      label: 'SOC analyst',
+      stroke: atkColor(step >= 3 ? '--success' : '--border-strong'),
+      lineWidth: step >= 3 ? 2 : 1.4
+    });
+
+    function prog(k) { return step >= k ? 1 : (step === k - 1 ? t : 0); }
+
+    /* flows */
+    AtkDraw.arrow(ctx, atk.x + atk.w, atk.y + atk.h * 0.5, srv.x, srv.y + srv.h * 0.5, prog(1), { color: atkColor('--danger'), label: 'trojanized PE' });
+    AtkDraw.arrow(ctx, srv.x + srv.w * 0.5, srv.y + srv.h, app.x + app.w * 0.30, app.y, prog(2), { color: atkColor('--warning'), label: 'download', dashed: true });
+    AtkDraw.arrow(ctx, app.x + app.w, app.y + app.h * 0.30, soc.x, soc.y + soc.h * 0.5, prog(3), { color: atkColor('--accent'), label: 'process start' });
+    AtkDraw.arrow(ctx, loader.x + loader.w * 0.5, loader.y + loader.h, app.x + app.w * 0.70, app.y, prog(4), { color: atkColor('--violet'), label: 'reads TLS dir' });
+    AtkDraw.arrow(ctx, app.x + app.w, app.y + app.h * 0.15, soc.x, soc.y + soc.h * 0.25, prog(5), { color: atkColor('--accent-2'), label: 'EDR verdict' });
+    AtkDraw.arrow(ctx, app.x + app.w, app.y + app.h * 0.75, soc.x, soc.y + soc.h * 0.75, prog(6), { color: atkColor('--accent-2'), label: 'memory scan', dashed: true });
+    AtkDraw.arrow(ctx, app.x + app.w * 0.5, app.y + app.h, proc2.x + proc2.w * 0.2, proc2.y, prog(7), { color: atkColor('--danger'), label: 'inject' });
+    AtkDraw.arrow(ctx, soc.x + soc.w * 0.3, soc.y + soc.h, victim.x + victim.w, victim.y + victim.h * 0.85, prog(8), { color: atkColor('--success'), label: 'isolate + block', dashed: true });
+
+    /* evidence pills */
+    if (step >= 1) AtkDraw.pill(ctx, atk.x, atk.y + atk.h + 10, 'static analysis would flag', atkColor('--warning'));
+    if (step >= 2) AtkDraw.pill(ctx, srv.x, srv.y - 26, 'gateway verdict (optional)', atkColor('--warning'));
+    var pills = [];
+    if (step >= 3) pills.push('Sysmon EID 1');
+    if (step >= 5) pills.push('Defender 1116');
+    if (step >= 6) pills.push('EDR memory scan');
+    if (step >= 7) pills.push('Sysmon EID 10');
+    if (step >= 8) pills.push('YARA match');
+    var px = soc.x - 10, py = soc.y - 28;
+    for (var i = 0; i < pills.length; i++) {
+      var w = AtkDraw.pill(ctx, px, py, pills[i], atkColor('--accent-2'));
+      px += w + 6;
+      if (px + 100 > W) { px = soc.x - 10; py -= 24; }
+    }
+  }
+  AtkSim.mount(document.getElementById('sim'), {
+    steps: STEPS,
+    scene: scene,
+    draw: draw,
+    hitTest: hitTest,
+    stepSeconds: 4.5,
+    autoplay: !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  });
+})();
+</script>
+</body>
+</html>

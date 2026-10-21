@@ -1,0 +1,2001 @@
+<!DOCTYPE html>
+<!-- ATT&CK Technique Detection Guide v2.0 — audited & corrected against MITRE ATT&CK v20, 2026-10-21 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1055.002 - Portable Executable Injection | Detection Guide</title>
+<meta name="description" content="Defensive guide to MITRE ATT&amp;CK T1055.002 Portable Executable Injection: how attackers copy a whole PE image into the memory of a trusted process, and how to detect it with Sysmon, EDR, Sigma, and Splunk.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1055-Process-Injection/002-Portable-Executable-Injection.html">
+<script>(function(){try{var t=localStorage.getItem('atk-theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<style>
+/* ATK-SHARED-CSS v1 — MITRE ATT&CK technique guide design system.
+   Shared by every technique page. Do not fork or re-theme per page. */
+
+:root{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --radius:14px; --radius-sm:9px;
+  --shadow:0 8px 28px rgba(2,6,18,.35);
+  --accent-soft:rgba(79,140,255,.14);
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 8px 24px rgba(23,35,64,.10);
+  --accent-soft:rgba(47,111,228,.10);
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:16.5px;line-height:1.65;overflow-wrap:break-word;-webkit-font-smoothing:antialiased}
+img,svg,canvas{max-width:100%}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{line-height:1.2;font-weight:700;margin:0 0 .5em;letter-spacing:-.01em}
+p{margin:0 0 1em}
+code,kbd,samp{font-family:var(--mono);font-size:.88em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:.08em .35em}
+pre code{background:none;border:none;padding:0;font-size:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent-soft)}
+#atk-header:empty{display:none}
+
+/* ---------- progress bar ---------- */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:80;pointer-events:none}
+.progress-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+/* ---------- hero ---------- */
+.hero{border-bottom:1px solid var(--border);background:var(--bg);background:linear-gradient(180deg,var(--accent-soft),transparent 64%)}
+.hero-inner{max-width:1280px;margin:0 auto;padding:56px 28px 36px;position:relative}
+.kicker{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2);margin:0 0 14px}
+.hero-title{font-size:clamp(1.9rem,4.4vw,2.75rem);letter-spacing:-.015em;max-width:26ch;margin-bottom:.45em}
+.tech-id{display:inline-block;vertical-align:middle;font-family:var(--mono);font-size:.44em;font-weight:700;color:var(--accent);border:1px solid var(--accent);background:var(--accent-soft);border-radius:10px;padding:.18em .5em;margin-right:.55rem;letter-spacing:.04em}
+.hero-intro{max-width:72ch;color:var(--muted);font-size:1.04rem;margin:0 0 20px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:0 0 26px;padding:0}
+.chip{font-size:.76rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:5px 12px}
+.chip-mono{font-family:var(--mono);font-size:.71rem;color:var(--accent-2);border-color:var(--border-strong)}
+.facts-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.fact-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.fact-label{display:block;font-family:var(--mono);font-size:.67rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent-2);margin-bottom:6px}
+.fact-card p{margin:0;font-size:.9rem;color:var(--muted);line-height:1.55;overflow-wrap:anywhere}
+.theme-toggle{position:absolute;top:24px;right:28px;width:42px;height:42px;border-radius:50%;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);font-size:1.05rem;line-height:1;cursor:pointer}
+.theme-toggle:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---------- layout ---------- */
+.layout{max-width:1280px;margin:0 auto;padding:44px 28px 110px;display:grid;grid-template-columns:262px minmax(0,1fr);gap:38px;align-items:start}
+.sidebar{position:sticky;top:20px;max-height:calc(100vh - 40px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 14px;box-shadow:var(--shadow)}
+.toc-heading{font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:2px 6px 10px}
+.toc{display:flex;flex-direction:column;gap:2px}
+.toc a{display:block;padding:7px 10px;border-radius:8px;color:var(--muted);font-size:.86rem;border-left:2px solid transparent}
+.toc a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent);font-weight:600}
+.toc a.toc-sub{padding-left:26px;font-size:.8rem;border-left:2px solid var(--border)}
+.toc a.toc-sub.active{border-left-color:var(--accent)}
+.main-content{min-width:0}
+
+/* ---------- sections ---------- */
+.section{margin:0 0 60px;scroll-margin-top:22px}
+.section-head{margin-bottom:22px}
+.section h2{display:flex;align-items:center;gap:12px;font-size:clamp(1.35rem,2.4vw,1.8rem);margin-bottom:.4em}
+.section-num{flex:none;display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:34px;border-radius:10px;font-family:var(--mono);font-size:.85rem;font-weight:700;color:var(--accent);background:var(--accent-soft);border:1px solid var(--border-strong)}
+.section-intro{color:var(--muted);max-width:75ch;margin:0}
+h3.subsec{display:flex;align-items:center;gap:10px;font-size:1.12rem;margin:36px 0 14px;scroll-margin-top:22px}
+.subsec-num{flex:none;font-family:var(--mono);font-size:.72rem;font-weight:700;color:var(--accent-2);border:1px solid var(--border-strong);border-radius:8px;padding:3px 8px;background:var(--surface-2)}
+h4{font-size:1rem}
+
+/* ---------- cards, grids, callouts ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);margin:0 0 16px}
+.card h3,.card h4{margin-top:0}
+.card p:last-child{margin-bottom:0}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:16px}
+.grid-2 .card,.grid-3 .card{margin:0}
+.callout{border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:12px;background:var(--surface-2);padding:14px 16px;margin:0 0 16px}
+.callout .callout-title{display:block;font-weight:700;font-size:.85rem;margin-bottom:6px}
+.callout p{margin:0 0 .5em;font-size:.93rem}
+.callout p:last-child{margin:0}
+.callout.note{border-left-color:var(--accent)}   .callout.note .callout-title{color:var(--accent)}
+.callout.good{border-left-color:var(--success)}  .callout.good .callout-title{color:var(--success)}
+.callout.warning{border-left-color:var(--warning)}.callout.warning .callout-title{color:var(--warning)}
+.callout.danger{border-left-color:var(--danger)} .callout.danger .callout-title{color:var(--danger)}
+
+/* ---------- badges ---------- */
+.badge{display:inline-block;padding:2px 10px;border-radius:999px;border:1px solid currentColor;font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;vertical-align:middle}
+.badge.critical{color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.badge.high{color:var(--high);background:color-mix(in srgb,var(--high) 12%,transparent)}
+.badge.medium{color:var(--warning);background:color-mix(in srgb,var(--warning) 14%,transparent)}
+.badge.low{color:var(--low);background:color-mix(in srgb,var(--low) 12%,transparent)}
+.badge.cat{color:var(--accent-2);background:var(--accent-soft);text-transform:none;letter-spacing:.02em}
+
+/* ---------- key/value list ---------- */
+.kv{display:grid;grid-template-columns:minmax(150px,max-content) minmax(0,1fr);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--surface)}
+.kv>div{padding:10px 14px;font-size:.9rem;border-top:1px solid var(--border);overflow-wrap:anywhere}
+.kv>div:nth-child(-n+2){border-top:none}
+.kv .k{background:var(--surface-2);font-weight:600;color:var(--muted);font-family:var(--mono);font-size:.76rem}
+
+/* ---------- timeline ---------- */
+.timeline{list-style:none;margin:0 0 16px;padding:4px 0 4px 24px;border-left:2px solid var(--border-strong)}
+.timeline li{position:relative;padding:0 0 16px 14px}
+.timeline li:last-child{padding-bottom:2px}
+.timeline li::before{content:"";position:absolute;left:-31px;top:7px;width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--bg),0 0 0 4px var(--border-strong)}
+.tl-when{font-family:var(--mono);font-size:.74rem;color:var(--accent-2);display:block;margin-bottom:2px}
+
+/* ---------- tables ---------- */
+.table-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:0 0 16px;background:var(--surface);-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.88rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+thead th{background:var(--surface-2);font-size:.76rem;text-transform:uppercase;letter-spacing:.06em;font-family:var(--mono)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--surface-2)}
+
+/* ---------- code blocks ---------- */
+.code-block{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--surface-2)}
+.code-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 8px 8px 14px;background:var(--surface);border-bottom:1px solid var(--border)}
+.code-head .lang{font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.copy-btn{flex:none;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);font-family:var(--mono);font-size:.72rem;padding:5px 12px;border-radius:8px;cursor:pointer}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.code-block pre{margin:0;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:12.8px;line-height:1.6;tab-size:2}
+
+/* ---------- simulation ---------- */
+.sim{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);margin:0 0 16px}
+.sim-canvas-wrap{position:relative;aspect-ratio:16/9;min-height:280px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+.sim-canvas{display:block;width:100%;height:100%}
+.sim-tooltip{position:absolute;z-index:5;pointer-events:none;background:var(--elevated);color:var(--text);border:1px solid var(--border-strong);border-radius:10px;padding:8px 11px;font-size:.78rem;line-height:1.45;max-width:230px;box-shadow:var(--shadow)}
+.sim-tooltip strong{display:block;color:var(--accent-2);margin-bottom:2px}
+.sim-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.sim-btn{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);border-radius:9px;padding:8px 16px;font-size:.85rem;font-weight:600;cursor:pointer}
+.sim-btn:hover{border-color:var(--accent)}
+.sim-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.sim-speed-label{display:inline-flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted)}
+.sim-speed{background:var(--surface-2);color:var(--text);border:1px solid var(--border-strong);border-radius:8px;padding:6px 8px;font-size:.85rem}
+.sim-status{margin-left:auto;font-family:var(--mono);font-size:.74rem;color:var(--muted)}
+.step-chips{display:flex;flex-wrap:wrap;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.step-chip{border:1px solid var(--border-strong);background:var(--surface-2);color:var(--muted);font-family:var(--mono);font-size:.71rem;border-radius:999px;padding:5px 11px;cursor:pointer}
+.step-chip:hover{color:var(--text)}
+.step-chip.active{color:#fff;background:var(--accent);border-color:var(--accent);font-weight:600}
+.sim-caption{padding:14px 16px 16px}
+.sim-step-title{font-weight:700;margin:0 0 6px;font-size:1rem}
+.sim-caption-text{font-size:.93rem;margin:0 0 12px;max-width:75ch}
+.sim-defender{border-left:3px solid var(--accent-2);background:var(--surface-2);border-radius:0 10px 10px 0;padding:10px 14px;margin:0 0 12px}
+.sim-defender-label{display:block;font-family:var(--mono);font-size:.66rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent-2);margin-bottom:4px}
+.sim-defender-text{margin:0;font-size:.88rem}
+.sim-evidence{display:flex;flex-wrap:wrap;gap:8px}
+.sim-story{padding-left:22px;margin:0}
+.sim-story li{margin-bottom:10px;font-size:.93rem}
+.sim-story em{color:var(--accent-2);font-style:normal;font-weight:600}
+
+/* ---------- mobile controls + overlay ---------- */
+.mobile-toc-btn,.back-top{position:fixed;z-index:60;border-radius:999px;cursor:pointer;font-family:var(--sans)}
+.mobile-toc-btn{right:18px;bottom:18px;display:none;background:var(--accent);border:1px solid var(--accent);color:#fff;font-weight:700;font-size:.85rem;padding:12px 18px;box-shadow:var(--shadow)}
+.back-top{right:18px;bottom:74px;width:44px;height:44px;background:var(--surface);border:1px solid var(--border-strong);color:var(--text);font-size:1.15rem;opacity:0;pointer-events:none;transform:translateY(6px);transition:opacity .2s,transform .2s}
+.back-top.show{opacity:1;pointer-events:auto;transform:none}
+.toc-overlay{position:fixed;inset:0;z-index:90;background:rgba(4,8,18,.6)}
+.toc-overlay-panel{position:absolute;top:0;left:0;bottom:0;width:min(330px,88vw);background:var(--surface);border-right:1px solid var(--border);padding:18px 16px;overflow:auto;box-shadow:var(--shadow)}
+.toc-close{display:block;margin:0 0 14px auto;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--text);border-radius:8px;padding:6px 12px;font-size:.8rem;cursor:pointer}
+.toc-overlay .toc a{font-size:.95rem;padding:9px 12px}
+
+/* ---------- utilities ---------- */
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.small{font-size:.85rem}
+
+/* ---------- responsive ---------- */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0;padding-top:28px}
+  .sidebar{display:none}
+  .mobile-toc-btn{display:inline-block}
+  .facts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .hero-inner{padding:40px 18px 26px}
+  .hero-intro{font-size:.98rem}
+  .theme-toggle{top:14px;right:14px}
+  .facts-grid{grid-template-columns:minmax(0,1fr)}
+  .grid-2,.grid-3{grid-template-columns:minmax(0,1fr)}
+  .layout{padding:24px 14px 130px}
+  .sim-canvas-wrap{aspect-ratio:4/3;min-height:240px}
+  .sim-status{margin-left:0;width:100%}
+  .sim-toolbar .sim-btn{flex:1 1 auto}
+  table{min-width:560px}
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto!important}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+/* ---------- print ---------- */
+@media print{
+  .progress-bar,.sidebar,.mobile-toc-btn,.back-top,.toc-overlay,.theme-toggle,.sim-toolbar,.step-chips,.copy-btn,.sim-tooltip{display:none!important}
+  html,body{background:#fff!important;color:#000!important}
+  .card,.fact-card,.code-block,.table-scroll,.callout,.sim,.kv{border-color:#bbb!important;box-shadow:none!important;background:#fff!important}
+  a{color:#000;text-decoration:none}
+  pre,.code-block pre{white-space:pre-wrap;word-break:break-word;overflow:visible}
+  .table-scroll{overflow:visible}
+  table{min-width:0}
+  .section{break-inside:auto}
+  h2,h3{break-after:avoid}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1055.002"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div class="progress-bar" aria-hidden="true"><span id="progressFill"></span></div>
+
+<main>
+  <header class="hero">
+    <div class="hero-inner">
+      <button id="pageThemeToggle" class="theme-toggle" type="button" aria-label="Switch color theme">☀</button>
+      <p class="kicker">MITRE ATT&amp;CK · Sub-technique of T1055 · Stealth · Privilege Escalation</p>
+      <h1 class="hero-title"><span class="tech-id">T1055.002</span> Portable Executable Injection</h1>
+      <p class="hero-intro">A portable executable (PE) is the standard Windows file format for programs and libraries. PE injection copies a complete PE image into the memory of another process and starts it there, so a whole program can run without ever existing on disk in the target. ATT&amp;CK lists this technique under two tactics: Stealth (TA0005) and Privilege Escalation (TA0004). TA0005 was named Defense Evasion before ATT&amp;CK v20.</p>
+      <ul class="chips" aria-label="Technique metadata">
+        <li class="chip chip-mono">ID · T1055.002</li>
+        <li class="chip">Tactics · Stealth / Privilege Escalation (TA0005 / TA0004)</li>
+        <li class="chip">Platform · Windows</li>
+        <li class="chip">Parent · T1055 Process Injection</li>
+        <li class="chip">Domain · Enterprise</li>
+        <li class="chip">Guide v2.0</li>
+      </ul>
+      <div class="facts-grid">
+        <div class="fact-card"><span class="fact-label">What it is</span><p>A full PE image — headers, sections, and entry point — is written into another process's memory and executed there with a remote thread.</p></div>
+        <div class="fact-card"><span class="fact-label">Why attackers use it</span><p>Fileless execution inside a trusted process. The payload never lands on disk, so file-scanning antivirus has nothing to find.</p></div>
+        <div class="fact-card"><span class="fact-label">Main risks</span><p>Memory-only implants, hidden command-and-control channels, and a quiet staging point for credential theft and bigger attacks.</p></div>
+        <div class="fact-card"><span class="fact-label">Detection focus</span><p>Unbacked executable memory, remote threads from odd addresses, and script hosts that write into other processes.</p></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" aria-label="Table of contents">
+      <p class="toc-heading">Contents</p>
+      <nav id="tocNav" class="toc" aria-label="Sections"></nav>
+      <noscript>
+        <nav class="toc" aria-label="Sections (static fallback)">
+          <a href="#overview">Overview</a>
+          <a href="#simulation">Animated simulation</a>
+          <a href="#red-team">Red team perspective</a>
+          <a href="#blue-team">Blue team perspective</a>
+          <a href="#detection-engineering">Detection engineering deep dive</a>
+          <a class="toc-sub" href="#regulation-mapping">5.1 Regulation mapping</a>
+          <a class="toc-sub" href="#threat-intelligence">5.2 Threat intelligence</a>
+          <a class="toc-sub" href="#threats-ranking">5.3 Threats ranking</a>
+          <a class="toc-sub" href="#logs-and-patterns">5.4 Logs and patterns</a>
+          <a class="toc-sub" href="#sigma-and-spl">5.5 Sigma rules and Splunk SPL</a>
+          <a href="#case-study">Real-world case study</a>
+          <a href="#mitigation">Mitigation and defense</a>
+          <a href="#mistakes">Common mistakes and best practices</a>
+          <a href="#cheat-sheet">Cheat sheet and quick reference</a>
+        </nav>
+      </noscript>
+    </aside>
+
+    <div class="main-content">
+      <section id="overview" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">1</span><span class="section-title">Overview</span></h2>
+    <p class="section-intro">Portable executable (PE) injection moves a complete program into the memory of another Windows process and runs it there. This section explains the idea in plain words, compares it with DLL injection, and shows where it sits in an attack chain.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>The PE format in one minute</h3>
+      <p>Windows programs and libraries use a file format called the <strong>portable executable (PE)</strong> format. A PE file has three main parts:</p>
+      <p><strong>Headers.</strong> A table at the start of the file describes the file, the CPU it is built for, and where execution begins. The header block starts with the two letters <code>MZ</code>.</p>
+      <p><strong>Sections.</strong> These are the blocks with real content: <code>.text</code> holds code, <code>.data</code> holds variables, and <code>.rsrc</code> holds resources such as icons and dialogs.</p>
+      <p><strong>Entry point.</strong> The exact address of the first instruction the CPU should run.</p>
+      <p>PE injection copies this whole structure — headers, sections, and entry point — into the memory of a process that is already running.</p>
+    </div>
+    <div class="card">
+      <h3>How it differs from DLL injection</h3>
+      <p>In classic <strong>DLL injection</strong> (T1055.001), the attacker makes the target process call <code>LoadLibrary</code>. The Windows loader itself then loads a DLL file from disk and runs it.</p>
+      <p><strong>PE injection</strong> skips the loader. The attacker copies a complete, standalone PE image straight into the target's memory and starts it with a remote thread. Because the loader never runs, the attacker must handle <strong>relocation</strong> manually. Relocation simply means fixing the absolute memory addresses inside the image so they match the base address where the image actually landed in the target.</p>
+      <p>The reward: the payload never needs a file on disk, so file-based antivirus has nothing to scan.</p>
+    </div>
+    <div class="card">
+      <h3>Self-injection vs remote injection</h3>
+      <p><strong>Self-injection</strong> writes and runs the PE inside the attacker's own process, such as a script host or the dropper itself. There are no cross-process events, so thread and process-access logs stay quiet.</p>
+      <p><strong>Remote injection</strong> writes into a different process, usually a trusted one such as <code>explorer.exe</code> or <code>svchost.exe</code>. This hides the implant behind the trusted process, but it produces loud cross-process events that defenders can detect.</p>
+    </div>
+    <div class="card">
+      <h3>Where it fits in the attack chain</h3>
+      <p>PE injection usually appears after delivery, when a dropper already runs on the host. It serves two goals at once: <strong>stealth</strong>, because no payload file lands on disk, and <strong>privilege escalation</strong>, when the target process runs with more rights than the dropper.</p>
+      <p>From this hidden position, attackers stage the next steps: credential access, command-and-control (C2) — the channel back to the attacker — and data collection.</p>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <span class="callout-title">Note — memory becomes the file</span>
+    <p>Once the PE image runs, only the memory of the target process holds the implant. A reboot destroys it, and a disk scan finds nothing. That is why memory visibility, not file scanning, is the core detection idea for this technique.</p>
+  </div>
+
+  <h3>Key facts</h3>
+  <div class="kv">
+    <div class="k">ID</div><div>T1055.002 — Portable Executable Injection</div>
+    <div class="k">Parent technique</div><div>T1055 — Process Injection</div>
+    <div class="k">Platform</div><div>Windows</div>
+    <div class="k">Tactics</div><div>Stealth / Privilege Escalation (TA0005 / TA0004) — TA0005 was named Defense Evasion before ATT&amp;CK v20</div>
+    <div class="k">Permissions required</div><div>User</div>
+    <div class="k">Data sources</div><div>Process access, Process modification, OS API execution, Thread creation</div>
+    <div class="k">Related techniques</div><div>T1055.001 DLL Injection · T1055.012 Process Hollowing · T1620 Reflective Code Loading · T1027 Obfuscated Files or Information</div>
+    <div class="k">What you will learn</div><div>How the technique works step by step, which logs it leaves behind, five detection rules with Splunk queries, and a tested response flow</div>
+  </div>
+</section>
+
+<section id="simulation" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">2</span><span class="section-title">Animated simulation</span></h2>
+    <p class="section-intro">Watch a complete PE injection story: a packed dropper copies a hidden PE image into <code>explorer.exe</code>, starts it with a remote thread, and the SOC (security operations center) follows every step. Hover or tap the boxes for details, and use the chips to jump to any step.</p>
+  </header>
+
+  <div class="sim" id="sim">
+    <div class="sim-canvas-wrap">
+      <canvas class="sim-canvas" role="img" aria-label="Animated diagram of portable executable injection: a packed dropper copies a full PE image into the memory of explorer.exe, a remote thread starts it, and the SOC analyst captures memory to confirm the implant."></canvas>
+      <div class="sim-tooltip" hidden></div>
+    </div>
+    <div class="sim-toolbar">
+      <button class="sim-btn primary sim-play" type="button">Play</button>
+      <button class="sim-btn sim-restart" type="button">Restart</button>
+      <label class="sim-speed-label">Speed
+        <select class="sim-speed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      </label>
+      <span class="sim-status" aria-live="polite">Step 1 of 8</span>
+    </div>
+    <div class="step-chips" role="group" aria-label="Jump to a step"></div>
+    <div class="sim-caption">
+      <p class="sim-step-title"></p>
+      <p class="sim-caption-text" aria-live="polite"></p>
+      <div class="sim-defender">
+        <span class="sim-defender-label">SOC view</span>
+        <p class="sim-defender-text" aria-live="polite"></p>
+      </div>
+      <div class="sim-evidence" aria-label="Evidence produced by this step"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Written story (text alternative)</h3>
+    <ol class="sim-story">
+      <li><strong>Step 1 — Foothold.</strong> A user opens a fake installer from a phishing email. The packed dropper starts, shows a normal setup screen, and quietly prepares its hidden payload. <em>Defender view:</em> Sysmon EID 1 logs a new process in a user-writable folder with an unusual parent chain; a fresh or missing signature is another hint.</li>
+      <li><strong>Step 2 — Read payload.</strong> The dropper decrypts its own resources and unpacks a complete hidden PE image into a private memory buffer. <em>Defender view:</em> EDR (endpoint detection and response) sees unusual section activity — large executable-looking regions appear inside the dropper before it touches other processes.</li>
+      <li><strong>Step 3 — Open + allocate.</strong> The dropper opens the trusted explorer.exe with OpenProcess and reserves fresh read-write (RW) memory inside it with VirtualAllocEx. <em>Defender view:</em> Sysmon EID 10 records cross-process access with sensitive rights, and an EDR rule flags the new writable region in a trusted process.</li>
+      <li><strong>Step 4 — Write full PE image.</strong> WriteProcessMemory copies the PE headers and all sections into the new region, relocation fixups adjust the image for its new base address, and VirtualProtectEx raises the memory protection to executable. <em>Defender view:</em> the region now holds image-like bytes that start with an MZ header and run executable, but no file backs them — an unbacked image region.</li>
+      <li><strong>Step 5 — Start execution.</strong> CreateRemoteThread starts a new thread in the target at the PE entry offset. No LoadLibrary call happens at any point. <em>Defender view:</em> Sysmon EID 8 shows a remote thread whose StartModule and StartFunction are empty, because the start address belongs to no module.</li>
+      <li><strong>Step 6 — Implant runs.</strong> The implant finishes initializing inside explorer.exe. It is now a complete, memory-only program living inside a trusted process. <em>Defender view:</em> EDR memory scanning finds unsigned executable code running inside a signed, trusted process.</li>
+      <li><strong>Step 7 — Hidden activity.</strong> From inside the trusted process, the implant polls the C2 server over HTTPS and waits for tasks. <em>Defender view:</em> network monitoring sees a periodic beacon flow from a process that never spoke like this before; egress baselines make it stand out.</li>
+      <li><strong>Step 8 — SOC triage.</strong> The SOC analyst captures triage memory. Scanners reveal the in-memory PE, and the host is isolated from the network. <em>Defender view:</em> the alert chain lines up — new process, cross-process write, unbacked thread, beacon flow — and memory forensics confirms a full PE image.</li>
+    </ol>
+  </div>
+
+  <div class="callout note">
+    <span class="callout-title">Note — how to read the simulation</span>
+    <p>The animation is illustrative, not a real capture. The blue evidence chips show the log events each step produces. The same evidence types appear in section 5.4, where they are mapped to real fields and detection logic.</p>
+  </div>
+</section>
+      <section id="red-team" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">3</span><span class="section-title">Red team perspective</span></h2>
+    <p class="section-intro">This section explains, at a conceptual level only, why attackers choose PE injection and which building blocks the technique is made of. It describes the purpose of each step — never working code.</p>
+  </header>
+
+  <div class="callout danger">
+    <span class="callout-title">Danger — Lab only</span>
+    <p>Everything in this guide is educational. Process injection code can damage systems and is illegal to run on machines you do not own. Practice only inside an isolated lab you control, and never against production or other people's systems. This page describes the purpose of each API step, not a recipe that can be copied.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Why attackers pick PE injection</h3>
+      <ul>
+        <li><strong>Whole implant in memory.</strong> The complete program lives and runs inside the target's memory space.</li>
+        <li><strong>Nothing on disk after start.</strong> A dropper can delete itself, and the implant never had a file at all.</li>
+        <li><strong>Works with packed payloads.</strong> Crypters and packers can wrap the PE so static analysis sees nothing useful.</li>
+        <li><strong>Trusted cover.</strong> The implant runs inside a signed process, so simple process trust checks pass.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Where it applies in practice</h3>
+      <ul>
+        <li><strong>Crypter services</strong> sold in criminal markets wrap a payload so it unpacks and injects at run time.</li>
+        <li><strong>Custom loaders</strong> of espionage toolsets stage second-stage implants this way.</li>
+        <li><strong>Commercial implants</strong> use in-memory PE execution to keep their tooling off disk.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Conceptual sequence (purpose of each step)</h3>
+    <p>Each step below states what the step achieves. Real tooling wraps these calls in error handling, obfuscation, and API hashing — details a defensive guide does not need.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Step</th><th>Purpose</th><th>What defenders can see</th></tr></thead>
+        <tbody>
+          <tr><td>Read payload</td><td>Decrypt and unpack the PE image from the dropper's resources into a private buffer.</td><td>Large executable-looking regions form inside a newly started process.</td></tr>
+          <tr><td>OpenProcess</td><td>Ask Windows for a handle to the target process — a handle is a permission ticket for one open object — with write and thread-creation rights.</td><td>Sysmon EID 10 logs the access request with its GrantedAccess mask.</td></tr>
+          <tr><td>VirtualAllocEx</td><td>Reserve fresh read-write (PAGE_READWRITE) memory inside the target.</td><td>A new writable private region appears in a process that normally needs none.</td></tr>
+          <tr><td>WriteProcessMemory + relocations</td><td>Copy the headers and section data, then process the relocation table so absolute addresses match the base address where the image actually landed — it is not the preferred ImageBase the file was built for.</td><td>Image-like bytes with an MZ header appear in memory that no file backs.</td></tr>
+          <tr><td>VirtualProtectEx</td><td>Raise the memory protection of the copied image to executable, for example PAGE_EXECUTE_READ on the code section.</td><td>A private region that was only writable turns executable — a classic EDR memory alert.</td></tr>
+          <tr><td>CreateRemoteThread</td><td>Start a thread at the PE entry offset. No LoadLibrary is used.</td><td>Sysmon EID 8 shows a thread whose start address belongs to no module.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Prerequisites</h3>
+      <ul>
+        <li><strong>Handle rights.</strong> The injector needs a handle with memory-write, memory-operation, and thread-creation access to the target.</li>
+        <li><strong>Architecture match.</strong> A 32-bit payload cannot simply run inside a 64-bit process; the bitness must line up.</li>
+        <li><strong>Base address handling.</strong> The payload must be relocated to the base address it actually gets, or be position-independent.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Common mistakes attackers make</h3>
+      <ul>
+        <li>Skipping relocations — the implant crashes the target process at once.</li>
+        <li>Hard-coding a base address that collides with address space layout randomization (ASLR), the Windows feature that randomizes memory positions.</li>
+        <li>Leaving the dropper on disk, which gives defenders a file to analyze.</li>
+        <li>Targeting protected processes, where Windows blocks these access rights entirely.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Variations defenders should know</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Variation</th><th>How it differs</th><th>Why it matters for detection</th></tr></thead>
+      <tbody>
+        <tr><td>Self-injection</td><td>The payload is written into the injector's own process instead of a remote one.</td><td>No cross-process thread or access events fire, so EID 8 and EID 10 stay quiet; memory scanning becomes the main signal.</td></tr>
+        <tr><td>Manual section mapping</td><td>Each PE section is written at its correct offset instead of one flat copy.</td><td>The memory layout looks more like a real loaded module, but scanners still find the unbacked image.</td></tr>
+        <tr><td>Reflective loading (T1620)</td><td>A small loader is written first; it then loads the PE inside the target itself.</td><td>The write is smaller, but the loader and image are both unbacked code.</td></tr>
+        <tr><td>Process hollowing (T1055.012)</td><td>The image of an existing process is replaced rather than a new image being added.</td><td>Hollowing swaps the real image; PE injection adds a new image next to it. Scanners flag both, but the process lineage differs.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="blue-team" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">4</span><span class="section-title">Blue team perspective</span></h2>
+    <p class="section-intro">Defenders cannot scan what is not on disk, so the blue-team view centers on memory and behavior. This section covers the telemetry sources, the artifacts that give the technique away, and a short triage flow.</p>
+  </header>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Visibility sources</h4>
+      <p><strong>EDR memory scanning</strong> (endpoint detection and response) inspects process memory on a schedule and on demand.</p>
+      <p><strong>ETW-TI</strong> is the Windows threat-intelligence event stream; it exposes sensitive API use to security products.</p>
+      <p><strong>Sysmon events 8 and 10</strong> record remote thread creation and cross-process access.</p>
+      <p><strong>Microsoft Defender</strong> raises behavioral verdicts for injection patterns.</p>
+    </div>
+    <div class="card">
+      <h4>Artifacts that reveal the injection</h4>
+      <p><strong>RWX private regions</strong> that contain PE headers (<code>MZ</code>) but are backed by no file on disk.</p>
+      <p><strong>Thread start outside any module</strong> — Sysmon EID 8 with an empty StartModule field.</p>
+      <p><strong>Ghost image</strong> — image-shaped memory whose contents match no signed file in the operating system.</p>
+    </div>
+    <div class="card">
+      <h4>Where to look first</h4>
+      <p>Start with EDR memory scan results, then triage captures scanned with malfind-style tools that list unbacked executable regions.</p>
+      <p>Correlate with Sysmon EID 8 and EID 10 to find the source process that injected.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Why it matters</h4>
+      <p>Fileless implants escape antivirus that only scans files. If your controls stop at the disk, a whole class of attacks is invisible to you. Memory telemetry closes that gap.</p>
+      <p>It also matters for scope: one host with an in-memory implant usually means the campaign touched more hosts, so the finding should drive a fleet-wide hunt.</p>
+    </div>
+    <div class="card">
+      <h4>Fit in the attack chain</h4>
+      <p>PE injection is the pivot between "attacker has code running" and "attacker has a durable, hidden foothold". After injection comes C2, credential access, and collection.</p>
+      <p>Detecting the injection step cuts the chain before the expensive stages start.</p>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <span class="callout-title">Good practice — treat memory verdicts as high signal</span>
+    <p>EDR memory scans and empty StartModule events are noisy but rare. A behavioral memory verdict on a signed, trusted process deserves human review within minutes, not days. Build the habit before the real incident arrives.</p>
+  </div>
+
+  <h3>Six-step triage flow</h3>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>#</th><th>Step</th><th>What to do</th><th>Output</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Validate</td><td>Confirm the verdict on the endpoint console and in the SIEM (security information and event management platform). Rule out known tuning exceptions.</td><td>True or false positive decision, with reasoning recorded.</td></tr>
+        <tr><td>2</td><td>Identify source and target</td><td>From Sysmon EID 8/10 or EDR timeline, name the injecting process and the process that received code.</td><td>Source process, target process, user context.</td></tr>
+        <tr><td>3</td><td>Capture triage memory</td><td>Use your EDR live-response or a standard triage capture script before any reboot. Memory is the only place the implant exists.</td><td>A memory sample stored outside the endpoint.</td></tr>
+        <tr><td>4</td><td>Extract and hash</td><td>Extract the in-memory PE from the capture and hash it. The hash may be unique, but it anchors the analysis.</td><td>Sample plus hashes for hunting and reporting.</td></tr>
+        <tr><td>5</td><td>Isolate</td><td>Contain the host at the network level while analysis continues. Do not power off — that destroys memory evidence.</td><td>Contained host, chain of custody intact.</td></tr>
+        <tr><td>6</td><td>Hunt fleet-wide</td><td>Hunt for the hash, the file paths, the C2 indicators, and the same behavior pattern across all endpoints.</td><td>Scope of compromise and a hunt report.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+      <section id="detection-engineering" class="section">
+        <header class="section-head">
+          <h2><span class="section-num">5</span><span class="section-title">Detection engineering deep dive</span></h2>
+          <p class="section-intro">This is the working section: regulation mapping, threat intelligence, ranked threats, the exact log fields that matter, and five ready-to-adapt detection rules with matching Splunk queries. Everything here assumes a Windows estate with Sysmon and an EDR agent.</p>
+        </header>
+        <h3 class="subsec" id="regulation-mapping"><span class="subsec-num">5.1</span><span class="section-title">Regulation mapping</span></h3>
+<p>Auditors ask how you detect stealthy execution, not only how you block files. The controls below map PE injection detection to common frameworks, with the evidence an assessor typically wants to see.</p>
+<div class="table-scroll">
+  <table>
+    <thead><tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+    <tbody>
+      <tr><td>GDPR</td><td>Art. 32(1) + Art. 33</td><td>Security of processing requires technical measures that fit the risk, including detection of stealthy execution; Art. 33 breach notification presumes you can detect and investigate an intrusion in time.</td><td>EDR memory scanning enabled fleet-wide; Sysmon and EDR logs retained; incident records showing injection alerts were triaged within the notification window.</td></tr>
+      <tr><td>HIPAA</td><td>45 CFR §164.312(a)(1) + §164.312(b) + §164.308(a)(1)(ii)(D)</td><td>Access control and audit controls require logging of activity on systems that hold electronic protected health information, and regular review of those records. Injection alerts are part of that review.</td><td>Sysmon and Defender audit-log configuration and coverage checks; review tickets for behavioral verdicts; information-system activity review records.</td></tr>
+      <tr><td>ISO/IEC 27001:2022</td><td>Annex A 8.15 + 8.16 + 5.24–5.26</td><td>Logging (8.15) and monitoring activities (8.16) must record and review anomalous behavior; 5.24–5.26 require planned incident management and response.</td><td>Monitoring policy; tuned detection rules such as the five Sigma rules in 5.5; incident management procedure and review meeting records.</td></tr>
+      <tr><td>SOC 2</td><td>CC7.2 + CC7.3</td><td>The entity monitors system anomalies (CC7.2) and evaluates security events continuously, responding in time (CC7.3).</td><td>Detection rule inventory with owners; alert triage records; response runbooks and tabletop notes.</td></tr>
+      <tr><td>PCI DSS v4.0</td><td>10.2 + 10.5 + 10.7 + 12.10</td><td>Audit logs must capture security events (10.2), be protected against change (10.5) and retained (10.7), and the incident response plan must be exercised (12.10). Memory-only injection leaves little disk trace, so log coverage is the fallback evidence.</td><td>Sysmon and Defender log retention records; alert samples; incident response test results.</td></tr>
+      <tr><td>NIST CSF 2.0</td><td>DE.CM-09 + PR.PS-04 + RS.MI-01/RS.MI-02</td><td>Endpoints and their software are monitored for adverse events (DE.CM-09), log records are generated and protected (PR.PS-04), and incidents are contained and eradicated (RS.MI).</td><td>Endpoint monitoring coverage report; log pipeline checks; containment and eradication runbook with evidence.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3 class="subsec" id="threat-intelligence"><span class="subsec-num">5.2</span><span class="section-title">Threat intelligence</span></h3>
+<div class="grid-2">
+  <div class="card">
+    <h4>Where to collect</h4>
+    <ul>
+      <li><strong>MITRE ATT&amp;CK</strong> — the technique page and its parent T1055 give the baseline behavior and data sources.</li>
+      <li><strong>Vendor reporting</strong> — Kaspersky, ESET, Microsoft, and Check Point regularly document loaders that run PEs in memory.</li>
+      <li><strong>OSINT</strong> — Malpedia tracks families with injection behavior; MalwareBazaar hosts samples; public YARA rulesets flag loader traits.</li>
+      <li><strong>ISACs</strong> — sector groups share indicators that fit your industry.</li>
+      <li><strong>Internal telemetry</strong> — your own EID 8 and EID 10 history is the best baseline for what is normal in your estate.</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h4>How to apply it</h4>
+    <p><strong>Collect</strong> loader names and injection traits from reporting, then <strong>analyze</strong> which traits your sensors can see — usually the empty StartModule event and RWX regions.</p>
+    <p><strong>Apply</strong> the traits as detection content: Sigma rules, EDR custom indicators, and hunt queries. Track each family with the confidence notes below so triage knows what a hit likely means.</p>
+    <p>Refresh the mapping when vendors publish new loader reports; tooling changes fast in this space.</p>
+  </div>
+</div>
+
+<h4>Actors and tooling documented for T1055.002</h4>
+<p class="small muted">Rows follow the procedure examples on the official ATT&amp;CK page for T1055.002 (checked 2026-10-21). Software IDs are the ATT&amp;CK entries.</p>
+<div class="table-scroll">
+  <table>
+    <thead><tr><th>Actor / family</th><th>Reported use (ATT&amp;CK procedure example)</th><th>Confidence</th></tr></thead>
+    <tbody>
+      <tr><td>Lazarus (G0032)</td><td>During the 3CX supply chain attack (C0057), its AppleJeus tooling used SigFlip to inject code into a signed process without breaking the file's signature.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Carbanak (S0030)</td><td>Downloads an executable and injects it directly into a new process.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Gootloader (S1138)</td><td>Uses its own PE loader to execute payloads in memory.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>GreyEnergy (S0342)</td><td>Has a module that injects a PE binary into a remote process.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>InvisiMole (S0260)</td><td>Injects its backdoor as a portable executable into a target process.</td><td><span class="badge high">High</span></td></tr>
+      <tr><td>Brute Ratel C4 (S1063)</td><td>Red-team tool observed injecting the Latrodectus loader into explorer.exe on compromised hosts.</td><td><span class="badge high">High</span></td></tr>
+    </tbody>
+  </table>
+</div>
+<div class="callout note">
+  <span class="callout-title">Note — reading confidence</span>
+  <p><strong>High</strong> means several independent vendor reports describe the behavior. <strong>Medium</strong> means reporting is thinner or older, so treat a match as a lead, not a verdict. Confidence describes the reporting, not the alert: still triage every hit.</p>
+</div>
+
+<h3 class="subsec" id="threats-ranking"><span class="subsec-num">5.3</span><span class="section-title">Threats ranking</span></h3>
+<p>The five realistic threats below are ranked by detection value for this technique, all on the Windows platform. "Preconditions" lists what must already be true; "justification" explains the rating.</p>
+
+<div class="card">
+  <h4>T1 · Remote thread started at an unbacked address <span class="badge high">High</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description.</strong> A new thread begins running at an address in memory that no file backs. This is the moment an injected PE image, or shellcode (a small piece of raw code without a full PE header), starts to run inside the target process.</p>
+  <p><strong>Preconditions.</strong> Attacker code already runs somewhere on the host; Sysmon EID 8 is collected.</p>
+  <p><strong>Impact.</strong> Hidden execution of a complete implant inside a trusted process.</p>
+  <p><strong>Justification.</strong> Rated high because it is the core execution signal of T1055.002 and is almost always malicious when the target is a system process.</p>
+</div>
+
+<div class="card">
+  <h4>T2 · EDR behavioral verdict: self or remote injection <span class="badge high">High</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description.</strong> Defender-class engines watch for the injection pattern itself and raise a behavioral verdict such as <code>Behavior:Win32/ProcessInject.*</code> when a process allocates memory in another process, writes code into it, and makes that memory executable.</p>
+  <p><strong>Preconditions.</strong> An EDR or antivirus product with a behavioral engine is deployed and enabled.</p>
+  <p><strong>Impact.</strong> A direct, high-confidence verdict that names the injecting process.</p>
+  <p><strong>Justification.</strong> Rated high because the engine observed the injection pattern directly, not just a side effect.</p>
+</div>
+
+<div class="card">
+  <h4>T3 · Script host writes to another process's memory <span class="badge high">High</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description.</strong> PowerShell, wscript, cscript, or mshta opens a second process with memory-write rights — the classic shape of a script-based loader preparing PE injection without dropping a binary.</p>
+  <p><strong>Preconditions.</strong> Script hosts can run on the endpoint; Sysmon EID 10 is collected.</p>
+  <p><strong>Impact.</strong> Fileless staging: the loader leaves no payload file for defenders to analyze.</p>
+  <p><strong>Justification.</strong> Rated high because script hosts almost never have a legitimate reason to write into other processes.</p>
+</div>
+
+<div class="card">
+  <h4>T4 · Dropper chain staging injection <span class="badge medium">Medium</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description.</strong> Office or script parents spawn <code>rundll32</code>, <code>regsvr32</code>, or <code>mshta</code> with uncommon command lines. The chain often ends in a loader that performs PE injection.</p>
+  <p><strong>Preconditions.</strong> A user opens a malicious document or script; Sysmon EID 1 is collected.</p>
+  <p><strong>Impact.</strong> Early warning before the implant runs — the cheapest moment to stop the attack.</p>
+  <p><strong>Justification.</strong> Rated medium because the chain can also deliver other techniques and needs the uncommon-command filter to stay precise.</p>
+</div>
+
+<div class="card">
+  <h4>T5 · Unsigned code region executing in a trusted process <span class="badge medium">Medium</span> <span class="badge cat">Windows</span></h4>
+  <p><strong>Description.</strong> CallTrace shows unknown module frames, or a memory scan finds unsigned executable code, inside <code>explorer.exe</code> or <code>svchost.exe</code>. This confirms that injected code actually runs, not only that memory changed.</p>
+  <p><strong>Preconditions.</strong> CallTrace is collected with EID 10, or periodic memory scans are configured.</p>
+  <p><strong>Impact.</strong> Confirms active implant execution and anchors deeper response.</p>
+  <p><strong>Justification.</strong> Rated medium because generated code and software protection layers can mimic it; the rule needs a baseline.</p>
+</div>
+
+<div class="table-scroll">
+  <table>
+    <thead><tr><th>ID</th><th>Threat</th><th>Severity</th><th>Platform</th><th>Primary signal</th></tr></thead>
+    <tbody>
+      <tr><td>T1</td><td>Remote thread at an unbacked address</td><td><span class="badge high">High</span></td><td>Windows</td><td>Sysmon EID 8 with empty StartModule</td></tr>
+      <tr><td>T2</td><td>Behavioral injection verdict</td><td><span class="badge high">High</span></td><td>Windows</td><td>Defender 1116, Behavior:Win32/ProcessInject.*</td></tr>
+      <tr><td>T3</td><td>Script host cross-process write</td><td><span class="badge high">High</span></td><td>Windows</td><td>Sysmon EID 10 with strong GrantedAccess</td></tr>
+      <tr><td>T4</td><td>Dropper chain staging</td><td><span class="badge medium">Medium</span></td><td>Windows</td><td>Sysmon EID 1 chain plus uncommon command line</td></tr>
+      <tr><td>T5</td><td>Unsigned region in trusted process</td><td><span class="badge medium">Medium</span></td><td>Windows</td><td>CallTrace with unknown frames, memory scan</td></tr>
+    </tbody>
+  </table>
+</div>
+        <h3 class="subsec" id="logs-and-patterns"><span class="subsec-num">5.4</span><span class="section-title">Logs and patterns</span></h3>
+<p>Each ranked threat maps to one or two log events. The table is the cheat sheet; the glossary and examples below it give the field-level detail an analyst needs to write and tune rules.</p>
+<div class="table-scroll">
+  <table>
+    <thead><tr><th>Threat</th><th>Log sources</th><th>Key fields</th><th>Normal vs suspicious</th><th>Detection logic</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>T1 Unbacked remote thread</td>
+        <td>Sysmon (EID 8)</td>
+        <td>EventID, SourceImage, TargetImage, StartModule, StartFunction</td>
+        <td>Normal: threads start inside loaded modules such as ntdll or kernel32, or inside the just-in-time (JIT) compilation area of .NET processes. Suspicious: StartModule and StartFunction are empty and the target is a trusted process.</td>
+        <td>EID 8 where StartModule or StartFunction is <code>-</code> or empty.</td>
+      </tr>
+      <tr>
+        <td>T2 Behavioral verdict</td>
+        <td>Microsoft Defender operational log (EID 1116)</td>
+        <td>EventID, DetectionName, Path, ProcessName, Action</td>
+        <td>Normal: signature detections on files. Suspicious: a <code>Behavior:</code> name, especially one starting with <code>Behavior:Win32/ProcessInject</code>.</td>
+        <td>EID 1116 where DetectionName starts with <code>Behavior:Win32/ProcessInject</code>.</td>
+      </tr>
+      <tr>
+        <td>T3 Script host cross-process write</td>
+        <td>Sysmon (EID 10)</td>
+        <td>SourceImage, TargetImage, GrantedAccess, CallTrace</td>
+        <td>Normal: script hosts read files and registry; they rarely open other processes. Suspicious: a script host opens another process with full memory rights.</td>
+        <td>EID 10 where SourceImage is a script host, GrantedAccess is a full-rights mask, and TargetImage differs from SourceImage.</td>
+      </tr>
+      <tr>
+        <td>T4 Dropper chain staging</td>
+        <td>Sysmon (EID 1)</td>
+        <td>ParentImage, Image, CommandLine</td>
+        <td>Normal: Office and wscript almost never spawn loader binaries. Suspicious: loader children with URLs, temp paths, or encoded commands.</td>
+        <td>EID 1 where ParentImage is Office or wscript, Image is rundll32, regsvr32, or mshta, and the command line is uncommon.</td>
+      </tr>
+      <tr>
+        <td>T5 Unknown frames in trusted process</td>
+        <td>Sysmon (EID 10), EDR memory scan</td>
+        <td>CallTrace, TargetImage</td>
+        <td>Normal: call stacks list named modules. Suspicious: <code>|UNKNOWN(</code> frames inside explorer or svchost, or unsigned executable code in memory.</td>
+        <td>EID 10 where CallTrace contains <code>|UNKNOWN(</code> and TargetImage is a trusted process.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<p>Two supporting events round out the picture. Sysmon EID 11 (file create) shows the dropper writing its installer or payload file to disk. Windows Security 4688 (process creation audit) adds a command-line trail on hosts that have no Sysmon agent.</p>
+
+<h4>Field glossary</h4>
+<div class="table-scroll">
+  <table>
+    <thead><tr><th>Field</th><th>Meaning</th><th>Why it matters here</th></tr></thead>
+    <tbody>
+      <tr><td><code>EventID</code></td><td>The Sysmon, Defender, or Windows Security event number.</td><td>Sysmon: 8 = remote thread created, 10 = process access, 1 = process creation, 11 = file create. Defender: 1116 = detection. Windows Security: 4688 = process creation audit.</td></tr>
+      <tr><td><code>SourceImage</code></td><td>The process that performs the action.</td><td>Names the injector. A script host here is a strong loader sign.</td></tr>
+      <tr><td><code>TargetImage</code></td><td>The process that is acted upon.</td><td>Names the host of the implant. Trusted processes raise the score.</td></tr>
+      <tr><td><code>StartModule</code></td><td>Module backing the new thread's start address (EID 8).</td><td>Empty (<code>-</code>) means unbacked memory — the PE injection signature.</td></tr>
+      <tr><td><code>StartFunction</code></td><td>Resolved function name of the start address (EID 8).</td><td>Empty confirms that no export or symbol matches the start address.</td></tr>
+      <tr><td><code>GrantedAccess</code></td><td>Hexadecimal rights mask requested on the target handle (EID 10).</td><td><code>0x1FFFFF</code> requests every right. <code>0x143A</code> requests exactly VM_WRITE (0x20), VM_OPERATION (0x8), and CREATE_THREAD (0x2) — the rights a PE injector needs.</td></tr>
+      <tr><td><code>CallTrace</code></td><td>Module and function frames of the calling stack (EID 10).</td><td>Unknown frames reveal code that runs from unbacked memory.</td></tr>
+      <tr><td><code>DetectionName</code></td><td>The Defender verdict string.</td><td><code>Behavior:</code> prefixes mark behavioral, not file-based, detections.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h4>Example event 1 — Sysmon EID 8, remote thread with empty StartModule</h4>
+<p class="small muted">Illustrative example shaped like a real Sysmon record; values are synthetic.</p>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sysmon XML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;EventID&gt;8&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-20T02:14:22.318Z" /&gt;
+    &lt;EventRecordID&gt;184223&lt;/EventRecordID&gt;
+    &lt;Channel&gt;Microsoft-Windows-Sysmon/Operational&lt;/Channel&gt;
+    &lt;Computer&gt;HR-WS-4471.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="RuleName"&gt;-&lt;/Data&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-20 02:14:22.312&lt;/Data&gt;
+    &lt;Data Name="SourceImage"&gt;C:\Users\Public\review_tool.exe&lt;/Data&gt;
+    &lt;Data Name="SourceProcessGuid"&gt;{A1B2C3D4-1111-2026-AAAA-0123456789AB}&lt;/Data&gt;
+    &lt;Data Name="TargetImage"&gt;C:\Windows\explorer.exe&lt;/Data&gt;
+    &lt;Data Name="TargetProcessGuid"&gt;{A1B2C3D4-2222-2026-BBBB-0123456789CD}&lt;/Data&gt;
+    &lt;Data Name="NewThreadId"&gt;7404&lt;/Data&gt;
+    &lt;Data Name="StartModule"&gt;-&lt;/Data&gt;
+    &lt;Data Name="StartFunction"&gt;-&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+</figure>
+<p>Read it like this: a process in <code>C:\Users\Public</code> started a thread inside <code>explorer.exe</code>, and the start address belongs to no module and no function. That single event is the T1 signature.</p>
+
+<h4>Example event 2 — Microsoft Defender behavioral verdict (EID 1116 style)</h4>
+<p class="small muted">Illustrative example in the operational log's key=value shape; values are synthetic.</p>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Defender event</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>Time:            2026-10-20T02:16:05.120Z
+EventID:         1116
+Source Name:     real-time protection
+Detection ID:    {6F22C4D9-8E31-4B7A-9C55-D3A1B2C4E5F6}
+Detection Name:  Behavior:Win32/ProcessInject.*
+Severity:        High
+Category:        Behavior
+Path:            C:\Users\Public\review_tool.exe
+Process Name:    C:\Windows\explorer.exe
+Action:          Quarantine
+Action Status:   Failed
+Description:     Memory-only payload; no file available to quarantine.
+Execution Path:  C:\Users\Public\review_tool.exe -&gt; C:\Windows\explorer.exe</code></pre>
+</figure>
+<p>Read it like this: Defender observed injection behavior, named the injector (<code>Path</code>) and the target (<code>Process Name</code>), and the quarantine <strong>failed</strong> because the payload exists only in memory. The DetectionName prefix <code>Behavior:Win32/ProcessInject</code> is what rule R2 matches.</p>
+
+<h3 class="subsec" id="sigma-and-spl"><span class="subsec-num">5.5</span><span class="section-title">Sigma rules and Splunk SPL</span></h3>
+<p>Five rules map one-to-one to the ranked threats. Levels follow the ranking: high, high, high, medium, medium. Each rule ships with a matching Splunk query and a mapping note.</p>
+
+<h4>R1 — remote-thread-unbacked-start <span class="badge high">High</span></h4>
+<p>Catches T1: a remote thread whose start address no module backs.</p>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Remote Thread Started at Unbacked Address
+id: d93ea796-434f-439e-8f38-c92700e3c1ab
+status: stable
+description: Detects a remote thread whose start address is not backed by any loaded
+  module (Sysmon Event ID 8 with empty StartModule or StartFunction). This is a strong
+  sign of portable executable injection, reflective loading, or shellcode execution.
+references:
+  - https://attack.mitre.org/techniques/T1055/002/
+  - https://github.com/SigmaHQ/sigma
+  - https://learn.microsoft.com/sysinternals/downloads/sysmon
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_module:
+    EventID: 8
+    StartModule:
+      - '-'
+      - ''
+  selection_function:
+    EventID: 8
+    StartFunction:
+      - '-'
+      - ''
+  condition: 1 of selection_*
+fields:
+  - UtcTime
+  - SourceImage
+  - TargetImage
+  - StartModule
+  - StartFunction
+falsepositives:
+  - Just-in-time compiled .NET code can briefly report an empty StartModule
+  - Legitimate debugging and profiling tools that create threads in unbacked memory
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.002
+  - attack.t1620</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventID=8 (StartModule="-" OR StartModule="" OR StartFunction="-" OR StartFunction="")
+| stats count AS hits, values(TargetImage) AS targets BY SourceImage
+| sort - hits</code></pre>
+</figure>
+<p><strong>Mapping note.</strong> Assumes Sysmon XML through a universal forwarder with standard field names, and the same OR logic as the Sigma rule (empty StartModule or empty StartFunction). An empty value can arrive as <code>-</code> or as a missing field; add <code>| fillnull value="-" StartModule, StartFunction</code> if your forwarder drops empty fields. The <code>stats</code> line only groups results for review — remove nothing else to keep the logic one-to-one. Tune .NET-heavy hosts by allowing known JIT paths.</p>
+
+<h4>R2 — defender-behavioral-process-injection <span class="badge high">High</span></h4>
+<p>Catches T2: the Defender behavioral verdict for injection activity.</p>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Defender Behavioral Detection for Process Injection
+id: 0b32c4a8-b2b7-4abf-93ae-49583afd0d57
+status: stable
+description: Detects Microsoft Defender operational event 1116 where the detection
+  name starts with Behavior:Win32/ProcessInject. This verdict fires when Defender
+  observes self or remote injection behavior — memory allocation in another process,
+  a write into it, and a protection change to executable — which matches
+  PE injection activity.
+references:
+  - https://attack.mitre.org/techniques/T1055/002/
+  - https://learn.microsoft.com/defender-endpoint/troubleshoot-microsoft-defender-antivirus
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: windefend
+detection:
+  selection:
+    EventID: 1116
+    DetectionName|startswith: 'Behavior:Win32/ProcessInject'
+  condition: selection
+fields:
+  - EventID
+  - DetectionName
+  - Path
+  - ProcessName
+  - Action
+falsepositives:
+  - Rare; some game anti-cheat tools and sandboxed launchers use injection-like behavior
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.002</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=wineventlog sourcetype="XmlWinEventLog:Microsoft-Windows-Windows Defender/Operational" EventCode=1116 DetectionName="Behavior:Win32/ProcessInject*"
+| stats count AS detections, values(Path) AS paths BY host, DetectionName
+| sort - detections</code></pre>
+</figure>
+<p><strong>Mapping note.</strong> The Defender channel is <code>Microsoft-Windows-Windows Defender/Operational</code>; note the doubled "Windows". Field names vary by add-on: some normalize to <code>detection_name</code> and <code>event_id</code>. Validate with <code>| fieldsummary</code> before tuning.</p>
+
+<h4>R3 — script-host-cross-process-write <span class="badge high">High</span></h4>
+<p>Catches T3: a script host opening another process with full memory rights.</p>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Script Host Opening Another Process with Write Rights
+id: f37180d7-35b8-4e07-8855-ab571ca7786c
+status: stable
+description: Detects Sysmon Event ID 10 where a script host such as PowerShell,
+  wscript, cscript, or mshta opens another process with strong memory and process
+  rights. Script hosts rarely need to write into other processes, so this is a
+  strong indicator of a script-based loader preparing PE injection.
+references:
+  - https://attack.mitre.org/techniques/T1055/002/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 10
+    SourceImage|endswith:
+      - '\powershell.exe'
+      - '\pwsh.exe'
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+    GrantedAccess:
+      - '0x1F0FFF'
+      - '0x1F1FFF'
+      - '0x1FFFFF'
+      - '0x143A'
+  filter_self:
+    TargetImage|endswith:
+      - '\powershell.exe'
+      - '\pwsh.exe'
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+  condition: selection and not filter_self
+fields:
+  - UtcTime
+  - SourceImage
+  - TargetImage
+  - GrantedAccess
+  - CallTrace
+falsepositives:
+  - Administrative frameworks that script process inspection or memory inventories
+  - Security tooling driven by scripts that legitimately reads other processes
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.002</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventID=10 GrantedAccess IN ("0x1F0FFF","0x1F1FFF","0x1FFFFF","0x143A") SourceImage IN ("*powershell.exe","*pwsh.exe","*wscript.exe","*cscript.exe","*mshta.exe")
+| where TargetImage != SourceImage
+| stats count AS hits, values(TargetImage) AS targets BY SourceImage, GrantedAccess
+| sort - hits</code></pre>
+</figure>
+<p><strong>Mapping note.</strong> Sigma cannot compare two fields directly, so the rule filters script-host targets to approximate "target is not the source"; in SPL the comparison is exact with <code>| where TargetImage != SourceImage</code>. The GrantedAccess values all combine at least memory write (0x20), memory operation (0x8), and thread creation (0x2); 0x1FFFFF is the full-rights mask. Extend the list with your EDR agent's known access patterns if needed.</p>
+
+<h4>R4 — dropper-chain-staging <span class="badge medium">Medium</span></h4>
+<p>Catches T4: Office or script parents spawning loader binaries with uncommon command lines.</p>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Office or Script Parent Spawning Injection Loader
+id: 35a6f338-4bb3-4d5e-ae6d-09cdf004825c
+status: stable
+description: Detects Sysmon Event ID 1 where Word, Excel, or wscript spawns rundll32,
+  regsvr32, or mshta with an uncommon command line. This dropper chain is a common
+  staging step right before a loader performs PE injection.
+references:
+  - https://attack.mitre.org/techniques/T1055/002/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_parent:
+    EventID: 1
+    ParentImage|endswith:
+      - '\winword.exe'
+      - '\excel.exe'
+      - '\wscript.exe'
+  selection_child:
+    Image|endswith:
+      - '\rundll32.exe'
+      - '\regsvr32.exe'
+      - '\mshta.exe'
+  selection_uncommon:
+    CommandLine|contains:
+      - 'http'
+      - 'javascript'
+      - '\Users\Public\'
+      - '\AppData\Local\Temp\'
+  condition: all of selection_*
+fields:
+  - UtcTime
+  - ParentImage
+  - Image
+  - CommandLine
+  - User
+falsepositives:
+  - Rare administrative scripts that legitimately use these loaders with URLs or temp paths
+level: medium
+tags:
+  - attack.execution
+  - attack.defense_evasion
+  - attack.t1055
+  - attack.t1055.002
+  - attack.t1566.001</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventID=1 ParentImage IN ("*winword.exe","*excel.exe","*wscript.exe") Image IN ("*rundll32.exe","*regsvr32.exe","*mshta.exe") (CommandLine="*http*" OR CommandLine="*javascript*" OR CommandLine="*\Users\Public\*" OR CommandLine="*\AppData\Local\Temp\*")
+| stats count AS hits, values(CommandLine) AS commands BY host, ParentImage, Image
+| sort - hits</code></pre>
+</figure>
+<p><strong>Mapping note.</strong> The uncommon-command selection uses common staging markers. Adjust the list to your environment, and add your software build paths to falsepositives if developers test scripts with these loaders.</p>
+
+<h4>R5 — unsigned-region-trusted-process <span class="badge medium">Medium</span></h4>
+<p>Catches T5: unknown call-stack frames inside explorer or svchost.</p>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Sigma YAML</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>title: Unknown Code Frames in Trusted Process Call Trace
+id: c5de4866-bca3-4ef6-a986-f2b039563d59
+status: stable
+description: Detects Sysmon Event ID 10 where the call stack of a cross-process
+  operation contains unknown module frames inside a highly trusted target such as
+  explorer or svchost. Unknown frames mean the calling code runs in memory that no
+  file backs, which matches an injected PE image.
+references:
+  - https://attack.mitre.org/techniques/T1055/002/
+  - https://github.com/SigmaHQ/sigma
+author: Detection Engineering Team
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 10
+    CallTrace|contains: '|UNKNOWN('
+    TargetImage|endswith:
+      - '\explorer.exe'
+      - '\svchost.exe'
+  condition: selection
+fields:
+  - UtcTime
+  - SourceImage
+  - TargetImage
+  - GrantedAccess
+  - CallTrace
+falsepositives:
+  - Generated or just-in-time compiled code in management agents
+  - Software protection layers that use dynamically created code
+level: medium
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.002</code></pre>
+</figure>
+<figure class="code-block">
+  <figcaption class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+  <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventID=10 CallTrace="*|UNKNOWN(*" TargetImage IN ("*explorer.exe","*svchost.exe")
+| stats count AS hits, values(CallTrace) AS traces BY TargetImage, SourceImage
+| sort - hits</code></pre>
+</figure>
+<p><strong>Mapping note.</strong> CallTrace joins frames with a pipe as <code>module!function+0xoffset</code>; unknown frames appear as <code>UNKNOWN(0x...)</code>. The Splunk wildcard form <code>CallTrace="*|UNKNOWN(*"</code> is case-insensitive by default, which matches Sigma's contains modifier.</p>
+
+<div class="callout warning">
+  <span class="callout-title">Warning — tune R1 before you trust it</span>
+  <p>Just-in-time compiled .NET applications and some profiling tools create threads whose module resolution is briefly empty. Run R1 in search-only mode for two weeks, list the source images that appear, and allow-list confirmed runtimes before the rule pages anyone.</p>
+</div>
+      </section>
+      <section id="case-study" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">6</span><span class="section-title">Real-world case study</span></h2>
+    <p class="section-intro">An espionage intrusion rebuilt for teaching, using tools and behaviors similar to those reported for Lazarus/DTrack. Every host, user, and timestamp is illustrative.</p>
+  </header>
+
+  <div class="callout note">
+    <span class="callout-title">Note — source and limits of this case study</span>
+    <p>Educational reconstruction. The tools and behaviors are similar to those reported for Lazarus/DTrack in public vendor reporting (Kaspersky, 2018–2020). Hosts, users, addresses, and times are invented. The goal is to show how the detection content in this page would play out, not to document one specific incident.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Context</h4>
+      <p><strong>Victim.</strong> A mid-size research and engineering organization with valuable intellectual property: design documents and source code.</p>
+      <p><strong>Attacker.</strong> An espionage team using tooling similar to DTrack, as reported by vendors. The goal is intellectual property theft over weeks, not fast extortion.</p>
+      <p><strong>Environment.</strong> Windows 10 workstations, file-based antivirus, EDR deployed but with memory-scan reviews handled lightly.</p>
+    </div>
+    <div class="card">
+      <h4>Attack chain at a glance</h4>
+      <p>Spearphishing email with a fake conference-registration installer. The installer drops a signed-looking downloader, which unpacks a DTrack-style PE and injects it into <code>explorer.exe</code>. The memory-only implant keys logs, collects documents, and exfiltrates archives over HTTPS.</p>
+      <p>Every stage after the installer is either packed or memory-only, so file scanning stays quiet until the memory scan fires.</p>
+    </div>
+  </div>
+
+  <h4>Timeline</h4>
+  <ol class="timeline">
+    <li><span class="tl-when">Day 0 · 09:14</span> An engineer opens the spearphish and runs the fake conference installer. The dropper starts and shows a plausible setup wizard.</li>
+    <li><span class="tl-when">Day 1 · 11:02</span> The signed-looking downloader fetches the packed payload. Antivirus file scans see nothing suspicious on disk.</li>
+    <li><span class="tl-when">Day 2 · 03:47</span> The dropper injects the full PE image into <code>explorer.exe</code> and starts it with a remote thread. The implant is now memory-only.</li>
+    <li><span class="tl-when">Day 3 · 10:15</span> <strong>Detection point.</strong> An EDR memory scan flags a PE image inside <code>explorer.exe</code>. The alert is initially triaged as a false positive because the process is signed and the ticket notes "explorer is trusted".</li>
+    <li><span class="tl-when">Day 4–5</span> The implant keylogs and collects design documents, staging them into archives inside user temp folders.</li>
+    <li><span class="tl-when">Day 6 · 22:40</span> Exfiltration over HTTPS blends with normal browser egress; no allow-list blocks the destination.</li>
+    <li><span class="tl-when">Day 7 · 14:30</span> A weekly threat hunt revisits the Day 3 alert, pulls Sysmon EID 8, finds the empty StartModule event from Day 2, and escalates to an incident.</li>
+  </ol>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Detection point</h4>
+      <p>The EDR memory scan on Day 3 — a PE image with an MZ header inside <code>explorer.exe</code>, backed by no file. The missed follow-up, not the sensor, was the gap.</p>
+    </div>
+    <div class="card">
+      <h4>Containment</h4>
+      <p>The host was isolated at the network level within 40 minutes of escalation. Memory was captured before any reboot, preserving the implant for analysis.</p>
+    </div>
+    <div class="card">
+      <h4>Eradication</h4>
+      <p>The dropper file was removed, run keys were cleaned, and the workstation was rebuilt. Password resets covered accounts used on the host.</p>
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Recovery</h4>
+      <p>The rebuilt host returned to service the next day. Egress allow-listing and a memory-alert review procedure went live the same week.</p>
+    </div>
+    <div class="card">
+      <h4>Impact</h4>
+      <p>Later review confirmed several research documents left the network, so intellectual property loss was assumed. Regulatory reporting followed, since customer data was also reachable from the host.</p>
+    </div>
+    <div class="card">
+      <h4>Team response and communication</h4>
+      <p>The SOC, IT, and legal leads joined one bridge. Status updates went out every four hours; the false-positive triage on Day 3 was reviewed openly, without blame, and the process changed.</p>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <span class="callout-title">Lessons learned</span>
+    <p><strong>Memory-scan alerts deserve review</strong> — "explorer is signed" is not an explanation; capture memory first. <strong>Egress allow-listing</strong> would have made the Day 6 exfiltration visible immediately. <strong>Hunt cadence</strong> — the weekly hunt caught what the triage process missed, and a daily review would have caught it three days earlier.</p>
+  </div>
+</section>
+
+<section id="mitigation" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">7</span><span class="section-title">Mitigation and defense</span></h2>
+    <p class="section-intro">No single control stops PE injection. The stack below makes the dropper harder to run, the injection harder to complete, and the implant easier to see.</p>
+  </header>
+
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Control</th><th>Type</th><th>What it does</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>EDR with memory scanning and injection protection</td><td>Endpoint / detective</td><td>Scans process memory for unbacked images and blocks cross-process writes.</td><td>The primary detection layer for this technique; keep verdict reviews staffed.</td></tr>
+        <tr><td>Exploit Protection: ACG and CIG</td><td>Endpoint / preventive</td><td>Arbitrary Code Guard and Code Integrity Guard stop unsigned or dynamically generated code from running in selected apps.</td><td>Apply to browsers, Office, and PDF readers first.</td></tr>
+        <tr><td>WDAC allow-listing</td><td>Application control</td><td>Only approved, signed code runs, so droppers fail before they can inject.</td><td>Strongest preventive control; stage it in audit mode first.</td></tr>
+        <tr><td>Attack surface reduction (ASR) rules</td><td>Endpoint / preventive</td><td>Blocks Office from spawning loader children and blocks Win32 API calls from scripts.</td><td>Directly breaks the T4 chain.</td></tr>
+        <tr><td>PowerShell constrained language plus script logging</td><td>Hardening / visibility</td><td>Limits script capability and records script content for hunting.</td><td>Removes the most common free loader.</td></tr>
+        <tr><td>Patching</td><td>Hygiene</td><td>Removes the vulnerabilities that loaders exploit to gain execution.</td><td>Focus on browsers, Office, and Java runtimes.</td></tr>
+        <tr><td>Least privilege</td><td>Access</td><td>Standard users cannot reach service processes or admin shares.</td><td>Limits which processes an implant can target.</td></tr>
+        <tr><td>Egress allow-listing</td><td>Network</td><td>Beacons must route through approved destinations with logging.</td><td>Makes the T-stage beacon flow stand out immediately.</td></tr>
+        <tr><td>Centralized logging</td><td>Visibility</td><td>Forwards Sysmon and Defender events to the SIEM with retention.</td><td>Required by every rule in section 5.5.</td></tr>
+        <tr><td>Backups</td><td>Resilience</td><td>Tested, offline backups give a clean rebuild path.</td><td>Not injection-specific, but essential for recovery.</td></tr>
+        <tr><td>Incident response runbook</td><td>Process</td><td>Documents triage steps for memory-only implants, including triage memory capture.</td><td>Use the six-step flow in section 4 as the base.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Home and small office</h4>
+      <p>Keep the operating system and browser updated, and leave built-in protection (Defender with cloud-delivered protection) switched on. Avoid running installers from email or chat, prefer the official app store, and keep automatic backups of important files.</p>
+      <p>If you manage a small office, forward Defender events to a single dashboard and review any <code>Behavior:</code> verdict the same day.</p>
+    </div>
+    <div class="card">
+      <h4>Where to start if you can do only five things</h4>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Priority</th><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Enable and verify EDR memory scanning plus injection protection</td><td>Low</td><td>Endpoint team</td><td>High</td></tr>
+            <tr><td>2</td><td>Forward Sysmon EID 8/10 and Defender 1116 to the SIEM and deploy rules R1–R5</td><td>Medium</td><td>Detection engineering</td><td>High</td></tr>
+            <tr><td>3</td><td>Enable Exploit Protection (ACG/CIG) on high-risk applications</td><td>Low–medium</td><td>Endpoint team</td><td>Medium–high</td></tr>
+            <tr><td>4</td><td>Egress allow-listing for workstations with proxy logging</td><td>High</td><td>Network team</td><td>High</td></tr>
+            <tr><td>5</td><td>Document the memory-alert triage runbook and schedule quarterly hunts</td><td>Low</td><td>SOC lead</td><td>Medium</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+      <section id="mistakes" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">8</span><span class="section-title">Common mistakes and best practices</span></h2>
+    <p class="section-intro">Twelve concrete blue-team mistakes that keep showing up around memory-only threats. Each one lists the symptom you will notice, the root cause, the fix, and the prevention that stops it from returning.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>1. Trusting file-based antivirus only</h4>
+      <p><strong>Symptom.</strong> Scans stay clean while an implant already runs.</p>
+      <p><strong>Root cause.</strong> Fileless execution leaves no file to scan.</p>
+      <p><strong>Fix.</strong> Turn on EDR memory scanning and behavioral verdicts.</p>
+      <p><strong>Prevention.</strong> Test defenses with fileless scenarios, not only sample files.</p>
+    </div>
+    <div class="card">
+      <h4>2. Memory-scan verdicts auto-closed as false positives</h4>
+      <p><strong>Symptom.</strong> Behavioral memory verdicts closed in minutes with no capture.</p>
+      <p><strong>Root cause.</strong> "The process is signed" treated as an explanation.</p>
+      <p><strong>Fix.</strong> Reopen such tickets, capture triage memory, and re-verify.</p>
+      <p><strong>Prevention.</strong> Forbid auto-close rules on behavioral memory verdicts.</p>
+    </div>
+    <div class="card">
+      <h4>3. No baseline of legitimate RWX regions</h4>
+      <p><strong>Symptom.</strong> Every RWX finding is treated as noise, or all findings are ignored.</p>
+      <p><strong>Root cause.</strong> JIT compilation and .NET create RWX memory by design.</p>
+      <p><strong>Fix.</strong> Build per-application baselines of known runtimes.</p>
+      <p><strong>Prevention.</strong> Keep the baseline list reviewed like any other asset data.</p>
+    </div>
+    <div class="card">
+      <h4>4. Sysmon EID 8 and 10 not collected</h4>
+      <p><strong>Symptom.</strong> No StartModule or CallTrace data during hunts.</p>
+      <p><strong>Root cause.</strong> Default audit policies never install a Sysmon configuration.</p>
+      <p><strong>Fix.</strong> Deploy a config with thread and process-access events.</p>
+      <p><strong>Prevention.</strong> Run coverage checks that verify the events actually arrive.</p>
+    </div>
+    <div class="card">
+      <h4>5. PowerShell logging switched off</h4>
+      <p><strong>Symptom.</strong> Loader scripts are invisible in investigations.</p>
+      <p><strong>Root cause.</strong> Script block logging never enabled by policy.</p>
+      <p><strong>Fix.</strong> Enable script and transcript logging and forward the logs.</p>
+      <p><strong>Prevention.</strong> Check the policy in the monthly configuration baseline.</p>
+    </div>
+    <div class="card">
+      <h4>6. Dropper allowed to run because "the user needed it"</h4>
+      <p><strong>Symptom.</strong> Exceptions open for unsigned tools on demand.</p>
+      <p><strong>Root cause.</strong> No application control policy or exception workflow.</p>
+      <p><strong>Fix.</strong> Remove the exception; approve and sign the tool properly.</p>
+      <p><strong>Prevention.</strong> Route every exception through a security review.</p>
+    </div>
+    <div class="card">
+      <h4>7. No triage memory capture process</h4>
+      <p><strong>Symptom.</strong> Evidence is lost after a reboot or reinstall.</p>
+      <p><strong>Root cause.</strong> No runbook for memory-only threats.</p>
+      <p><strong>Fix.</strong> Add capture steps with named tooling to the runbook.</p>
+      <p><strong>Prevention.</strong> Practice the capture quarterly on a lab host.</p>
+    </div>
+    <div class="card">
+      <h4>8. Hash-only hunting</h4>
+      <p><strong>Symptom.</strong> Hunts find nothing because each payload rebuild is unique.</p>
+      <p><strong>Root cause.</strong> Reliance on file hashes as the only indicator.</p>
+      <p><strong>Fix.</strong> Hunt behavior: EID 8/10 patterns and memory traits.</p>
+      <p><strong>Prevention.</strong> Add at least one behavioral hunt to the monthly plan.</p>
+    </div>
+    <div class="card">
+      <h4>9. No egress allow-listing, so C2 blends in</h4>
+      <p><strong>Symptom.</strong> Beacon traffic looks like every other HTTPS flow.</p>
+      <p><strong>Root cause.</strong> Open outbound internet from workstations.</p>
+      <p><strong>Fix.</strong> Route egress through categories, allow-lists, and logs.</p>
+      <p><strong>Prevention.</strong> Review the egress baseline each quarter.</p>
+    </div>
+    <div class="card">
+      <h4>10. Orphaned detection rules</h4>
+      <p><strong>Symptom.</strong> Rules silently break after log source changes.</p>
+      <p><strong>Root cause.</strong> No owner assigned to any rule.</p>
+      <p><strong>Fix.</strong> Assign owners and monitor rule health and drift.</p>
+      <p><strong>Prevention.</strong> Keep a rule inventory with review dates.</p>
+    </div>
+    <div class="card">
+      <h4>11. Untested rules</h4>
+      <p><strong>Symptom.</strong> A rule misses a real event or floods false positives during an incident.</p>
+      <p><strong>Root cause.</strong> Rules never validated against sample data.</p>
+      <p><strong>Fix.</strong> Replay captured events through the rule set.</p>
+      <p><strong>Prevention.</strong> Purple-team validation and automated tests for rules.</p>
+    </div>
+    <div class="card">
+      <h4>12. Undocumented false positive rationale</h4>
+      <p><strong>Symptom.</strong> The same benign pattern escalates repeatedly; analysts distrust the rules.</p>
+      <p><strong>Root cause.</strong> Tuning decisions live in chat threads and memories.</p>
+      <p><strong>Fix.</strong> Record every false positive and its reason in the rule notes.</p>
+      <p><strong>Prevention.</strong> Review the tuning log in the monthly detection meeting.</p>
+    </div>
+  </div>
+
+  <div class="callout warning">
+    <span class="callout-title">Warning — alert fatigue is the main risk</span>
+    <p>Most of the mistakes above combine into one failure: noisy rules train analysts to ignore memory verdicts. Tuning for precision is not optional; it is what keeps the high-value verdicts trusted when they matter.</p>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Daily habits</h4>
+      <ul>
+        <li>Review memory-scan and injection verdicts within minutes.</li>
+        <li>Check overnight beacon anomalies against the egress baseline.</li>
+        <li>Confirm log pipelines are green for Sysmon and Defender.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Weekly habits</h4>
+      <ul>
+        <li>Review new unbacked-thread events and tune noisy rules.</li>
+        <li>Verify agent health and Sysmon coverage on new hosts.</li>
+        <li>Walk one detection rule end to end, source to response.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Monthly habits</h4>
+      <ul>
+        <li>Run a purple-team injection test in the lab.</li>
+        <li>Review false positive documentation and rule drift.</li>
+        <li>Verify the egress baseline and backup restore paths.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="cheat-sheet" class="section">
+  <header class="section-head">
+    <h2><span class="section-num">9</span><span class="section-title">Cheat sheet and quick reference</span></h2>
+    <p class="section-intro">Everything an analyst needs on one screen: key facts, the five detections, the first response steps, and where to read more.</p>
+  </header>
+
+  <h3>Key facts</h3>
+  <div class="kv">
+    <div class="k">Technique</div><div>T1055.002 — Portable Executable Injection (parent T1055 Process Injection)</div>
+    <div class="k">Tactics</div><div>Stealth / Privilege Escalation (TA0005 / TA0004) · Platform: Windows · Permissions: User</div>
+    <div class="k">Essence</div><div>Copy a complete PE image into another process's memory and run it with a remote thread — no file on disk</div>
+    <div class="k">Key artifacts</div><div>RWX region with an MZ header · EID 8 with empty StartModule · EID 10 script-host cross-process write · CallTrace with unknown frames</div>
+    <div class="k">Fastest signals</div><div>EDR memory scan verdicts and Defender <code>Behavior:Win32/ProcessInject.*</code></div>
+  </div>
+
+  <h3>Top five detections</h3>
+  <p>Full rule text, SPL queries, and tuning notes are in <a href="#sigma-and-spl">section 5.5</a>.</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Rule</th><th>Log source</th><th>Level</th><th>What it catches</th></tr></thead>
+      <tbody>
+        <tr><td>remote-thread-unbacked-start</td><td>Sysmon EID 8</td><td><span class="badge high">High</span></td><td>Remote threads starting in unbacked memory</td></tr>
+        <tr><td>defender-behavioral-process-injection</td><td>Defender EID 1116</td><td><span class="badge high">High</span></td><td>Behavioral verdicts for injection activity</td></tr>
+        <tr><td>script-host-cross-process-write</td><td>Sysmon EID 10</td><td><span class="badge high">High</span></td><td>Script hosts opening other processes with full rights</td></tr>
+        <tr><td>dropper-chain-staging</td><td>Sysmon EID 1</td><td><span class="badge medium">Medium</span></td><td>Office or script parents spawning loaders</td></tr>
+        <tr><td>unsigned-region-trusted-process</td><td>Sysmon EID 10</td><td><span class="badge medium">Medium</span></td><td>Unknown call frames inside trusted processes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>First 30 minutes</h4>
+      <ul>
+        <li>Validate the verdict on the endpoint console and in the SIEM.</li>
+        <li>Isolate the host with network containment — do not power off.</li>
+        <li>Capture triage memory before anything else changes.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>First 24 hours</h4>
+      <ul>
+        <li>Extract the in-memory PE from the capture and hash it.</li>
+        <li>Hunt the hash and the behavior pattern fleet-wide.</li>
+        <li>Rotate credentials exposed on the host and report per policy.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Links and further reading</h3>
+  <div class="card">
+    <ul>
+      <li><a href="https://attack.mitre.org/techniques/T1055/002/" rel="noopener">Official ATT&amp;CK page — T1055.002 Portable Executable Injection</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/" rel="noopener">Parent — T1055 Process Injection</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/001/" rel="noopener">Sibling — T1055.001 Dynamic-link Library Injection</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/003/" rel="noopener">Sibling — T1055.003 Thread Execution Hijacking</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/012/" rel="noopener">Related — T1055.012 Process Hollowing</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1620/" rel="noopener">Related — T1620 Reflective Code Loading</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1027/" rel="noopener">Related — T1027 Obfuscated Files or Information</a></li>
+      <li><a href="https://learn.microsoft.com/sysinternals/downloads/sysmon" rel="noopener">Sysmon documentation (Microsoft Learn)</a></li>
+      <li><a href="https://github.com/SigmaHQ/sigma" rel="noopener">SigmaHQ rule repository</a></li>
+    </ul>
+  </div>
+</section>
+    </div>
+  </div>
+</main>
+
+<button class="mobile-toc-btn" id="mobileTocBtn" type="button" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="back-top" id="backTop" type="button" aria-label="Back to top">↑</button>
+<div class="toc-overlay" id="tocOverlay" hidden>
+  <div class="toc-overlay-panel" role="dialog" aria-modal="true" aria-label="Contents">
+    <button class="toc-close" id="tocClose" type="button" aria-label="Close contents">Close ×</button>
+    <nav id="overlayNav" class="toc" aria-label="Sections"></nav>
+  </div>
+</div>
+
+<script>
+/* ATK-SHARED-JS v1 — shared behavior for ATT&CK technique guide pages.
+   Provides: theme toggle, reading progress, generated TOC, scrollspy,
+   mobile contents overlay, back-to-top, copy buttons, canvas simulation engine. */
+(function () {
+  'use strict';
+  var doc = document, win = window, root = doc.documentElement;
+  var reducedQuery = win.matchMedia('(prefers-reduced-motion: reduce)');
+  function isReduced() { return reducedQuery.matches; }
+
+  /* ---------- helpers ---------- */
+  win.atkColor = function (name) { return getComputedStyle(root).getPropertyValue(name).trim(); };
+
+  /* ---------- theme ---------- */
+  function currentTheme() { return root.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
+  function setTheme(t, store) {
+    root.setAttribute('data-theme', t);
+    if (store) { try { localStorage.setItem('atk-theme', t); } catch (e) {} }
+    doc.dispatchEvent(new CustomEvent('atkthemechange', { detail: t }));
+  }
+  var themeBtn = doc.getElementById('pageThemeToggle');
+  if (themeBtn) {
+    function syncThemeBtn() {
+      var light = currentTheme() === 'light';
+      themeBtn.textContent = light ? '\u263E' : '\u2600';
+      var label = light ? 'Switch to dark theme' : 'Switch to light theme';
+      themeBtn.setAttribute('aria-label', label);
+      themeBtn.title = label;
+    }
+    themeBtn.addEventListener('click', function () { setTheme(currentTheme() === 'light' ? 'dark' : 'light', true); });
+    syncThemeBtn();
+    /* Hide this page-level toggle if the shared site shell already provides one. */
+    function shellCheck() {
+      if (doc.querySelector('[data-shell-theme-toggle],[data-theme-toggle]')) { themeBtn.hidden = true; }
+    }
+    shellCheck();
+    win.addEventListener('load', shellCheck);
+    doc.addEventListener('atkshellready', shellCheck);
+  }
+
+  /* ---------- TOC generated from real section headings ---------- */
+  var main = doc.querySelector('.main-content');
+  var tocItems = [];
+  if (main) {
+    var sections = main.querySelectorAll('section[id]');
+    Array.prototype.forEach.call(sections, function (sec) {
+      var h2 = sec.querySelector('.section-head h2') || sec.querySelector('h2');
+      if (!h2) return;
+      var t = h2.querySelector('.section-title');
+      tocItems.push({ id: sec.id, label: t ? t.textContent : h2.textContent.replace(/^\s*[0-9.]+\s*/, ''), level: 1 });
+      var subs = sec.querySelectorAll('h3.subsec[id]');
+      Array.prototype.forEach.call(subs, function (h3) {
+        var t3 = h3.querySelector('.section-title');
+        tocItems.push({ id: h3.id, label: t3 ? t3.textContent : h3.textContent.replace(/^\s*[0-9.]+\s*/, ''), level: 2 });
+      });
+    });
+  }
+  function renderToc(container) {
+    var frag = doc.createDocumentFragment();
+    tocItems.forEach(function (it) {
+      var a = doc.createElement('a');
+      a.href = '#' + it.id;
+      a.textContent = it.label;
+      if (it.level === 2) a.className = 'toc-sub';
+      a.setAttribute('data-toc-id', it.id);
+      frag.appendChild(a);
+    });
+    container.appendChild(frag);
+  }
+  var tocNav = doc.getElementById('tocNav');
+  var overlayNav = doc.getElementById('overlayNav');
+  if (tocNav && tocItems.length) renderToc(tocNav);
+  if (overlayNav && tocItems.length) renderToc(overlayNav);
+
+  /* ---------- scrollspy + progress + back-to-top visibility ---------- */
+  var fill = doc.getElementById('progressFill');
+  var backTop = doc.getElementById('backTop');
+  var spyEls = [];
+  tocItems.forEach(function (it) {
+    var el = doc.getElementById(it.id);
+    if (el) spyEls.push({ id: it.id, el: el });
+  });
+  function setActive(id) {
+    var links = doc.querySelectorAll('[data-toc-id]');
+    Array.prototype.forEach.call(links, function (a) {
+      var on = a.getAttribute('data-toc-id') === id;
+      a.classList.toggle('active', on);
+      if (on) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+    });
+  }
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    win.requestAnimationFrame(function () {
+      ticking = false;
+      var y = win.scrollY || root.scrollTop || 0;
+      var max = Math.max(1, root.scrollHeight - win.innerHeight);
+      if (fill) fill.style.width = Math.min(100, Math.round((y / max) * 100)) + '%';
+      if (backTop) backTop.classList.toggle('show', y > 480);
+      var pos = y + 150;
+      var cur = spyEls.length ? spyEls[0].id : null;
+      for (var i = 0; i < spyEls.length; i++) {
+        if (spyEls[i].el.getBoundingClientRect().top + y <= pos) cur = spyEls[i].id;
+      }
+      if (spyEls.length && (y + win.innerHeight) >= (root.scrollHeight - 4)) cur = spyEls[spyEls.length - 1].id;
+      if (cur) setActive(cur);
+    });
+  }
+  win.addEventListener('scroll', onScroll, { passive: true });
+  win.addEventListener('resize', onScroll);
+  onScroll();
+
+  /* ---------- mobile contents overlay ---------- */
+  var tocBtn = doc.getElementById('mobileTocBtn');
+  var overlay = doc.getElementById('tocOverlay');
+  var tocClose = doc.getElementById('tocClose');
+  var lastFocus = null;
+  function openOverlay() {
+    if (!overlay) return;
+    lastFocus = doc.activeElement;
+    overlay.hidden = false;
+    if (tocBtn) tocBtn.setAttribute('aria-expanded', 'true');
+    doc.body.style.overflow = 'hidden';
+    if (tocClose) tocClose.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.hidden = true;
+    doc.body.style.overflow = '';
+    if (tocBtn) {
+      tocBtn.setAttribute('aria-expanded', 'false');
+      tocBtn.focus();
+    } else if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) {} }
+  }
+  if (tocBtn) tocBtn.addEventListener('click', openOverlay);
+  if (tocClose) tocClose.addEventListener('click', closeOverlay);
+  if (overlay) overlay.addEventListener('click', function (e) { if (e.target === overlay) closeOverlay(); });
+  doc.addEventListener('keydown', function (e) { if (e.key === 'Escape' && overlay && !overlay.hidden) closeOverlay(); });
+  [tocNav, overlayNav].forEach(function (nav) {
+    if (!nav) return;
+    nav.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest ? e.target.closest('a') : null;
+      if (a && overlay && !overlay.hidden) closeOverlay();
+    });
+  });
+
+  /* ---------- back to top ---------- */
+  if (backTop) backTop.addEventListener('click', function () {
+    win.scrollTo({ top: 0, behavior: isReduced() ? 'auto' : 'smooth' });
+  });
+
+  /* ---------- copy buttons ---------- */
+  function copyText(text, btn) {
+    function done(ok) {
+      if (!btn.getAttribute('data-label')) btn.setAttribute('data-label', btn.textContent);
+      btn.textContent = ok ? 'Copied!' : 'Copy failed';
+      setTimeout(function () { btn.textContent = btn.getAttribute('data-label') || 'Copy'; }, 1600);
+    }
+    function fallback() {
+      var ta = doc.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+      doc.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = doc.execCommand('copy'); } catch (e) {}
+      doc.body.removeChild(ta);
+      done(ok);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    } else { fallback(); }
+  }
+  doc.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('.copy-btn') : null;
+    if (!btn) return;
+    var block = btn.closest('.code-block');
+    var code = block ? block.querySelector('pre code') : null;
+    if (code) copyText(code.innerText.replace(/\n$/, ''), btn);
+  });
+
+  /* ---------- drawing helpers for simulations ---------- */
+  var MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  var SANS = 'system-ui, "Segoe UI", Roboto, Arial, sans-serif';
+  var AtkDraw = {
+    roundRect: function (ctx, x, y, w, h, r) {
+      r = Math.max(0, Math.min(r, w / 2, h / 2));
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    },
+    box: function (ctx, x, y, w, h, opts) {
+      opts = opts || {};
+      ctx.save();
+      AtkDraw.roundRect(ctx, x, y, w, h, opts.radius == null ? 10 : opts.radius);
+      ctx.fillStyle = opts.fill || win.atkColor('--surface');
+      ctx.fill();
+      ctx.lineWidth = opts.lineWidth || 1.4;
+      ctx.strokeStyle = opts.stroke || win.atkColor('--border-strong');
+      ctx.stroke();
+      var lines = (opts.label || '').split('\n');
+      ctx.fillStyle = opts.labelColor || win.atkColor('--text');
+      ctx.font = opts.font || ('600 12px ' + SANS);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      var lh = opts.lineHeight || 14;
+      var startY = y + h / 2 - ((lines.length - 1) * lh) / 2;
+      for (var i = 0; i < lines.length; i++) ctx.fillText(lines[i], x + w / 2, startY + i * lh);
+      ctx.restore();
+    },
+    arrow: function (ctx, x1, y1, x2, y2, prog, opts) {
+      opts = opts || {};
+      prog = Math.max(0, Math.min(1, prog));
+      var color = opts.color || win.atkColor('--accent');
+      var dx = x2 - x1, dy = y2 - y1, dist = Math.hypot(dx, dy) || 1;
+      var ux = dx / dist, uy = dy / dist;
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = opts.width || 1.6;
+      if (opts.dashed) ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (prog > 0 && prog < 1) {
+        var px = x1 + dx * prog, py = y1 + dy * prog;
+        ctx.globalAlpha = 0.22;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(px, py, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(px, py, 4.2, 0, Math.PI * 2); ctx.fill();
+      }
+      if (prog >= 1) {
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - ux * 10 - uy * 5, y2 - uy * 10 + ux * 5);
+        ctx.lineTo(x2 - ux * 10 + uy * 5, y2 - uy * 10 - ux * 5);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+      }
+      if (opts.label) {
+        ctx.font = '11px ' + MONO;
+        ctx.fillStyle = opts.labelColor || color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(opts.label, (x1 + x2) / 2, (y1 + y2) / 2 - 6);
+      }
+      ctx.restore();
+    },
+    dot: function (ctx, x, y, r, color, pulse) {
+      ctx.save();
+      if (pulse) {
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    },
+    pill: function (ctx, x, y, text, color) {
+      ctx.save();
+      ctx.font = '10.5px ' + MONO;
+      var w = ctx.measureText(text).width + 14;
+      AtkDraw.roundRect(ctx, x, y, w, 18, 9);
+      ctx.fillStyle = win.atkColor('--elevated');
+      ctx.fill();
+      ctx.strokeStyle = color || win.atkColor('--border-strong');
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = color || win.atkColor('--text');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, x + w / 2, y + 9.5);
+      ctx.restore();
+      return w;
+    },
+    text: function (ctx, str, x, y, opts) {
+      opts = opts || {};
+      ctx.save();
+      ctx.font = (opts.weight ? opts.weight + ' ' : '') + (opts.size || 12) + 'px ' + (opts.mono ? MONO : SANS);
+      ctx.fillStyle = opts.color || win.atkColor('--text');
+      ctx.textAlign = opts.align || 'left';
+      ctx.textBaseline = opts.baseline || 'alphabetic';
+      ctx.fillText(str, x, y);
+      ctx.restore();
+    }
+  };
+  win.AtkDraw = AtkDraw;
+
+  /* ---------- simulation engine ---------- */
+  win.AtkSim = { mount: mountSim };
+  function mountSim(host, cfg) {
+    if (!host) return;
+    var canvas = host.querySelector('.sim-canvas');
+    if (!canvas || !canvas.getContext) return;
+    var ctx = canvas.getContext('2d');
+    var steps = cfg.steps || [];
+    var N = steps.length;
+    var stepSec = cfg.stepSeconds || 4.5;
+    var st = { i: 0, t: 0, playing: false, speed: 1, raf: 0, lastTs: 0 };
+    var W = 0, H = 0, scene = {};
+    var stepTitle = host.querySelector('.sim-step-title');
+    var capText = host.querySelector('.sim-caption-text');
+    var defText = host.querySelector('.sim-defender-text');
+    var evWrap = host.querySelector('.sim-evidence');
+    var statusEl = host.querySelector('.sim-status');
+    var playBtn = host.querySelector('.sim-play');
+    var restartBtn = host.querySelector('.sim-restart');
+    var speedSel = host.querySelector('.sim-speed');
+    var chipsWrap = host.querySelector('.step-chips');
+    var tooltip = host.querySelector('.sim-tooltip');
+    var wrap = host.querySelector('.sim-canvas-wrap');
+
+    function resize() {
+      var r = canvas.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var dpr = Math.min(win.devicePixelRatio || 1, 2);
+      W = r.width; H = r.height;
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      render();
+    }
+    function render() {
+      ctx.clearRect(0, 0, W, H);
+      try { scene = cfg.scene ? (cfg.scene(W, H) || {}) : {}; } catch (e) { scene = {}; }
+      try { if (cfg.draw) cfg.draw(ctx, W, H, scene, st.i, st.t); } catch (e) {}
+    }
+    function syncUI() {
+      var s = steps[st.i] || {};
+      if (stepTitle) stepTitle.textContent = 'Step ' + (st.i + 1) + ' — ' + (s.title || '');
+      if (capText) capText.textContent = s.caption || '';
+      if (defText) defText.textContent = s.defender || '';
+      if (statusEl) statusEl.textContent = 'Step ' + (st.i + 1) + ' of ' + N;
+      if (evWrap) {
+        evWrap.innerHTML = '';
+        var evs = s.evidence || [];
+        for (var i = 0; i < evs.length; i++) {
+          var sp = doc.createElement('span');
+          sp.className = 'chip chip-mono';
+          sp.textContent = evs[i];
+          evWrap.appendChild(sp);
+        }
+      }
+      if (chipsWrap) {
+        for (var j = 0; j < chipsWrap.children.length; j++) {
+          var c = chipsWrap.children[j];
+          var on = j === st.i;
+          c.classList.toggle('active', on);
+          if (on) c.setAttribute('aria-current', 'step'); else c.removeAttribute('aria-current');
+        }
+      }
+      if (playBtn) playBtn.textContent = st.playing ? 'Pause' : 'Play';
+    }
+    function frame(ts) {
+      if (!st.playing) return;
+      if (!st.lastTs) st.lastTs = ts;
+      var dt = Math.min(0.05, (ts - st.lastTs) / 1000);
+      st.lastTs = ts;
+      st.t += (dt * st.speed) / stepSec;
+      if (st.t >= 1) {
+        if (st.i < N - 1) { st.i += 1; st.t = 0; syncUI(); }
+        else { st.t = 1; pause(); }
+      }
+      render();
+      if (st.playing) st.raf = win.requestAnimationFrame(frame);
+    }
+    function play() {
+      if (st.playing) return;
+      if (st.i >= N - 1 && st.t >= 1) { st.i = 0; st.t = 0; }
+      st.playing = true;
+      st.lastTs = 0;
+      syncUI();
+      st.raf = win.requestAnimationFrame(frame);
+    }
+    function pause() {
+      st.playing = false;
+      if (st.raf) win.cancelAnimationFrame(st.raf);
+      st.raf = 0;
+      if (playBtn) playBtn.textContent = 'Play';
+    }
+    function goTo(i) {
+      st.i = Math.max(0, Math.min(N - 1, i));
+      st.t = isReduced() ? 1 : 0;
+      syncUI();
+      render();
+    }
+    if (chipsWrap) {
+      for (var k = 0; k < steps.length; k++) {
+        (function (idx) {
+          var b = doc.createElement('button');
+          b.type = 'button';
+          b.className = 'step-chip';
+          b.textContent = (idx + 1) + '. ' + (steps[idx].title || 'Step');
+          b.title = steps[idx].title || '';
+          b.addEventListener('click', function () { goTo(idx); });
+          chipsWrap.appendChild(b);
+        })(k);
+      }
+    }
+    if (playBtn) playBtn.addEventListener('click', function () { if (st.playing) pause(); else play(); });
+    if (restartBtn) restartBtn.addEventListener('click', function () {
+      st.i = 0;
+      st.t = isReduced() ? 1 : 0;
+      syncUI();
+      render();
+      if (st.playing) st.lastTs = 0;
+    });
+    if (speedSel) speedSel.addEventListener('change', function () { st.speed = parseFloat(speedSel.value) || 1; });
+    function hideTip() { if (tooltip) tooltip.hidden = true; }
+    function showTipAt(mx, my) {
+      if (!cfg.hitTest) return;
+      var hit = null;
+      try { hit = cfg.hitTest(mx, my, W, H, scene); } catch (err) { hit = null; }
+      if (hit) {
+        tooltip.innerHTML = '<strong></strong><span></span>';
+        tooltip.firstChild.textContent = hit.label || '';
+        tooltip.lastChild.textContent = hit.desc || '';
+        tooltip.hidden = false;
+        var tw = tooltip.offsetWidth || 200;
+        var x = Math.max(8, Math.min(mx + 14, (wrap ? wrap.clientWidth : W) - tw - 8));
+        var y = Math.min(my + 14, (wrap ? wrap.clientHeight : H) - 70);
+        tooltip.style.left = x + 'px';
+        tooltip.style.top = y + 'px';
+      } else { hideTip(); }
+    }
+    if (wrap && tooltip) {
+      canvas.addEventListener('mousemove', function (e) {
+        var r = canvas.getBoundingClientRect();
+        showTipAt(e.clientX - r.left, e.clientY - r.top);
+      });
+      canvas.addEventListener('mouseleave', hideTip);
+      canvas.addEventListener('click', function (e) {
+        var r = canvas.getBoundingClientRect();
+        showTipAt(e.clientX - r.left, e.clientY - r.top);
+      });
+    }
+    doc.addEventListener('atkthemechange', render);
+    if (win.ResizeObserver) { new ResizeObserver(resize).observe(canvas); }
+    else { win.addEventListener('resize', resize); }
+    resize();
+    syncUI();
+    if (cfg.autoplay && !isReduced()) { play(); }
+    else { st.t = 1; render(); syncUI(); }
+  }
+})();
+</script>
+<script>
+(function () {
+  'use strict';
+  var STEPS = [
+    {
+      title: 'Foothold',
+      caption: 'A user opens a fake installer from a phishing email. The packed dropper starts, shows a normal setup screen, and quietly prepares its hidden payload.',
+      defender: 'Sysmon EID 1 logs a new process in a user-writable folder with an unusual parent chain. A fresh or missing signature is another hint.',
+      evidence: ['Sysmon EID 1', 'suspicious process tree']
+    },
+    {
+      title: 'Read payload',
+      caption: 'The dropper decrypts its own resources and unpacks a complete hidden PE image into a private memory buffer.',
+      defender: 'EDR sees unusual section activity: large executable-looking regions appear inside the dropper before it touches other processes.',
+      evidence: ['EDR unpacking behavior', 'unusual section activity']
+    },
+    {
+      title: 'Open + allocate',
+      caption: 'The dropper opens the trusted explorer.exe with OpenProcess and reserves fresh read-write memory inside it with VirtualAllocEx.',
+      defender: 'Sysmon EID 10 records cross-process access with sensitive rights, and an EDR rule flags the new writable region in a trusted process.',
+      evidence: ['Sysmon EID 10 + EDR alert', 'writable region in trusted process']
+    },
+    {
+      title: 'Write full PE image',
+      caption: 'WriteProcessMemory copies the PE headers and all sections into the new region, relocation fixups adjust the image for its new base address, and VirtualProtectEx makes the region executable.',
+      defender: 'The region now holds image-like bytes that start with an MZ header, but no file backs them. This is an unbacked image region.',
+      evidence: ['unbacked image region', 'MZ in private memory']
+    },
+    {
+      title: 'Start execution',
+      caption: 'CreateRemoteThread starts a new thread in the target at the PE entry offset. No LoadLibrary call happens at any point.',
+      defender: 'Sysmon EID 8 shows a remote thread whose StartModule and StartFunction are empty, because the start address belongs to no module.',
+      evidence: ['Sysmon EID 8', 'StartModule "-"']
+    },
+    {
+      title: 'Implant runs',
+      caption: 'The implant finishes initializing inside explorer.exe. It is now a complete, memory-only program living inside a trusted process.',
+      defender: 'EDR memory scanning finds unsigned executable code running inside a signed, trusted process.',
+      evidence: ['EDR memory scan', 'unsigned code in trusted process']
+    },
+    {
+      title: 'Hidden activity',
+      caption: 'From inside the trusted process, the implant polls the C2 server over HTTPS and waits for tasks.',
+      defender: 'Network monitoring sees a periodic beacon flow from a process that never spoke like this before. Egress baselines make it stand out.',
+      evidence: ['periodic beacon flow', 'new egress pattern']
+    },
+    {
+      title: 'SOC triage',
+      caption: 'The SOC analyst captures triage memory. Scanners reveal the in-memory PE, and the host is isolated from the network.',
+      defender: 'The alert chain lines up: new process, cross-process write, unbacked thread, beacon flow. Memory forensics confirms a full PE image.',
+      evidence: ['triage memory capture', 'host isolated']
+    }
+  ];
+
+  function scene(W, H) {
+    return { nodes: [
+      { id: 'pe', x: W * 0.59, y: H * 0.60, w: W * 0.12, h: H * 0.13, label: 'Injected PE (memory)', desc: 'The complete PE image written into the target with WriteProcessMemory. It exists only in memory, with no file on disk.' },
+      { id: 'dropper', x: W * 0.39, y: H * 0.24, w: W * 0.14, h: H * 0.22, label: 'Dropper (packed exe)', desc: 'Small signed-looking program that unpacks the hidden PE payload from its own resources.' },
+      { id: 'target', x: W * 0.575, y: H * 0.24, w: W * 0.155, h: H * 0.56, label: 'explorer.exe (target)', desc: 'Trusted Windows process chosen by the attacker. The implant runs inside it and inherits its trusted look.' },
+      { id: 'victim', x: W * 0.36, y: H * 0.10, w: W * 0.40, h: H * 0.80, label: 'Victim host (Windows 11)', desc: 'The compromised endpoint. Sysmon and EDR telemetry flow from this machine to the SOC.' },
+      { id: 'atk', x: W * 0.05, y: H * 0.16, w: W * 0.14, h: H * 0.20, label: 'Attacker (lab VM)', desc: 'Prepares the packed dropper and the PE payload, then sends the fake installer by email.' },
+      { id: 'c2', x: W * 0.05, y: H * 0.64, w: W * 0.14, h: H * 0.20, label: 'C2 server', desc: 'Command-and-control server. Receives periodic HTTPS beacons from the implant inside explorer.exe.' },
+      { id: 'soc', x: W * 0.80, y: H * 0.30, w: W * 0.15, h: H * 0.24, label: 'SOC analyst', desc: 'Watches EDR and Sysmon events, captures memory, and confirms the in-memory PE before isolating the host.' }
+    ] };
+  }
+
+  function N(s, id) {
+    for (var i = 0; i < s.nodes.length; i++) if (s.nodes[i].id === id) return s.nodes[i];
+    return { x: 0, y: 0, w: 0, h: 0 };
+  }
+
+  function hitTest(x, y, W, H, scene) {
+    var ns = (scene && scene.nodes) || [];
+    for (var i = 0; i < ns.length; i++) {
+      var n = ns[i];
+      if (x >= n.x && x <= n.x + (n.w || 0) && y >= n.y && y <= n.y + (n.h || 0)) return n;
+    }
+    return null;
+  }
+
+  function draw(ctx, W, H, s, step, t) {
+    var atkColor = window.atkColor, D = window.AtkDraw;
+    var cur = step + 1;
+    function pr(k) { return cur > k ? 1 : (cur === k ? t : 0); }
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.fillStyle = atkColor('--border');
+    ctx.globalAlpha = 0.4;
+    for (var gx = 22; gx < W; gx += 46) {
+      for (var gy = 22; gy < H; gy += 46) {
+        ctx.beginPath(); ctx.arc(gx, gy, 1.1, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    var vic = N(s, 'victim'), drp = N(s, 'dropper'), tgt = N(s, 'target'),
+        pe = N(s, 'pe'), atk = N(s, 'atk'), c2n = N(s, 'c2'), soc = N(s, 'soc');
+
+    D.box(ctx, vic.x, vic.y, vic.w, vic.h, { fill: atkColor('--surface-2'), lineWidth: 1.2 });
+    D.text(ctx, 'VICTIM HOST', vic.x + 12, vic.y + 18, { size: 10, mono: true, color: atkColor('--muted') });
+    D.text(ctx, 'Windows 11 endpoint', vic.x + 12, vic.y + 33, { size: 11, color: atkColor('--muted') });
+
+    D.box(ctx, drp.x, drp.y, drp.w, drp.h, { label: 'Dropper\n(packed exe)' });
+    D.box(ctx, tgt.x, tgt.y, tgt.w, tgt.h, {});
+    D.text(ctx, 'explorer.exe', tgt.x + tgt.w / 2, tgt.y + 20, { size: 12, weight: '600', align: 'center' });
+    D.text(ctx, 'trusted process', tgt.x + tgt.w / 2, tgt.y + 35, { size: 10, mono: true, color: atkColor('--muted'), align: 'center' });
+    D.box(ctx, pe.x, pe.y, pe.w, pe.h, {
+      label: 'Injected PE\n(memory)',
+      fill: cur >= 4 ? atkColor('--elevated') : atkColor('--surface'),
+      stroke: cur >= 6 ? atkColor('--danger') : atkColor('--border-strong'),
+      lineWidth: cur >= 6 ? 1.8 : 1.4
+    });
+    if (cur >= 4) D.text(ctx, 'MZ', pe.x + 10, pe.y + 15, { size: 11, mono: true, weight: '700', color: atkColor('--danger') });
+    if (cur === 4) {
+      ctx.save();
+      ctx.globalAlpha = 0.16;
+      ctx.fillStyle = atkColor('--danger');
+      ctx.fillRect(pe.x, pe.y, pe.w, pe.h * Math.max(0, Math.min(1, t)));
+      ctx.restore();
+    }
+
+    D.box(ctx, atk.x, atk.y, atk.w, atk.h, { label: 'Attacker\n(lab VM)' });
+    D.box(ctx, c2n.x, c2n.y, c2n.w, c2n.h, { label: 'C2 server', stroke: cur >= 7 ? atkColor('--danger') : undefined, lineWidth: cur >= 7 ? 1.8 : 1.4 });
+    D.box(ctx, soc.x, soc.y, soc.w, soc.h, { label: 'SOC analyst', stroke: cur === 8 ? atkColor('--success') : undefined, lineWidth: cur === 8 ? 1.8 : 1.4 });
+
+    if (pr(1) > 0) D.arrow(ctx, atk.x + atk.w, atk.y + atk.h / 2, drp.x, drp.y + drp.h / 2, pr(1), { color: atkColor('--danger'), label: 'fake installer' });
+    if (pr(3) > 0) D.arrow(ctx, drp.x + drp.w, drp.y + drp.h * 0.35, tgt.x, tgt.y + tgt.h * 0.35, pr(3), { color: atkColor('--danger'), dashed: true, label: 'OpenProcess + VirtualAllocEx' });
+    if (pr(4) > 0) D.arrow(ctx, drp.x + drp.w, drp.y + drp.h * 0.85, pe.x, pe.y + pe.h / 2, pr(4), { color: atkColor('--danger'), label: 'WriteProcessMemory' });
+    if (pr(5) > 0) D.arrow(ctx, tgt.x + tgt.w * 0.82, tgt.y + 46, pe.x + pe.w * 0.82, pe.y - 2, pr(5), { color: atkColor('--high'), label: 'CreateRemoteThread' });
+    if (pr(7) > 0) D.arrow(ctx, tgt.x, tgt.y + tgt.h - 12, c2n.x + c2n.w, c2n.y + c2n.h / 2, pr(7), { color: atkColor('--danger'), dashed: true, label: 'C2 beacon (HTTPS)' });
+    if (pr(8) > 0) D.arrow(ctx, soc.x, soc.y + soc.h / 2, vic.x + vic.w, vic.y + vic.h * 0.5, pr(8), { color: atkColor('--success'), dashed: true, label: 'memory capture' });
+
+    if (cur >= 1) D.pill(ctx, vic.x + 10, vic.y - 24, 'Sysmon EID 1', atkColor('--accent-2'));
+    if (cur >= 2) D.pill(ctx, drp.x, drp.y - 24, 'EDR: unpacking', atkColor('--accent-2'));
+    if (cur >= 3) D.pill(ctx, tgt.x, tgt.y - 24, 'EID 10 + EDR alert', atkColor('--accent-2'));
+    if (cur >= 4) D.pill(ctx, pe.x + 2, pe.y + pe.h + 6, 'unbacked image', atkColor('--accent-2'));
+    if (cur >= 5) D.pill(ctx, tgt.x, tgt.y + tgt.h + 8, 'EID 8 StartModule -', atkColor('--accent-2'));
+    if (cur >= 6) D.pill(ctx, tgt.x + 4, pe.y - 24, 'EDR memory scan', atkColor('--accent-2'));
+    if (cur >= 7) D.pill(ctx, c2n.x, c2n.y - 24, 'beacon traffic', atkColor('--accent-2'));
+    if (cur >= 8) D.pill(ctx, soc.x, soc.y - 24, 'triage capture', atkColor('--success'));
+
+    var activeMap = { 1: drp, 2: drp, 3: tgt, 4: pe, 5: pe, 6: pe, 7: tgt, 8: soc };
+    var an = activeMap[cur];
+    if (an) {
+      ctx.save();
+      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = atkColor('--accent');
+      ctx.lineWidth = 1.6;
+      D.roundRect(ctx, an.x - 6, an.y - 6, an.w + 12, an.h + 12, 12);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  window.AtkSim.mount(document.getElementById('sim'), {
+    steps: STEPS,
+    scene: scene,
+    draw: draw,
+    hitTest: hitTest,
+    stepSeconds: 4.5,
+    autoplay: !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  });
+})();
+</script>
+</body>
+</html>

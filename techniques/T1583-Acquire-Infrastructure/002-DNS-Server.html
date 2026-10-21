@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1583.002 – DNS Server · ATT&amp;CK Detection Guide</title>
+<meta name="description" content="How adversaries run their own DNS servers and fast-flux networks (MITRE ATT&amp;CK T1583.002), and how defenders detect, triage, and stop them.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1583-Acquire-Infrastructure/002-DNS-Server.html">
+<script>
+/* Theme before first paint: default to user's color scheme, store choice locally. */
+(function(){try{var t=localStorage.getItem('atk-theme');if(t!=='dark'&&t!=='light'){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'}document.documentElement.setAttribute('data-theme',t)}catch(e){document.documentElement.setAttribute('data-theme','dark')}})();
+</script>
+<style>
+/* ATK-BASE-CSS-v1 — shared design system for ATT&CK technique guides.
+   Embed verbatim. Page-specific CSS may be appended AFTER this block, prefixed with .atk-page */
+
+:root{
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --accent-soft:rgba(79,140,255,.13); --accent-2-soft:rgba(34,211,238,.12);
+  --accent-border:rgba(79,140,255,.42);
+  --violet-soft:rgba(167,139,250,.13); --violet-border:rgba(167,139,250,.42);
+  --success-soft:rgba(52,211,153,.12); --success-border:rgba(52,211,153,.4);
+  --warn-soft:rgba(251,191,36,.12); --warn-border:rgba(251,191,36,.42);
+  --danger-soft:rgba(248,113,113,.12); --danger-border:rgba(248,113,113,.42);
+  --high-soft:rgba(251,146,60,.14); --low-soft:rgba(74,222,128,.13);
+  --code-bg:#0c1322; --code-fg:#d9e2f4;
+  --shadow:0 8px 28px rgba(3,8,20,.45);
+}
+[data-theme="light"]{
+  color-scheme: light;
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --accent-soft:rgba(47,111,228,.10); --accent-2-soft:rgba(8,145,178,.10);
+  --accent-border:rgba(47,111,228,.38);
+  --violet-soft:rgba(124,92,224,.10); --violet-border:rgba(124,92,224,.38);
+  --success-soft:rgba(13,158,110,.10); --success-border:rgba(13,158,110,.38);
+  --warn-soft:rgba(180,83,9,.10); --warn-border:rgba(180,83,9,.38);
+  --danger-soft:rgba(220,38,38,.09); --danger-border:rgba(220,38,38,.38);
+  --high-soft:rgba(194,65,12,.11); --low-soft:rgba(21,128,61,.11);
+  --code-bg:#101b33; --code-fg:#d9e2f4;
+  --shadow:0 8px 28px rgba(24,34,56,.08);
+}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;overflow-x:hidden}
+@supports (overflow:clip){html,body{overflow-x:clip}}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:var(--font-sans); font-size:16.5px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+::selection{background:var(--accent-soft); color:var(--text)}
+a{color:var(--accent); text-decoration:none}
+a:hover{color:var(--accent-2); text-decoration:underline}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+code{font-family:var(--font-mono); font-size:.9em; background:var(--surface-2);
+  border:1px solid var(--border); border-radius:6px; padding:1px 5px; color:var(--text)}
+.codeblock code{background:none;border:0;padding:0;color:var(--code-fg);font-size:inherit}
+h4{font-size:15.5px; line-height:1.35; margin:20px 0 8px}
+.wrap{max-width:1280px; margin-inline:auto; padding-inline:clamp(16px,4vw,36px)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--font-mono)}
+.small{font-size:13px}
+ul,ol{padding-left:22px}
+li{margin-bottom:6px}
+p{max-width:75ch}
+hr{border:0;border-top:1px solid var(--border);margin:24px 0}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- progress bar ---------- */
+#atk-progress{position:fixed;top:0;left:0;right:0;height:3px;z-index:90;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+  transform:scaleX(0);transform-origin:0 50%;pointer-events:none}
+
+/* ---------- hero ---------- */
+.hero{padding:44px 0 10px}
+.kicker{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-mono);
+  font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.kicker::before{content:"";width:8px;height:8px;background:var(--accent);border-radius:2px;display:inline-block}
+.hero h1{font-size:clamp(1.85rem,4.4vw,2.75rem);line-height:1.12;letter-spacing:-.015em;margin:14px 0 14px;font-weight:800}
+.tid{font-family:var(--font-mono);font-size:.6em;font-weight:700;color:var(--accent-2);
+  background:var(--accent-2-soft);border:1px solid var(--accent-border);
+  border-radius:10px;padding:.14em .5em;vertical-align:middle;margin-right:.45em;white-space:nowrap}
+.hero-intro{max-width:78ch;color:var(--text);opacity:.94;margin:0 0 18px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px;padding:0;list-style:none}
+.chip{font-family:var(--font-mono);font-size:12px;font-weight:500;padding:5px 11px;
+  border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--muted)}
+.chip b{color:var(--text);font-weight:600}
+.facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.fact{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:13px 15px;box-shadow:var(--shadow)}
+.fact .k{font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.fact .v{font-size:14.5px;font-weight:600;line-height:1.45}
+
+/* ---------- layout ---------- */
+.layout{max-width:1280px;margin-inline:auto;padding-inline:clamp(16px,4vw,36px);
+  display:grid;grid-template-columns:256px minmax(0,1fr);gap:38px;align-items:start;padding-block:10px 90px}
+.toc{position:sticky;top:18px;background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;padding:16px 14px;max-height:calc(100vh - 40px);overflow:auto;box-shadow:var(--shadow)}
+.toc-title{font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);margin:2px 8px 10px}
+.toc-list a{display:block;padding:6px 10px;border-radius:8px;color:var(--muted);
+  font-size:13.5px;line-height:1.35;border-left:2px solid transparent}
+.toc-list a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc-list a.active{color:var(--accent);background:var(--accent-soft);border-left-color:var(--accent);font-weight:600}
+.toc-list a.sub{font-size:12.5px;padding-left:26px}
+.toc-hint{font-size:12px;color:var(--muted);margin:8px}
+.main{min-width:0}
+
+/* ---------- sections ---------- */
+.section{margin-top:54px;scroll-margin-top:92px}
+.sec-head{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.sec-num{font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--accent);
+  background:var(--accent-soft);border:1px solid var(--accent-border);
+  border-radius:10px;padding:6px 11px;flex:none}
+.section h2{font-size:clamp(1.4rem,2.6vw,1.85rem);line-height:1.16;letter-spacing:-.01em;margin:0;font-weight:750}
+.sec-intro{color:var(--muted);max-width:80ch;margin:2px 0 22px}
+h3.sub-h{display:flex;align-items:center;gap:10px;margin:36px 0 12px;font-size:1.18rem;
+  line-height:1.3;scroll-margin-top:108px;font-weight:700}
+.sub-num{font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:var(--accent-2);
+  background:var(--accent-2-soft);border:1px solid var(--accent-border);
+  border-radius:8px;padding:4px 9px;flex:none}
+
+/* ---------- cards & grids ---------- */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:18px 20px;box-shadow:var(--shadow);margin:16px 0}
+.card h4{margin-top:0}
+.card p:last-child,.card ul:last-child,.card ol:last-child{margin-bottom:0}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:16px 0}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:16px 0}
+.grid-2 .card,.grid-3 .card{margin:0}
+@media (max-width:1000px){.grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.grid-2,.grid-3{grid-template-columns:1fr}}
+
+/* ---------- callouts ---------- */
+.callout{display:flex;gap:12px;padding:14px 16px;border-radius:12px;border:1px solid;margin:16px 0}
+.co-ico{font-family:var(--font-mono);font-size:10.5px;font-weight:700;letter-spacing:.07em;
+  text-transform:uppercase;padding:4px 9px;border-radius:6px;align-self:flex-start;
+  white-space:nowrap;flex:none;color:#fff}
+.co-body{min-width:0}
+.callout p{margin:0 0 8px;max-width:none}
+.callout p:last-child{margin:0}
+.callout.note{background:var(--accent-soft);border-color:var(--accent-border)}
+.callout.note .co-ico{background:var(--accent)}
+.callout.good{background:var(--success-soft);border-color:var(--success-border)}
+.callout.good .co-ico{background:var(--success)}
+.callout.warn{background:var(--warn-soft);border-color:var(--warn-border)}
+.callout.warn .co-ico{background:var(--warning);color:#1a1a1a}
+.callout.danger{background:var(--danger-soft);border-color:var(--danger-border)}
+.callout.danger .co-ico{background:var(--danger)}
+
+/* ---------- tables ---------- */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:16px 0;
+  -webkit-overflow-scrolling:touch;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:660px}
+th{text-align:left;font-family:var(--font-mono);font-weight:700;font-size:12px;
+  background:var(--surface-2);color:var(--muted);padding:10px 12px;
+  border-bottom:1px solid var(--border-strong);text-transform:uppercase;letter-spacing:.05em}
+td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:14.5px;vertical-align:top;min-width:96px}
+tr:last-child td{border-bottom:0}
+tbody tr:nth-child(even){background:var(--surface-2)}
+
+/* ---------- code blocks ---------- */
+.codeblock{margin:16px 0;border-radius:12px;overflow:hidden;border:1px solid var(--border);
+  background:var(--code-bg)}
+.cb-head{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--elevated);
+  border-bottom:1px solid var(--border)}
+.cb-dots{display:inline-flex;gap:5px;flex:none}
+.cb-dots i{width:9px;height:9px;border-radius:50%;background:var(--border-strong)}
+.cb-title{font-family:var(--font-mono);font-size:12px;color:var(--muted);flex:1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cb-copy{font-family:var(--font-mono);font-size:11.5px;font-weight:600;color:var(--code-fg);
+  background:var(--surface-2);border:1px solid var(--border-strong);padding:5px 11px;
+  border-radius:8px;cursor:pointer;flex:none}
+.cb-copy:hover{color:var(--accent-2);border-color:var(--accent-2)}
+.codeblock pre{margin:0;padding:14px 16px;overflow:auto;max-height:540px}
+.codeblock pre code{font-family:var(--font-mono);font-size:12.8px;line-height:1.6;color:var(--code-fg);white-space:pre}
+
+/* ---------- badges ---------- */
+.badge{display:inline-block;font-family:var(--font-mono);font-size:10.5px;font-weight:700;
+  letter-spacing:.07em;text-transform:uppercase;padding:3px 9px;border-radius:999px;
+  border:1px solid;white-space:nowrap}
+.b-crit{color:var(--danger);background:var(--danger-soft);border-color:var(--danger-border)}
+.b-high{color:var(--high);background:var(--high-soft);border-color:rgba(251,146,60,.45)}
+.b-med{color:var(--warning);background:var(--warn-soft);border-color:var(--warn-border)}
+.b-low{color:var(--low);background:var(--low-soft);border-color:rgba(74,222,128,.45)}
+.b-info{color:var(--accent);background:var(--accent-soft);border-color:var(--accent-border)}
+.b-cat{color:var(--violet);background:var(--violet-soft);border-color:var(--violet-border)}
+
+/* ---------- key/value lists ---------- */
+.kv{display:grid;grid-template-columns:minmax(130px,max-content) 1fr;gap:9px 18px;margin:14px 0}
+.kv dt{font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.05em;padding-top:2px}
+.kv dd{margin:0;font-size:14.5px}
+@media (max-width:640px){.kv{grid-template-columns:1fr;gap:2px 0}.kv dd{margin-bottom:8px}}
+
+/* ---------- timeline ---------- */
+.tl{position:relative;margin:18px 0 8px;padding-left:30px;list-style:none}
+.tl::before{content:"";position:absolute;left:10px;top:6px;bottom:10px;width:2px;
+  background:var(--border-strong);border-radius:2px}
+.tl li{position:relative;padding-bottom:20px}
+.tl li:last-child{padding-bottom:4px}
+.tl li::before{content:"";position:absolute;left:-26px;top:6px;width:11px;height:11px;
+  border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.tl-when{font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:var(--accent-2);
+  display:block;margin-bottom:4px;letter-spacing:.04em}
+.tl h4{margin:0 0 6px}
+.tl p{margin:0 0 8px}
+
+/* ---------- checklists ---------- */
+ul.checks,ul.cross{list-style:none;padding-left:2px}
+ul.checks li{position:relative;padding-left:26px}
+ul.checks li::before{content:"\2713";position:absolute;left:2px;top:0;color:var(--success);font-weight:700}
+ul.cross li{position:relative;padding-left:26px}
+ul.cross li::before{content:"\2717";position:absolute;left:2px;top:0;color:var(--danger);font-weight:700}
+
+/* ---------- buttons & chips ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  font-family:var(--font-sans);font-size:13.5px;font-weight:600;padding:9px 15px;
+  border-radius:10px;border:1px solid var(--border-strong);background:var(--surface-2);
+  color:var(--text);cursor:pointer;text-decoration:none}
+.btn:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn-primary:hover{color:#fff;filter:brightness(1.08)}
+.chip-btn{font-family:var(--font-mono);font-size:12px;font-weight:600;padding:6px 11px;
+  border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-2);
+  color:var(--muted);cursor:pointer}
+.chip-btn:hover{color:var(--text);border-color:var(--accent)}
+.chip-btn.active{color:var(--accent);background:var(--accent-soft);border-color:var(--accent)}
+.speed-group{display:inline-flex;gap:6px}
+
+/* ---------- simulation ---------- */
+.sim-shell{padding:18px}
+.sim-canvas-wrap{position:relative;border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;background:var(--surface-2);overflow-x:auto}
+.sim-canvas-wrap canvas{display:block;width:100%;min-width:660px;height:auto}
+.sim-tip{position:absolute;pointer-events:none;background:var(--elevated);
+  border:1px solid var(--border-strong);color:var(--text);font-size:12.5px;line-height:1.45;
+  padding:8px 11px;border-radius:8px;max-width:250px;box-shadow:var(--shadow);
+  opacity:0;transition:opacity .12s;z-index:6}
+.sim-tip.show{opacity:1}
+.sim-tip b{color:var(--accent-2)}
+.sim-bar{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
+.sim-steps{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.sim-out{margin-top:14px}
+.sim-cap{border:1px solid var(--accent-border);border-left:3px solid var(--accent);
+  background:var(--accent-soft);padding:12px 14px;border-radius:10px;font-size:14.5px}
+.sim-cap p{margin:0;max-width:none}
+.sim-def{margin-top:10px}
+.sim-evi{margin-top:10px;font-family:var(--font-mono);font-size:12.5px;color:var(--muted);
+  border:1px dashed var(--border-strong);border-radius:10px;padding:10px 13px}
+details.sim-alt{margin-top:14px;border:1px solid var(--border);border-radius:10px;
+  padding:12px 16px;background:var(--surface-2)}
+details.sim-alt summary{cursor:pointer;font-weight:600;font-size:14px}
+details.sim-alt[open] summary{margin-bottom:8px}
+.sim-story{margin:8px 0 2px;padding-left:22px}
+.sim-story li{margin-bottom:10px;font-size:14.5px}
+.sim-story li strong{color:var(--accent-2)}
+
+/* ---------- floating controls ---------- */
+.fab-stack{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;
+  gap:8px;z-index:64;align-items:flex-end}
+.fab{font-family:var(--font-mono);font-size:12.5px;font-weight:700;padding:10px 14px;
+  border-radius:12px;border:1px solid var(--border-strong);background:var(--elevated);
+  color:var(--text);cursor:pointer;box-shadow:var(--shadow)}
+.fab:hover{border-color:var(--accent);color:var(--accent)}
+.fab-contents{display:none}
+#atk-toTop{opacity:0;pointer-events:none;transform:translateY(8px);transition:opacity .2s,transform .2s}
+#atk-toTop.show{opacity:1;pointer-events:auto;transform:none}
+@media (max-width:1040px){.fab-contents{display:inline-flex}}
+
+/* ---------- mobile overlay ---------- */
+.ov{position:fixed;inset:0;z-index:70;visibility:hidden;transition:visibility 0s .24s}
+.ov.open{visibility:visible;transition-delay:0s}
+.ov-back{position:absolute;inset:0;background:rgba(4,8,18,.6);opacity:0;transition:opacity .2s}
+.ov.open .ov-back{opacity:1}
+.ov-panel{position:absolute;top:0;left:0;bottom:0;width:min(330px,88vw);background:var(--surface);
+  border-right:1px solid var(--border);transform:translateX(-103%);transition:transform .24s ease;
+  overflow-y:auto;padding:16px}
+.ov.open .ov-panel{transform:none}
+.ov-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.ov-head strong{font-size:15px}
+
+/* ---------- responsive ---------- */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{display:none}
+}
+@media (max-width:640px){
+  .facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hero{padding:30px 0 6px}
+  .sim-bar .btn{flex:1 1 auto}
+}
+@media (max-width:430px){
+  .facts{grid-template-columns:1fr}
+  .hero h1{font-size:1.7rem}
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;
+    transition-duration:.01ms !important}
+}
+
+/* ---------- print ---------- */
+@media print{
+  #atk-progress,.toc,.fab-stack,.ov,.sim-bar,.sim-steps,.cb-copy,.toc-hint,.sim-tip{display:none !important}
+  body{background:#fff;color:#000;font-size:11.5pt}
+  .layout{display:block;max-width:none;padding:0}
+  .card,.callout,.codeblock,.fact{box-shadow:none;break-inside:avoid}
+  .codeblock{background:#f3f4f8;border-color:#c8cdd8}
+  .codeblock pre code{color:#111}
+  .codeblock pre{max-height:none;white-space:pre-wrap}
+  a{color:#0645ad;text-decoration:underline}
+  .section{break-inside:auto}
+  h2,h3{break-after:avoid}
+  .tbl-wrap{overflow:visible}
+  table{min-width:0}
+}
+/* ATK-BASE-CSS-v1 END */
+</style>
+</head>
+<body>
+
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1583.002"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div id="atk-progress" aria-hidden="true"></div>
+
+<div class="hero wrap">
+  <span class="kicker">MITRE ATT&amp;CK · SUB-TECHNIQUE OF T1583</span>
+  <h1><span class="tid">T1583.002</span> DNS Server</h1>
+  <p class="hero-intro">Some attackers do not abuse other people&rsquo;s DNS (Domain Name System: the service that turns names into IP addresses). They build their own: they register domains, rent cheap servers, and run authoritative nameservers on them. With fast flux the answers change every minute, so C2 (command and control: the channel an attacker uses to send commands to malware) and malware delivery stay hard to block.</p>
+  <ul class="chips">
+    <li class="chip"><b>Parent:</b> T1583 Acquire Infrastructure</li>
+    <li class="chip"><b>Tactic:</b> Resource Development</li>
+    <li class="chip"><b>Platforms:</b> PRE (pre-compromise, per ATT&amp;CK)</li>
+    <li class="chip"><b>Added:</b> ATT&amp;CK v8 (2020)</li>
+    <li class="chip"><b>Guide:</b> v2.0 (audited &amp; corrected)</li>
+    <li class="chip"><b>Detection:</b> passive DNS, TTL analytics, NS churn</li>
+    <li class="chip"><b>Related:</b> T1568.001 Fast Flux DNS</li>
+  </ul>
+  <div class="facts">
+    <div class="fact"><div class="k">What it is</div><div class="v">The adversary registers a domain, rents servers, and runs their own authoritative DNS &mdash; often with rotating answers (fast flux).</div></div>
+    <div class="fact"><div class="k">Role in attack chain</div><div class="v">Resource Development. The DNS server later carries DNS C2 (T1071.004), payload delivery, and phishing hosting.</div></div>
+    <div class="fact"><div class="k">Detection difficulty</div><div class="v">Medium. The servers sit outside your estate; you see them only through passive DNS and resolver logs.</div></div>
+    <div class="fact"><div class="k">Main data sources</div><div class="v">Passive DNS; resolver query logs; TTL observations; NS change history; threat-intel feeds.</div></div>
+  </div>
+</div>
+
+<div class="layout">
+  <nav class="toc" id="atk-toc" aria-label="Table of contents">
+    <div class="toc-title">On this page</div>
+    <div class="toc-list"></div>
+    <noscript><p class="toc-hint">Enable JavaScript to see the table of contents. All content on this page works without it.</p></noscript>
+  </nav>
+
+  <main class="main" id="atk-main">
+
+    <section class="section" id="sec-1-overview">
+      <div class="sec-head"><span class="sec-num">1</span><h2>Overview</h2></div>
+      <p class="sec-intro">What this technique is in plain words, why attackers build their own DNS, and where it sits in the attack chain.</p>
+
+      <p>DNS (Domain Name System) is the service that turns names such as <span class="mono">bank.example</span> into IP addresses. An <strong>authoritative nameserver</strong> is the DNS server that holds the official answers for a domain. With T1583.002, the adversary sets that server up themselves instead of using a normal provider. They register a domain (see T1583.001). They rent one or more cheap virtual private servers (VPS: a rented slice of a physical server). Then they install DNS software such as BIND, NSD, or PowerDNS and answer queries on their own terms.</p>
+
+      <p>Owning the DNS server gives the attacker real power. They can point one name at many IP addresses and change those addresses every minute. They can give different answers to different askers, for example only answering malware that asks in a special way. They can also hide data inside DNS records. This family of tricks is called <strong>fast flux</strong>: <strong>IP flux</strong> when the A records (address records) rotate, and <strong>NS flux</strong> when the nameserver records themselves rotate.</p>
+
+      <div class="grid-3">
+        <div class="card"><h4>Own server, not a hijack</h4><p>The attacker does not break into someone else&rsquo;s DNS. They build their own. That is cheaper, faster, and leaves no victim who could raise an alarm. It also gives full control of every answer, including the TTL (time to live: how long a DNS answer may be reused).</p></div>
+        <div class="card"><h4>IP flux vs NS flux</h4><p>IP flux: one domain returns many rotating A records with a low TTL, for example 60 seconds. NS flux: the nameserver hostnames for the domain rotate too, so even the &ldquo;who answers for this zone&rdquo; layer keeps moving. Big campaigns use both at once.</p></div>
+        <div class="card"><h4>Why attackers like it</h4><p>Cheap VPS nodes are easy to replace. If one IP is blocked, the next answer already waits. If one nameserver is seized, another takes over. This spreads C2 and malware delivery across many throwaway servers and gives takedown resistance.</p></div>
+      </div>
+
+      <p>Where it fits: T1583.002 belongs to the <strong>Resource Development</strong> tactic. The DNS infrastructure built here is used later by T1071.004 (DNS application layer protocol C2), T1568.001 (Fast Flux DNS), and delivery techniques such as T1566 (phishing) and T1189 (drive-by compromise). The page teaches you what the infrastructure looks like, what it leaves behind, and how to detect it.</p>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Asset the attacker needs</th><th>What they do</th><th>ATT&amp;CK</th></tr></thead>
+          <tbody>
+            <tr><td>A domain</td><td>Register one or more harmless-looking domains</td><td><span class="mono">T1583.001</span> Domains</td></tr>
+            <tr><td>Servers</td><td>Rent cheap VPS nodes from several hosters</td><td><span class="mono">T1583.003</span> Virtual Private Server</td></tr>
+            <tr><td>The DNS service</td><td>Install authoritative nameserver software on the nodes</td><td><span class="mono">T1583.002</span> (this page)</td></tr>
+            <tr><td>A pool of extra nodes</td><td>Take over bots to add flux capacity</td><td><span class="mono">T1583.005</span> Botnet</td></tr>
+            <tr><td>Hosting for drops</td><td>Add hosting for phishing pages and payloads</td><td><span class="mono">T1583.006</span> Web Services</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Key facts</h4>
+      <dl class="kv">
+        <dt>ATT&amp;CK ID</dt><dd>T1583.002 &mdash; Acquire Infrastructure: DNS Server</dd>
+        <dt>Parent</dt><dd>T1583 &mdash; Acquire Infrastructure</dd>
+        <dt>Tactic</dt><dd>Resource Development</dd>
+        <dt>Platforms</dt><dd>PRE (pre-compromise, per ATT&amp;CK)</dd>
+        <dt>Version</dt><dd>1.0 &mdash; created 01 October 2020 (ATT&amp;CK v8); last modified 24 October 2025</dd>
+        <dt>Reported users</dt><dd>Axiom (dynamic DNS services), HEXANE (custom DNS servers sending commands via TXT records), Sea Turtle (adversary-in-the-middle DNS servers) &mdash; per ATT&amp;CK procedure examples</dd>
+        <dt>Detection</dt><dd>Passive DNS, resolver logs, TTL analytics, NS churn monitoring</dd>
+      </dl>
+
+      <div class="callout note"><span class="co-ico">Note</span><div class="co-body"><p><strong>T1583.002 vs T1568.001 &mdash; build vs use.</strong> T1583.002 is the moment the adversary acquires and configures DNS infrastructure. T1568.001 (Fast Flux DNS) is the later, operational use of fast flux to hide C2. Defenders see the operational side most often, but the acquisition side leaves its own clues: new domains, new nameservers, registrar and hosting records.</p></div></div>
+    </section>
+
+    <section class="section" id="sec-2-simulation">
+      <div class="sec-head"><span class="sec-num">2</span><h2>Animated Simulation</h2></div>
+      <p class="sec-intro">Watch the full fast-flux story play out: setup, rotation, abuse, and the SOC answer.</p>
+
+      <div class="card sim-shell">
+        <div class="sim-canvas-wrap">
+          <canvas id="simCanvas" width="840" height="540" role="img" aria-label="Animated diagram: an attacker registers a domain, runs an authoritative DNS server with fast-flux A and NS records, a victim resolves changing IPs and reaches C2 through flux nodes, and the SOC detects the flux and blocks the domain."></canvas>
+          <div class="sim-tip" id="simTip" aria-hidden="true"></div>
+        </div>
+        <div class="sim-bar">
+          <button class="btn btn-primary" id="simPlay" type="button">Play</button>
+          <button class="btn" id="simRestart" type="button">Restart</button>
+          <span class="speed-group" id="simSpeed" role="group" aria-label="Playback speed">
+            <button class="chip-btn" type="button" data-speed="0.5">0.5&times;</button>
+            <button class="chip-btn" type="button" data-speed="1" aria-pressed="true">1&times;</button>
+            <button class="chip-btn" type="button" data-speed="2">2&times;</button>
+          </span>
+        </div>
+        <div class="sim-steps" id="simChips" role="group" aria-label="Simulation steps"></div>
+        <div class="sim-out" aria-live="polite">
+          <div class="sim-cap"><p id="simCap">Step 1 of 8: The attacker registers a domain and rents two cheap VPS nodes. The domain will soon answer for both servers.</p></div>
+          <div class="callout good sim-def"><span class="co-ico">SOC view</span><div class="co-body"><p id="simDef">Nothing is visible inside the estate yet. The only early clue sits outside: a fresh domain registration with unknown nameservers.</p></div></div>
+          <div class="sim-evi" id="simEvi">Evidence left behind: registrar WHOIS record; VPS hosting order</div>
+        </div>
+        <details class="sim-alt">
+          <summary>Written version of all steps (accessibility)</summary>
+          <ol class="sim-story">
+            <li><strong>1. Register and rent.</strong> The attacker registers a domain and rents two cheap VPS nodes. The domain will soon answer for both.</li>
+            <li><strong>2. Install DNS, TTL 60.</strong> They install authoritative DNS software and set the TTL (the reuse time for DNS answers) to 60 seconds, so old answers expire fast.</li>
+            <li><strong>3. IP flux.</strong> They rotate the A records across both nodes. One name now points at many IP addresses that change every minute (IP flux).</li>
+            <li><strong>4. NS flux.</strong> They also rotate the nameserver records themselves, so the &ldquo;who answers this zone&rdquo; layer keeps moving (NS flux).</li>
+            <li><strong>5. Victim resolves.</strong> The victim resolves the name again and again and gets a different IP each time, because the TTL is only 60 seconds.</li>
+            <li><strong>6. Payload and C2.</strong> The payload download and the C2 (command and control) traffic go through whichever flux node answered last.</li>
+            <li><strong>7. SOC spots flux.</strong> The SOC&rsquo;s passive DNS system counts the answers: high IP cardinality, a 60-second TTL, and constant NS churn for one domain. A flux-detection alert fires.</li>
+            <li><strong>8. Block and report.</strong> The SOC blocks the domain at the resolver and reports the nameservers to the hosting provider for abuse. They keep watching for re-delegation.</li>
+          </ol>
+        </details>
+        <noscript><p class="muted small">The animated canvas needs JavaScript. The written steps above tell the same story.</p></noscript>
+      </div>
+
+      <div class="grid-2">
+        <div class="card"><h4>The players</h4>
+          <ul>
+            <li><strong>Attacker</strong> &mdash; registers the domain, rents the nodes, and controls the DNS zone from one control host.</li>
+            <li><strong>Auth DNS</strong> &mdash; the attacker-run authoritative nameserver. It answers every query for the zone with a 60-second TTL.</li>
+            <li><strong>Flux node A / B</strong> &mdash; cheap rented VPS servers. Their IPs go in and out of the A and NS records while they serve payloads or C2.</li>
+            <li><strong>Victim</strong> &mdash; an internal workstation that resolves the flux name and connects to whichever IP answered.</li>
+            <li><strong>Resolver</strong> &mdash; your recursive DNS server. Its logs are the single best place to spot flux.</li>
+            <li><strong>SOC</strong> &mdash; the security operations center, watching passive DNS and resolver telemetry.</li>
+          </ul>
+        </div>
+        <div class="card"><h4>What to watch</h4>
+          <ul>
+            <li><strong>IP cardinality</strong> &mdash; how many unique IPs one parent domain returns in a short window. Normal sites stay low.</li>
+            <li><strong>TTL floor</strong> &mdash; answers with a 60-second (or lower) TTL for a young domain are a classic flux marker.</li>
+            <li><strong>NS churn</strong> &mdash; nameserver records that change several times a day. Normal domains change NS a few times a year.</li>
+            <li><strong>NXDOMAIN bursts</strong> &mdash; many failed lookups followed by success is the signature of hard flux.</li>
+            <li><strong>Egress shape</strong> &mdash; one host connecting to many short-lived IPs on the same name and port.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="sec-3-red-team">
+      <div class="sec-head"><span class="sec-num">3</span><h2>Red Team Perspective</h2></div>
+      <p class="sec-intro">Why attackers build their own DNS, how the setup works in principle, and where it usually breaks.</p>
+
+      <div class="grid-2">
+        <div class="card"><h4>When and why attackers use it</h4>
+          <p>Attackers rent their own DNS servers when they need the infrastructure to survive. A single web host can be blocked in minutes; a fast-flux network cannot. Running the nameserver also lets them shape the answers: the same name can return a benign page to a curious analyst and a payload to the malware that asks the right way. ATT&amp;CK documents this control advantage explicitly for T1583.002.</p>
+          <p>The costs are low. Two or three small VPS nodes, one cheap domain, and free DNS software are enough to start. That is why ransomware crews, banking trojan operators, and information-stealer campaigns all reuse this pattern.</p>
+        </div>
+        <div class="card"><h4>How the setup works (conceptual)</h4>
+          <ol>
+            <li>Register one or more short, harmless-looking domains (T1583.001).</li>
+            <li>Rent two or more VPS nodes from different hosters (T1583.003).</li>
+            <li>Install authoritative DNS software (BIND, NSD, PowerDNS) on the nodes.</li>
+            <li>Set the zone TTL to 60 seconds or lower so answers expire fast.</li>
+            <li>Put several A records in the zone and rotate them with a small script.</li>
+            <li>Optionally rotate the NS records through the registrar&rsquo;s API (NS flux).</li>
+            <li>Keep the flux controller on a separate, well-hidden &ldquo;mother node&rdquo;.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">lab-zone: db.corp-lab.net (lab-only)</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-log">; Lab-only example — never use against systems you do not own.
+; Documentation IPs (RFC 5737) and a lab-only zone name.
+$TTL 60
+@  IN SOA ns1.corp-lab.net. hostmaster.corp-lab.net. (
+      2026010201 ; serial
+      900        ; refresh
+      300        ; retry
+      604800     ; expire
+      60 )       ; minimum / negative-caching TTL
+@   IN NS  ns1.corp-lab.net.
+@   IN NS  ns2.corp-lab.net.
+@   IN A   203.0.113.10
+@   IN A   203.0.113.11
+ns1 IN A   203.0.113.10
+ns2 IN A   203.0.113.11</code></pre></div>
+      <p class="muted small">This zone shows the shape of a flux zone: a low TTL on every record, several A answers for one name, and nameservers that resolve to the same rotating hosts. In a real campaign the attacker adds automation that rewrites these records every few minutes.</p>
+
+      <h4>Prerequisites</h4>
+      <ul>
+        <li>A registered domain with a registrar that allows fast NS changes (T1583.001).</li>
+        <li>Two or more rented servers, ideally spread over hosters and countries (T1583.003).</li>
+        <li>DNS software and a small rotation script; no special hardware is needed.</li>
+        <li>Patience to warm the domain so it does not look freshly created (domain aging).</li>
+      </ul>
+
+      <h4>Variations you will meet</h4>
+      <div class="grid-3">
+        <div class="card"><h4>IP flux (soft flux)</h4><p>A records rotate across rented nodes with a 60-second TTL. The client never notices; the SOC sees one name with dozens of answers. This is the delivery workhorse.</p></div>
+        <div class="card"><h4>NS flux (hard flux)</h4><p>The NS records of the zone rotate too, so the zone itself jumps between nameservers. Takedowns must chase the delegation, not just the IPs. Seizing one node is not enough.</p></div>
+        <div class="card"><h4>TXT-record C2</h4><p>The attacker hides commands in TXT record answers, as reported for the HEXANE group&rsquo;s custom DNS servers. Traffic looks like normal lookups and sails past many proxies.</p></div>
+      </div>
+
+      <h4>Common attacker mistakes</h4>
+      <ul class="cross">
+        <li>The rotation is too regular. Passive DNS still shows one name with extreme IP cardinality &mdash; the pattern does not hide from statistics.</li>
+        <li>They reuse the same bulletproof nameserver across campaigns, which links the campaigns together.</li>
+        <li>They forget the TTL on the NS records, so the old delegation stays cached and the flux lags behind.</li>
+        <li>They keep the registrar account weak after abuse reports, which is how seizures succeed.</li>
+      </ul>
+
+      <div class="callout warn"><span class="co-ico">Warning</span><div class="co-body"><p><strong>Lab only.</strong> Everything on this page is for defense and education. Stand up flux-like DNS only in a lab zone you own and only with documentation IPs. Running DNS infrastructure to attack, scan, or deceive systems you do not own is a crime in most countries, and hostile traffic from rented nodes is traced back to the paying customer quickly.</p></div></div>
+    </section>
+
+    <section class="section" id="sec-4-blue-team">
+      <div class="sec-head"><span class="sec-num">4</span><h2>Blue Team Perspective</h2></div>
+      <p class="sec-intro">What fast-flux DNS looks like from inside your network, and where to look first.</p>
+
+      <p>You will almost never see the attacker&rsquo;s servers directly. They live outside your estate. What you see is your own resolver&rsquo;s view of the world. It shows the names your users ask for and the answers that came back. It also shows how long those answers stay valid and where your endpoints connect afterwards. That view is enough. Fast flux cannot hide its defining behavior &mdash; one name, many answers, short TTL, moving nameservers.</p>
+
+      <h4>Artifacts a flux campaign leaves on your side</h4>
+      <ul class="checks">
+        <li>Passive DNS history for the domain: dozens of unique A answers with a 60-second TTL.</li>
+        <li>NS change history: the nameserver set changes several times within a day or week.</li>
+        <li>Resolver logs: the same parent name answered by different IPs for the same client within minutes.</li>
+        <li>Proxy and firewall logs: one internal host opening short connections to many unrelated IP ranges on one name.</li>
+        <li>NXDOMAIN bursts followed by success for the same parent name (hard flux settling).</li>
+        <li>A young domain (days or weeks old) doing all of the above.</li>
+      </ul>
+
+      <div class="grid-2">
+        <div class="card"><h4>Where to look</h4>
+          <ul>
+            <li><strong>Resolver query logs</strong> &mdash; Unbound, BIND, InfoBlox, Windows DNS, or cloud resolver logs shipped to the SIEM.</li>
+            <li><strong>Zeek DNS logs</strong> &mdash; <span class="mono">dns.log</span> with query, answers, and TTL fields.</li>
+            <li><strong>Endpoint DNS events</strong> &mdash; Sysmon EventID 22 (DNS query) shows which process asked.</li>
+            <li><strong>Passive DNS</strong> &mdash; vendor console or feed for A/NS history and first-seen dates.</li>
+            <li><strong>Threat-intel feeds</strong> &mdash; blocklist hits for the domain or its nameservers.</li>
+            <li><strong>Egress flow records</strong> &mdash; which internal hosts talked to the answered IPs.</li>
+          </ul>
+        </div>
+        <div class="card"><h4>Why it matters</h4>
+          <p>DNS is the last common hop before C2. Almost every malware family must resolve a name before it can fetch a payload or beacon out. A block at the resolver costs nothing to deploy, works for every device that uses the resolver, and cannot be uninstalled by the malware. That is why flux detection belongs at the resolver, not only in endpoint tools.</p>
+          <p>It also matters for scope: one flux domain often serves a whole campaign, so a single well-documented block can protect thousands of hosts at once.</p>
+        </div>
+      </div>
+
+      <h4>Quick triage flow</h4>
+      <ol>
+        <li><strong>Pull the passive DNS record</strong> for the suspicious domain: first seen, unique IPs, NS history.</li>
+        <li><strong>Count the answers</strong>: unique IPs in the last 5 minutes, lowest TTL observed.</li>
+        <li><strong>Check the nameservers</strong>: are they young, shared with many other zones, or known bulletproof hosts?</li>
+        <li><strong>Find your clients</strong>: which internal hosts queried the name, which process asked, and how often.</li>
+        <li><strong>Follow the answers</strong>: did anyone connect to the returned IPs? Collect the flow records as evidence.</li>
+        <li><strong>Block and report</strong>: add the domain (not just the IPs) to the resolver RPZ, then report the nameservers to the hoster and the blocklist feeds.</li>
+      </ol>
+
+      <div class="callout danger"><span class="co-ico">Danger</span><div class="co-body"><p><strong>Do not block flux IPs one by one.</strong> The attacker rotates answers faster than you can paste them into a blocklist, and each block entry ages out with the TTL. Block the domain at the resolver, and only use IP blocks for immediate containment of an active session.</p></div></div>
+
+      <div class="callout good"><span class="co-ico">Good practice</span><div class="co-body"><p>Force every endpoint to use your internal resolvers and block direct outbound DNS (TCP/UDP 53) to the internet. Without this one network control, malware can pick its own nameserver and your resolver logs &mdash; your best flux sensor &mdash; stay empty.</p></div></div>
+    </section>
+
+    <section class="section" id="sec-5-detection">
+      <div class="sec-head"><span class="sec-num">5</span><h2>Detection Engineering Deep Dive</h2></div>
+      <p class="sec-intro">From regulation mapping and intel sources to ranked threats, log patterns, and ready-to-use Sigma and Splunk rules.</p>
+
+      <h3 class="sub-h" id="sec-5-1-regulation"><span class="sub-num">5.1</span> Regulation Mapping</h3>
+      <p>DNS-flux detection is not a legal requirement by name, but several frameworks expect exactly the monitoring and threat-intelligence work this page describes. Use this table when an auditor asks why resolver logging and flux analytics exist.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+          <tbody>
+            <tr><td>GDPR</td><td>Art. 32 &mdash; security of processing</td><td>Malware delivered over flux domains endangers the confidentiality and integrity of personal data; monitoring is an expected technical safeguard.</td><td>DNS monitoring policy; resolver log retention; incident records for DNS-borne malware.</td></tr>
+            <tr><td>HIPAA Security Rule</td><td>164.308(a)(5)&ndash;(6)</td><td>Requires protection from malicious software and periodic technical evaluation; flux domains are a common malware delivery path.</td><td>Security awareness records; risk analysis updates; egress and DNS review evidence.</td></tr>
+            <tr><td>ISO/IEC 27001:2022</td><td>A.8.16 monitoring activities; A.5.7 threat intelligence</td><td>Networks must be monitored for anomalous behavior, and intel about flux networks must be collected and applied.</td><td>SIEM use-case catalogue; intel source list; alert tuning records.</td></tr>
+            <tr><td>SOC 2</td><td>CC7.2 / CC7.3</td><td>Requires detection of anomalous events and a defined evaluation and response process.</td><td>Detection rule inventory; triage tickets for flux alerts; documented response.</td></tr>
+            <tr><td>PCI DSS 4.0</td><td>Req 10.2 (audit logging); 12.6.3 (security awareness)</td><td>DNS activity must be logged as part of audit logging, and staff must be trained to spot phishing hosted on flux domains.</td><td>Resolver log retention proof; phishing program material; blocklist change history.</td></tr>
+            <tr><td>NIST CSF 2.0</td><td>ID.RA-02 (threat intel received); DE.CM-01 (networks monitored)</td><td>Flux indicators arrive from external intel, and network monitoring must catch the internal side of the pattern.</td><td>Intel feeds in place; monitoring coverage statement; detection test results.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="sub-h" id="sec-5-2-threat-intel"><span class="sub-num">5.2</span> Threat Intelligence</h3>
+      <p>Threat intelligence for T1583.002 is mostly about history. Passive DNS collects DNS answers at many observation points and stores them as a time series. It turns one suspicious answer into a full story: when the domain appeared, how many IPs it used, and how fast they rotated. It also dates how often the nameservers changed. Build your intel workflow around that story.</p>
+
+      <div class="grid-3">
+        <div class="card"><h4>Passive DNS providers</h4><p>Farsight DNSDB and RiskIQ PassiveTotal (now Microsoft Defender Threat Intelligence) store years of A and NS answers. Use them to measure cardinality, TTL, and NS churn over time, and to date a domain&rsquo;s first malicious use.</p></div>
+        <div class="card"><h4>Blocklist trackers</h4><p>The abuse.ch URLhaus and ThreatFox feeds, Spamhaus DBL, and SURBL list flux domains hours after they appear. Consume them at the resolver as an RPZ (response policy zone: a feed-driven blocklist) and watch the hit counts.</p></div>
+        <div class="card"><h4>Sample repositories</h4><p>MalwareBazaar ties malware samples to the C2 domains they used. When you find new flux nameservers, report them so the feeds and the research community benefit.</p></div>
+        <div class="card"><h4>Research and vendor blogs</h4><p>Academic fast-flux studies (for example the long-running measurements by Holz and colleagues) and vendor posts on cases such as Sea Turtle or the Lyceum DNS backdoor describe patterns worth copying into rules.</p></div>
+        <div class="card"><h4>ISAC and peer sharing</h4><p>Sector ISACs exchange sinkhole lists and re-delegation warnings. Contribute your own blocked domains &mdash; sharing cuts the community&rsquo;s response time sharply.</p></div>
+        <div class="card"><h4>Internal telemetry</h4><p>Your resolver logs, NXDOMAIN statistics, and your own passive DNS view are the freshest sources you own. They see the campaign before any vendor does.</p></div>
+      </div>
+
+      <div class="callout note"><span class="co-ico">Note</span><div class="co-body"><p><strong>Known infrastructure patterns.</strong> The Avalanche fast-flux platform carried dozens of malware families until its takedown in November 2016 (see section 6). Long-running fast-flux botnets are built from infected home devices and routers. Bulletproof NS providers &mdash; hosting firms that ignore abuse reports &mdash; share one nameserver across many low-reputation zones, which is itself a detection signal.</p></div></div>
+
+      <h4>Actors reported using this technique</h4>
+      <p>MITRE ATT&amp;CK lists three groups whose reported operations used adversary-controlled DNS infrastructure. The claims below are taken verbatim from ATT&amp;CK procedure examples, so treat them as vendor reporting, not as confirmed convictions.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Group</th><th>ATT&amp;CK-reported use of DNS infrastructure</th><th>Source</th><th>Confidence</th><th>Why it matters here</th></tr></thead>
+          <tbody>
+            <tr><td><span class="mono">Sea Turtle</span> (G1041)</td><td>Built adversary-in-the-middle DNS servers to impersonate legitimate services that were later used to capture credentials. Public reporting ties this to the 2018&ndash;2019 DNS-hijacking campaign.</td><td>Cisco Talos, 2019</td><td><span class="badge b-high">High</span></td><td>The mature end state: hijacked or attacker-run nameservers serving lookalike sites for credential capture.</td></tr>
+            <tr><td><span class="mono">Axiom</span> (G0001)</td><td>Has acquired dynamic DNS services for use in the targeting of intended victims.</td><td>Novetta, 2014</td><td><span class="badge b-med">Medium</span></td><td>Even rented dynamic-DNS accounts count as acquiring this infrastructure, and the pattern is old and persistent.</td></tr>
+            <tr><td><span class="mono">HEXANE</span> (G1001)</td><td>Has set up custom DNS servers to send commands to compromised hosts via TXT records.</td><td>Zscaler (Lyceum DNS research), June 2022</td><td><span class="badge b-med">Medium</span></td><td>Links this page to DNS C2 over TXT records; watch for TXT-heavy sessions to rare nameservers.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Confidence levels and how to act</h4>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Level</th><th>How to judge</th><th>How to act</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge b-high">High</span></td><td>Two or more independent vendors report it, or passive DNS confirms the flux pattern directly.</td><td>Block at the resolver, report the nameservers for abuse, and hunt your estate for earlier contact.</td></tr>
+            <tr><td><span class="badge b-med">Medium</span></td><td>One reputable vendor or one internal telemetry match.</td><td>Put the domain on a watchlist, monitor hits, and run a short hunt before blocking.</td></tr>
+            <tr><td><span class="badge b-low">Low</span></td><td>Unverified social post or a single unproven feed entry.</td><td>Track in the intel platform only. Do not auto-block; check passive DNS yourself first.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Collect, analyze, apply</h4>
+      <ol>
+        <li><strong>Collect</strong>: subscribe to at least one passive DNS source, two blocklist feeds, and your own resolver logs. Keep a sinkholed-domains watchlist.</li>
+        <li><strong>Analyze</strong>: for every candidate domain, measure IP cardinality, TTL floor, NS churn, and domain age. Compare against the CDN allowlist before you call it flux.</li>
+        <li><strong>Apply</strong>: push confirmed domains to the resolver RPZ, name the nameservers in abuse reports, and feed your detections back into the watchlist.</li>
+      </ol>
+
+      <h3 class="sub-h" id="sec-5-3-threat-ranking"><span class="sub-num">5.3</span> Threats Ranking and Categorization</h3>
+      <p>The eight threats below are the realistic ways T1583.002 infrastructure harms an organization. They are ranked honestly: most DNS-flux threats are High or Medium, and the ranking reflects reach and impact across the estate, not fear.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Threat</th><th>Severity</th><th>Platform</th><th>Description</th><th>Preconditions</th><th>Impact &amp; justification</th></tr></thead>
+          <tbody>
+            <tr><td>T1</td><td>IP-flux malware delivery domain</td><td><span class="badge b-high">High</span></td><td><span class="badge b-cat">Network</span></td><td>A young domain answers with rotating A records and a 60-second TTL; endpoints fetch payloads from whichever node answered.</td><td>Freshly registered domain; low-TTL zone; several rented nodes.</td><td>Hides the real delivery host, defeats IP blocks, and scales to many victims at once.</td></tr>
+            <tr><td>T2</td><td>NS-flux C2 domain</td><td><span class="badge b-high">High</span></td><td><span class="badge b-cat">Network</span></td><td>The nameserver records of a C2 zone rotate across bulletproof hosts, keeping the channel alive after partial seizures.</td><td>Registrar API control; several NS hosts; low NS TTL.</td><td>Takedowns lose effect, the C2 zone survives, and infected hosts reconnect from many networks.</td></tr>
+            <tr><td>T3</td><td>DNS tunneling infrastructure</td><td><span class="badge b-high">High</span></td><td><span class="badge b-cat">Network</span></td><td>Data hidden in DNS queries (long labels, TXT bursts) crosses the resolver to an attacker-run authoritative server.</td><td>Malware on an endpoint; resolver forwards external DNS; attacker controls the NS.</td><td>Data theft (exfiltration: sending stolen data out of your network) and C2 ride inside ordinary UDP 53 traffic and bypass many proxy controls.</td></tr>
+            <tr><td>T4</td><td>One authoritative NS hosting many malicious domains</td><td><span class="badge b-med">Medium</span></td><td><span class="badge b-cat">Network</span></td><td>A single nameserver answers for dozens of unrelated low-reputation zones from the same bulletproof provider.</td><td>Bulletproof provider account; bulk domain registrations.</td><td>One takedown target for many campaigns; blocking it disrupts several crews at once.</td></tr>
+            <tr><td>T5</td><td>Re-delegation after takedown</td><td><span class="badge b-med">Medium</span></td><td><span class="badge b-cat">Network</span></td><td>A blocked or sinkholed domain returns days later on new nameservers and new IPs.</td><td>Domain still registered; attacker keeps registrar access.</td><td>One-time blocking is not enough; defenses need watchlist re-checks and monitoring.</td></tr>
+            <tr><td>T6</td><td>Low-TTL rotation to defeat IP blocks</td><td><span class="badge b-med">Medium</span></td><td><span class="badge b-cat">Network</span></td><td>Answers change inside the TTL window so reputation-scored IPs are skipped before a block lands.</td><td>Flux controller running; TTL of 60 seconds or lower.</td><td>IP blocklists age out immediately; forces defenders to domain-level controls.</td></tr>
+            <tr><td>T7</td><td>Open resolver used for amplification DDoS</td><td><span class="badge b-high">High</span></td><td><span class="badge b-cat">Network</span></td><td>The flux nodes run open recursive resolvers and are abused to bounce spoofed, oversized DNS answers at victims.</td><td>Nodes misconfigured as open resolvers; spoofable UDP paths.</td><td>Large amplification floods the target and can make your egress part of someone else&rsquo;s attack.</td></tr>
+            <tr><td>T8</td><td>Adversary sinkhole-lookalike to poison intel</td><td><span class="badge b-low">Low</span></td><td><span class="badge b-cat">Network</span></td><td>The attacker serves misleading &ldquo;clean&rdquo; answers or mimics sinkhole behavior to make analysts mislabel their infrastructure.</td><td>Researchers are watching the campaign; answers can be conditioned per asker.</td><td>Wastes takedown effort and pollutes blocklists; low direct impact but slows defenders.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted small">The top six (T1&ndash;T6) get full Sigma and Splunk coverage in section 5.5. T7 is best handled with resolver configuration (never answer the internet), and T8 with analyst awareness.</p>
+
+      <h3 class="sub-h" id="sec-5-4-logs-patterns"><span class="sub-num">5.4</span> Logs and Patterns</h3>
+      <p>Each threat above has a natural log source and a normal-versus-suspicious contrast. Use this table as the source map for your detection backlog.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Log source</th><th>Key fields</th><th>Normal behavior</th><th>Suspicious behavior</th><th>Detection idea</th></tr></thead>
+          <tbody>
+            <tr><td>T1</td><td>Zeek DNS / resolver logs</td><td><span class="mono">query, answers, TTLs, id.orig_h</span></td><td>Big CDN names rotate per region, with TTL 60&ndash;300 and a huge installed base.</td><td>Young domain with more than 20 unique IPs in 5 minutes and a TTL of 60.</td><td>Cardinality per 5-minute bucket per parent domain (Rule 1).</td></tr>
+            <tr><td>T2</td><td>Passive DNS + resolver NS queries</td><td><span class="mono">query, answers (NS), first_seen</span></td><td>NS records of normal domains stay stable for months.</td><td>The NS answer set changes five or more times in a day.</td><td>NS churn per domain per 24 hours (Rule 2).</td></tr>
+            <tr><td>T3</td><td>Resolver logs incl. TXT</td><td><span class="mono">query, qtype_name, label length</span></td><td>TXT bursts go to known mail and security services with short labels.</td><td>Long random labels, or 40+ TXT queries in 10 minutes to one young domain.</td><td>TXT burst plus long-label regex (Rule 3).</td></tr>
+            <tr><td>T4</td><td>Passive DNS</td><td><span class="mono">NS answer sets, zone counts</span></td><td>Major providers share nameservers across millions of legitimate zones.</td><td>One small NS host answers 50+ fresh, low-reputation domains.</td><td>Distinct zones per NS answer set, minus known providers (Rule 4).</td></tr>
+            <tr><td>T5</td><td>Resolver logs + sinkhole watchlist</td><td><span class="mono">query, answers, rcode_name</span></td><td>Blocked domains answer with your sinkhole IP only.</td><td>A watchlisted domain answers successfully with fresh, non-sinkhole IPs.</td><td>Watchlist join minus sinkhole answers (Rule 5).</td></tr>
+            <tr><td>T6</td><td>Resolver logs</td><td><span class="mono">query, answers, TTLs, timestamps</span></td><td>The same answer stays until its TTL expires.</td><td>The answer flips for one client before the TTL ends, with TTLs of 300 or less.</td><td>Successive-answer comparison per client (Rule 6).</td></tr>
+            <tr><td>T7</td><td>Firewall + DNS server logs</td><td><span class="mono">src, dest, port, response size</span></td><td>Your resolvers answer only your own clients.</td><td>Any query arriving from an internet source, or very large answers leaving.</td><td>Flag every external client of an internal resolver.</td></tr>
+            <tr><td>T8</td><td>Intel platform + passive DNS</td><td><span class="mono">tags, source, confidence</span></td><td>Intel labels match the passive DNS pattern over weeks.</td><td>A &ldquo;clean&rdquo; verdict suddenly appears on a known-flux domain.</td><td>Compare vendor verdicts against your own passive DNS measurements.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Example event: Zeek DNS record (flux answer)</h4>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">log: zeek dns.log (JSON)</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-log">{"ts":"2026-01-05T09:14:07.812Z","uid":"CzQ9fR3kqZp8wL1a4d","id.orig_h":"10.20.6.31","id.resp_h":"10.20.0.10","id.resp_p":53,"proto":"udp","trans_id":41255,"rtt":0.042,"query":"update-cdn.corp-login.net","qclass":1,"qclass_name":"C_INTERNET","qtype":1,"qtype_name":"A","rcode":0,"rcode_name":"NOERROR","AA":true,"RD":true,"RA":true,"answers":["203.0.113.77","203.0.113.198"],"TTLs":[60.0,60.0],"rejected":false}</code></pre></div>
+      <ul>
+        <li>Field <span class="mono">id.orig_h</span> &mdash; the asking client; group alerts by this to see which hosts touched the flux name.</li>
+        <li>Field <span class="mono">id.resp_h</span> &mdash; your internal resolver (10.20.0.10); the query went through your estate, which is good.</li>
+        <li>Field <span class="mono">query</span> &mdash; the requested name. The <span class="mono">corp-login.net</span> name is a lab domain used throughout this page.</li>
+        <li>Field <span class="mono">AA</span> &mdash; authoritative answer: the resolver got the answer straight from the attacker&rsquo;s nameserver, not from cache.</li>
+        <li>Field <span class="mono">answers</span> + <span class="mono">TTLs</span> &mdash; two rotating IPs with a 60-second TTL: the classic flux fingerprint.</li>
+      </ul>
+
+      <h4>Example event: Sysmon EventID 22 (which process asked)</h4>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">log: Sysmon EventID 22 (JSON)</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-log">{"EventTime":"2026-01-05 09:14:08.104","Hostname":"WKS-4412.corp.local","EventID":22,"SourceName":"Microsoft-Windows-Sysmon","Channel":"Microsoft-Windows-Sysmon/Operational","Level":4,"Task":22,"ProcessGuid":"{2f4e6a10-3c9d-678a-1100-000000000000}","ProcessId":4328,"Image":"C:\\Windows\\System32\\svchost.exe","User":"CORP\\jdoe","Protocol":"udp","QueryName":"update-cdn.corp-login.net","QueryStatus":"0","QueryResults":"203.0.113.198;","QueryType":"A","UtcTime":"2026-01-05 09:14:08.089"}</code></pre></div>
+      <ul>
+        <li><span class="mono">Hostname</span> + <span class="mono">User</span> &mdash; pin the query to one workstation and one user for scoping.</li>
+        <li><span class="mono">Image</span> &mdash; here the system resolver service answered on behalf of a process; pair with EventID 3 (network connection) to find the caller.</li>
+        <li><span class="mono">QueryName</span> + <span class="mono">QueryResults</span> &mdash; the flux name and the IP the endpoint actually received; correlate this with the Zeek record above.</li>
+        <li><span class="mono">QueryStatus</span> &mdash; 0 means success; a run of failures followed by success hints at hard flux.</li>
+      </ul>
+
+      <h3 class="sub-h" id="sec-5-5-sigma-spl"><span class="sub-num">5.5</span> Sigma Rules and Splunk SPL</h3>
+      <p>One Sigma rule and one matching SPL query for each of the top six threats (T1&ndash;T6). All rules assume Zeek-style DNS logs; adjust field names if your pipeline renames them.</p>
+
+      <h4>T1 &mdash; IP-flux malware delivery domain</h4>
+      <p>Fires when one parent domain answers with extreme IP cardinality across the estate within 5 minutes. This is the primary flux alarm.</p>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">sigma: dns_ip_flux_cardinality.yml</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-yaml">title: Estate-Wide IP Flux on One Domain Within 5 Minutes
+id: a3f8c2d1-7b4e-4c9a-9f2e-6d5b8a1c4e70
+status: stable
+description: &gt;
+  One parent domain answers with more than 20 unique A-record IPs across the
+  estate within 5 minutes. Fast-flux operators rotate answers like this
+  (MITRE ATT&amp;CK T1583.002) so that IP blocks expire immediately. Check the
+  passive DNS history and the domain age before you judge the alert.
+references:
+  - https://attack.mitre.org/techniques/T1583/002/
+  - https://en.wikipedia.org/wiki/Fast_flux
+author: Detection Engineering Team
+date: 2025-11-18
+logsource:
+  category: network
+  product: zeek
+  service: dns
+detection:
+  selection:
+    qtype_name: 'A'
+  filter_internal:
+    query|endswith:
+      - '.corp.local'
+      - '.internal'
+  condition: selection and not filter_internal | count(distinct answers) by query &gt; 20
+  timeframe: 5m
+fields:
+  - id.orig_h
+  - query
+  - answers
+  - TTLs
+falsepositives:
+  - Large CDN or cloud frontends that answer per region for big SaaS names
+  - Round-robin load balancers on popular internal-facing services
+level: high
+tags:
+  - attack.resource_development
+  - attack.t1583
+  - attack.t1583.002
+  - attack.t1568.004</code></pre></div>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">spl: ip_flux_cardinality.spl</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-spl">index=network sourcetype=zeek:dns.log qtype_name="A" NOT query=*.corp.local
+| eval min_ttl=mvmin(TTLs)
+| bin _time span=5m
+| stats dc(answers) AS unique_ips, values(answers) AS sample_ips,
+        dc('id.orig_h') AS clients, min(min_ttl) AS lowest_ttl
+        BY _time query
+| where unique_ips &gt; 20
+| sort - unique_ips</code></pre></div>
+      <p class="muted small">Field assumptions: Zeek <span class="mono">dns.log</span> at <span class="mono">index=network</span>, with the fields <span class="mono">query</span>, <span class="mono">answers</span>, <span class="mono">TTLs</span>, and <span class="mono">id.orig_h</span> as parsed by your DNS sourcetype.</p>
+      <ul>
+        <li><strong>Mapping</strong>: Resource Development / T1583.002, with operational overlap into T1568.001.</li>
+        <li><strong>False positives</strong>: CDNs and big mail platforms; require the CDN allowlist before judging.</li>
+        <li><strong>Tuning</strong>: raise the threshold for your busiest sites; add domain-age enrichment so 30-year-old names rank lower than 3-day-old names.</li>
+      </ul>
+
+      <h4>T2 &mdash; NS-flux C2 domain</h4>
+      <p>Fires when the nameserver answer set of one external domain keeps changing. Normal domains change NS a few times a year, not five times a day.</p>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">sigma: dns_ns_flux_churn.yml</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-yaml">title: Nameserver Record Churn on One External Domain (NS Flux)
+id: b21e9f47-5c3a-4d86-8a4b-1e9f7c2d5a33
+status: test
+description: &gt;
+  Detects an external parent domain whose NS answers keep changing: five or
+  more distinct nameserver sets within 24 hours. NS flux (MITRE ATT&amp;CK
+  T1583.002) moves a zone between bulletproof hosts so seizures lose effect.
+  Normal registrars change NS records only a few times per year.
+references:
+  - https://attack.mitre.org/techniques/T1583/002/
+  - https://www.spamhaus.org/dbl/
+author: Detection Engineering Team
+date: 2025-12-02
+logsource:
+  category: network
+  product: zeek
+  service: dns
+detection:
+  selection:
+    qtype_name: 'NS'
+  filter_internal:
+    query|endswith:
+      - '.corp.local'
+      - '.internal'
+  condition: selection and not filter_internal | count(distinct answers) by query &gt; 5
+  timeframe: 24h
+fields:
+  - id.orig_h
+  - query
+  - answers
+  - rcode_name
+falsepositives:
+  - Cloud migration projects that move a domain between DNS providers
+  - Domains that publish several geographic nameserver sets at once
+level: high
+tags:
+  - attack.resource_development
+  - attack.t1583
+  - attack.t1583.002</code></pre></div>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">spl: ns_flux_churn.spl</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-spl">index=network sourcetype=zeek:dns.log qtype_name="NS" NOT query=*.corp.local
+| bin _time span=24h
+| stats dc(answers) AS unique_ns, values(answers) AS ns_sets_seen
+        BY _time query
+| where unique_ns &gt;= 5
+| lookup flux_ns_feed.csv query OUTPUT is_flux_ns
+| sort - unique_ns</code></pre></div>
+      <p class="muted small">Field assumptions: Zeek <span class="mono">dns.log</span> for NS queries; <span class="mono">flux_ns_feed.csv</span> is a maintained lookup of bulletproof or flux nameservers exported from your intel platform.</p>
+      <ul>
+        <li><strong>Mapping</strong>: Resource Development / T1583.002; supports resilience analysis for T1568.001.</li>
+        <li><strong>False positives</strong>: hosting migrations; exempt named change windows.</li>
+        <li><strong>Tuning</strong>: NS queries are rare from clients &mdash; if your estate barely logs them, mirror the zone history from a passive DNS provider instead.</li>
+      </ul>
+
+      <h4>T3 &mdash; DNS tunneling infrastructure</h4>
+      <p>Fires on TXT bursts or very long subdomain labels to one external name. Marked tunneling-adjacent: legitimate services use TXT too, so keep the allowlist close.</p>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">sigma: dns_tunneling_burst.yml</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-yaml">title: Possible DNS Tunneling - TXT Query Burst or Long Random Labels
+id: c74d1f62-8a9b-4e23-b7c5-3f6e8d0a9b14
+status: test
+description: &gt;
+  Detects bursts of TXT queries to one external domain, or queries whose first
+  label is very long, which is how DNS tunneling (data hidden inside DNS
+  queries) looks on the wire. The server side of such tunnels is often a
+  T1583.002 DNS server. Tunneling-adjacent: legitimate TXT use exists.
+references:
+  - https://attack.mitre.org/techniques/T1583/002/
+  - https://en.wikipedia.org/wiki/DNS_tunneling
+author: Detection Engineering Team
+date: 2025-11-25
+logsource:
+  category: network
+  product: zeek
+  service: dns
+detection:
+  selection_txt:
+    qtype_name:
+      - 'TXT'
+      - 'NULL'
+  selection_long:
+    query|re: '(?i)^[a-z0-9+/_-]{45,}\.'
+  filter_internal:
+    query|endswith:
+      - '.corp.local'
+      - '.internal'
+  condition: (selection_txt or selection_long) and not filter_internal | count() by query &gt; 40
+  timeframe: 10m
+fields:
+  - id.orig_h
+  - query
+  - qtype_name
+  - answers
+falsepositives:
+  - Mail security products that verify SPF, DKIM, and DMARC in bursts
+  - License or update services that store configuration in TXT records
+level: high
+tags:
+  - attack.resource_development
+  - attack.t1583
+  - attack.t1583.002
+  - attack.t1071.004</code></pre></div>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">spl: dns_tunneling_burst.spl</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-spl">index=network sourcetype=zeek:dns.log (qtype_name="TXT" OR qtype_name="NULL")
+| regex query="(?i)(^[a-z0-9+/_-]{45,}\.|^[a-f0-9]{30,}\.)"
+| search NOT query=*.corp.local
+| bin _time span=10m
+| stats count AS tunnel_queries, dc('id.orig_h') AS clients,
+        values(qtype_name) AS qtypes, max(eval(mvcount(split(query,".")))) AS labels
+        BY _time query
+| where tunnel_queries &gt; 40
+| sort - tunnel_queries</code></pre></div>
+      <p class="muted small">Field assumptions: Zeek <span class="mono">dns.log</span> with <span class="mono">qtype_name</span> and <span class="mono">query</span>; the regex runs inside Splunk, so no extra lookups are needed.</p>
+      <ul>
+        <li><strong>Mapping</strong>: Resource Development / T1583.002; the C2 traffic is T1071.004, and stealing data out via DNS maps to T1048.003.</li>
+        <li><strong>False positives</strong>: SPF/DKIM lookups from mail gateways; add them as allowlisted senders.</li>
+        <li><strong>Tuning</strong>: start with count 40 per 10 minutes, then adjust to your mail volume; long-label matches deserve eyes even below the threshold.</li>
+      </ul>
+
+      <h4>T4 &mdash; One authoritative NS hosting many malicious domains</h4>
+      <p>Fires when one nameserver answer set serves an unusually large number of different parent domains. Enrich with reputation data before acting, because the biggest CDN providers share nameservers at even larger scale.</p>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">sigma: dns_bulletproof_ns_zone_count.yml</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-yaml">title: One Authoritative Nameserver Answering for Many Unrelated Domains
+id: d58e2a90-1f4c-4b78-9e6d-7a2c5b3f8e06
+status: test
+description: &gt;
+  Detects a nameserver answer set that serves more than 50 different external
+  parent domains within one hour, the bulk-hosting pattern behind many
+  T1583.002 DNS servers and bulletproof providers. Enrich with a
+  domain-reputation feed before acting, because big CDN providers also share
+  nameservers.
+references:
+  - https://attack.mitre.org/techniques/T1583/002/
+  - https://bazaar.abuse.ch/
+author: Detection Engineering Team
+date: 2025-12-16
+logsource:
+  category: network
+  product: zeek
+  service: dns
+detection:
+  selection:
+    qtype_name: 'NS'
+  filter_known:
+    answers|contains:
+      - 'cloudflare'
+      - 'amazonaws'
+      - 'google'
+      - 'azure'
+      - 'akam'
+  condition: selection and not filter_known | count(distinct query) by answers &gt; 50
+  timeframe: 1h
+fields:
+  - query
+  - answers
+  - id.orig_h
+falsepositives:
+  - Shared hosting providers with many legitimate customer zones
+  - Security scanners that enumerate NS records across the internet
+level: medium
+tags:
+  - attack.resource_development
+  - attack.t1583
+  - attack.t1583.002</code></pre></div>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">spl: bulletproof_ns_zone_count.spl</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-spl">index=network sourcetype=zeek:dns.log qtype_name="NS"
+| regex answers!="(?i)(cloudflare|amazonaws|akamai|akam|googledomains|azure)"
+| stats dc(query) AS domains_served, values(query) AS sample_domains,
+        dc('id.orig_h') AS askers
+        BY answers
+| where domains_served &gt; 50
+| lookup flux_ns_feed.csv answers OUTPUT is_flux_ns
+| sort - domains_served</code></pre></div>
+      <p class="muted small">Field assumptions: Zeek <span class="mono">dns.log</span>; <span class="mono">answers</span> is a multivalue NS list; <span class="mono">flux_ns_feed.csv</span> is a maintained bulletproof-NS lookup from your intel platform.</p>
+      <ul>
+        <li><strong>Mapping</strong>: Resource Development / T1583.002; the shared-NS pattern also links campaigns for intel analysis.</li>
+        <li><strong>False positives</strong>: mid-size shared hosters; whitelist them by ASN once confirmed.</li>
+        <li><strong>Tuning</strong>: require the zones to be young or low-reputation to keep the alert high-value; drop the threshold to 20 if your estate is small.</li>
+      </ul>
+
+      <h4>T5 &mdash; Re-delegation after takedown</h4>
+      <p>Fires when a domain on your sinkhole watchlist starts answering successfully again &mdash; the classic fast-flux comeback.</p>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">sigma: dns_redelegation_after_takedown.yml</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-yaml">title: Sinkholed Domain Resolves Again on New Nameservers
+id: e69f3b81-2a5d-4c89-a7f6-8b3d4c5e9a72
+status: stable
+description: &gt;
+  A domain on the team sinkhole watchlist answers successfully again, usually
+  on new nameservers and new IPs. Fast-flux operators re-delegate blocked
+  domains (T1583.002) within days. Keep the watchlist fed from your own block
+  actions and from intel reports.
+references:
+  - https://attack.mitre.org/techniques/T1583/002/
+  - https://www.europol.europa.eu/media-press/newsroom/news/avalanche-network-dismantled-in-international-cyber-operation
+author: Detection Engineering Team
+date: 2025-12-10
+logsource:
+  category: network
+  product: zeek
+  service: dns
+detection:
+  selection:
+    rcode_name: 'NOERROR'
+    query|endswith:
+      - 'corp-login.net'
+      - 'cdn-update.site'
+      - 'safe-tracker.top'
+  filter_sinkhole:
+    answers|contains: '10.10.90.90'
+  condition: selection and not filter_sinkhole
+fields:
+  - id.orig_h
+  - query
+  - answers
+  - rcode_name
+falsepositives:
+  - A legitimate owner re-registering an expired domain
+  - Your own domain migrations if a watchlist entry was added by mistake
+level: medium
+tags:
+  - attack.resource_development
+  - attack.t1583
+  - attack.t1583.002</code></pre></div>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">spl: redelegation_after_takedown.spl</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-spl">index=network sourcetype=zeek:dns.log rcode_name="NOERROR"
+| lookup watchlist_sinkholed.csv query OUTPUT watch_state
+| search watch_state="sinkholed"
+| search NOT answers="10.10.90.90"
+| stats values(answers) AS new_answers, min(_time) AS first_hit,
+        max(_time) AS last_seen, dc('id.orig_h') AS clients
+        BY query
+| sort - last_seen</code></pre></div>
+      <p class="muted small">Field assumptions: Zeek <span class="mono">dns.log</span>; <span class="mono">watchlist_sinkholed.csv</span> maps query to a state and is exported from your block-management tooling; 10.10.90.90 is your own sinkhole address.</p>
+      <ul>
+        <li><strong>Mapping</strong>: Resource Development / T1583.002; the behavior pairs with T1568.001 on the operational side.</li>
+        <li><strong>False positives</strong>: benign re-registrations; verify with WHOIS change history before re-blocking.</li>
+        <li><strong>Tuning</strong>: keep the watchlist short and current; drop entries older than a year unless the campaign is still active.</li>
+      </ul>
+
+      <h4>T6 &mdash; Low-TTL rotation to defeat IP blocks</h4>
+      <p>Fires when the same client receives different A answers for one external name within 5 minutes while TTLs stay low. This is the answer-flip behavior that outruns IP blocks.</p>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">sigma: dns_answer_flip_low_ttl.yml</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-yaml">title: DNS Answer Changes for the Same Client Before TTL Expiry
+id: f7a04c92-3b6e-4d9a-8c57-9c4e5d6f0b83
+status: test
+description: &gt;
+  The same client gets different A answers for one external name within 5
+  minutes while the advertised TTL is still valid. This low-TTL rotation
+  (MITRE ATT&amp;CK T1583.002 fast flux) dodges IP blocklists. Validate against
+  passive DNS, because some multi-CDN answers also rotate between regions.
+references:
+  - https://attack.mitre.org/techniques/T1583/002/
+  - https://attack.mitre.org/techniques/T1568/001/
+author: Detection Engineering Team
+date: 2026-01-08
+logsource:
+  category: network
+  product: zeek
+  service: dns
+detection:
+  selection:
+    qtype_name: 'A'
+  filter_internal:
+    query|endswith:
+      - '.corp.local'
+      - '.internal'
+  condition: selection and not filter_internal | count(distinct answers) by id.orig_h,query &gt; 3
+  timeframe: 5m
+fields:
+  - id.orig_h
+  - query
+  - answers
+  - TTLs
+falsepositives:
+  - Multi-CDN names that answer per region for the same client
+  - Mobile clients roaming between networks during the window
+level: medium
+tags:
+  - attack.resource_development
+  - attack.t1583
+  - attack.t1583.002
+  - attack.t1568.004</code></pre></div>
+      <div class="codeblock"><div class="cb-head"><span class="cb-dots"><i></i><i></i><i></i></span><span class="cb-title">spl: answer_flip_low_ttl.spl</span><button class="cb-copy" type="button">Copy</button></div><pre><code class="language-spl">index=network sourcetype=zeek:dns.log qtype_name="A" NOT query=*.corp.local
+| streamstats current=f window=2 values(answers) AS prev_answers BY 'id.orig_h' query
+| where answers != prev_answers
+| eval lowest_ttl=mvmin(TTLs)
+| stats count AS answer_flips, values(prev_answers) AS earlier_answers,
+        values(answers) AS later_answers, min(lowest_ttl) AS min_ttl
+        BY query 'id.orig_h'
+| where answer_flips &gt;= 2 AND min_ttl &lt;= 300
+| sort - answer_flips</code></pre></div>
+      <p class="muted small">Field assumptions: Zeek <span class="mono">dns.log</span>; the comparison uses successive answers per client and query, and the <span class="mono">min_ttl &lt;= 300</span> filter approximates &ldquo;inside the TTL window&rdquo;. If your pipeline stores only one TTL per record, drop the multivalue helpers.</p>
+      <ul>
+        <li><strong>Mapping</strong>: Resource Development / T1583.002; the evasion goal is T1568.001 (Fast Flux DNS).</li>
+        <li><strong>False positives</strong>: CDN rotation and roaming clients; enrich with ASN before alerting.</li>
+        <li><strong>Tuning</strong>: raise the flip threshold for busy engineering networks; pair with the CDN allowlist from Rule 1.</li>
+      </ul>
+    </section>
+
+    <section class="section" id="sec-6-case-study">
+      <div class="sec-head"><span class="sec-num">6</span><h2>Real-World Case Study</h2></div>
+      <p class="sec-intro">Avalanche (2016): the largest fast-flux takedown of its time, and the reason passive DNS matters.</p>
+
+      <p>For roughly seven years, the criminal platform known as <strong>Avalanche</strong> sold fast-flux hosting as a service. It ran its own DNS infrastructure: thousands of domains that rotated answers across rented and infected nodes, plus bulletproof nameservers that ignored abuse reports. Reporting by Europol and partners described a network that carried more than 30 malware families and sent millions of malware-laced emails per day. Estimates put the fronted domains in the hundreds of thousands, though reported figures differ by source.</p>
+
+      <p>In late November 2016, after about 45 days of preparation, law enforcement from five countries seized the platform&rsquo;s command servers and sinkholed its C2 traffic. The action was coordinated with Europol, Eurojust, and partners including the German BKA and US agencies. It also blocked or sinkholed more than 800,000 associated domains (reported). Researchers had tracked the network for years with passive DNS measurements, which made the target list possible.</p>
+
+      <ul class="tl">
+        <li><span class="tl-when">2009&ndash;2016 · Context</span><h4>A fast-flux platform as a service</h4><p>Avalanche grows into a shared criminal cloud: bulletproof nameservers, rotating A records, and rented nodes. Any crew can rent delivery and C2 capacity for its malware family of choice.</p></li>
+        <li><span class="tl-when">2010&ndash;2016 · Attack chain</span><h4>Delivery and C2 on rotating answers</h4><p>Spam links and drive-by downloads point victims at flux domains. Payloads and C2 (command and control) come from whichever node answers, so blocking single IPs does almost nothing.</p></li>
+        <li><span class="tl-when">Years before 2016 · Detection point</span><h4>Researchers measure the flux</h4><p>Academic and vendor teams use passive DNS to map one domain after another: extreme IP cardinality, low TTLs, shared nameservers. The measurements connect the dots into a target list for law enforcement.</p></li>
+        <li><span class="tl-when">T&minus;45 days · Preparation</span><h4>Five countries coordinate</h4><p>Investigators, prosecutors, CERTs, and financial-sector partners plan the action: server seizures, sinkhole takeover, victim notification, and domain blocking move in one coordinated window.</p></li>
+        <li><span class="tl-when">29&ndash;30 November 2016 · Containment</span><h4>Servers seized, C2 sinkholed</h4><p>The coordinated action takes control of command servers and redirects C2 traffic to sinkholes. Infected systems still call out, but now they meet researchers instead of criminals.</p></li>
+        <li><span class="tl-when">December 2016 · Eradication</span><h4>Domains blocked at scale</h4><p>Registrars, registries, and filter vendors block or sinkhole hundreds of thousands of associated domains (reported figures exceed 800,000). Financial institutions are told which customers connected to the C2.</p></li>
+        <li><span class="tl-when">Dec 2016&ndash;2017 · Recovery and impact</span><h4>Cleanup and rebuilds</h4><p>Cleanup guidance goes out through banks and CERTs worldwide. Some affected crews rebuild on new infrastructure &mdash; and a share of blocked domains re-delegates to new nameservers within months.</p></li>
+        <li><span class="tl-when">2016&ndash;2017 · Team response and communication</span><h4>Public, coordinated messaging</h4><p>Europol, national police, and the US Department of Justice publish jointly. That helps banks, hosters, and registrars act on the same indicators at the same time.</p></li>
+        <li><span class="tl-when">Ongoing · Lessons</span><h4>What the operation taught</h4><p>The takedown validated years of quiet measurement work &mdash; and showed that seized domains tend to come back. Monitoring never stops.</p></li>
+      </ul>
+
+      <div class="callout good"><span class="co-ico">Lessons</span><div class="co-body">
+        <p><strong>Flux detection belongs at the resolver.</strong> The measurements that enabled Avalanche&rsquo;s takedown came from DNS observations, not from endpoints. <strong>International cooperation works</strong> &mdash; five countries moved in one window. <strong>Domains come back</strong> &mdash; keep watching re-delegations long after the headlines fade.</p>
+      </div></div>
+
+      <h4>Incident stages mapped to ATT&amp;CK</h4>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Stage</th><th>What happened</th><th>ATT&amp;CK mapping</th></tr></thead>
+          <tbody>
+            <tr><td>Infrastructure build</td><td>Domains registered; authoritative nameservers and flux nodes stood up</td><td><span class="mono">T1583.001</span> Domains; <span class="mono">T1583.002</span> DNS Server; <span class="mono">T1583.003</span> VPS</td></tr>
+            <tr><td>Capacity pool</td><td>Infected home devices added as rotating nodes</td><td><span class="mono">T1583.005</span> Botnet</td></tr>
+            <tr><td>Delivery</td><td>Spam and drive-by links pointed at flux domains</td><td><span class="mono">T1566.002</span> Spearphishing Link</td></tr>
+            <tr><td>Operational C2</td><td>Beacons resolved through rotating answers</td><td><span class="mono">T1568.001</span> Fast Flux DNS</td></tr>
+            <tr><td>Defense evasion</td><td>Low TTLs and NS churn defeated IP blocks and seizures</td><td><span class="mono">T1583.002</span> (this page)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted small">Figures marked &ldquo;reported&rdquo; come from public law-enforcement and vendor reporting and differ slightly between sources; treat them as orders of magnitude.</p>
+    </section>
+
+    <section class="section" id="sec-7-mitigation">
+      <div class="sec-head"><span class="sec-num">7</span><h2>Mitigation and Defense</h2></div>
+      <p class="sec-intro">ATT&amp;CK rates this technique M1056 &ldquo;Pre-compromise&rdquo;: you cannot prevent an attacker renting servers. You can remove the advantage the infrastructure gives them.</p>
+
+      <p>The mitigation goal is simple: every host must use resolvers you control, those resolvers must log, and the logs must feed analytics that know what flux looks like. The cards below group the controls by area.</p>
+
+      <div class="grid-3">
+        <div class="card"><h4>Policy</h4><p>Write a DNS standard: approved resolvers, blocklist feeds, NS-change monitoring for your own domains, and registrar lock plus registry lock for company-owned domains. Name the abuse contact for your own IP space so others can report you fast.</p></div>
+        <div class="card"><h4>Identity</h4><p>Treat registrar and DNS-provider accounts as privileged identity: hardware second factors, separate accounts per domain, and alerts on NS record changes or transfer requests. Stolen registrar access enables re-delegation attacks against your own names.</p></div>
+        <div class="card"><h4>Endpoint</h4><p>Enable Sysmon EventID 22 (DNS query) and ship it centrally. EDR rules should flag processes that resolve many different external names in bursts &mdash; that is how tunneling looks from the client side.</p></div>
+        <div class="card"><h4>Network</h4><p>Force all DNS through internal resolvers and block direct outbound TCP/UDP 53 to the internet. Run RPZ (response policy zone) blocklists at the resolvers. Never expose an open resolver to the internet.</p></div>
+        <div class="card"><h4>Cloud</h4><p>Turn on query logging for managed DNS (for example Route 53 Resolver query logging or the equivalent in your cloud) and send it to the SIEM. Cloud VPCs without DNS logs are the classic blind spot for flux detection.</p></div>
+        <div class="card"><h4>Logging</h4><p>Resolver query logs, Zeek <span class="mono">dns.log</span>, and a passive DNS subscription form the minimum sensor set. Retain them for at least a year &mdash; flux campaigns are found by history, not by single events.</p></div>
+        <div class="card"><h4>Monitoring</h4><p>Run the flux analytics from section 5.5: IP cardinality, TTL floors, NS churn, NXDOMAIN baselines, and re-delegation watchlists. Alert on NS changes for your own domains within minutes, not weeks.</p></div>
+        <div class="card"><h4>Backup</h4><p>Keep snapshots of your own zone files, registrar configurations, and passive DNS exports. They are your evidence set when you must prove what a lookalike or re-delegated domain changed.</p></div>
+        <div class="card"><h4>Response</h4><p>Pre-stage abuse-report contacts for the big hosters and registrars, a takedown playbook, and RPZ change procedures. Join an ISAC so inbound warnings about shared flux networks reach you in hours.</p></div>
+      </div>
+
+      <div class="callout warn"><span class="co-ico">Warning</span><div class="co-body"><p><strong>Test the DNS lock-down before you enforce it.</strong> Hard-blocking outbound port 53 breaks devices with hardcoded resolvers, printers, and some cloud agents. Run it in monitor mode for two weeks, keep an allowlist for the stragglers, then enforce.</p></div></div>
+
+      <div class="card"><h4>Home and small office</h4>
+        <p>Point your router at a filtering resolver such as Quad9 (9.9.9.9) or Cloudflare malware-blocking (1.1.1.2) &mdash; both refuse answers from known malware domains. Keep router firmware current, change the router admin password from the default, and disable remote administration from the internet. Home routers are the favorite recruits for fast-flux node pools, so a patched router protects others too.</p>
+      </div>
+
+      <h4>Prioritized actions</h4>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th><th>How to verify</th></tr></thead>
+          <tbody>
+            <tr><td>Ship resolver logs to the SIEM</td><td>Low</td><td>Network / SOC</td><td>High &mdash; enables every detection on this page</td><td>Query the index per site; coverage should reach 100% of offices</td></tr>
+            <tr><td>Force internal resolvers; block direct outbound 53</td><td>Medium</td><td>Network</td><td>High &mdash; malware loses its own nameservers</td><td>Run a client test resolving against an external resolver; it must fail</td></tr>
+            <tr><td>Deploy flux analytics (cardinality + TTL + NS churn)</td><td>Medium</td><td>Detection engineering</td><td>High &mdash; catches delivery and C2 domains early</td><td>Replay the lab zone from section 3 and confirm the alert</td></tr>
+            <tr><td>Subscribe to passive DNS and two blocklist feeds</td><td>Low</td><td>Threat intel</td><td>High &mdash; adds history and community knowledge</td><td>Enrichment works during triage; RPZ hit counts rise</td></tr>
+            <tr><td>RPZ blocklists at resolvers</td><td>Low</td><td>Network</td><td>Medium &mdash; free domain-level blocking estate-wide</td><td>Resolve a known test-blocked domain; expect the block page</td></tr>
+            <tr><td>Registrar lock + NS-change alerts for own domains</td><td>Low</td><td>IT security</td><td>Medium &mdash; stops re-delegation attacks on your brand</td><td>Trigger a test NS change in a lab zone; the alert must fire</td></tr>
+            <tr><td>Pre-stage abuse contacts and the takedown playbook</td><td>Low</td><td>IR lead</td><td>Medium &mdash; halves re-delegation time in practice</td><td>Run a tabletop; find the contacts in under five minutes</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" id="sec-8-mistakes">
+      <div class="sec-head"><span class="sec-num">8</span><h2>Common Mistakes and Best Practices</h2></div>
+      <p class="sec-intro">Twelve mistakes real SOC teams make with DNS-flux detection &mdash; and the fix for each one.</p>
+
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>TTL-only flux detection</td><td>The alert fires all day on big CDNs</td><td>CDNs also use short TTLs, so TTL alone is not a flux signal</td><td>Require high IP cardinality together with the low TTL, and allowlist major CDNs</td><td>Keep one shared CDN allowlist used by every DNS rule</td></tr>
+            <tr><td>2</td><td>No passive DNS source</td><td>Nobody can say how long the domain has done this</td><td>The team never subscribed to a passive DNS provider</td><td>Subscribe to Farsight DNSDB or equivalent and wire it into triage</td><td>Add passive DNS to the standard DNS triage runbook</td></tr>
+            <tr><td>3</td><td>Ignoring NS flux</td><td>The zone survives every takedown and block</td><td>Detection watches only A records</td><td>Track NS history per domain and alert on churn (Rule 2)</td><td>Include NS records in every flux report</td></tr>
+            <tr><td>4</td><td>Blocking IPs instead of domains</td><td>The blocklist grows; the malware still resolves</td><td>Flux outruns static IP blocks by design</td><td>Block the domain at the resolver via RPZ; use IP blocks only for live containment</td><td>Policy: domain-level blocks are the default</td></tr>
+            <tr><td>5</td><td>No NXDOMAIN baseline</td><td>Hard-flux campaigns stay invisible until an EDR hit</td><td>Nobody tracks failed lookups</td><td>Build a per-site NXDOMAIN baseline and review spikes</td><td>Weekly review of top NXDOMAIN parents</td></tr>
+            <tr><td>6</td><td>No resolver logging at all</td><td>No client-to-domain map exists during incidents</td><td>Resolvers ship without logging by default</td><td>Enable query logging on every resolver and ship to the SIEM</td><td>Make resolver logging a standard build item</td></tr>
+            <tr><td>7</td><td>Confusing CDN rotation with flux</td><td>Repeated false positives erode trust in DNS alerts</td><td>CDNs and flux both rotate IPs</td><td>Enrich with ASN and provider intel before the alert is judged</td><td>Two-source confirmation rule for every DNS block</td></tr>
+            <tr><td>8</td><td>No abuse-report contacts</td><td>The blocked domain returns next week</td><td>Nobody knows where to report the nameservers</td><td>Pre-stage hoster and registrar abuse contacts in the IR plan</td><td>Test the contacts in a quarterly tabletop</td></tr>
+            <tr><td>9</td><td>No DNS tunneling visibility</td><td>Data leaves inside TXT queries, unnoticed</td><td>Only A records are analyzed</td><td>Log TXT/NULL queries and enable the long-label rule (Rule 3)</td><td>Include qtype coverage in logging requirements</td></tr>
+            <tr><td>10</td><td>DNS has no named owner in the SOC</td><td>Flux alerts sit untriaged for days</td><td>No team owns DNS detection</td><td>Name a DNS detection owner and put it in the on-call rota</td><td>Write ownership into the detection catalogue</td></tr>
+            <tr><td>11</td><td>One alert per query event</td><td>Alert flood; analysts ignore DNS entirely</td><td>Per-event rules on chatty DNS logs</td><td>Aggregate per domain per window (as all six rules here do)</td><td>Review alert volume monthly and re-tune</td></tr>
+            <tr><td>12</td><td>Trusting single-vendor intel blindly</td><td>A legitimate domain gets blocked on one weak report</td><td>No confidence model for indicators</td><td>Apply the high/medium/low confidence rules from section 5.2</td><td>Require two independent sources before auto-blocking</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Habits that keep DNS detection healthy</h4>
+      <div class="grid-3">
+        <div class="card"><h4>Daily</h4><ul class="checks">
+          <li>Review flux and tunneling alerts with the CDN allowlist at hand.</li>
+          <li>Check the top NXDOMAIN spikes per site.</li>
+          <li>Confirm new young domains that were queried by more than one client.</li>
+        </ul></div>
+        <div class="card"><h4>Weekly</h4><ul class="checks">
+          <li>Review the NS churn report and re-delegation watchlist.</li>
+          <li>Re-tune cardinality thresholds against the last week of data.</li>
+          <li>Check RPZ hit counts for feeds that stopped updating.</li>
+        </ul></div>
+        <div class="card"><h4>Monthly</h4><ul class="checks">
+          <li>Audit resolver logging coverage per office and cloud VPC.</li>
+          <li>Refresh intel feeds, allowlists, and abuse contacts.</li>
+          <li>Run a short tabletop on a flux takedown and re-delegation scenario.</li>
+        </ul></div>
+      </div>
+    </section>
+
+    <section class="section" id="sec-9-cheat-sheet">
+      <div class="sec-head"><span class="sec-num">9</span><h2>Cheat Sheet and Quick Reference</h2></div>
+      <p class="sec-intro">The one-screen summary: key facts, top detections, response checklist, and related pages.</p>
+
+      <h4>Key facts</h4>
+      <dl class="kv">
+        <dt>ATT&amp;CK ID</dt><dd>T1583.002 &mdash; Acquire Infrastructure: DNS Server (sub-technique of T1583)</dd>
+        <dt>Tactic</dt><dd>Resource Development &middot; Platforms: PRE (pre-compromise) &middot; Added in ATT&amp;CK v8, 01 October 2020</dd>
+        <dt>What the adversary does</dt><dd>Registers domains, rents servers, runs authoritative nameservers &mdash; often with IP flux, NS flux, and 60-second TTLs</dd>
+        <dt>What it enables</dt><dd>DNS C2 (T1071.004), malware delivery, phishing hosting, takedown resistance</dd>
+        <dt>Where to detect</dt><dd>The recursive resolver: passive DNS, cardinality, TTL analytics, NS churn</dd>
+        <dt>Golden rule</dt><dd>Block the domain, not the IP &mdash; and expect re-delegation, so keep a watchlist</dd>
+        <dt>Distinction</dt><dd>T1583.002 = building the DNS infrastructure; T1568.001 Fast Flux DNS = using fast flux operationally</dd>
+      </dl>
+
+      <h4>Top detections</h4>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Detection</th><th>Log source</th><th>When it fires</th><th>Severity</th></tr></thead>
+          <tbody>
+            <tr><td>IP flux cardinality (Rule 1)</td><td>Zeek DNS / resolver logs</td><td>One parent domain, more than 20 unique IPs in 5 minutes</td><td><span class="badge b-high">High</span></td></tr>
+            <tr><td>NS flux churn (Rule 2)</td><td>Passive DNS + NS queries</td><td>Five or more distinct NS sets for one domain in 24 hours</td><td><span class="badge b-high">High</span></td></tr>
+            <tr><td>DNS tunneling burst (Rule 3)</td><td>Resolver logs (TXT/NULL)</td><td>40+ TXT queries in 10 minutes or 45+ character labels</td><td><span class="badge b-high">High</span></td></tr>
+            <tr><td>Bulk bulletproof NS (Rule 4)</td><td>Passive DNS / NS queries</td><td>One NS answer set serving 50+ different parent domains</td><td><span class="badge b-med">Medium</span></td></tr>
+            <tr><td>Re-delegation comeback (Rule 5)</td><td>Resolver logs + watchlist</td><td>Sinkholed domain answers again with fresh IPs</td><td><span class="badge b-med">Medium</span></td></tr>
+            <tr><td>Answer flip in TTL window (Rule 6)</td><td>Resolver logs</td><td>Same client gets different answers within 5 minutes at low TTL</td><td><span class="badge b-med">Medium</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Response checklist</h4>
+      <ul class="checks">
+        <li>Pull passive DNS history for the domain: first seen, unique IPs, NS history.</li>
+        <li>Measure IP cardinality and the TTL floor for the last 24 hours.</li>
+        <li>Identify which internal clients and processes queried the name.</li>
+        <li>Collect flow and proxy evidence for connections to the answered IPs.</li>
+        <li>Block the domain (not the IPs) at the resolver via RPZ.</li>
+        <li>Report the nameservers to the hosting provider and blocklist feeds.</li>
+        <li>Add the domain to the re-delegation watchlist and schedule a re-check.</li>
+        <li>Share confirmed indicators with your ISAC or peer group.</li>
+      </ul>
+
+      <h4>Related pages</h4>
+      <ul>
+        <li><a href="https://attack.mitre.org/techniques/T1583/002/">T1583.002 &mdash; DNS Server (official ATT&amp;CK page)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1583/">T1583 &mdash; Acquire Infrastructure (parent technique)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1583/001/">T1583.001 &mdash; Domains</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1583/003/">T1583.003 &mdash; Virtual Private Server</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1583/004/">T1583.004 &mdash; Server</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1583/005/">T1583.005 &mdash; Botnet</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1583/006/">T1583.006 &mdash; Web Services</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1583/007/">T1583.007 &mdash; Serverless</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1583/008/">T1583.008 &mdash; Malvertising</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1584/">T1584 &mdash; Compromise Infrastructure</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1071/004/">T1071.004 &mdash; Application Layer Protocol: DNS</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1568/001/">T1568.001 &mdash; Fast Flux DNS (operational fast flux)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1566/">T1566 &mdash; Phishing (delivery over the flux domain)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1189/">T1189 &mdash; Drive-by Compromise (delivery over the flux domain)</a></li>
+      </ul>
+    </section>
+
+  </main>
+</div>
+
+<div class="fab-stack">
+  <button class="fab fab-contents" id="atk-contentsBtn" type="button" aria-expanded="false" aria-controls="atk-ov">Contents</button>
+  <button class="fab" id="atk-themeBtn" type="button" aria-label="Toggle dark or light theme">Theme</button>
+  <button class="fab" id="atk-toTop" type="button" aria-label="Back to top">Top</button>
+</div>
+
+<div class="ov" id="atk-ov" role="dialog" aria-modal="true" aria-label="Table of contents">
+  <div class="ov-back" data-close></div>
+  <div class="ov-panel">
+    <div class="ov-head"><strong>Contents</strong><button class="btn" id="atk-ovClose" type="button" data-close>Close</button></div>
+    <div class="toc-list ov-list"></div>
+  </div>
+</div>
+
+<script>
+/* Page-specific simulation config. Define BEFORE the base script. 8 steps required. */
+window.SIM_CONFIG = {
+  canvas: 'simCanvas',
+  ariaLabel: 'Animated diagram: an attacker registers a domain, runs an authoritative DNS server with fast-flux A and NS records, a victim resolves changing IPs and reaches C2 through flux nodes, and the SOC detects the flux and blocks the domain.',
+  nodes: [
+    { id: 'attacker', label: 'Attacker', sub: 'threat actor', x: 110, y: 140, kind: 'attacker', tip: 'Registers the domain, rents the VPS nodes, and controls the DNS zone.' },
+    { id: 'authns', label: 'Auth DNS', sub: 'authoritative NS', x: 360, y: 110, kind: 'infra', tip: 'The attacker-run authoritative nameserver that answers for the zone with a 60-second TTL.' },
+    { id: 'fluxA', label: 'Flux node A', sub: 'VPS node 1', x: 340, y: 250, kind: 'infra', tip: 'Cheap rented server that serves payloads or C2 while its IP is in rotation.' },
+    { id: 'fluxB', label: 'Flux node B', sub: 'VPS node 2', x: 530, y: 170, kind: 'infra', tip: 'Second rotating node; answers alternate between the two IPs.' },
+    { id: 'victim', label: 'Victim', sub: 'client host', x: 720, y: 130, kind: 'victim', tip: 'Internal workstation that resolves the flux name and connects to whichever IP answered.' },
+    { id: 'resolver', label: 'Resolver', sub: 'recursive DNS', x: 640, y: 300, kind: 'service', tip: 'The internal recursive resolver; its logs are the best place to spot flux.' },
+    { id: 'soc', label: 'SOC', sub: 'defender view', x: 420, y: 450, kind: 'defender', tip: 'Security operations center watching passive DNS and resolver telemetry.' }
+  ],
+  steps: [
+    { title: 'Register and rent',
+      caption: 'The attacker registers a domain and rents two cheap VPS nodes. The domain will soon answer for both servers.',
+      defender: 'Nothing is visible inside the estate yet. The only early clue sits outside: a fresh domain registration with unknown nameservers.',
+      evidence: 'registrar WHOIS record; VPS hosting order',
+      packets: [
+        { from: 'attacker', to: 'fluxA', label: 'rent VPS', color: 'danger', n: 1, dur: 2400 },
+        { from: 'attacker', to: 'fluxB', label: 'rent VPS', color: 'danger', n: 1, dur: 2600 }
+      ],
+      focus: ['attacker', 'fluxA', 'fluxB'] },
+    { title: 'Install DNS, TTL 60',
+      caption: 'The attacker installs authoritative DNS software and sets the TTL to 60 seconds, so old answers expire fast.',
+      defender: 'A new zone now exists on a young domain. Passive DNS vendors record its first NS records.',
+      evidence: 'zone file; SOA record with TTL 60',
+      packets: [
+        { from: 'attacker', to: 'authns', label: 'deploy NS', color: 'violet', n: 2, dur: 2400 }
+      ],
+      focus: ['attacker', 'authns'] },
+    { title: 'IP flux',
+      caption: 'The attacker rotates the A records across both nodes. One name now points at many IP addresses that change every minute.',
+      defender: 'Passive DNS starts to show high IP cardinality: one parent domain, many answers, short TTL.',
+      evidence: 'passive DNS A-record history; TTL observations',
+      packets: [
+        { from: 'authns', to: 'fluxA', label: 'A: node A', color: 'danger', n: 2, dur: 2400 },
+        { from: 'authns', to: 'fluxB', label: 'A: node B', color: 'danger', n: 2, dur: 2600 }
+      ],
+      focus: ['authns', 'fluxA', 'fluxB'] },
+    { title: 'NS flux',
+      caption: 'The attacker also rotates the nameserver records themselves, so even the who-answers-this-zone layer keeps moving.',
+      defender: 'The NS history of the domain changes several times a day. Churn at NS level is rare for normal sites.',
+      evidence: 'NS change history; registrar API logs',
+      packets: [
+        { from: 'authns', to: 'fluxA', label: 'NS: node A', color: 'violet', n: 1, dur: 2200 },
+        { from: 'authns', to: 'fluxB', label: 'NS: node B', color: 'violet', n: 1, dur: 2600 }
+      ],
+      focus: ['authns', 'fluxA', 'fluxB'] },
+    { title: 'Victim resolves',
+      caption: 'The victim resolves the name again and again and gets a different IP each time, because the TTL is only 60 seconds.',
+      defender: 'Resolver logs show the same parent domain answered by different IPs for one client within minutes.',
+      evidence: 'resolver query logs; TTL 60 answers',
+      packets: [
+        { from: 'victim', to: 'authns', label: 'resolve name', color: 'accent', n: 2, dur: 2400 },
+        { from: 'authns', to: 'resolver', label: 'rotating IP', color: 'warn', n: 2, dur: 2800 }
+      ],
+      focus: ['victim', 'authns', 'resolver'] },
+    { title: 'Payload and C2',
+      caption: 'The payload download and the C2 (command and control) traffic go through whichever flux node answered last.',
+      defender: 'Egress logs show one internal host connecting to many short-lived IPs on the same name and port.',
+      evidence: 'proxy and egress logs; network flow records',
+      packets: [
+        { from: 'victim', to: 'fluxA', label: 'fetch payload', color: 'danger', n: 2, dur: 2400 },
+        { from: 'victim', to: 'fluxB', label: 'C2 beacon', color: 'danger', n: 2, dur: 2600 }
+      ],
+      focus: ['victim', 'fluxA', 'fluxB'] },
+    { title: 'SOC spots flux',
+      caption: 'The SOC passive DNS system counts the answers: high IP cardinality, a 60-second TTL, and constant NS churn for one domain.',
+      defender: 'A flux-detection alert fires. Triage: confirm the cardinality, check which clients queried the name, then prepare a resolver block.',
+      evidence: 'flux-detection alert; cardinality graph',
+      packets: [
+        { from: 'resolver', to: 'soc', label: 'DNS telemetry', color: 'success', n: 2, dur: 2400 },
+        { from: 'authns', to: 'soc', label: 'passive DNS', color: 'accent2', n: 1, dur: 2800 }
+      ],
+      focus: ['soc', 'resolver'] },
+    { title: 'Block and report',
+      caption: 'The SOC blocks the domain at the resolver and reports the nameservers to the hosting provider for abuse.',
+      defender: 'Clients can no longer resolve the name. Watch for re-delegation: the same domain may return on new nameservers.',
+      evidence: 'resolver RPZ block entry; abuse report ticket',
+      packets: [
+        { from: 'soc', to: 'resolver', label: 'RPZ block', color: 'success', n: 2, dur: 2400 },
+        { from: 'soc', to: 'authns', label: 'report NS abuse', color: 'warn', n: 1, dur: 2800 }
+      ],
+      focus: ['soc', 'resolver', 'authns'] }
+  ]
+};
+document.getElementById('atk-themeBtn').addEventListener('click', function(){ window.ATK.toggleTheme(); });
+</script>
+
+<script>
+/* ATK-BASE-JS-v1 — shared runtime for ATT&CK technique guides.
+   Embed verbatim in ONE <script> at end of body. Do not modify. */
+(function () {
+  'use strict';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var THEME_KEY = 'atk-theme';
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+
+  /* ---------- theme ---------- */
+  function applyTheme(t) {
+    if (t !== 'dark' && t !== 'light') t = 'dark';
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+  }
+  function toggleTheme() {
+    var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    applyTheme(t);
+    try { window.dispatchEvent(new CustomEvent('atk-theme-change', { detail: { theme: t } })); } catch (e) {}
+  }
+  window.ATK = { toggleTheme: toggleTheme, applyTheme: applyTheme, prefersReducedMotion: function () { return reduce; } };
+  window.addEventListener('storage', function (e) {
+    if (e.key === THEME_KEY && e.newValue) { document.documentElement.setAttribute('data-theme', e.newValue); }
+  });
+
+  /* ---------- progress bar + back to top ---------- */
+  var pbar = document.getElementById('atk-progress');
+  var toTop = document.getElementById('atk-toTop');
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(function () {
+      ticking = false;
+      var h = document.documentElement;
+      var y = window.pageYOffset || h.scrollTop || 0;
+      var max = h.scrollHeight - h.clientHeight;
+      if (pbar) pbar.style.transform = 'scaleX(' + (max > 0 ? Math.min(1, y / max) : 0) + ')';
+      if (toTop) toTop.classList.toggle('show', y > 600);
+      trackActive();
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  if (toTop) toTop.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+  });
+
+  /* ---------- table of contents (generated from real headings) ---------- */
+  function tocLists() { return $$('#atk-toc .toc-list, #atk-ov .toc-list'); }
+  var targets = [];
+  function buildTOC() {
+    var main = document.getElementById('atk-main');
+    if (!main) return;
+    var lists = tocLists(); if (!lists.length) return;
+    var secs = $$('section.section', main);
+    var frag = lists.map(function () { return document.createDocumentFragment(); });
+    function addLink(id, label, isSub) {
+      lists.forEach(function (L, i) {
+        var a = document.createElement('a');
+        a.href = '#' + id; a.textContent = label;
+        if (isSub) a.className = 'sub';
+        frag[i].appendChild(a);
+      });
+      var el = document.getElementById(id);
+      if (el) targets.push(el);
+    }
+    secs.forEach(function (sec, i) {
+      var h2 = $('h2', sec); if (!h2) return;
+      if (!sec.id) sec.id = 'sec-' + (i + 1);
+      var num = $('.sec-num', sec);
+      var label = (num ? num.textContent.trim() + '. ' : '') + h2.textContent.trim();
+      addLink(sec.id, label, false);
+      $$('h3.sub-h', sec).forEach(function (h3) {
+        if (!h3.id) h3.id = sec.id + '-sub';
+        addLink(h3.id, h3.textContent.replace(/\s+/g, ' ').trim(), true);
+      });
+    });
+    lists.forEach(function (L, i) { L.appendChild(frag[i]); });
+  }
+  var activeId = null;
+  function trackActive() {
+    if (!targets.length) return;
+    var cur = targets[0].id;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].getBoundingClientRect().top <= 140) cur = targets[i].id; else break;
+    }
+    if (cur !== activeId) {
+      activeId = cur;
+      tocLists().forEach(function (L) {
+        $$('a', L).forEach(function (a) {
+          a.classList.toggle('active', a.getAttribute('href') === '#' + cur);
+        });
+      });
+    }
+  }
+
+  /* ---------- smooth anchor scrolling + overlay close ---------- */
+  function bindAnchors() {
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('.toc-list a') : null;
+      if (!a) return;
+      var id = decodeURIComponent((a.getAttribute('href') || '').slice(1));
+      var el = document.getElementById(id);
+      if (!el) return;
+      e.preventDefault();
+      closeOverlay();
+      el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+      try { history.replaceState(null, '', '#' + id); } catch (err) {}
+    });
+  }
+
+  /* ---------- mobile contents overlay ---------- */
+  var ov, contentsBtn, lastFocus = null;
+  function openOverlay() {
+    ov.classList.add('open');
+    contentsBtn.setAttribute('aria-expanded', 'true');
+    lastFocus = document.activeElement;
+    document.body.style.overflow = 'hidden';
+    var c = $('#atk-ovClose'); if (c) c.focus();
+  }
+  function closeOverlay() {
+    if (!ov || !ov.classList.contains('open')) return;
+    ov.classList.remove('open');
+    if (contentsBtn) contentsBtn.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  function bindOverlay() {
+    ov = document.getElementById('atk-ov');
+    contentsBtn = document.getElementById('atk-contentsBtn');
+    if (!ov || !contentsBtn) return;
+    contentsBtn.addEventListener('click', function () {
+      ov.classList.contains('open') ? closeOverlay() : openOverlay();
+    });
+    ov.addEventListener('click', function (e) {
+      if (e.target.closest('[data-close]')) closeOverlay();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeOverlay();
+    });
+  }
+
+  /* ---------- copy buttons ---------- */
+  function bindCopy() {
+    $$('.cb-copy').forEach(function (btn) {
+      btn.dataset.label = btn.textContent || 'Copy';
+      btn.addEventListener('click', function () {
+        var cb = btn.closest('.codeblock'); if (!cb) return;
+        var pre = $('pre', cb); if (!pre) return;
+        var txt = pre.textContent || '';
+        function done() {
+          btn.textContent = 'Copied!';
+          setTimeout(function () { btn.textContent = btn.dataset.label || 'Copy'; }, 1600);
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(done, function () { fallback(); });
+        } else { fallback(); }
+        function fallback() {
+          var ta = document.createElement('textarea');
+          ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta); ta.select();
+          try { document.execCommand('copy'); done(); } catch (err) {}
+          document.body.removeChild(ta);
+        }
+      });
+    });
+  }
+
+  /* ---------- simulation engine (config-driven canvas) ---------- */
+  var Sim = (function () {
+    var MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    var SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    var W = 840, H = 540, PAD = 74;
+    var cfg, canvas, ctx, wrapEl, tipEl;
+    var colors = {}, kindColor = {};
+    var nmap = {}, order = [];
+    var steps = [], step = 0, playing = false, speed = 1, acc = 0, stepLen = 5200;
+    var playBtn, chips = [], scale = 1, lastT = null;
+
+    function readColors() {
+      var cs = getComputedStyle(document.documentElement);
+      function v(n) { return cs.getPropertyValue(n).trim(); }
+      colors = {
+        surface: v('--surface'), surface2: v('--surface-2'), borderS: v('--border-strong'),
+        text: v('--text'), muted: v('--muted'), danger: v('--danger'), accent: v('--accent'),
+        accent2: v('--accent-2'), violet: v('--violet'), success: v('--success'), warn: v('--warning')
+      };
+      kindColor = { attacker: colors.danger, victim: colors.accent, infra: colors.violet,
+        service: colors.accent2, defender: colors.success };
+    }
+    function hexA(hex, a) {
+      if (!hex || hex.charAt(0) !== '#') return hex;
+      var h = hex.slice(1);
+      if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+      var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+      return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+    }
+    function rr(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    function trim(a, b) {
+      var dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      var ux = dx / d, uy = dy / d, t0 = PAD / d, t1 = 1 - PAD / d;
+      if (t1 < t0) { t1 = 0.5; t0 = 0.2; }
+      return { x0: a.x + dx * t0, y0: a.y + dy * t0, x1: a.x + dx * t1, y1: a.y + dy * t1,
+        ux: ux, uy: uy };
+    }
+    function setPlayUI() {
+      if (!playBtn) return;
+      playBtn.textContent = playing ? 'Pause' : (step === steps.length - 1 && acc >= stepLen ? 'Replay' : 'Play');
+      playBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+    }
+    function goto(i) {
+      step = Math.max(0, Math.min(steps.length - 1, i)); acc = 0;
+      var s = steps[step];
+      var cap = document.getElementById('simCap');
+      var def = document.getElementById('simDef');
+      var evi = document.getElementById('simEvi');
+      if (cap) cap.textContent = 'Step ' + (step + 1) + ' of ' + steps.length + ': ' + s.caption;
+      if (def) def.textContent = s.defender || '';
+      if (evi) evi.textContent = s.evidence ? 'Evidence left behind: ' + s.evidence : '';
+      chips.forEach(function (b, j) {
+        b.setAttribute('aria-pressed', j === step ? 'true' : 'false');
+        b.classList.toggle('active', j === step);
+      });
+      setPlayUI();
+      draw();
+    }
+    function nextStep() {
+      if (step < steps.length - 1) { goto(step + 1); }
+      else { playing = false; setPlayUI(); }
+    }
+    function draw() {
+      if (!ctx) return;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = hexA(colors.muted, 0.16);
+      for (var gx = 20; gx < W; gx += 40) for (var gy = 20; gy < H; gy += 40) ctx.fillRect(gx, gy, 1.5, 1.5);
+      var s = steps[step]; if (!s) return;
+      (s.packets || []).forEach(function (p, idx) {
+        var a = nmap[p.from], b = nmap[p.to]; if (!a || !b) return;
+        var col = colors[p.color] || colors.accent;
+        var L = trim(a, b);
+        ctx.strokeStyle = hexA(col, 0.38); ctx.setLineDash([5, 6]); ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(L.x0, L.y0); ctx.lineTo(L.x1, L.y1); ctx.stroke(); ctx.setLineDash([]);
+        var px = -L.uy, py = L.ux, ax = L.x1 - L.ux * 9, ay = L.y1 - L.uy * 9;
+        ctx.fillStyle = hexA(col, 0.85); ctx.beginPath();
+        ctx.moveTo(L.x1, L.y1);
+        ctx.lineTo(ax + px * 4.5, ay + py * 4.5);
+        ctx.lineTo(ax - px * 4.5, ay - py * 4.5);
+        ctx.closePath(); ctx.fill();
+        var n = p.n || 1, dur = p.dur || 2600;
+        for (var k = 0; k < n; k++) {
+          var off = (idx * 0.37 + k / n);
+          var t = reduce ? 0.5 : ((acc / dur) + off) % 1;
+          var mx = L.x0 + (L.x1 - L.x0) * t, my = L.y0 + (L.y1 - L.y0) * t;
+          ctx.beginPath(); ctx.arc(mx, my, 4.2, 0, 6.2832); ctx.fillStyle = col; ctx.fill();
+        }
+        if (p.label) {
+          var lx = L.x0 + (L.x1 - L.x0) * 0.5, ly = L.y0 + (L.y1 - L.y0) * 0.5 - 12;
+          ctx.font = '600 10.5px ' + MONO;
+          var tw = ctx.measureText(p.label).width;
+          ctx.fillStyle = hexA(colors.surface, 0.93);
+          rr(lx - tw / 2 - 7, ly - 11, tw + 14, 19, 6); ctx.fill();
+          ctx.strokeStyle = hexA(col, 0.55); ctx.lineWidth = 1; ctx.stroke();
+          ctx.fillStyle = colors.text; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(p.label, lx, ly + 0.5);
+        }
+      });
+      order.forEach(function (id) {
+        var nd = nmap[id], c = kindColor[nd.kind] || colors.accent;
+        var x = nd.x - nd.w / 2, y = nd.y - nd.h / 2;
+        var isFocus = (s.focus || []).indexOf(id) >= 0;
+        if (isFocus && !reduce) {
+          var pulse = 0.5 + 0.5 * Math.sin(acc / 300);
+          ctx.strokeStyle = hexA(c, 0.25 + 0.45 * pulse); ctx.lineWidth = 2.5;
+          rr(x - 6, y - 6, nd.w + 12, nd.h + 12, 14); ctx.stroke();
+        }
+        ctx.fillStyle = colors.surface; ctx.strokeStyle = c; ctx.lineWidth = 1.8;
+        rr(x, y, nd.w, nd.h, 12); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x + 13, y + 13, 3.4, 0, 6.2832); ctx.fillStyle = c; ctx.fill();
+        ctx.fillStyle = colors.text; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.font = '600 13px ' + SANS;
+        ctx.fillText(nd.label, x + 23, nd.sub ? y + nd.h / 2 - 8 : y + nd.h / 2 + 1, nd.w - 32);
+        if (nd.sub) {
+          ctx.font = '10px ' + MONO; ctx.fillStyle = colors.muted;
+          ctx.fillText(nd.sub, x + 23, y + nd.h / 2 + 11, nd.w - 32);
+        }
+      });
+      var kinds = [['attacker', 'Attacker'], ['victim', 'Target'], ['infra', 'Infrastructure'],
+        ['service', 'Web service'], ['defender', 'SOC / Defender']];
+      var present = {};
+      order.forEach(function (id) { present[nmap[id].kind] = true; });
+      var lx = 14;
+      ctx.font = '10.5px ' + MONO; ctx.textBaseline = 'middle';
+      kinds.forEach(function (kd) {
+        if (!present[kd[0]]) return;
+        var c = kindColor[kd[0]];
+        ctx.fillStyle = c; rr(lx, H - 22, 9, 9, 2); ctx.fill();
+        ctx.fillStyle = colors.muted; ctx.textAlign = 'left';
+        ctx.fillText(kd[1], lx + 14, H - 17.5);
+        lx += 14 + ctx.measureText(kd[1]).width + 16;
+      });
+    }
+    function fit() {
+      if (!canvas || !wrapEl) return;
+      var d = window.devicePixelRatio || 1;
+      var r = canvas.getBoundingClientRect();
+      if (r.width < 2) return;
+      canvas.width = Math.round(r.width * d);
+      canvas.height = Math.round(r.width * H / W * d);
+      scale = r.width / W;
+      ctx = canvas.getContext('2d');
+      ctx.setTransform(d * scale, 0, 0, d * scale, 0, 0);
+      draw();
+    }
+    function tick(ts) {
+      if (lastT === null) lastT = ts;
+      var dt = Math.min(50, ts - lastT); lastT = ts;
+      if (playing) {
+        acc += dt * speed;
+        if (acc >= stepLen) nextStep();
+      }
+      if (playing || !reduce) draw();
+      window.requestAnimationFrame(tick);
+    }
+    function hitTest(e) {
+      var r = canvas.getBoundingClientRect();
+      var mx = (e.clientX - r.left) * (W / r.width);
+      var my = (e.clientY - r.top) * (H / (r.width * H / W));
+      for (var i = 0; i < order.length; i++) {
+        var nd = nmap[order[i]];
+        if (Math.abs(mx - nd.x) <= nd.w / 2 + 4 && Math.abs(my - nd.y) <= nd.h / 2 + 4) return nd;
+      }
+      return null;
+    }
+    function showTip(nd, e) {
+      if (!tipEl || !nd) { hideTip(); return; }
+      tipEl.innerHTML = '<b>' + nd.label + '</b>' + (nd.tip ? '<br>' + nd.tip : '');
+      var r = canvas.getBoundingClientRect(), w = wrapEl.getBoundingClientRect();
+      var x = (e.clientX - w.left) + 14, y = (e.clientY - w.top) + 14;
+      if (x + 260 > w.width) x = (e.clientX - w.left) - 264;
+      tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
+      tipEl.classList.add('show');
+    }
+    function hideTip() { if (tipEl) tipEl.classList.remove('show'); }
+    function init() {
+      cfg = window.SIM_CONFIG; if (!cfg || !cfg.nodes || !cfg.steps) return;
+      canvas = document.getElementById(cfg.canvas || 'simCanvas'); if (!canvas) return;
+      ctx = canvas.getContext && canvas.getContext('2d'); if (!ctx) return;
+      wrapEl = canvas.parentElement;
+      tipEl = document.getElementById('simTip');
+      playBtn = document.getElementById('simPlay');
+      var restBtn = document.getElementById('simRestart');
+      var speedBox = document.getElementById('simSpeed');
+      var chipsBox = document.getElementById('simChips');
+      readColors();
+      cfg.nodes.forEach(function (n) {
+        nmap[n.id] = n; order.push(n.id);
+        n.w = n.w || 132; n.h = n.h || 52;
+      });
+      steps = cfg.steps;
+      steps.forEach(function (s, i) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'chip-btn'; b.textContent = String(i + 1);
+        b.title = s.title || ('Step ' + (i + 1));
+        b.setAttribute('aria-label', 'Show step ' + (i + 1) + (s.title ? ': ' + s.title : ''));
+        b.addEventListener('click', function () { goto(i); });
+        if (chipsBox) chipsBox.appendChild(b);
+        chips.push(b);
+      });
+      if (playBtn) playBtn.addEventListener('click', function () {
+        if (playing) { playing = false; }
+        else { if (step === steps.length - 1 && acc >= stepLen) { goto(0); } playing = true; }
+        setPlayUI();
+      });
+      if (restBtn) restBtn.addEventListener('click', function () { playing = false; goto(0); setPlayUI(); });
+      if (speedBox) $$('.chip-btn', speedBox).forEach(function (b) {
+        b.addEventListener('click', function () {
+          speed = parseFloat(b.dataset.speed) || 1;
+          $$('.chip-btn', speedBox).forEach(function (x) {
+            x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+          });
+        });
+      });
+      canvas.setAttribute('tabindex', '0');
+      canvas.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowRight') { goto(step + 1); e.preventDefault(); }
+        else if (e.key === 'ArrowLeft') { goto(step - 1); e.preventDefault(); }
+        else if (e.key === 'Home') { goto(0); e.preventDefault(); }
+        else if (e.key === 'End') { goto(steps.length - 1); e.preventDefault(); }
+      });
+      canvas.addEventListener('mousemove', function (e) { showTip(hitTest(e), e); });
+      canvas.addEventListener('mouseleave', hideTip);
+      canvas.addEventListener('click', function (e) { showTip(hitTest(e), e); });
+      goto(0);
+      fit();
+      if (window.ResizeObserver) new ResizeObserver(fit).observe(wrapEl);
+      if (typeof MutationObserver !== 'undefined') {
+        new MutationObserver(function () { readColors(); draw(); })
+          .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+      }
+      if (!reduce) { playing = true; setPlayUI(); }
+      window.requestAnimationFrame(tick);
+    }
+    return { init: init };
+  })();
+
+  /* ---------- boot ---------- */
+  function boot() {
+    buildTOC();
+    bindAnchors();
+    bindOverlay();
+    bindCopy();
+    if (window.SIM_CONFIG) Sim.init();
+    onScroll();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+/* ATK-BASE-JS-v1 END */
+</script>
+</body>
+</html>

@@ -1,0 +1,2593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script>(function(){try{var t=localStorage.getItem('atk-theme');if(t!=='dark'&&t!=='light'){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta charset="utf-8">
+<title>T1055.008 - Ptrace System Calls v2.0 | MITRE ATT&amp;CK Detection Guide</title>
+<meta name="description" content="Detection engineering guide for MITRE ATT&amp;CK T1055.008 (Ptrace System Calls) on Linux: animated simulation, auditd and eBPF telemetry, Sigma rules and Splunk SPL.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1055-Process-Injection/008-Ptrace-System-Calls.html">
+<style>
+/* =========================================================
+   ATT&CK guide — shared page CSS (kit). Embed VERBATIM.
+   Add page-specific rules only after the PAGE-SPECIFIC marker.
+   ========================================================= */
+:root[data-theme="dark"]{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --shadow:0 1px 3px rgba(2,8,23,.35), 0 8px 24px rgba(2,8,23,.25);
+  --tint-danger:rgba(248,113,113,.14); --tint-high:rgba(251,146,60,.14);
+  --tint-warning:rgba(251,191,36,.14); --tint-low:rgba(74,222,128,.14);
+  --tint-accent:rgba(79,140,255,.14); --tint-violet:rgba(167,139,250,.14);
+  --tint-cyan:rgba(34,211,238,.14);
+}
+:root[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 1px 3px rgba(24,34,56,.08), 0 8px 24px rgba(24,34,56,.08);
+  --tint-danger:rgba(220,38,38,.10); --tint-high:rgba(194,65,12,.10);
+  --tint-warning:rgba(180,83,9,.10); --tint-low:rgba(21,128,61,.10);
+  --tint-accent:rgba(47,111,228,.10); --tint-violet:rgba(124,92,224,.10);
+  --tint-cyan:rgba(8,145,178,.10);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  font-size:16.5px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+code,pre,kbd,samp,.mono{
+  font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+h1,h2,h3,h4{line-height:1.2; margin:0 0 .5em; font-weight:700}
+p{max-width:72ch}
+a{color:var(--accent)}
+a:hover{color:var(--accent-2)}
+img,video{max-width:100%}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+::selection{background:var(--tint-accent)}
+.skip-link{
+  position:absolute; left:-9999px; top:0; z-index:100; background:var(--accent);
+  color:#fff; padding:8px 14px; border-radius:0 0 8px 0; font-weight:600; text-decoration:none;
+}
+.skip-link:focus{left:0}
+
+/* progress bar */
+#progress-bar{
+  position:fixed; top:0; left:0; height:3px; width:0; z-index:80;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+}
+
+/* hero */
+.hero{max-width:1280px; margin:0 auto; padding:48px 32px 6px}
+.kicker{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent-2); margin:0 0 14px;
+}
+.hero-title{font-size:clamp(1.9rem,4.2vw,2.9rem); letter-spacing:-.02em; margin-bottom:14px}
+.tech-id{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color:var(--accent); background:var(--tint-accent);
+  border:1px solid var(--accent); border-radius:10px; padding:.08em .38em; margin-right:.35em;
+  font-size:.78em; vertical-align:.08em; white-space:nowrap;
+}
+.hero-intro{color:var(--muted); font-size:17px; max-width:70ch; margin:0 0 18px}
+.chip-row{display:flex; flex-wrap:wrap; gap:8px; list-style:none; margin:0 0 20px; padding:0}
+.chip{
+  font-size:12.5px; font-weight:600; padding:5px 11px; border-radius:999px;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--muted);
+}
+.fact-grid{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
+.fact-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; box-shadow:var(--shadow); display:flex; flex-direction:column; gap:4px;
+}
+.fact-label{
+  font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted);
+}
+.fact-value{font-weight:700; font-size:14.5px; overflow-wrap:anywhere}
+
+/* two-column layout */
+.layout{
+  max-width:1280px; margin:26px auto 0; padding:0 32px 72px;
+  display:grid; grid-template-columns:260px minmax(0,1fr); gap:40px; align-items:start;
+}
+.sidebar{position:sticky; top:24px; max-height:calc(100vh - 48px); overflow:auto; padding-bottom:8px}
+.toc-title{
+  font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); margin:6px 0 10px; font-weight:700;
+}
+.toc-list{list-style:none; margin:0; padding:0; font-size:14px}
+.toc-list a{
+  display:block; padding:6px 10px; border-left:2px solid transparent;
+  color:var(--muted); text-decoration:none; border-radius:6px;
+}
+.toc-list a:hover{color:var(--text); background:var(--surface-2)}
+.toc-list a.active{color:var(--text); background:var(--surface-2); border-left-color:var(--accent)}
+.toc-sub{list-style:none; margin:2px 0 6px; padding:0}
+.toc-sub a{padding-left:26px; font-size:13px}
+
+/* sections */
+main > section{margin:0 0 56px; scroll-margin-top:24px}
+.section-head{margin-bottom:8px}
+.section-head h2{
+  display:flex; align-items:center; gap:12px;
+  font-size:clamp(1.35rem,2.4vw,1.8rem); letter-spacing:-.01em;
+}
+.section-num{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.62em; font-weight:700; color:var(--accent); background:var(--tint-accent);
+  border:1px solid var(--accent); border-radius:8px; padding:.22em .5em; white-space:nowrap;
+}
+main h3{
+  display:flex; align-items:center; gap:10px;
+  font-size:1.18rem; margin:28px 0 10px; scroll-margin-top:24px;
+}
+.section-intro{color:var(--muted); margin:0 0 20px; max-width:70ch}
+main p{margin:0 0 14px}
+main,main > section{min-width:0}
+p code,li code,td code,dd code,dt code,.card code,.callout code,.fact-value{overflow-wrap:anywhere}
+
+/* cards & grids */
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:18px 20px; box-shadow:var(--shadow); margin:0 0 16px;
+}
+.card h4{margin:0 0 8px; font-size:15.5px}
+.card > :last-child{margin-bottom:0}
+.grid-2{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:0 0 16px}
+.grid-3{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin:0 0 16px}
+.grid-2 .card,.grid-3 .card{margin:0}
+
+/* callouts */
+.callout{
+  border:1px solid var(--border); border-left:4px solid var(--accent);
+  background:var(--surface-2); border-radius:10px; padding:14px 16px; margin:0 0 16px;
+}
+.callout .callout-label{
+  display:inline-block; font-size:11px; font-weight:700; letter-spacing:.1em;
+  text-transform:uppercase; padding:2px 8px; border-radius:6px; margin-bottom:8px;
+  background:var(--tint-accent); color:var(--accent);
+}
+.callout.tip{border-left-color:var(--success)}
+.callout.tip .callout-label{background:var(--tint-low); color:var(--success)}
+.callout.warning{border-left-color:var(--warning)}
+.callout.warning .callout-label{background:var(--tint-warning); color:var(--warning)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .callout-label{background:var(--tint-danger); color:var(--danger)}
+.callout > :last-child{margin-bottom:0}
+.callout p{margin-bottom:8px}
+
+/* badges */
+.badge{
+  display:inline-block; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11.5px; font-weight:700; padding:3px 9px; border-radius:999px;
+  border:1px solid var(--border-strong); color:var(--muted); background:var(--surface-2);
+  white-space:nowrap;
+}
+.badge.sev-critical{color:var(--danger); border-color:var(--danger); background:var(--tint-danger)}
+.badge.sev-high{color:var(--high); border-color:var(--high); background:var(--tint-high)}
+.badge.sev-medium{color:var(--warning); border-color:var(--warning); background:var(--tint-warning)}
+.badge.sev-low{color:var(--low); border-color:var(--low); background:var(--tint-low)}
+.badge.plat-windows{color:var(--accent); border-color:var(--accent); background:var(--tint-accent)}
+.badge.plat-linux{color:var(--violet); border-color:var(--violet); background:var(--tint-violet)}
+.badge.plat-macos{color:var(--accent-2); border-color:var(--accent-2); background:var(--tint-cyan)}
+.badge.plat-cloud{color:var(--accent-2); border-color:var(--accent-2); background:var(--tint-cyan)}
+.badge.plat-network{color:var(--warning); border-color:var(--warning); background:var(--tint-warning)}
+.badge.plat-identity{color:var(--danger); border-color:var(--danger); background:var(--tint-danger)}
+
+/* key/value list */
+.kv-list{
+  border:1px solid var(--border); border-radius:12px; overflow:hidden;
+  background:var(--surface); margin:0 0 16px; box-shadow:var(--shadow);
+}
+.kv-row{display:grid; grid-template-columns:220px 1fr; border-top:1px solid var(--border)}
+.kv-row:first-child{border-top:0}
+.kv-key{
+  padding:10px 14px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+  background:var(--surface-2);
+}
+.kv-val{padding:10px 14px; font-size:14.5px; overflow-wrap:anywhere}
+
+/* tables */
+.table-wrap{
+  overflow-x:auto; border:1px solid var(--border); border-radius:12px;
+  background:var(--surface); margin:0 0 16px; box-shadow:var(--shadow);
+}
+.table-wrap table{border-collapse:collapse; width:100%; min-width:640px}
+.table-wrap th{
+  background:var(--surface-2); text-align:left; padding:10px 12px;
+  font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted);
+  border-bottom:1px solid var(--border); white-space:nowrap;
+}
+.table-wrap td{padding:10px 12px; border-top:1px solid var(--border); font-size:14.5px; vertical-align:top}
+.table-wrap tbody tr:hover{background:var(--surface-2)}
+
+/* code blocks */
+figure.code-block{
+  margin:0 0 16px; border:1px solid var(--border); border-radius:12px;
+  overflow:hidden; background:var(--surface-2); box-shadow:var(--shadow);
+}
+figure.code-block figcaption{
+  display:flex; justify-content:space-between; align-items:center; gap:10px;
+  padding:8px 12px; border-bottom:1px solid var(--border); background:var(--elevated);
+}
+.code-title{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+  overflow-wrap:anywhere;
+}
+.copy-btn{
+  appearance:none; border:1px solid var(--border-strong); background:var(--surface-2);
+  color:var(--text); border-radius:8px; padding:4px 10px; font-size:12px; font-weight:600;
+  cursor:pointer; white-space:nowrap;
+}
+.copy-btn:hover{border-color:var(--accent); color:var(--accent)}
+figure.code-block pre{margin:0; padding:14px 16px; overflow:auto; max-height:540px}
+figure.code-block code{font-size:13.5px; line-height:1.55; white-space:pre}
+
+/* simulation */
+.sim-shell{
+  position:relative; background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; overflow:hidden; box-shadow:var(--shadow); margin:0 0 8px;
+}
+#sim-canvas{display:block; width:100%; height:440px; touch-action:pan-y}
+#sim-tooltip{
+  position:absolute; z-index:5; pointer-events:none; opacity:0; transition:opacity .15s;
+  background:var(--elevated); border:1px solid var(--border-strong); border-radius:8px;
+  padding:8px 10px; font-size:12.5px; max-width:250px; color:var(--text); box-shadow:var(--shadow);
+}
+#sim-tooltip .tt-name{font-weight:700; margin-bottom:2px}
+.sim-controls{
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+  padding:12px; border-top:1px solid var(--border); background:var(--surface-2);
+}
+.sim-steps{display:flex; gap:6px; flex-wrap:wrap; align-items:center}
+.sim-step{
+  appearance:none; border:1px solid var(--border-strong); background:var(--surface);
+  color:var(--muted); border-radius:8px; min-width:32px; padding:5px 8px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px;
+  font-weight:700; cursor:pointer;
+}
+.sim-step:hover{color:var(--text); border-color:var(--accent)}
+.sim-step[aria-current="true"]{background:var(--accent); border-color:var(--accent); color:#fff}
+.sim-spacer{flex:1}
+#sim-caption{margin:14px 0 8px; font-size:15.5px}
+#sim-defender{
+  margin:0 0 16px; padding:10px 14px; border:1px dashed var(--border-strong);
+  border-radius:10px; background:var(--surface-2); color:var(--muted); font-size:14px;
+}
+#sim-defender strong{color:var(--accent-2)}
+
+/* buttons */
+.btn{
+  appearance:none; border:1px solid var(--border-strong); background:var(--surface-2);
+  color:var(--text); border-radius:8px; padding:7px 13px; font-size:13px; font-weight:600;
+  cursor:pointer; font-family:inherit;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+.btn.primary:hover{background:var(--accent-2); border-color:var(--accent-2); color:#fff}
+.btn:disabled{opacity:.5; cursor:not-allowed}
+
+/* floating action buttons */
+.fab{
+  position:fixed; z-index:60; width:44px; height:44px; border-radius:999px;
+  display:grid; place-items:center; border:1px solid var(--border-strong);
+  background:var(--elevated); color:var(--text); cursor:pointer; font-weight:700; font-size:12px;
+  box-shadow:var(--shadow); font-family:inherit; padding:0;
+}
+.fab:hover{border-color:var(--accent); color:var(--accent)}
+#btn-top{right:18px; bottom:18px; opacity:0; pointer-events:none; transition:opacity .2s}
+#btn-top.show{opacity:1; pointer-events:auto}
+#theme-toggle{right:18px; bottom:70px; width:auto; min-width:44px; padding:0 12px; height:36px}
+#btn-contents{left:18px; bottom:18px; width:auto; padding:0 14px; height:36px; display:none}
+
+/* mobile overlay */
+#toc-overlay{position:fixed; inset:0; z-index:90; display:none; background:rgba(4,8,18,.6)}
+#toc-overlay.open{display:block}
+.overlay-panel{
+  position:absolute; left:0; right:0; bottom:0; max-height:80vh; overflow:auto;
+  background:var(--elevated); border-top:1px solid var(--border-strong);
+  border-radius:16px 16px 0 0; padding:18px 18px 28px; box-shadow:var(--shadow);
+}
+.overlay-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px}
+.overlay-head .toc-title{margin:0}
+
+/* timeline */
+.timeline{list-style:none; margin:0 0 16px; padding:0 0 0 26px; border-left:2px solid var(--border-strong)}
+.timeline li{position:relative; padding:0 0 18px 16px}
+.timeline li::before{
+  content:""; position:absolute; left:-33px; top:5px; width:12px; height:12px;
+  border-radius:50%; background:var(--accent); border:2px solid var(--bg);
+}
+.time-label{
+  display:block; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px; color:var(--accent-2); font-weight:700; margin-bottom:2px;
+}
+
+/* checklist */
+.check-list{list-style:none; margin:0 0 16px; padding:0}
+.check-list li{position:relative; padding:6px 0 6px 30px; border-bottom:1px solid var(--border)}
+.check-list li::before{
+  content:""; position:absolute; left:4px; top:11px; width:12px; height:12px;
+  border:2px solid var(--border-strong); border-radius:3px;
+}
+
+/* generic lists */
+main ul,main ol{margin:0 0 14px; padding-left:24px}
+main li{margin-bottom:6px}
+
+/* responsive */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr); gap:0}
+  .sidebar{display:none}
+  #btn-contents{display:grid; place-items:center}
+  .fact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  .hero{padding:36px 16px 4px}
+  .layout{padding:0 16px 64px}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .fact-grid{grid-template-columns:1fr}
+  #sim-canvas{height:340px}
+  .kv-row{grid-template-columns:1fr}
+  .kv-key{padding-bottom:2px}
+  .kv-val{padding-top:2px}
+  #btn-top{right:12px; bottom:12px}
+  #theme-toggle{right:12px; bottom:60px}
+  #btn-contents{left:12px; bottom:12px}
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001s !important; transition-duration:.001s !important}
+}
+
+/* print */
+@media print{
+  :root[data-theme="dark"],:root[data-theme="light"]{
+    --bg:#ffffff; --surface:#ffffff; --surface-2:#ffffff; --elevated:#ffffff;
+    --text:#000000; --muted:#333333; --border:#bbbbbb; --border-strong:#888888;
+    --accent:#000000; --accent-2:#000000; --shadow:none;
+    --tint-danger:#f5f5f5; --tint-high:#f5f5f5; --tint-warning:#f5f5f5; --tint-low:#f5f5f5;
+    --tint-accent:#f5f5f5; --tint-violet:#f5f5f5; --tint-cyan:#f5f5f5;
+  }
+  body{background:#fff; color:#000; font-size:12pt}
+  .sidebar,#btn-contents,#btn-top,#theme-toggle,#progress-bar,#toc-overlay,
+  .copy-btn,.sim-controls,#sim-tooltip,.skip-link{display:none !important}
+  .layout{display:block; max-width:none; padding:0}
+  .sim-shell{border:1px solid #bbb}
+  figure.code-block pre{white-space:pre-wrap; word-break:break-word; max-height:none}
+  .table-wrap{overflow:visible}
+  .table-wrap table{min-width:0}
+  .card,.callout,.fact-card,.timeline li,.table-wrap,figure.code-block{break-inside:avoid}
+  a{color:#000; text-decoration:underline}
+}
+/* ==== PAGE-SPECIFIC CSS ==== */
+
+/* ---- T1055.008 page additions (reuse kit tokens only) ---- */
+main p code, main li code, main td code, main th code, .kv-val code, .callout code,
+#sim-caption code, #sim-defender code{
+  background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+  padding:1px 5px; font-size:.9em;
+}
+.spl-note{font-size:12.5px; color:var(--muted); margin:-4px 0 16px}
+.ctl-label{font-size:12px; font-weight:600; color:var(--muted)}
+#sim-speed{
+  appearance:none; border:1px solid var(--border-strong); background:var(--surface);
+  color:var(--text); border-radius:8px; padding:6px 10px; font-size:13px; font-weight:600;
+  cursor:pointer; font-family:inherit;
+}
+.sim-legend{
+  display:flex; flex-wrap:wrap; gap:14px; font-size:12.5px; color:var(--muted);
+  margin:0 0 16px; padding:0; list-style:none;
+}
+.leg-dot{display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:6px; vertical-align:-1px}
+#sim-tooltip .tt-desc{color:var(--muted); margin-top:2px}
+#sim-story li{margin-bottom:12px}
+.story-soc{color:var(--muted)}
+@media (max-width:640px){ .sim-controls{gap:6px} }
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1055.008"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip-link" href="#main">Skip to content</a>
+<div id="progress-bar" aria-hidden="true"></div>
+
+<section class="hero" id="top">
+  <p class="kicker">MITRE ATT&amp;CK · PROCESS INJECTION · T1055.008</p>
+  <h1 class="hero-title"><span class="tech-id">T1055.008</span> Ptrace System Calls</h1>
+  <p class="hero-intro">Ptrace System Calls is a Linux way to inject code into a running process. One process attaches to another, stops it, changes its memory and CPU registers, and lets it run again. Attackers use this to hide their code inside a trusted program, so no new file ever appears on disk.</p>
+  <ul class="chip-row" role="list">
+    <li class="chip">Platform: Linux</li>
+    <li class="chip">Tactic: Stealth (formerly Defense Evasion)</li>
+    <li class="chip">Tactic: Privilege Escalation</li>
+    <li class="chip">Parent: T1055 Process Injection</li>
+    <li class="chip">Guide v2.0</li>
+  </ul>
+  <div class="fact-grid">
+    <div class="fact-card"><span class="fact-label">ATT&amp;CK ID</span><span class="fact-value">T1055.008</span></div>
+    <div class="fact-card"><span class="fact-label">Platforms</span><span class="fact-value">Linux</span></div>
+    <div class="fact-card"><span class="fact-label">Tactics</span><span class="fact-value">Stealth (formerly Defense Evasion), Privilege Escalation</span></div>
+    <div class="fact-card"><span class="fact-label">Detection + data sources</span><span class="fact-value">Hard - auditd syscall rules and eBPF sensors are required; auth and network logs only show the edges</span></div>
+  </div>
+</section>
+
+<div class="layout">
+  <nav class="sidebar" id="toc" aria-label="Table of contents">
+    <p class="toc-title">Contents</p>
+    <ul class="toc-list">
+      <li><a href="#s1-overview">1. Overview</a></li>
+      <li><a href="#s2-simulation">2. Animated Simulation</a></li>
+      <li><a href="#s3-redteam">3. Red Team / Hacker Perspective</a></li>
+      <li><a href="#s4-blueteam">4. Blue Team / SOC Perspective</a></li>
+      <li><a href="#s5-detection">5. Detection Engineering Deep Dive</a>
+        <ul class="toc-sub">
+          <li><a href="#s5-1-regulations">5.1 Regulation Mapping</a></li>
+          <li><a href="#s5-2-threatintel">5.2 Threat Intelligence</a></li>
+          <li><a href="#s5-3-ranking">5.3 Threats Ranking and Categorization</a></li>
+          <li><a href="#s5-4-logs">5.4 Logs and Patterns</a></li>
+          <li><a href="#s5-5-sigma">5.5 Sigma Rules and Splunk SPL</a></li>
+        </ul>
+      </li>
+      <li><a href="#s6-casestudy">6. Real-World Case Study</a></li>
+      <li><a href="#s7-mitigation">7. Mitigation and Defense</a></li>
+      <li><a href="#s8-mistakes">8. Common Mistakes and Best Practices</a></li>
+      <li><a href="#s9-cheatsheet">9. Cheat Sheet and Quick Reference</a></li>
+    </ul>
+  </nav>
+  <main id="main">
+
+  <section id="s1-overview" aria-labelledby="s1-overview-title">
+    <div class="section-head">
+      <h2 id="s1-overview-title"><span class="section-num" aria-hidden="true">1</span><span class="section-title">Overview</span></h2>
+    </div>
+    <p class="section-intro">What this technique is, why attackers like it, and what you will learn on this page.</p>
+
+    <p><code>ptrace</code> means "process trace". It is the Linux debugging API (Application Programming Interface) - the set of functions a debugger uses to watch another program. One process, the <em>tracer</em>, attaches to another process, the <em>target</em>. While attached, the tracer can stop the target, read and write its memory, and read and write its CPU registers. The kernel provides all of this through the <code>ptrace</code> system call (a system call, or syscall, is how a program asks the kernel to do work for it).</p>
+
+    <p>Attackers use those same normal-looking calls for a harmful goal. First they stop a trusted, long-running process. Then they write a small payload into its memory. A payload of this kind is called shellcode: machine code that can run from almost any memory address. Next they point the instruction pointer at the payload. RIP is the CPU register that holds the address of the next instruction. Finally they let the process continue. The payload now runs inside the trusted process. The process name, the file on disk, and the open network ports all still look normal. This is why the technique belongs to Process Injection (T1055). It serves the Stealth tactic (formerly Defense Evasion) and the Privilege Escalation tactic. In 2025, ATT&amp;CK version 17 renamed the Defense Evasion tactic to Stealth. This page uses the new name, and older tools and Sigma tags still carry the old one.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Why attackers like it</h4>
+        <ul>
+          <li>The payload runs inside a process that defenders already trust.</li>
+          <li>No new file is written to disk, so file-based antivirus sees nothing.</li>
+          <li>Linux has no loud <code>CreateRemoteThread</code> equivalent, so classic Windows-style injection alerts do not exist here.</li>
+          <li>It pairs well with sibling sub-techniques: writing to <code>/proc/pid/mem</code> (T1055.009) and vDSO (virtual Dynamic Shared Object) hijacking (T1055.014) use similar memory-write steps.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>What you will learn here</h4>
+        <ul>
+          <li>The exact attack flow, shown step by step in an animated simulation.</li>
+          <li>Which logs (auditd, eBPF (extended Berkeley Packet Filter) sensors) show each step of the attack.</li>
+          <li>Six ready-to-adapt Sigma rules with matching Splunk SPL (Search Processing Language) queries.</li>
+          <li>How to harden Linux hosts with the Yama ptrace policy.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">ATT&amp;CK ID</div><div class="kv-val"><code>T1055.008</code>, child of <a href="https://attack.mitre.org/techniques/T1055/" target="_blank" rel="noopener">T1055 Process Injection</a></div></div>
+      <div class="kv-row"><div class="kv-key">Platforms</div><div class="kv-val">Linux</div></div>
+      <div class="kv-row"><div class="kv-key">Tactics</div><div class="kv-val">Stealth (formerly Defense Evasion), Privilege Escalation</div></div>
+      <div class="kv-row"><div class="kv-key">Main system calls</div><div class="kv-val"><code>ptrace</code> with PTRACE_ATTACH, PTRACE_SEIZE, PTRACE_GETREGSET, PTRACE_POKEDATA, PTRACE_SETREGS, PTRACE_DETACH; helper tools <code>process_vm_writev</code> and writes to <code>/proc/pid/mem</code></div></div>
+      <div class="kv-row"><div class="kv-key">Permissions needed</div><div class="kv-val">Same user ID (UID) as the target process, or root; the Linux capability CAP_SYS_PTRACE overrides the normal limits</div></div>
+      <div class="kv-row"><div class="kv-key">Kernel setting that matters</div><div class="kv-val"><code>kernel.yama.ptrace_scope</code>: 0 permissive, 1 descendants only (common default), 2 admin only, 3 fully disabled</div></div>
+      <div class="kv-row"><div class="kv-key">Typical targets</div><div class="kv-val">Web servers, CI (Continuous Integration) build agents, database daemons, VPN (virtual private network) or monitoring agents - anything that stays up for weeks</div></div>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-label">Where it fits in the attack chain</span>
+      <p>Attackers usually get the first foothold with valid accounts, for example a stolen SSH (Secure Shell) key. Ptrace injection then gives them a hiding place inside a trusted process. After that they steal data or reach a command and control (C2) server. The SOC (Security Operations Center) often sees the first and last steps but misses the middle one - this page fixes that.</p>
+    </div>
+  </section>
+
+  <section id="s2-simulation" aria-labelledby="s2-simulation-title">
+    <div class="section-head">
+      <h2 id="s2-simulation-title"><span class="section-num" aria-hidden="true">2</span><span class="section-title">Animated Simulation</span></h2>
+    </div>
+    <p class="section-intro">Watch a full ptrace injection on a Linux build server. The attacker is on the left, the victim host in the middle, and the SOC view on the right. Press Play, or click a step number. Hover over a panel for details. A written version of the story follows below.</p>
+
+    <div class="sim-shell">
+      <canvas id="sim-canvas" role="img" aria-label="Teaching diagram of ptrace injection in 8 steps: an attacker logs in to a Linux build server with a stolen SSH key, enumerates processes, attaches to the ci-runner daemon (PID 2147, process identifier) with PTRACE_ATTACH, reads registers, writes shellcode into daemon memory, redirects RIP and detaches, then beacons to a C2 server. The SOC panel on the right collects auth, auditd, eBPF and network evidence at each step, and the final step shows defender containment."></canvas>
+      <div id="sim-tooltip" role="status"></div>
+      <div class="sim-controls">
+        <button id="sim-play" class="btn primary" type="button">Play</button>
+        <button id="sim-pause" class="btn" type="button">Pause</button>
+        <button id="sim-restart" class="btn" type="button">Restart</button>
+        <label class="ctl-label" for="sim-speed">Speed</label>
+        <select id="sim-speed">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+        </select>
+        <span class="sim-spacer"></span>
+        <div class="sim-steps" id="sim-steps" role="group" aria-label="Simulation steps">
+          <button class="sim-step" type="button" data-step="0" aria-current="true" title="Login with a stolen key">1</button>
+          <button class="sim-step" type="button" data-step="1" title="Process discovery">2</button>
+          <button class="sim-step" type="button" data-step="2" title="PTRACE_ATTACH">3</button>
+          <button class="sim-step" type="button" data-step="3" title="Register reads">4</button>
+          <button class="sim-step" type="button" data-step="4" title="Shellcode write">5</button>
+          <button class="sim-step" type="button" data-step="5" title="Redirect and release">6</button>
+          <button class="sim-step" type="button" data-step="6" title="C2 beacon">7</button>
+          <button class="sim-step" type="button" data-step="7" title="Defender response">8</button>
+        </div>
+      </div>
+    </div>
+    <ul class="sim-legend" role="list">
+      <li><span class="leg-dot" style="background:var(--warning)"></span>attacker action</li>
+      <li><span class="leg-dot" style="background:var(--accent)"></span>evidence flowing to the SOC</li>
+      <li><span class="leg-dot" style="background:var(--danger)"></span>high-severity signal</li>
+      <li><span class="leg-dot" style="background:var(--success)"></span>defender action</li>
+    </ul>
+    <p id="sim-caption">Step 1 of 8 - The attacker logs in to the Linux build server with a stolen SSH (Secure Shell) key. The key belongs to the ci-deploy service account, so the session looks partly normal.</p>
+    <p id="sim-defender"><strong>SOC view: </strong>An SSH login for a service account comes from an unusual IP address. The login time does not match any planned build job.</p>
+
+    <h4>Written story - the same 8 steps</h4>
+    <ol id="sim-story">
+      <li><strong>Step 1 - Login with a stolen key.</strong> The attacker logs in to the build server with a stolen SSH key that belongs to the <code>ci-deploy</code> service account. <span class="story-soc">SOC view: a service account logs in from an unusual IP address, outside the build window.</span></li>
+      <li><strong>Step 2 - Process discovery.</strong> The attacker lists processes and reads <code>/proc</code> to find a daemon that stays up for weeks. <span class="story-soc">SOC view: a burst of process-listing commands from a service account looks like discovery.</span></li>
+      <li><strong>Step 3 - PTRACE_ATTACH.</strong> The attacker calls ptrace with PTRACE_ATTACH. The kernel stops the daemon and names the attacker as its tracer. <span class="story-soc">SOC view: auditd records a ptrace system call from an unexpected binary.</span></li>
+      <li><strong>Step 4 - Register reads.</strong> With PTRACE_GETREGSET the attacker reads the registers, including RIP, the next-instruction address, to plan where the new code can live. <span class="story-soc">SOC view: a tight attach-wait-read chain does not match normal debugging.</span></li>
+      <li><strong>Step 5 - Shellcode write.</strong> The attacker writes shellcode into daemon memory with PTRACE_POKEDATA or <code>process_vm_writev</code>. No file touches the disk. <span class="story-soc">SOC view: the eBPF sensor reports a cross-process memory write into the daemon.</span></li>
+      <li><strong>Step 6 - Redirect and release.</strong> The attacker points RIP at the shellcode and detaches. The daemon resumes and now runs attacker code inside a trusted process. <span class="story-soc">SOC view: EDR (Endpoint Detection and Response) flags execution from a memory region that no file backs.</span></li>
+      <li><strong>Step 7 - Beacon.</strong> The injected code calls out to the attacker C2 server while wearing the good name of the trusted daemon. <span class="story-soc">SOC view: a rare outbound connection to a new IP address.</span></li>
+      <li><strong>Step 8 - Response.</strong> Defenders verify <code>kernel.yama.ptrace_scope</code>, hunt older auditd events, isolate the host, stop the daemon, and rotate the exposed keys. <span class="story-soc">SOC view: containment in order - isolate, collect, clean, recover, rotate.</span></li>
+    </ol>
+  </section>
+
+  <section id="s3-redteam" aria-labelledby="s3-redteam-title">
+    <div class="section-head">
+      <h2 id="s3-redteam-title"><span class="section-num" aria-hidden="true">3</span><span class="section-title">Red Team / Hacker Perspective</span></h2>
+    </div>
+    <p class="section-intro">How attackers use ptrace injection, and how defenders can rehearse the same steps safely in a lab.</p>
+
+    <div class="callout danger">
+      <span class="callout-label">Defense and lab use only</span>
+      <p>Everything in this section exists for defenders and students. Run commands only against test machines that you own, inside an isolated lab network. Using these steps against systems you do not own is illegal in most countries. The code samples are incomplete on purpose: they teach the concept, they are not a working attack tool.</p>
+    </div>
+
+    <h4>When and why an attacker picks this technique</h4>
+    <p>Ptrace injection becomes attractive after an attacker already has a shell on a Linux host - for example through a stolen SSH key, a webshell, or a weak service. Instead of dropping a new binary on disk (a step that file scanners see), the attacker moves into a process that is already allowed to run. That process is also already allowed to talk to the network. On servers that run for months, a daemon is a quiet and stable home.</p>
+    <p>It also helps with privilege goals. Sometimes the attacker's account runs as the same UID (user identifier) as a more privileged service. Sometimes the attacker holds CAP_SYS_PTRACE. In both cases the injection hands over the service's view of the world: its open files, its credentials in memory, and its network position.</p>
+
+    <h4>Preconditions an attacker needs</h4>
+    <div class="grid-2">
+      <div class="card">
+        <h4>Access conditions</h4>
+        <ul>
+          <li>Code execution on the host: a shell, a webshell, or compromised automation.</li>
+          <li>The same UID as the target process, or root.</li>
+          <li>A permissive <code>kernel.yama.ptrace_scope</code>: 0 allows any same-UID attach, 1 (the common default) allows only child processes, 2 needs CAP_SYS_PTRACE, 3 blocks ptrace for everyone.</li>
+          <li>CAP_SYS_PTRACE overrides the scope=1 limit and is the only way to attach at scope=2. Only scope=3 blocks attach for everyone. Containers that leak this power by mistake are a common finding.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Good target choices (from the attacker's view)</h4>
+        <ul>
+          <li>Long-running daemons: web servers, CI (Continuous Integration) agents, database processes.</li>
+          <li>Processes with network access, so injected code can beacon without strange new sockets.</li>
+          <li>Processes nobody restarts often, because the injection dies with the process.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h4>The attack flow, step by step</h4>
+    <ol>
+      <li><strong>Get a foothold.</strong> Log in with a stolen key or abuse a vulnerable service.</li>
+      <li><strong>Enumerate.</strong> List processes with <code>ps</code> or by reading <code>/proc</code>; pick a daemon that is old, chatty, and trusted.</li>
+      <li><strong>Attach.</strong> Call <code>ptrace(PTRACE_ATTACH, pid)</code> or use PTRACE_SEIZE. The kernel stops the target and records the attacker as its tracer.</li>
+      <li><strong>Read the layout.</strong> Use PTRACE_GETREGSET or PTRACE_GETREGS to read RIP and the other registers; read <code>/proc/pid/maps</code> to find a code cave - an unused memory region big enough for the payload.</li>
+      <li><strong>Write the payload.</strong> Copy position-independent shellcode into the cave with PTRACE_POKEDATA, <code>process_vm_writev</code>, or a write to <code>/proc/pid/mem</code> (that variant is T1055.009).</li>
+      <li><strong>Redirect execution.</strong> Set RIP to the payload address with PTRACE_SETREGS or PTRACE_SETREGSET.</li>
+      <li><strong>Release.</strong> Call PTRACE_DETACH or PTRACE_CONT. The daemon resumes - now running attacker code inside itself.</li>
+      <li><strong>Hold on.</strong> The payload beacons out and hides behind the daemon's good name until the process restarts.</li>
+    </ol>
+
+    <h4>Lab-only examples</h4>
+    <p>The snippets below show the shape of the technique. They stop early on purpose and only work inside a lab VM (virtual machine) where <code>kernel.yama.ptrace_scope</code> is 0 and you own every process.</p>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Lab-only C snippet - attach and read registers</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-c">/* LAB ONLY - run inside an isolated test VM that you own.
+   Shows the first steps of ptrace use: attach, wait, read registers.
+   A real attack would continue with PTRACE_POKEDATA and PTRACE_SETREGS;
+   this snippet stops here on purpose and releases the target unchanged. */
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;sys/ptrace.h&gt;
+#include &lt;sys/user.h&gt;
+#include &lt;sys/wait.h&gt;
+
+int main(int argc, char *argv[]) {
+    if (argc != 2) { fprintf(stderr, "usage: lab_attach PID\n"); return 1; }
+    int pid = atoi(argv[1]);
+
+    if (ptrace(PTRACE_ATTACH, pid, 0, 0) == -1) {
+        perror("ptrace attach (is Yama blocking?)");
+        return 1;
+    }
+    waitpid(pid, 0, 0);                    /* wait until the target stops */
+
+    struct user_regs_struct regs;
+    if (ptrace(PTRACE_GETREGS, pid, 0, &amp;regs) == -1) {
+        perror("ptrace getregs");
+        return 1;
+    }
+    printf("target PID %d stopped, RIP = %llx\n", pid, (unsigned long long)regs.rip);
+
+    ptrace(PTRACE_DETACH, pid, 0, 0);      /* release the target unchanged */
+    return 0;
+}</code></pre>
+    </figure>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Lab-only - a debugger shows what "normal" ptrace looks like</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-bash"># Lab only: a debugger uses ptrace too - learn its normal shape first
+gdb -p 2147
+(gdb) info registers rip
+(gdb) detach
+(gdb) quit</code></pre>
+    </figure>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Lab-only - watch ptrace calls happen in your test VM</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-bash"># Lab only: trace your own test program and see the ptrace calls it makes
+strace -f ./lab_attach 2&gt; ptrace_trace.txt
+grep ptrace ptrace_trace.txt</code></pre>
+    </figure>
+
+    <h4>Common variations</h4>
+    <div class="grid-2">
+      <div class="card">
+        <h4>PTRACE_SEIZE instead of ATTACH</h4>
+        <p>SEIZE takes control more gently and supports live tracing without a hard stop. The detection picture stays the same: it is still a ptrace call with a distinctive first argument.</p>
+      </div>
+      <div class="card">
+        <h4>process_vm_writev as the writer</h4>
+        <p>The same payload placement without a full attach. Some injectors also read memory with <code>process_vm_readv</code> instead of PTRACE_GETREGS. Writing through <code>/proc/pid/mem</code> is the sibling sub-technique T1055.009.</p>
+      </div>
+      <div class="card">
+        <h4>vDSO hijacking</h4>
+        <p>T1055.014 patches the small shared code page the kernel maps into every process. It uses ptrace or <code>process_vm_writev</code> as its write primitive, so the same telemetry can catch both.</p>
+      </div>
+      <div class="card">
+        <h4>Injection from inside containers</h4>
+        <p>A container that gets CAP_SYS_PTRACE can reach processes beyond its own boundary. This turns one weak container into a host-wide problem, which is common on shared build machines.</p>
+      </div>
+    </div>
+
+    <h4>Mistakes attackers make (and detectors should watch for)</h4>
+    <ul>
+      <li>Forgetting <code>waitpid</code> after attach: the injector touches registers too early and fails.</li>
+      <li>Choosing a target that crashes under modification - a dead daemon is a loud detector.</li>
+      <li>Leaving the tracer attached: <code>TracerPid</code> in <code>/proc/pid/status</code> then names them.</li>
+      <li>Running the injector from <code>/tmp</code> under a random name - a gift for auditd rules.</li>
+      <li>Ignoring Yama: the blocked attempt still shows up as a failed ptrace call, which is evidence too.</li>
+    </ul>
+  </section>
+
+  <section id="s4-blueteam" aria-labelledby="s4-blueteam-title">
+    <div class="section-head">
+      <h2 id="s4-blueteam-title"><span class="section-num" aria-hidden="true">4</span><span class="section-title">Blue Team / SOC Perspective</span></h2>
+    </div>
+    <p class="section-intro">What defenders see, which artifacts the technique leaves behind, and a short triage flow for the first hour.</p>
+
+    <p>The SOC (Security Operations Center) rarely sees the injection moment directly. It sees the edges: a strange login before it, and a strange connection after it. The middle - the ptrace calls themselves - shows up only if the host logs syscalls with auditd or an eBPF sensor. That is why this technique is hard: the pages before and after the crime are logged by default, but the crime itself needs extra sensors.</p>
+
+    <h4>Artifacts the technique leaves</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Artifact</th><th>Where to find it</th><th>Why it matters</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>SYSCALL record for ptrace</td><td>auditd log (audit.log), Auditbeat, SIEM (Security Information and Event Management)</td><td>Names the caller binary, the user IDs, and the target PID (process identifier). This is the core evidence.</td></tr>
+          <tr><td>TracerPid field</td><td><code>/proc/&lt;pid&gt;/status</code> on the live host</td><td>A fast live-response check: a value other than 0 names the tracer process.</td></tr>
+          <tr><td>Cross-process memory write</td><td>eBPF sensors (Falco, Tracee, Tetragon)</td><td>The strongest single signal: one process writes into the memory of another.</td></tr>
+          <tr><td>Code from unbacked memory</td><td>EDR (Endpoint Detection and Response) memory scanning</td><td>Running code whose bytes come from no file on disk points to injection.</td></tr>
+          <tr><td>New outbound connection</td><td>Netflow, firewall, proxy logs</td><td>A beacon from a process that never spoke to that destination before.</td></tr>
+          <tr><td>Service account login</td><td>Auth logs (sshd, journald), SIEM</td><td>The stolen key that started the chain. Confirm the source IP and the time.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Where to look</h4>
+    <div class="grid-3">
+      <div class="card">
+        <h4>Logs</h4>
+        <p>auditd for ptrace and <code>process_vm_writev</code> syscalls; sshd auth logs for the entry point; SIEM dashboards that join them by host and time.</p>
+      </div>
+      <div class="card">
+        <h4>Memory</h4>
+        <p>Live response: check TracerPid, then capture the daemon's memory if your process allows it. EDR memory scans find code without a file backing.</p>
+      </div>
+      <div class="card">
+        <h4>Network</h4>
+        <p>Netflow and proxy logs: a new destination IP from a server VLAN is rare and worth a look, especially port 443 from a daemon that had no egress before.</p>
+      </div>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-label">Quick win</span>
+      <p>On any Linux host you can answer "is this process being traced?" with one command: <code>grep TracerPid /proc/2147/status</code>. A non-zero result means someone is attached. Put this in your live-response runbook.</p>
+    </div>
+
+    <div class="callout note">
+      <span class="callout-label">Field to know: auid</span>
+      <p><code>auid</code> is the audit user ID: the user who logged in and started the process chain. It survives UID switches and <code>sudo</code>. A ptrace call with <code>auid=4294967295</code> means "no login session at all" - typical for cron jobs, or for a compromised daemon doing the injecting.</p>
+    </div>
+
+    <h4>First-hour triage flow</h4>
+    <ol>
+      <li>Validate the alert: host, caller binary, target process, and exact time.</li>
+      <li>On the host, check <code>TracerPid</code> for the target and read <code>/proc/&lt;pid&gt;/maps</code> for odd regions.</li>
+      <li>Pull auditd records for that host in a 30-minute window around the event.</li>
+      <li>Check <code>kernel.yama.ptrace_scope</code> - a value of 0 tells you the host was open to this attack.</li>
+      <li>If confirmed: isolate the host, capture memory, and stop the daemon.</li>
+      <li>Rotate the exposed keys, then rebuild the host from a trusted image.</li>
+    </ol>
+  </section>
+
+  <section id="s5-detection" aria-labelledby="s5-detection-title">
+    <div class="section-head">
+      <h2 id="s5-detection-title"><span class="section-num" aria-hidden="true">5</span><span class="section-title">Detection Engineering Deep Dive</span></h2>
+    </div>
+    <p class="section-intro">The longest and most practical part of this page: regulation mapping, threat intelligence, a ranked threat list, real log shapes, and six ready-to-adapt Sigma rules with matching Splunk SPL.</p>
+
+    <h3 id="s5-1-regulations"><span class="section-num" aria-hidden="true">5.1</span>Regulation Mapping</h3>
+    <p>Ptrace injection hides malicious code inside trusted processes on systems that hold customer, patient, cardholder, or company data. Auditors do not test for ptrace directly. They test whether you log, monitor, and harden the systems that could face it. The controls below map that duty onto this technique.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Framework</th><th>Control reference</th><th>Why it applies</th><th>Expected evidence</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>GDPR (General Data Protection Regulation)</td>
+            <td>Art. 32 - security of processing</td>
+            <td>Injected code can read or exfiltrate personal data, so technical measures must fit the risk.</td>
+            <td>Hardening baseline showing <code>kernel.yama.ptrace_scope</code>; auditd coverage list; risk assessment entries for Linux servers.</td>
+          </tr>
+          <tr>
+            <td>HIPAA (Health Insurance Portability and Accountability Act) Security Rule</td>
+            <td>164.308(a)(1) risk analysis; 164.312(b) audit controls</td>
+            <td>Systems handling electronic health records need audit controls that record and examine system activity.</td>
+            <td>auditd rules for ptrace and <code>process_vm_writev</code>; periodic log review records; sensor deployment report.</td>
+          </tr>
+          <tr>
+            <td>ISO/IEC (International Organization for Standardization) 27001:2022</td>
+            <td>A.8.15 logging; A.8.16 monitoring activities</td>
+            <td>Logs must exist for security-relevant events, and anomalies must be monitored and investigated.</td>
+            <td>Event source inventory including auditd and eBPF sensors; monitoring procedures; anomaly tickets with outcomes.</td>
+          </tr>
+          <tr>
+            <td>SOC 2 (System and Organization Controls 2)</td>
+            <td>CC7.2, CC7.3</td>
+            <td>Requires monitoring for configuration changes and anomalies, then evaluating and responding.</td>
+            <td>Detection rules with named owners; triage records for ptrace alerts; change tickets for scope changes.</td>
+          </tr>
+          <tr>
+            <td>PCI DSS (Payment Card Industry Data Security Standard) 4.0</td>
+            <td>10.2 audit logging; 11.5.1 anti-malware and integrity</td>
+            <td>Payment systems need audit logging plus mechanisms that detect malicious code and memory tampering.</td>
+            <td>EDR or eBPF sensor reports for cardholder-data hosts; quarterly scans of the yama setting; log retention proof.</td>
+          </tr>
+          <tr>
+            <td>NIST (National Institute of Standards and Technology) CSF (Cybersecurity Framework) 2.0</td>
+            <td>PR.PS platform security; DE.CM continuous monitoring</td>
+            <td>Platform hardening and continuous monitoring are explicit framework outcomes.</td>
+            <td>Baseline documents (ptrace_scope value per host class); monitoring dashboards; detection coverage map.</td>
+          </tr>
+          <tr>
+            <td>NIST SP 800-53 Rev. 5</td>
+            <td>AU-6 audit record review; SI-4 system monitoring</td>
+            <td>Requires review of audit records and system-wide monitoring for hostile activity.</td>
+            <td>Audit review procedures with frequency; SIEM content for ptrace syscalls; escalation records.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Turning these controls into evidence is simple once you see the pattern. Each control maps to a check. Configuration management exports the <code>yama.ptrace_scope</code> value for every host. The SIEM shows that the ptrace rules are deployed and firing. The ticket system shows that a person reviewed the alerts. Collect those three artifacts per host class and you can answer an auditor for GDPR, HIPAA, ISO, SOC 2, PCI DSS, and NIST at the same time. Review the mapping twice a year, because sensor and control names change.</p>
+
+    <h3 id="s5-2-threatintel"><span class="section-num" aria-hidden="true">5.2</span>Threat Intelligence</h3>
+    <p>Good threat intelligence for this technique answers two questions: who injects code on Linux hosts, and what does that behavior look like in logs. Names change; the syscall pattern does not. Build your picture from the four source families below, then check them against your own telemetry.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>MITRE ATT&amp;CK and vendor reporting</h4>
+        <p>Start with the official ATT&amp;CK entry for T1055.008, then read vendor reports about Linux malware. Vendor blogs often describe loader behavior without naming the syscall - read for the pattern, not the brand name.</p>
+      </div>
+      <div class="card">
+        <h4>OSINT and public code</h4>
+        <p>OSINT (open-source intelligence) includes research blogs and public proof-of-concept (PoC) repositories. Small ptrace injectors are public, and reading them shows which syscalls real code touches - perfect input for detection logic. Never deploy them outside a lab.</p>
+      </div>
+      <div class="card">
+        <h4>Commercial feeds and ISACs</h4>
+        <p>Commercial threat feeds add observed infrastructure and sample hashes. An ISAC (Information Sharing and Analysis Center) shares what peer companies see. Filter both to Linux endpoint telemetry so the signal stays relevant to this technique.</p>
+      </div>
+      <div class="card">
+        <h4>Internal telemetry</h4>
+        <p>Your own auditd and eBPF data is the best source you have. It defines the normal debugging baseline per host class - and that baseline is exactly what your detection rules need for tuning.</p>
+      </div>
+    </div>
+
+    <div class="callout warning">
+      <span class="callout-label">Honest note on attribution</span>
+      <p>ATT&amp;CK documents exactly one procedure example for this sub-technique: the PACEMAKER malware, listed first below. Beyond it, public reporting that names ptrace specifically is thin. Few sources confirm which groups used this exact sub-technique, and memory-injection stories often blur ptrace with <code>/proc/pid/mem</code> writes. The table below shows confidence levels on purpose. Where evidence is weak, we say so - do not copy these claims into your own reports without the same care.</p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Actor, malware, or campaign</th><th>Confidence</th><th>What public reporting says</th><th>Relevance to ptrace injection</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a href="https://attack.mitre.org/software/S1109/" target="_blank" rel="noopener">PACEMAKER [S1109]</a> (malware)</td>
+            <td><span class="badge sev-high">High</span> (documented use)</td>
+            <td>ATT&amp;CK documents that PACEMAKER can use PTRACE to attach to a targeted process to read process memory (Mandiant Pulse Secure zero-day reporting, April 2021).</td>
+            <td>The one procedure example ATT&amp;CK lists for this sub-technique. It shows the attach step used to reach another process's memory.</td>
+          </tr>
+          <tr>
+            <td>E-crime groups distributing Linux miners</td>
+            <td><span class="badge sev-medium">Medium</span></td>
+            <td>Vendor reporting from 2018 to 2020 describes Linux loaders that place miners inside running processes.</td>
+            <td>Loaders use ptrace or <code>/proc/pid/mem</code> writes to reach that state; treat as close sibling behavior.</td>
+          </tr>
+          <tr>
+            <td>Winnti-linked tooling on Linux</td>
+            <td><span class="badge sev-low">Low</span></td>
+            <td>Older reporting describes process injection by groups targeting gaming and technology companies.</td>
+            <td>The exact primitive is not always named; use it for awareness, not for detection logic.</td>
+          </tr>
+          <tr>
+            <td>Public open-source injectors</td>
+            <td><span class="badge sev-high">High</span> (existence, not attribution)</td>
+            <td>Public PoC repositories contain small ptrace injectors for learning and testing.</td>
+            <td>Used in red-team labs and by low-skill actors; explains what your sensors will see.</td>
+          </tr>
+          <tr>
+            <td>Insider misuse on shared servers</td>
+            <td><span class="badge sev-low">Low to Medium</span></td>
+            <td>Incident response teams describe developers or admins attaching to the wrong process on shared hosts.</td>
+            <td>Same telemetry as the attack; usually one host, one account, and a quick confession.</td>
+          </tr>
+          <tr>
+            <td>Commodity botnets on small Linux devices</td>
+            <td><span class="badge sev-medium">Medium</span></td>
+            <td>Reporting describes memory-resident loaders on routers and small servers.</td>
+            <td>Injection method varies; ptrace is one of several options when the loader runs as root.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Use this intelligence the practical way. Turn each reported pattern into a detection idea (section 5.5 has six), then test the idea against your own baseline before you deploy it. Analysis means pulling the exact syscalls and preconditions out of each report. Application means turning them into rules or hardening checks. Track actor names in your threat register, but let the syscall-level behavior drive the rules - behavior survives rebranding, group names do not.</p>
+
+    <h3 id="s5-3-ranking"><span class="section-num" aria-hidden="true">5.3</span>Threats Ranking and Categorization</h3>
+    <p>Ranking method: impact first, then how often the pattern appears in reporting and in real telemetry, then how hard it is to detect. Ranks assume a typical enterprise with Linux servers in the data center and the cloud. Adjust for your own exposure.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Threat</th><th>Rank</th><th>Platforms</th><th>Description</th><th>Preconditions</th><th>Impact</th><th>Why this rank</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Implant hiding in a trusted daemon</strong> (primary abuse of this technique)</td>
+            <td><span class="badge sev-critical">Critical</span></td>
+            <td><span class="badge plat-linux">Linux</span></td>
+            <td>A long-running daemon is silently stopped, modified, and resumed with attacker code inside it.</td>
+            <td>Attacker code execution on the host; same UID as the daemon or root; permissive yama scope or CAP_SYS_PTRACE.</td>
+            <td>Full command and control from inside a trusted process; stealthy persistence until the daemon restarts.</td>
+            <td>This is the technique working as intended for an attacker: high impact and hard to see without syscall sensors.</td>
+          </tr>
+          <tr>
+            <td><strong>Miner or C2 loader injected into CI/CD build agents</strong></td>
+            <td><span class="badge sev-high">High</span></td>
+            <td><span class="badge plat-linux">Linux</span> <span class="badge plat-cloud">Cloud</span></td>
+            <td>A miner or loader is placed inside a trusted CI/CD (continuous integration and delivery) build agent process.</td>
+            <td>Stolen pipeline credentials or a compromised build job; build daemons that run long-lived agent processes.</td>
+            <td>Resource theft, plus the risk that code built on the host is tampered with (a supply-chain problem).</td>
+            <td>The most commonly reported real-world pattern for Linux memory injection, and build farms are attractive targets.</td>
+          </tr>
+          <tr>
+            <td><strong>Permissive ptrace scope on container hosts</strong></td>
+            <td><span class="badge sev-high">High</span></td>
+            <td><span class="badge plat-linux">Linux</span> <span class="badge plat-cloud">Cloud</span></td>
+            <td>A misconfigured kernel setting or container capability removes the normal attach limits.</td>
+            <td><code>kernel.yama.ptrace_scope=0</code> or containers granted CAP_SYS_PTRACE.</td>
+            <td>One compromised container can inject into processes anywhere on the host.</td>
+            <td>A single misconfiguration multiplies the reach of every other threat on this list.</td>
+          </tr>
+          <tr>
+            <td><strong>Supply-chain compromise of build tooling that chains into injection</strong></td>
+            <td><span class="badge sev-high">High</span></td>
+            <td><span class="badge plat-linux">Linux</span> <span class="badge plat-cloud">Cloud</span> <span class="badge plat-network">Network</span></td>
+            <td>A poisoned build dependency moves from trusted tooling into daemon memory on many hosts at once.</td>
+            <td>A poisoned dependency or update runs on build hosts with injection-friendly settings.</td>
+            <td>Many hosts affected at once; injected implant ships inside artifacts customers trust.</td>
+            <td>Rare, but the blast radius is wide and the technique hides it well.</td>
+          </tr>
+          <tr>
+            <td><strong>Insider misuse on multi-user servers</strong></td>
+            <td><span class="badge sev-medium">Medium</span></td>
+            <td><span class="badge plat-linux">Linux</span> <span class="badge plat-identity">Identity</span></td>
+            <td>An insider with a same-UID account attaches to a service to read memory or sabotage it.</td>
+            <td>A developer or admin account on a shared host; target process owned by the same UID.</td>
+            <td>Reading another service's memory, token theft, or quiet sabotage of one host.</td>
+            <td>Needs intent and same-UID access, which limits scale, but it does happen and it uses the same syscalls.</td>
+          </tr>
+          <tr>
+            <td><strong>Red-team simulation with a lab injector</strong></td>
+            <td><span class="badge sev-medium">Medium</span></td>
+            <td><span class="badge plat-linux">Linux</span></td>
+            <td>An approved lab test runs an injector that should trigger every detection on this page.</td>
+            <td>Approved scope, written rules of engagement, isolated lab or change window.</td>
+            <td>Low real risk; the value is proof that your detections and runbook work.</td>
+            <td>Planned and controlled by design - it should look exactly like the critical threat, so label it in advance.</td>
+          </tr>
+          <tr>
+            <td><strong>Benign lookalikes: debuggers, crash handlers, APM agents</strong></td>
+            <td><span class="badge sev-low">Low</span></td>
+            <td><span class="badge plat-linux">Linux</span></td>
+            <td>Debuggers, crash handlers, and monitoring agents make ptrace calls during normal operations.</td>
+            <td>None - this is normal operations, not an attack.</td>
+            <td>No direct impact; the risk is alert noise that hides the real signal.</td>
+            <td>Not a threat itself, but it must be allowlisted or it will bury every real alert.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-label">How to use this ranking</span>
+      <p>Build detections for the top three rows first, because they share one telemetry set: auditd records for ptrace and <code>process_vm_writev</code>. The bottom row then tells you what to allowlist so those detections stay quiet and useful.</p>
+    </div>
+
+    <h3 id="s5-4-logs"><span class="section-num" aria-hidden="true">5.4</span>Logs and Patterns</h3>
+    <p>Ptrace injection lives and dies by syscall telemetry. ATT&amp;CK publishes a detection strategy for this technique (DET0203, Ptrace-Based Process Injection on Linux); the sources and rules below align with it. The tables show the sources that matter, then the fields, then what normal looks like versus what an attack looks like. Finally, four real-shaped event examples show the exact JSON (JavaScript Object Notation) your pipeline should handle.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Log source</th><th>What it records</th><th>Why it matters here</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>auditd (via Auditbeat-style JSON)</td><td>Every ptrace and <code>process_vm_writev</code> call: caller binary, user IDs, arguments, exit code</td><td>The primary source. It names the injector and the moment it happened.</td></tr>
+          <tr><td>eBPF sensors (Falco, Tracee, Tetragon)</td><td>Kernel events with policy decisions: cross-process writes, attach calls, execution from odd regions</td><td>Works even where auditd is missing, and adds context auditd lacks.</td></tr>
+          <tr><td>Sysmon for Linux / EDR for Linux</td><td>Process creation, file hashes, network events, memory findings</td><td>Joins the injection to what ran before and what connected after.</td></tr>
+          <tr><td>Auth logs (sshd, journald)</td><td>Logins, key fingerprints, source addresses</td><td>Shows the foothold that made the injection possible.</td></tr>
+          <tr><td>Netflow, firewall, proxy</td><td>Outbound connections per host and process</td><td>Catches the beacon from the injected daemon.</td></tr>
+          <tr><td>Configuration state (sysctl, container capabilities)</td><td><code>kernel.yama.ptrace_scope</code>, CAP_SYS_PTRACE grants</td><td>Tells you whether the host could even resist this attack.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Field (Auditbeat-style)</th><th>Meaning</th><th>Why it helps</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>syscall</code></td><td>The system call name, for example <code>ptrace</code></td><td>Your first filter for every rule in this page.</td></tr>
+          <tr><td><code>a0</code></td><td>First syscall argument; for ptrace it is the request, such as <code>0x10</code> (PTRACE_ATTACH) or <code>0x4206</code> (PTRACE_SEIZE)</td><td>Separates attach requests from harmless read calls.</td></tr>
+          <tr><td><code>proc.name</code> and <code>exe</code></td><td>Caller process name and binary path</td><td>An unknown binary calling ptrace is the headline of the alert.</td></tr>
+          <tr><td><code>auid</code></td><td>Audit user ID: who logged in and started this process chain</td><td><code>4294967295</code> means no login session - a strong signal on servers.</td></tr>
+          <tr><td><code>uid</code> and <code>euid</code></td><td>Real and effective user IDs of the caller</td><td>Shows whether the caller had rights over the target process.</td></tr>
+          <tr><td><code>exit</code></td><td>Return value; <code>-1</code> means the kernel blocked the call</td><td>Blocked attempts are still evidence of probing.</td></tr>
+          <tr><td><code>target.pid</code></td><td>Process being traced (from the a1 argument or sensor enrichment)</td><td>Links the alert to the victim daemon.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Behavior</th><th>Normal</th><th>Suspicious</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>ptrace calls</td><td>gdb or strace used by a developer on a dev host, in working hours, on a process they own</td><td>Any ptrace from an unknown binary. Any attach to a daemon. Any ptrace on a server outside maintenance windows.</td></tr>
+          <tr><td><code>process_vm_writev</code></td><td>Almost never used on servers; some developer tools and profilers on workstations</td><td>Any cross-process write on a server, especially into a daemon owned by another account</td></tr>
+          <tr><td><code>auid</code> value</td><td>A real login user on interactive hosts</td><td><code>4294967295</code> (unset) doing ptrace on a server - cron or a compromised daemon</td></tr>
+          <tr><td><code>exit</code> value</td><td><code>-1</code> on hardened hosts, from the same old agent every time</td><td><code>-1</code> from new binaries (probing), or <code>0</code> where the policy should have blocked it (policy drift)</td></tr>
+          <tr><td>Daemon behavior</td><td>Same connections and child processes for weeks</td><td>New outbound destination, or a child process spawned from injected code</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>Turn the logging on with two auditd rules. The commands below are for a lab host first, then roll them out with your configuration management. On production, prefer persistent files under <code>/etc/audit/rules.d/</code>.</p>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Lab-only - auditd rules that record ptrace and process_vm_writev</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-bash"># Lab only: add the rules, then confirm they fire with a test attach in your VM
+auditctl -a always,exit -F arch=b64 -S ptrace -k t1055_ptrace
+auditctl -a always,exit -F arch=b64 -S process_vm_writev -k t1055_memwrite
+# Read what was captured:
+ausearch -k t1055_ptrace -i
+# Make the rules persistent by adding the same lines under /etc/audit/rules.d/</code></pre>
+    </figure>
+
+    <h4>Event example 1 - ptrace attach from an unknown binary</h4>
+    <p>This is the record you want to alert on. The caller is a strange binary in <code>/tmp</code>, the caller has no login session, and the target is a long-running daemon.</p>
+    <figure class="code-block">
+      <figcaption><span class="code-title">auditd via Auditbeat-style JSON - SYSCALL ptrace attach</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-json">{
+  "@timestamp": "2025-03-18T02:41:07.312Z",
+  "host.name": "build-srv-04",
+  "event.action": "syscall",
+  "event.outcome": "success",
+  "syscall": "ptrace",
+  "a0": "0x10",
+  "proc.name": "cache-loader",
+  "proc.pid": 24310,
+  "proc.ppid": 24301,
+  "exe": "/tmp/.cache-loader",
+  "auid": 4294967295,
+  "uid": 1001,
+  "euid": 1001,
+  "exit": "0",
+  "target.pid": 2147,
+  "message": "SYSCALL ptrace a0=0x10 pid=24310 target=2147 exe=/tmp/.cache-loader"
+}</code></pre>
+    </figure>
+    <ul>
+      <li><code>syscall: "ptrace"</code> with <code>a0: "0x10"</code> - an attach request (PTRACE_ATTACH), not a read.</li>
+      <li><code>exe: "/tmp/.cache-loader"</code> - the caller is not a debugger and hides in a world-writable directory.</li>
+      <li><code>auid: 4294967295</code> - no login session behind the caller, so a shell user did not start it.</li>
+      <li><code>exit: "0"</code> - the attach succeeded; the daemon is now stopped and traced.</li>
+      <li><code>target.pid: 2147</code> - the victim process, which enrichment will name as the <code>ci-runner</code> daemon.</li>
+    </ul>
+
+    <h4>Event example 2 - eBPF sensor flags the injection</h4>
+    <p>An eBPF sensor such as Falco evaluates kernel events directly. Its output is a ready-made alert with the fields your incident ticket needs.</p>
+    <figure class="code-block">
+      <figcaption><span class="code-title">Falco (eBPF) JSON output - ptrace injection rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-json">{
+  "time": "2025-03-18T02:41:12.881Z",
+  "rule": "Ptrace code injection into a system daemon",
+  "priority": "Critical",
+  "output": "Code injection via ptrace by cache-loader (user_id=1001) into ci-runner (target_pid=2147)",
+  "hostname": "build-srv-04",
+  "source": "syscall",
+  "tags": ["process", "injection", "mitre_t1055.008"],
+  "proc_name": "cache-loader",
+  "event_type": ["ptrace"]
+}</code></pre>
+    </figure>
+    <ul>
+      <li><code>rule</code> - the sensor policy that matched; keep the wording stable so SIEM rules stay simple.</li>
+      <li><code>priority: "Critical"</code> - the sensor already ranked it; your Sigma rule can filter on it.</li>
+      <li><code>output</code> - a human-readable sentence with caller, user, and target; copy it into the ticket.</li>
+      <li><code>tags</code> - includes the ATT&amp;CK mapping, which makes dashboards trivial.</li>
+    </ul>
+
+    <h4>Event example 3 - EDR sees code running from unbacked memory</h4>
+    <p>After the detach, the daemon executes the payload. EDR (Endpoint Detection and Response) memory scanning sees code that no file on disk backs, and the same alert often shows the new network destination.</p>
+    <figure class="code-block">
+      <figcaption><span class="code-title">EDR alert JSON - execution from unbacked memory region</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-json">{
+  "@timestamp": "2025-03-18T02:41:19.204Z",
+  "agent.id": "edr-lin-77",
+  "host.name": "build-srv-04",
+  "event.kind": "alert",
+  "event.severity": 88,
+  "rule.name": "Execution from unbacked memory region",
+  "process.name": "ci-runner",
+  "process.pid": 2147,
+  "threat.technique.id": "T1055.008",
+  "message": "Thread started from a memory region with no file backing after a ptrace attach.",
+  "network.destination.ip": "203.0.113.77",
+  "network.destination.port": 443
+}</code></pre>
+    </figure>
+    <ul>
+      <li><code>process.name: "ci-runner"</code> - the trusted daemon is now the one running the code; that inversion is the story of this technique.</li>
+      <li><code>threat.technique.id: "T1055.008"</code> - the vendor already maps the alert; use it for ATT&amp;CK coverage reports.</li>
+      <li><code>network.destination.ip</code> - joins the endpoint story to the network story in one record.</li>
+      <li><code>event.severity: 88</code> - tune thresholds so this outranks everyday policy noise.</li>
+    </ul>
+
+    <h4>Event example 4 - a blocked ptrace attempt</h4>
+    <p>On a hardened host the kernel refuses the attach. The attempt failed, but the record still proves someone tried - keep it and hunt it.</p>
+    <figure class="code-block">
+      <figcaption><span class="code-title">auditd via Auditbeat-style JSON - blocked ptrace (exit=-1)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-json">{
+  "@timestamp": "2025-03-18T09:02:33.510Z",
+  "host.name": "app-srv-11",
+  "event.action": "syscall",
+  "event.outcome": "failure",
+  "syscall": "ptrace",
+  "a0": "0x10",
+  "proc.name": "agent-updater",
+  "proc.pid": 8842,
+  "exe": "/opt/agent/bin/updater",
+  "auid": 4294967295,
+  "uid": 998,
+  "euid": 998,
+  "exit": "-1",
+  "target.pid": 771
+}</code></pre>
+    </figure>
+    <ul>
+      <li><code>exit: "-1"</code> - the kernel said no; Yama or seccomp did its job.</li>
+      <li><code>target.pid: 771</code> - a process the updater has no business touching.</li>
+      <li><code>exe</code> points to a signed vendor path - a good example of a false positive to allowlist after review.</li>
+      <li>Compare across hosts: the same attempt succeeding somewhere means that host lost its hardening.</li>
+    </ul>
+
+    <div class="card">
+      <h4>Detection logic in one sentence per threat</h4>
+      <ul>
+        <li><strong>Hidden implant:</strong> alert when a ptrace attach arrives from any binary that is not on the host class debugger allowlist.</li>
+        <li><strong>Miner loader in CI:</strong> alert when a build daemon itself calls ptrace or <code>process_vm_writev</code>.</li>
+        <li><strong>Open scope:</strong> alert on configuration drift when <code>kernel.yama.ptrace_scope</code> drops below the approved value.</li>
+        <li><strong>Insider misuse:</strong> alert when a user account attaches to a daemon owned by a different account.</li>
+        <li><strong>Benign lookalikes:</strong> allowlist gdb, strace, crash handlers, and APM (Application Performance Monitoring) agents by host class, then alert on everything else.</li>
+      </ul>
+    </div>
+
+    <h3 id="s5-5-sigma"><span class="section-num" aria-hidden="true">5.5</span>Sigma Rules and Splunk SPL</h3>
+    <p>Six Sigma rules cover the threats from section 5.3. Each rule is followed by a matching Splunk SPL query, a mapping note, false positives, tuning guidance, and a severity. The log source for rules 1 to 5 is auditd in Auditbeat-style output; rule 6 reads Falco eBPF findings. The Sigma tags keep <code>attack.defense_evasion</code>, because the Sigma taxonomy predates the ATT&amp;CK v17 rename to Stealth.</p>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Sigma - Ptrace Attach to a Long-Running Daemon</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-yaml">title: Ptrace Attach to a Long-Running Daemon
+id: 3f2a9c14-7b8e-4d21-9a5f-1e6c40b2d731
+status: experimental
+description: |
+  Detects a ptrace attach request (PTRACE_ATTACH, first argument 0x10) made by a
+  process that is not a known developer or support tool. Attackers use the attach
+  to stop a trusted daemon and inject code into it (MITRE ATT&amp;CK T1055.008).
+references:
+  - https://attack.mitre.org/techniques/T1055/008/
+  - https://man7.org/linux/man-pages/man2/ptrace.2.html
+author: Detection Engineering Team
+date: 2025-03-18
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection:
+    syscall: ptrace
+    a0|contains: '0x10'
+  filter_known_tools:
+    proc.name|endswith:
+      - gdb
+      - strace
+      - lldb
+  condition: selection and not filter_known_tools
+fields:
+  - host.name
+  - proc.name
+  - exe
+  - auid
+  - uid
+  - target.pid
+falsepositives:
+  - Developers or support engineers attaching a debugger to a service during a live incident.
+  - APM (Application Performance Monitoring) agents, crash handlers, or profilers that use ptrace.
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.008</code></pre>
+    </figure>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Splunk SPL - Ptrace Attach to a Long-Running Daemon</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-7d syscall=ptrace a0="0x10"
+| search NOT proc.name IN (gdb, strace, lldb)
+| stats count dc(target.pid) as targets values(exe) as callers by host.name proc.name auid uid
+| sort -count</code></pre>
+    </figure>
+    <p class="spl-note">Field names follow Auditbeat-style auditd output. Adjust index and sourcetype names to your environment.</p>
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">Mapping note</div><div class="kv-val">Sigma fields keep their names in SPL: <code>syscall</code>, <code>a0</code>, <code>proc.name</code>, <code>exe</code>, <code>auid</code>, <code>uid</code>, <code>target.pid</code>. The Sigma condition becomes the <code>NOT proc.name IN (...)</code> filter.</div></div>
+      <div class="kv-row"><div class="kv-key">False positives</div><div class="kv-val">Debugger use by developers and support engineers; APM agents, crash handlers, and profilers that attach to processes by design.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning guidance</div><div class="kv-val">Scope the rule to server host classes first. On auditd setups that log decimal arguments, match <code>a0=16</code> instead of <code>0x10</code>. Add your profiling agents to the filter list after a two-week baseline.</div></div>
+      <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val"><span class="badge sev-high">high</span> - an attach from an unknown binary is the core injection step.</div></div>
+    </div>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Sigma - Ptrace From a Process With No Login Session</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-yaml">title: Ptrace From a Process With No Login Session
+id: 8c51d2e7-4a30-4f9b-b6e8-2d97a1c5f0b4
+status: experimental
+description: |
+  Detects a ptrace call made by a process whose auid is 4294967295, which means
+  the process has no login session. On servers this points to cron jobs, daemons,
+  or an attacker working from inside a compromised service instead of a shell.
+references:
+  - https://attack.mitre.org/techniques/T1055/008/
+author: Detection Engineering Team
+date: 2025-04-02
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection:
+    syscall: ptrace
+    auid: 4294967295
+  filter_known_tools:
+    proc.name:
+      - gdb
+      - strace
+  condition: selection and not filter_known_tools
+fields:
+  - host.name
+  - proc.name
+  - exe
+  - uid
+  - euid
+  - exit
+falsepositives:
+  - Maintenance frameworks or health checks that trace their own child processes.
+  - Container runtimes performing normal process management tasks.
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.008</code></pre>
+    </figure>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Splunk SPL - Ptrace From a Process With No Login Session</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-7d syscall=ptrace auid=4294967295
+| search NOT proc.name IN (gdb, strace)
+| stats count values(exe) as callers by host.name proc.name uid euid
+| sort -count</code></pre>
+    </figure>
+    <p class="spl-note">Field names follow Auditbeat-style auditd output. Adjust index and sourcetype names to your environment.</p>
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">Mapping note</div><div class="kv-val">The unset-audit-user value <code>4294967295</code> is numeric in both formats. If your pipeline stores <code>auid</code> as text, add <code>auid="4294967295"</code> with quotes or a <code>-1</code> equivalent.</div></div>
+      <div class="kv-row"><div class="kv-key">False positives</div><div class="kv-val">Health checks and maintenance frameworks that trace their own children; container runtimes doing process management.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning guidance</div><div class="kv-val">Baseline for a month, then allowlist the two or three maintenance binaries you find. Everything else with no login session deserves a look.</div></div>
+      <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val"><span class="badge sev-high">high</span> - on servers, ptrace without a login session is rarely good news.</div></div>
+    </div>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Sigma - Cross-Process Memory Write via process_vm_writev</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-yaml">title: Cross-Process Memory Write via process_vm_writev
+id: e7b409af-2c63-4d58-8f21-6a90d3c7e512
+status: test
+description: |
+  Detects process_vm_writev, a syscall that copies memory between processes.
+  On servers it is rare outside debuggers, and it is a common write primitive
+  for code injection next to PTRACE_POKEDATA (MITRE ATT&amp;CK T1055.008, T1055.009).
+references:
+  - https://attack.mitre.org/techniques/T1055/008/
+  - https://attack.mitre.org/techniques/T1055/009/
+author: Detection Engineering Team
+date: 2025-05-21
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection:
+    syscall: process_vm_writev
+  filter_known_tools:
+    proc.name|endswith:
+      - gdb
+      - strace
+  condition: selection and not filter_known_tools
+fields:
+  - host.name
+  - proc.name
+  - exe
+  - uid
+  - euid
+  - target.pid
+falsepositives:
+  - Debuggers, profilers, and monitoring agents that inspect process memory for diagnostics.
+  - Database or runtime tooling that reads other processes on purpose.
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.008</code></pre>
+    </figure>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Splunk SPL - Cross-Process Memory Write via process_vm_writev</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-7d syscall=process_vm_writev
+| search NOT proc.name IN (gdb, strace)
+| stats count values(exe) as callers values(target.pid) as targets by host.name proc.name uid euid
+| sort -count</code></pre>
+    </figure>
+    <p class="spl-note">Field names follow Auditbeat-style auditd output. Adjust index and sourcetype names to your environment.</p>
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">Mapping note</div><div class="kv-val">One selection with a single field maps to one SPL search term: <code>syscall=process_vm_writev</code>. The filter list becomes the same <code>NOT ... IN</code> pattern as the rule above.</div></div>
+      <div class="kv-row"><div class="kv-key">False positives</div><div class="kv-val">Profilers and diagnostics agents; some database tooling reads sibling processes on purpose.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning guidance</div><div class="kv-val">On workstations, raise the severity or limit to developer hours. On servers, keep it at full severity and allowlist only named binaries with an owner and a review date.</div></div>
+      <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val"><span class="badge sev-high">high</span> - a cross-process write is the payload placement step of the attack.</div></div>
+    </div>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Sigma - Build Daemon Making Ptrace Calls</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-yaml">title: Build Daemon Making Ptrace Calls
+id: a1d65e83-90f4-4c27-b3a5-4e2f8b6c19da
+status: experimental
+description: |
+  Detects a CI (Continuous Integration) build daemon calling ptrace or
+  process_vm_writev. A build daemon has no reason to trace other processes;
+  this usually means an attacker got code execution inside a build job and is
+  injecting into a longer-lived process (MITRE ATT&amp;CK T1055.008).
+references:
+  - https://attack.mitre.org/techniques/T1055/008/
+author: Detection Engineering Team
+date: 2025-06-09
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection:
+    syscall:
+      - ptrace
+      - process_vm_writev
+    proc.name:
+      - ci-runner
+      - jenkins
+      - gitlab-runner
+      - buildkite-agent
+  condition: selection
+fields:
+  - host.name
+  - proc.name
+  - exe
+  - auid
+  - uid
+  - target.pid
+falsepositives:
+  - Build jobs that run debuggers as part of their tests; allowlist those job types.
+level: critical
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.008</code></pre>
+    </figure>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Splunk SPL - Build Daemon Making Ptrace Calls</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-24h (syscall=ptrace OR syscall=process_vm_writev) proc.name IN (ci-runner, jenkins, gitlab-runner, buildkite-agent)
+| stats count values(exe) as callers values(target.pid) as targets by host.name proc.name auid
+| sort -count</code></pre>
+    </figure>
+    <p class="spl-note">Field names follow Auditbeat-style auditd output. Adjust index and sourcetype names to your environment.</p>
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">Mapping note</div><div class="kv-val">The two-value selection on <code>syscall</code> maps to an OR pair, and the <code>proc.name</code> list maps to <code>IN (...)</code>. Here the caller list is the point of the rule, so no filter is needed.</div></div>
+      <div class="kv-row"><div class="kv-key">False positives</div><div class="kv-val">Test suites that genuinely debug processes inside build jobs; add the job label to the allowlist, not the whole daemon.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning guidance</div><div class="kv-val">Keep the daemon name list current with your build platform. If your CI runs jobs as separate short-lived processes, also alert on short-lived children of the daemon calling ptrace.</div></div>
+      <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val"><span class="badge sev-critical">critical</span> - a build daemon tracing other processes means the pipeline is already compromised.</div></div>
+    </div>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Sigma - Blocked or Failed Ptrace System Call</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-yaml">title: Blocked or Failed Ptrace System Call
+id: 5d94c7f2-1b38-4e60-a7d4-9c0e5f3a8b62
+status: test
+description: |
+  Detects a ptrace call that returned exit=-1, typically EPERM (operation not
+  permitted) after a Yama or seccomp block. The attempt failed, but the record
+  still proves someone tried. Hunt these to find policy drift and early probing.
+references:
+  - https://attack.mitre.org/techniques/T1055/008/
+author: Detection Engineering Team
+date: 2025-02-11
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection:
+    syscall: ptrace
+    exit: '-1'
+  condition: selection
+fields:
+  - host.name
+  - proc.name
+  - exe
+  - auid
+  - uid
+  - exit
+falsepositives:
+  - Broken monitoring agents or old software that still calls ptrace without permission.
+  - Sandboxes and instruments that probe ptrace availability on purpose.
+level: low
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.008</code></pre>
+    </figure>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Splunk SPL - Blocked or Failed Ptrace System Call</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-spl">index=linux_audit sourcetype="linux_audit" earliest=-30d syscall=ptrace exit="-1"
+| stats count by host.name proc.name exe uid
+| sort -count</code></pre>
+    </figure>
+    <p class="spl-note">Field names follow Auditbeat-style auditd output. Adjust index and sourcetype names to your environment.</p>
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">Mapping note</div><div class="kv-val">The exit field is a string in the sample pipeline, so the SPL compares against <code>"-1"</code>. Keep the whole 30-day window: this rule is for hunting and policy validation, not for paging anyone.</div></div>
+      <div class="kv-row"><div class="kv-key">False positives</div><div class="kv-val">The same broken agent failing every day on the same hosts - boring, expected, and worth allowlisting after review.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning guidance</div><div class="kv-val">Track this as a trend, not as an alert. A failed ptrace from a new binary, or success where you expect failure, are the two changes that matter.</div></div>
+      <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val"><span class="badge sev-low">low</span> - blocked attempts are valuable evidence with low urgency.</div></div>
+    </div>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Sigma - Falco eBPF Rule Hit for Ptrace Injection</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-yaml">title: Falco eBPF Rule Hit for Ptrace Injection
+id: 6b2f8d51-4c7a-4e93-b8d0-3f5a1c9e7d40
+status: experimental
+description: |
+  Matches Falco (an eBPF runtime sensor) findings whose rule name mentions ptrace
+  or injection. Falco evaluates kernel events directly, so it sees cross-process
+  writes and attach calls even when auditd is not installed (MITRE ATT&amp;CK T1055.008).
+references:
+  - https://attack.mitre.org/techniques/T1055/008/
+  - https://falco.org/
+author: Detection Engineering Team
+date: 2025-07-15
+logsource:
+  product: linux
+  service: falco
+detection:
+  selection:
+    rule|contains:
+      - ptrace
+      - injection
+  condition: selection
+fields:
+  - time
+  - hostname
+  - rule
+  - priority
+  - output
+  - proc_name
+falsepositives:
+  - Custom Falco rules written for your own debugging tooling; keep that allowlist narrow.
+level: high
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1055
+  - attack.t1055.008</code></pre>
+    </figure>
+
+    <figure class="code-block">
+      <figcaption><span class="code-title">Splunk SPL - Falco eBPF Rule Hit for Ptrace Injection</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-spl">index=sec_ebpf sourcetype="falco" earliest=-7d (rule="*ptrace*" OR rule="*injection*")
+| stats count by host.name rule priority proc_name
+| sort -count</code></pre>
+    </figure>
+    <p class="spl-note">Falco output fields differ from auditd: <code>rule</code>, <code>priority</code>, <code>proc_name</code>, and <code>output</code> come from the sensor's JSON. Adjust index and sourcetype names to your environment.</p>
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">Mapping note</div><div class="kv-val">The Sigma <code>rule|contains</code> list maps to two wildcard searches joined by OR. Falco names its own rules, so the match is on the rule text, not on raw syscall fields.</div></div>
+      <div class="kv-row"><div class="kv-key">False positives</div><div class="kv-val">Any custom rule you wrote that happens to mention injection; review your Falco rule names once a quarter.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning guidance</div><div class="kv-val">Filter on <code>priority</code> for paging (Critical and Warning), and route the rest to a daily review queue. Map Falco rules to ATT&amp;CK tags so dashboards stay automatic.</div></div>
+      <div class="kv-row"><div class="kv-key">Severity</div><div class="kv-val"><span class="badge sev-high">high</span> - the sensor did the hard work; your job is to route it well.</div></div>
+    </div>
+  </section>
+
+  <section id="s6-casestudy" aria-labelledby="s6-casestudy-title">
+    <div class="section-head">
+      <h2 id="s6-casestudy-title"><span class="section-num" aria-hidden="true">6</span><span class="section-title">Real-World Case Study</span></h2>
+    </div>
+    <p class="section-intro">A composite incident that puts every detection from section 5 into one story, from the stolen key to the lessons learned.</p>
+
+    <div class="callout warning">
+      <span class="callout-label">Composite scenario</span>
+      <p>This case study is a <strong>composite</strong>: it merges patterns that appear in public vendor reporting about Linux miners with common incident response experience. It does not describe one confirmed intrusion, and it names no real company. Times, host names, and IP addresses are examples in the reserved documentation ranges (for example 203.0.113.x). For one documented real-world use of ptrace against a victim process, see the PACEMAKER example in section 5.2. The story below stays composite.</p>
+    </div>
+
+    <h4>Context</h4>
+    <p>A software company runs a build farm of twelve Linux servers. Each server runs a CI (Continuous Integration) agent called <code>ci-runner</code> that stays up for months. A developer laptop was stolen. The laptop held an SSH (Secure Shell) private key named <code>deploy-2024</code> that could log in to the build farm as the <code>ci-deploy</code> service account. The build hosts had <code>kernel.yama.ptrace_scope=0</code> because an old debugging tool needed it years ago. Nobody had auditd rules for ptrace until after this incident.</p>
+
+    <h4>Timeline</h4>
+    <ul class="timeline">
+      <li><span class="time-label">02:38</span>Build server <code>build-srv-04</code> accepts an SSH login for <code>ci-deploy</code> from an IP in a country the team never works from. The auth log shows public-key auth with key <code>deploy-2024</code>.</li>
+      <li><span class="time-label">02:41</span>The session runs a burst of <code>ps</code> and <code>/proc</code> reads and settles on <code>ci-runner</code>, a daemon that has been up for 71 days.</li>
+      <li><span class="time-label">02:43</span>An unknown binary at <code>/tmp/.cache-loader</code> calls <code>ptrace(PTRACE_ATTACH)</code> on the daemon. <strong>The new auditd ptrace rule fires here - this is the detection point.</strong></li>
+      <li><span class="time-label">02:44</span>Register reads, a memory write into the daemon, register redirect, detach. The eBPF sensor logs a cross-process write; no memory-scanning EDR rule exists yet.</li>
+      <li><span class="time-label">02:45</span>The daemon opens a TLS (Transport Layer Security) connection to 203.0.113.77 - a destination no process on the host has contacted before. Netflow stores it; no alert exists for it.</li>
+      <li><span class="time-label">09:15</span>The morning SOC analyst reviews the auditd alert, sees the <code>/tmp</code> caller and the daemon target, and opens a priority 1 (P1) incident. The host is isolated at the network switch.</li>
+      <li><span class="time-label">11:30</span>The daemon is stopped after its memory is captured. The stolen key <code>deploy-2024</code> is revoked, and two more keys on the same laptop are rotated as a precaution.</li>
+      <li><span class="time-label">Next day</span>The host is rebuilt from the golden image with <code>kernel.yama.ptrace_scope=2</code>, and the Sigma rules from section 5.5 ship to the whole build fleet.</li>
+    </ul>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Attack chain</h4>
+        <p>Stolen key (valid accounts) to service login, process discovery, ptrace attach, register read, memory write, execution redirect, and a beacon from inside the trusted daemon. Each step except the login left a syscall or network record.</p>
+      </div>
+      <div class="card">
+        <h4>Detection point</h4>
+        <p>The auditd rule for ptrace fired on the attach at 02:43: caller <code>exe=/tmp/.cache-loader</code>, <code>auid=4294967295</code>, target <code>ci-runner</code>. Two independent confirmations followed: the eBPF cross-process write, and the rare outbound destination.</p>
+      </div>
+      <div class="card">
+        <h4>Containment</h4>
+        <p>Isolate first: the switch port for <code>build-srv-04</code> was disabled within 20 minutes of the ticket. Capture second: the daemon's memory was snapshotted before anyone stopped the process.</p>
+      </div>
+      <div class="card">
+        <h4>Eradication</h4>
+        <p>The injected code lived only in daemon memory, so stopping the daemon removed it. Responders searched the other eleven build hosts for the same caller path and ptrace pattern; two more hosts showed the blocked-attach signature and were rebuilt too.</p>
+      </div>
+      <div class="card">
+        <h4>Recovery</h4>
+        <p>The host was rebuilt from the golden image, <code>ptrace_scope=2</code> became the fleet standard, and the revoked key was replaced with a short-lived certificate. Builds resumed the same afternoon.</p>
+      </div>
+      <div class="card">
+        <h4>Impact</h4>
+        <p>No customer data left through this path. The attacker burned a stolen key, lost the foothold in under seven hours, and got no builds out of it. Engineering time was the main cost: about 30 person-hours across SOC, platform, and identity teams.</p>
+      </div>
+      <div class="card">
+        <h4>Team response and communication</h4>
+        <p>One incident channel, one scribe, updates every 30 minutes. Leadership got a plain-language summary: what happened, what we do not yet know, and the two decisions needed (isolate the farm, rotate all deploy keys). Support teams got a short note so they would not answer customer questions with guesses.</p>
+      </div>
+      <div class="card">
+        <h4>What nearly went wrong</h4>
+        <p>The on-call almost restarted the daemon before the memory capture. The runbook now says it in bold: capture memory first, then stop the process. The stolen laptop was also still trusted in the VPN - a second key rotation closed that gap.</p>
+      </div>
+    </div>
+
+    <h4>Lessons learned</h4>
+    <div class="grid-3">
+      <div class="card">
+        <h4>Yama hardening</h4>
+        <p>The old <code>ptrace_scope=0</code> setting from a forgotten debugging tool made the whole fleet injectable. Fix the debugging workflow instead of opening the kernel knob, and enforce the value with configuration management.</p>
+      </div>
+      <div class="card">
+        <h4>auditd coverage</h4>
+        <p>Two auditd rules found in seconds what file scanning would have missed for weeks. Add ptrace and <code>process_vm_writev</code> rules to the baseline image, not to individual hosts.</p>
+      </div>
+      <div class="card">
+        <h4>eBPF sensor rollout</h4>
+        <p>The eBPF sensor logged the cross-process write but nobody watched its output. A sensor without a routing plan is a hard drive with evidence on it. Give every sensor an owner and a queue.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="s7-mitigation" aria-labelledby="s7-mitigation-title">
+    <div class="section-head">
+      <h2 id="s7-mitigation-title"><span class="section-num" aria-hidden="true">7</span><span class="section-title">Mitigation and Defense</span></h2>
+    </div>
+    <p class="section-intro">Controls that remove the attacker's ability to inject, plus the detection and response layers that catch the attempts that still happen.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Control</th><th>Scope</th><th>Priority</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Set <code>kernel.yama.ptrace_scope=2</code> (3 for dedicated appliances)</td><td>All Linux servers</td><td><span class="badge sev-high">High</span></td><td>Low</td><td>Platform team</td><td>Blocks most same-UID injection paths outright.</td></tr>
+          <tr><td>Remove CAP_SYS_PTRACE from containers and service units</td><td>Kubernetes, Docker, systemd</td><td><span class="badge sev-high">High</span></td><td>Medium</td><td>Platform team</td><td>Stops the yama bypass and keeps injection inside one boundary.</td></tr>
+          <tr><td>Least-privilege service accounts; no shared UIDs across services</td><td>Identity</td><td><span class="badge sev-high">High</span></td><td>Medium</td><td>IAM team</td><td>Shrinks the set of processes an attacker may target.</td></tr>
+          <tr><td>SSH key hygiene: rotate keys, prefer short-lived certificates</td><td>Identity</td><td><span class="badge sev-high">High</span></td><td>Medium</td><td>IAM team</td><td>Cuts the foothold that feeds the injection.</td></tr>
+          <tr><td>auditd rules for ptrace and <code>process_vm_writev</code> in the golden image</td><td>Logging</td><td><span class="badge sev-high">High</span></td><td>Low</td><td>Detection engineering</td><td>Core telemetry for every rule in section 5.5.</td></tr>
+          <tr><td>Roll out an eBPF sensor (Falco, Tracee, or Tetragon)</td><td>Endpoint</td><td><span class="badge sev-high">High</span></td><td>Medium</td><td>Security engineering</td><td>Sees cross-process writes even where auditd is missing.</td></tr>
+          <tr><td>EDR for Linux with memory scanning enabled</td><td>Endpoint</td><td><span class="badge sev-medium">Medium</span></td><td>Medium</td><td>SOC</td><td>Catches execution from unbacked memory after the fact.</td></tr>
+          <tr><td>Egress filtering and per-daemon network baselines</td><td>Network</td><td><span class="badge sev-medium">Medium</span></td><td>Low</td><td>Network team</td><td>Makes the beacon from an injected daemon visible and hard.</td></tr>
+          <tr><td>Remove compilers and debuggers from production images</td><td>Endpoint</td><td><span class="badge sev-medium">Medium</span></td><td>Low</td><td>Platform team</td><td>Removes attacker tooling and reduces false positives at once.</td></tr>
+          <tr><td>Golden images with a patch and baseline cadence</td><td>Endpoint</td><td><span class="badge sev-medium">Medium</span></td><td>Medium</td><td>Platform team</td><td>Reduces footholds and makes rebuilds fast and safe.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>ATT&amp;CK mitigation mapping</h4>
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key"><a href="https://attack.mitre.org/mitigations/M1040/" target="_blank" rel="noopener">M1040 - Behavior Prevention on Endpoint</a></div><div class="kv-val">ATT&amp;CK lists this mitigation for T1055.008. Endpoint security can block the common sequence of behavior that appears during injection. This maps to the eBPF sensor and Linux EDR rows in the controls table.</div></div>
+      <div class="kv-row"><div class="kv-key"><a href="https://attack.mitre.org/mitigations/M1026/" target="_blank" rel="noopener">M1026 - Privileged Account Management</a></div><div class="kv-val">ATT&amp;CK also lists this mitigation for T1055.008. Use Yama (<code>/proc/sys/kernel/yama/ptrace_scope</code>) so only privileged users can ptrace, and add Linux Security Modules (LSM) such as SELinux, grsecurity, or AppArmor. This maps to the yama scope, capability, and least-privilege rows in the controls table.</div></div>
+    </div>
+
+    <h4>Check and set the Yama policy (lab first, then fleet)</h4>
+    <figure class="code-block">
+      <figcaption><span class="code-title">Lab-only - inspect and set the Yama ptrace policy</span><button class="copy-btn" type="button">Copy</button></figcaption>
+      <pre><code class="language-bash"># Lab only: check the current policy (needs root to change it)
+cat /proc/sys/kernel/yama/ptrace_scope
+# 0 = classic permissive, 1 = descendants only, 2 = admin only, 3 = fully disabled
+# Set it at runtime, then persist the value under /etc/sysctl.d/:
+sysctl -w kernel.yama.ptrace_scope=2</code></pre>
+    </figure>
+
+    <h4>If you run a small office or a home lab</h4>
+    <div class="grid-3">
+      <div class="card">
+        <h4>Harden what you have</h4>
+        <p>Set <code>ptrace_scope</code> to 2 on your Linux machines, update the system weekly, and do not run random binaries as root. That alone stops most of this technique.</p>
+      </div>
+      <div class="card">
+        <h4>Watch your keys</h4>
+        <p>Keep one SSH key per device, use a passphrase, and remove old keys from servers you no longer log in to. A stolen key is how this story starts.</p>
+      </div>
+      <div class="card">
+        <h4>Back up and isolate</h4>
+        <p>Keep offline backups of anything important, and keep lab machines off your main network. If a box acts strange, pull its cable first and ask questions after.</p>
+      </div>
+    </div>
+
+    <h4>Do these first</h4>
+    <ul class="check-list">
+      <li>Measure <code>kernel.yama.ptrace_scope</code> across every Linux host today; you cannot fix what you have not counted.</li>
+      <li>Deploy the two auditd rules from section 5.4 in the golden image.</li>
+      <li>List every container and service unit that holds CAP_SYS_PTRACE and remove it where you can.</li>
+      <li>Inventory service accounts with valid SSH keys and set a rotation date.</li>
+      <li>Ship Sigma rules 1 to 4 from section 5.5 to your SIEM and silence the known debugger allowlist.</li>
+      <li>Add "capture memory before stopping the process" to your Linux response runbook.</li>
+    </ul>
+  </section>
+
+  <section id="s8-mistakes" aria-labelledby="s8-mistakes-title">
+    <div class="section-head">
+      <h2 id="s8-mistakes-title"><span class="section-num" aria-hidden="true">8</span><span class="section-title">Common Mistakes and Best Practices</span></h2>
+    </div>
+    <p class="section-intro">Ten mistakes blue teams really make around this technique, each with the symptom, the root cause, the fix, and the habit that prevents it.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>No ptrace events reach the SIEM.</td><td>auditd rules for ptrace were never deployed.</td><td>Deploy the rules from section 5.4 and prove them with a lab attach.</td><td>Review the log source inventory every quarter.</td></tr>
+          <tr><td>Developer laptops flood the rule with alerts.</td><td>The rule ignores that developers use gdb daily.</td><td>Scope the rule to servers or add a debugger allowlist.</td><td>Baseline each host class for two weeks before rollout.</td></tr>
+          <tr><td><code>auid=4294967295</code> treated as broken logging</td><td>The team does not know the unset-audit-user value</td><td>Document the meaning in the runbook and keep the rule</td><td>Train new analysts on auditd field basics</td></tr>
+          <tr><td>Crash handlers and APM agents trigger the rule.</td><td>Legitimate tools also attach with ptrace.</td><td>Allowlist those binaries by path after review.</td><td>Keep the allowlist as reviewed code, not as a ticket note.</td></tr>
+          <tr><td>Nobody knows the fleet's yama values</td><td>No configuration baseline for kernel settings</td><td>Add <code>ptrace_scope</code> to compliance scans</td><td>Enforce the value with configuration management</td></tr>
+          <tr><td>Containers ship with CAP_SYS_PTRACE</td><td>A copied Dockerfile added capabilities for an old debug step</td><td>Remove the capability and fix the underlying workflow</td><td>Check image capabilities in the build pipeline</td></tr>
+          <tr><td>Injection coverage exists only for Windows</td><td>The team assumed injection is a Windows problem</td><td>Extend the detection map to Linux hosts</td><td>Map ATT&amp;CK coverage per platform each quarter</td></tr>
+          <tr><td>The beacon was never noticed</td><td>No network baseline for daemons</td><td>Build a per-daemon egress baseline</td><td>Keep netflow retention at 90 days or more</td></tr>
+          <tr><td>Responder restarted the daemon before capture</td><td>The runbook lacks the memory step</td><td>Update the runbook: capture memory, then stop</td><td>Run a tabletop exercise twice a year</td></tr>
+          <tr><td>The stolen key stayed valid after cleanup</td><td>Everyone focused on the host, not the identity</td><td>Revoke every key used from that device</td><td>Use an identity-first containment checklist</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout tip">
+      <span class="callout-label">Best practice in one line</span>
+      <p>Know your normal first: a two-week baseline of who calls ptrace per host class turns a noisy rule into your best Linux injection detector.</p>
+    </div>
+
+    <h4>Habits that keep the detections honest</h4>
+    <div class="grid-3">
+      <div class="card">
+        <h4>Daily</h4>
+        <ul>
+          <li>Review high-severity ptrace alerts and close them with a reason.</li>
+          <li>Check log source heartbeats: auditd and sensors must be shipping.</li>
+          <li>Skim new outbound destinations from server VLANs.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Weekly</h4>
+        <ul>
+          <li>Compare yama values across the fleet against the standard.</li>
+          <li>Tune the noisiest rule and record why.</li>
+          <li>Read one vendor report on Linux threats and extract one detection idea.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Monthly</h4>
+        <ul>
+          <li>Purple-team one injection step in the lab and measure the gap.</li>
+          <li>Review the allowlist: remove entries nobody owns.</li>
+          <li>Rotate service keys and export the compliance evidence from 5.1.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="s9-cheatsheet" aria-labelledby="s9-cheatsheet-title">
+    <div class="section-head">
+      <h2 id="s9-cheatsheet-title"><span class="section-num" aria-hidden="true">9</span><span class="section-title">Cheat Sheet and Quick Reference</span></h2>
+    </div>
+    <p class="section-intro">The whole page in one screen: key facts, the top detections, a response checklist, and where to read more.</p>
+
+    <h4>Key facts</h4>
+    <div class="kv-list">
+      <div class="kv-row"><div class="kv-key">Technique</div><div class="kv-val">T1055.008 - Ptrace System Calls (parent: T1055 Process Injection)</div></div>
+      <div class="kv-row"><div class="kv-key">Platform and tactics</div><div class="kv-val">Linux; Stealth (formerly Defense Evasion) and Privilege Escalation</div></div>
+      <div class="kv-row"><div class="kv-key">Core steps</div><div class="kv-val">Attach (PTRACE_ATTACH or SEIZE), read registers (GETREGSET), write shellcode (POKEDATA or <code>process_vm_writev</code>), redirect RIP (SETREGS), detach</div></div>
+      <div class="kv-row"><div class="kv-key">Best single detection</div><div class="kv-val">auditd SYSCALL record: ptrace attach from a binary outside the debugger allowlist</div></div>
+      <div class="kv-row"><div class="kv-key">Best hardening step</div><div class="kv-val"><code>kernel.yama.ptrace_scope=2</code> and no CAP_SYS_PTRACE in containers</div></div>
+      <div class="kv-row"><div class="kv-key">Fastest live check</div><div class="kv-val"><code>grep TracerPid /proc/&lt;pid&gt;/status</code> - non-zero means the process is being traced</div></div>
+      <div class="kv-row"><div class="kv-key">Related techniques</div><div class="kv-val">T1055.009 (writes through <code>/proc/pid/mem</code>), T1055.014 (vDSO hijacking uses the same write primitives)</div></div>
+    </div>
+
+    <h4>Top detections</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Detection</th><th>Log source</th><th>When it fires</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Ptrace attach from an unexpected binary</td><td>auditd SYSCALL records</td><td>Any attach where the caller is not an allowlisted debugger or agent.</td></tr>
+          <tr><td>Ptrace with no login session</td><td>auditd (<code>auid=4294967295</code>)</td><td>Cron or a compromised daemon calls ptrace on a server.</td></tr>
+          <tr><td>Cross-process memory write</td><td>auditd or eBPF sensor</td><td><code>process_vm_writev</code> targets a process owned by another account.</td></tr>
+          <tr><td>Build daemon calls ptrace</td><td>auditd, CI host class</td><td>The CI agent itself traces other processes - pipeline compromise.</td></tr>
+          <tr><td>Code from unbacked memory</td><td>EDR for Linux</td><td>The daemon executes code that no file on disk backs.</td></tr>
+          <tr><td>Rare outbound connection from a daemon</td><td>Netflow, firewall, proxy</td><td>A long-running daemon reaches a destination it has never used.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Response checklist</h4>
+    <ul class="check-list">
+      <li>Confirm the alert: host, caller binary, target process, exact time.</li>
+      <li>Run <code>grep TracerPid /proc/&lt;pid&gt;/status</code> on the host.</li>
+      <li>Pull auditd events for the host in a 30-minute window around the alert.</li>
+      <li>Check <code>kernel.yama.ptrace_scope</code> on that host.</li>
+      <li>Isolate the host if the injection is confirmed.</li>
+      <li>Capture the daemon's memory, then stop the daemon.</li>
+      <li>Rotate the exposed SSH keys and tokens.</li>
+      <li>Rebuild from a trusted image before returning the host to service.</li>
+    </ul>
+
+    <h4>Read more</h4>
+    <ul>
+      <li><a href="https://attack.mitre.org/techniques/T1055/008/" target="_blank" rel="noopener">Official ATT&amp;CK page for T1055.008 - Ptrace System Calls</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/" target="_blank" rel="noopener">Parent technique T1055 - Process Injection</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/009/" target="_blank" rel="noopener">T1055.009 - Proc Memory (the <code>/proc/pid/mem</code> sibling)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1055/014/" target="_blank" rel="noopener">T1055.014 - VDSO Hijacking (uses ptrace as its write primitive)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1057/" target="_blank" rel="noopener">T1057 - Process Discovery (the enumeration step of the attack)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1078/" target="_blank" rel="noopener">T1078 - Valid Accounts (the stolen-key foothold)</a></li>
+    </ul>
+  </section>
+
+  </main>
+</div>
+
+<button id="btn-contents" class="fab" aria-haspopup="dialog" aria-expanded="false" aria-controls="toc-overlay">Contents</button>
+<button id="theme-toggle" class="fab" type="button">Dark</button>
+<button id="btn-top" class="fab" type="button" aria-label="Back to top">Top</button>
+
+<div id="toc-overlay" role="dialog" aria-modal="true" aria-label="Contents">
+  <div class="overlay-panel">
+    <div class="overlay-head">
+      <p class="toc-title">Contents</p>
+      <button id="overlay-close" class="btn" type="button">Close</button>
+    </div>
+    <ul class="toc-list">
+      <li><a href="#s1-overview">1. Overview</a></li>
+      <li><a href="#s2-simulation">2. Animated Simulation</a></li>
+      <li><a href="#s3-redteam">3. Red Team / Hacker Perspective</a></li>
+      <li><a href="#s4-blueteam">4. Blue Team / SOC Perspective</a></li>
+      <li><a href="#s5-detection">5. Detection Engineering Deep Dive</a>
+        <ul class="toc-sub">
+          <li><a href="#s5-1-regulations">5.1 Regulation Mapping</a></li>
+          <li><a href="#s5-2-threatintel">5.2 Threat Intelligence</a></li>
+          <li><a href="#s5-3-ranking">5.3 Threats Ranking and Categorization</a></li>
+          <li><a href="#s5-4-logs">5.4 Logs and Patterns</a></li>
+          <li><a href="#s5-5-sigma">5.5 Sigma Rules and Splunk SPL</a></li>
+        </ul>
+      </li>
+      <li><a href="#s6-casestudy">6. Real-World Case Study</a></li>
+      <li><a href="#s7-mitigation">7. Mitigation and Defense</a></li>
+      <li><a href="#s8-mistakes">8. Common Mistakes and Best Practices</a></li>
+      <li><a href="#s9-cheatsheet">9. Cheat Sheet and Quick Reference</a></li>
+    </ul>
+  </div>
+</div>
+<script>
+/* =========================================================
+   ATT&CK guide — shared page JS (kit). Embed VERBATIM.
+   Add page-specific JS (simulation etc.) after the marker.
+   Exposes: window.atkToken(name), window.ATK_REDUCED,
+   and a 'atkthemechange' CustomEvent on document.
+   ========================================================= */
+(function () {
+  'use strict';
+
+  var REDUCED = false;
+  try { REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { REDUCED = false; }
+  window.ATK_REDUCED = REDUCED;
+
+  window.atkToken = function (name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  };
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /* ---- theme toggle ---- */
+  var themeBtn = document.getElementById('theme-toggle');
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') || 'dark';
+  }
+  function applyThemeLabel() {
+    if (!themeBtn) return;
+    var t = currentTheme();
+    themeBtn.textContent = t === 'dark' ? 'Dark' : 'Light';
+    themeBtn.setAttribute('aria-label', 'Color theme: ' + t + '. Activate to switch to ' + (t === 'dark' ? 'light' : 'dark') + '.');
+    themeBtn.setAttribute('aria-pressed', t === 'dark' ? 'true' : 'false');
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function () {
+      var next = currentTheme() === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('atk-theme', next); } catch (e) {}
+      applyThemeLabel();
+      document.dispatchEvent(new CustomEvent('atkthemechange', { detail: { theme: next } }));
+    });
+    applyThemeLabel();
+  }
+
+  /* ---- back to top + reading progress ---- */
+  var topBtn = document.getElementById('btn-top');
+  var bar = document.getElementById('progress-bar');
+  var ticking = false;
+  function onScrollFrame() {
+    ticking = false;
+    var doc = document.documentElement;
+    var y = window.scrollY || doc.scrollTop || 0;
+    var max = doc.scrollHeight - window.innerHeight;
+    var p = max > 0 ? Math.min(1, Math.max(0, y / max)) : 0;
+    if (bar) bar.style.width = (p * 100).toFixed(2) + '%';
+    if (topBtn) {
+      if (y > 600) { topBtn.classList.add('show'); } else { topBtn.classList.remove('show'); }
+    }
+  }
+  window.addEventListener('scroll', function () {
+    if (!ticking) { ticking = true; window.requestAnimationFrame(onScrollFrame); }
+  }, { passive: true });
+  if (topBtn) {
+    topBtn.addEventListener('click', function () {
+      window.scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' });
+    });
+  }
+
+  /* ---- TOC build from real headings (cannot drift) ---- */
+  function labelFromHeading(h) {
+    var clone = h.cloneNode(true);
+    var nums = clone.querySelectorAll('.section-num');
+    var numText = '';
+    for (var i = 0; i < nums.length; i++) { numText = nums[i].textContent; nums[i].remove(); }
+    var title = clone.textContent.replace(/\s+/g, ' ').trim();
+    return numText ? numText + '. ' + title : title;
+  }
+  function buildTocList(ul) {
+    if (!ul) return;
+    var out = '';
+    var secs = document.querySelectorAll('main > section[id]');
+    for (var i = 0; i < secs.length; i++) {
+      var s = secs[i];
+      var h = s.querySelector('h2');
+      if (!h) continue;
+      out += '<li><a href="#' + s.id + '">' + esc(labelFromHeading(h)) + '</a>';
+      var subs = s.querySelectorAll('h3[id]');
+      if (subs.length) {
+        out += '<ul class="toc-sub">';
+        for (var j = 0; j < subs.length; j++) {
+          out += '<li><a href="#' + subs[j].id + '">' + esc(labelFromHeading(subs[j])) + '</a></li>';
+        }
+        out += '</ul>';
+      }
+      out += '</li>';
+    }
+    ul.innerHTML = out;
+  }
+  var tocLists = document.querySelectorAll('.toc-list');
+  for (var t = 0; t < tocLists.length; t++) { buildTocList(tocLists[t]); }
+
+  /* ---- active TOC highlighting ---- */
+  var activeId = null;
+  function setActive(id) {
+    if (id === activeId) return;
+    activeId = id;
+    var links = document.querySelectorAll('.toc-list a');
+    for (var i = 0; i < links.length; i++) {
+      var href = links[i].getAttribute('href') || '';
+      var on = href === '#' + id;
+      links[i].classList.toggle('active', on);
+      if (on) { links[i].setAttribute('aria-current', 'true'); } else { links[i].removeAttribute('aria-current'); }
+    }
+  }
+  var headingEls = document.querySelectorAll('main > section[id], main h3[id]');
+  if ('IntersectionObserver' in window) {
+    var visible = [];
+    var io = new IntersectionObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        var en = entries[i];
+        if (en.isIntersecting) {
+          if (visible.indexOf(en.target.id) === -1) visible.push(en.target.id);
+        } else {
+          visible = visible.filter(function (x) { return x !== en.target.id; });
+        }
+      }
+      if (visible.length) setActive(visible[visible.length - 1]);
+    }, { rootMargin: '-12% 0px -68% 0px', threshold: 0 });
+    for (var k = 0; k < headingEls.length; k++) { io.observe(headingEls[k]); }
+  } else {
+    var scrollTick = false;
+    window.addEventListener('scroll', function () {
+      if (scrollTick) return;
+      scrollTick = true;
+      window.requestAnimationFrame(function () {
+        scrollTick = false;
+        var best = null;
+        for (var i = 0; i < headingEls.length; i++) {
+          if (headingEls[i].getBoundingClientRect().top < 140) best = headingEls[i].id;
+        }
+        if (best) setActive(best);
+      });
+    }, { passive: true });
+  }
+
+  /* ---- mobile contents overlay ---- */
+  var overlay = document.getElementById('toc-overlay');
+  var openBtn = document.getElementById('btn-contents');
+  var closeBtn = document.getElementById('overlay-close');
+  function openOverlay() {
+    if (!overlay) return;
+    overlay.classList.add('open');
+    if (openBtn) openBtn.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+    if (closeBtn) closeBtn.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    if (openBtn) {
+      openBtn.setAttribute('aria-expanded', 'false');
+      openBtn.focus();
+    }
+    document.body.style.overflow = '';
+  }
+  if (openBtn && overlay) {
+    openBtn.addEventListener('click', openOverlay);
+    if (closeBtn) closeBtn.addEventListener('click', closeOverlay);
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closeOverlay();
+      else if (e.target.closest && e.target.closest('a[href^="#"]')) closeOverlay();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && overlay.classList.contains('open')) closeOverlay();
+    });
+  }
+
+  /* ---- copy buttons (event delegation) ---- */
+  document.addEventListener('click', function (e) {
+    if (!e.target || !e.target.closest) return;
+    var btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    var fig = btn.closest('figure');
+    var code = fig ? fig.querySelector('pre code') : null;
+    if (!code) return;
+    var text = code.textContent || '';
+    function done(ok) {
+      var old = btn.getAttribute('data-label') || btn.textContent;
+      btn.setAttribute('data-label', old);
+      btn.textContent = ok ? 'Copied!' : 'Copy failed';
+      setTimeout(function () { btn.textContent = old; }, 1600);
+    }
+    function fallback() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        done(ok);
+      } catch (err) { done(false); }
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, fallback);
+    } else { fallback(); }
+  });
+})();
+/* ==== PAGE-SPECIFIC JS ==== */
+
+/* =========================================================
+   T1055.008 - ptrace injection simulation (canvas, vanilla JS)
+   8 steps, starts paused on step 1, theme-aware via atkToken.
+   ========================================================= */
+(function () {
+  'use strict';
+
+  var STEPS = [
+    {
+      chip: 'Login with a stolen key',
+      label: 'SSH login (stolen key)',
+      cap: 'Step 1 of 8 - The attacker logs in to the Linux build server with a stolen SSH (Secure Shell) key. The key belongs to the ci-deploy service account, so the session looks partly normal.',
+      soc: 'An SSH login for a service account comes from an unusual IP address. The login time does not match any planned build job.',
+      ev: 'auth: SSH login from unusual IP',
+      sev: 'warn'
+    },
+    {
+      chip: 'Process discovery',
+      label: 'ps and /proc sweep',
+      cap: 'Step 2 of 8 - The attacker lists running processes and reads the /proc file system to find a long-lived daemon that nobody will miss for hours.',
+      soc: 'The service account suddenly runs many process-listing commands. This is rare for that account and looks like discovery.',
+      ev: 'auditd: unusual process sweep',
+      sev: 'info'
+    },
+    {
+      chip: 'PTRACE_ATTACH',
+      label: 'PTRACE_ATTACH',
+      cap: 'Step 3 of 8 - The attacker calls the ptrace system call with PTRACE_ATTACH. The kernel stops the daemon and records the attacker as its tracer.',
+      soc: 'auditd (the Linux audit framework) writes a SYSCALL record for ptrace from an unexpected binary. The target is a long-running daemon.',
+      ev: 'auditd: SYSCALL ptrace a0=0x10',
+      sev: 'danger'
+    },
+    {
+      chip: 'Register reads',
+      label: 'PTRACE_GETREGSET',
+      cap: 'Step 4 of 8 - With PTRACE_GETREGSET the attacker reads the CPU registers. RIP, the register that holds the next instruction address, shows where a code cave can be used.',
+      soc: 'Several ptrace calls arrive in a tight chain: attach, wait, then register reads. Normal debugging on this host does not look like this.',
+      ev: 'auditd: register-read chain',
+      sev: 'info'
+    },
+    {
+      chip: 'Shellcode write',
+      label: 'PTRACE_POKEDATA / process_vm_writev',
+      cap: 'Step 5 of 8 - The attacker writes small position-independent shellcode into a free memory area of the daemon. No file is written to disk.',
+      soc: 'The eBPF (extended Berkeley Packet Filter) sensor sees a cross-process memory write into the daemon. This is the strongest single signal so far.',
+      ev: 'eBPF: cross-process memory write',
+      sev: 'danger'
+    },
+    {
+      chip: 'Redirect and release',
+      label: 'PTRACE_SETREGS + DETACH',
+      cap: 'Step 6 of 8 - The attacker points RIP at the new code and calls PTRACE_DETACH. The daemon resumes and now runs attacker code inside a trusted process.',
+      soc: 'The EDR (Endpoint Detection and Response) agent flags code running from a memory region that no file backs.',
+      ev: 'EDR: code from unbacked region',
+      sev: 'danger'
+    },
+    {
+      chip: 'C2 beacon',
+      label: 'beacon to C2',
+      cap: 'Step 7 of 8 - The injected code connects out to the attacker command and control (C2) server. The traffic looks like it comes from the trusted daemon.',
+      soc: 'The host opens a rare outbound connection to a new IP address. The source process is the trusted daemon itself.',
+      ev: 'netflow: rare outbound C2 link',
+      sev: 'warn'
+    },
+    {
+      chip: 'Defender response',
+      label: 'containment',
+      cap: 'Step 8 of 8 - Defenders check kernel.yama.ptrace_scope, hunt older auditd events, isolate the host, stop the daemon, and rotate the exposed SSH keys.',
+      soc: 'Containment happens in order: isolate first, collect evidence second, then clean, recover, and rotate the stolen key.',
+      ev: 'response: host isolated, keys rotated',
+      sev: 'good'
+    }
+  ];
+
+  var SEV_STYLE = {
+    info:   { fill: 'tintAccent',  border: 'accent' },
+    warn:   { fill: 'tintWarning', border: 'warning' },
+    danger: { fill: 'tintDanger',  border: 'danger' },
+    good:   { fill: 'tintLow',     border: 'success' }
+  };
+
+  var TT = {
+    attacker: {
+      name: 'Attacker workstation',
+      desc: 'Starts with a stolen SSH key of a service account, then uses ptrace system calls to inject code into a trusted process.'
+    },
+    victim: {
+      name: 'Linux host build-srv-04',
+      desc: 'Runs the ci-runner daemon. Long-lived daemons are good hiding places because they stay up for weeks.'
+    },
+    daemon: {
+      name: 'ci-runner daemon (PID 2147, process identifier)',
+      desc: 'The target process. PTRACE_ATTACH stops it, shellcode is written into its memory, and it resumes with attacker code.'
+    },
+    soc: {
+      name: 'SOC - defender panel',
+      desc: 'The Security Operations Center. It sees auth logs, auditd records, eBPF sensor events, EDR findings and network flow.'
+    }
+  };
+
+  var canvas = document.getElementById('sim-canvas');
+  var captionEl = document.getElementById('sim-caption');
+  var defenderEl = document.getElementById('sim-defender');
+  var tooltip = document.getElementById('sim-tooltip');
+  var playBtn = document.getElementById('sim-play');
+  var pauseBtn = document.getElementById('sim-pause');
+  var restartBtn = document.getElementById('sim-restart');
+  var speedSel = document.getElementById('sim-speed');
+  if (!canvas || !captionEl || !defenderEl || !tooltip) return;
+
+  var ctx = canvas.getContext('2d');
+  var step = 0;      /* current step index 0..7 */
+  var prog = 1;      /* progress inside the step, 0..1 (start settled) */
+  var playing = false;
+  var speed = 1;
+  var lastTs = 0;
+  var tokens = {};
+  var hit = [];
+
+  function tok(name) { return window.atkToken(name); }
+  function readTokens() {
+    tokens = {
+      surface: tok('--surface'), surface2: tok('--surface-2'), elevated: tok('--elevated'),
+      text: tok('--text'), muted: tok('--muted'), border: tok('--border'),
+      borderStrong: tok('--border-strong'), accent: tok('--accent'), accent2: tok('--accent-2'),
+      violet: tok('--violet'), success: tok('--success'), warning: tok('--warning'),
+      danger: tok('--danger'), tintDanger: tok('--tint-danger'), tintWarning: tok('--tint-warning'),
+      tintLow: tok('--tint-low'), tintAccent: tok('--tint-accent'), tintViolet: tok('--tint-violet')
+    };
+  }
+
+  function mono(size, weight) {
+    ctx.font = (weight || 400) + ' ' + size + 'px ui-monospace, Menlo, Consolas, "Liberation Mono", monospace';
+  }
+  function rr(x, y, w, h, r) {
+    var rad = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rad, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rad);
+    ctx.arcTo(x + w, y + h, x, y + h, rad);
+    ctx.arcTo(x, y + h, x, y, rad);
+    ctx.arcTo(x, y, x + w, y, rad);
+    ctx.closePath();
+  }
+  function clip(text, maxPx) {
+    if (ctx.measureText(text).width <= maxPx) return text;
+    while (text.length > 1 && ctx.measureText(text + '...').width > maxPx) text = text.slice(0, -1);
+    return text + '...';
+  }
+
+  function layout(W, H) {
+    var m = Math.max(10, Math.round(W * 0.025));
+    var aw = W * 0.22, vw = W * 0.36, sw = W * 0.27;
+    var gap = (W - 2 * m - aw - vw - sw) / 2;
+    if (gap < 10) {
+      var k = (W - 2 * m - 20) / (aw + vw + sw);
+      aw *= k; vw *= k; sw *= k;
+      gap = (W - 2 * m - aw - vw - sw) / 2;
+    }
+    var top = 60;
+    return {
+      m: m,
+      atk: { x: m, y: H * 0.32, w: aw, h: H * 0.42 },
+      vic: { x: m + aw + gap, y: top, w: vw, h: H - top - 24 },
+      soc: { x: W - m - sw, y: top, w: sw, h: H - top - 24 }
+    };
+  }
+
+  function drawAttacker(L) {
+    var a = L.atk;
+    hit.push({ x: a.x, y: a.y, w: a.w, h: a.h, key: 'attacker' });
+    rr(a.x, a.y, a.w, a.h, 12);
+    ctx.fillStyle = tokens.surface2;
+    ctx.fill();
+    ctx.strokeStyle = tokens.borderStrong;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    mono(11, 700);
+    ctx.fillStyle = tokens.warning;
+    ctx.fillText('ATTACKER', a.x + 12, a.y + 22);
+    mono(10, 400);
+    ctx.fillStyle = tokens.muted;
+    ctx.fillText('untrusted laptop', a.x + 12, a.y + 38);
+    var lines = [
+      'ssh ci-deploy@build-srv-04',
+      'ps aux | grep -i daemon',
+      'ptrace(PTRACE_ATTACH, 2147)'
+    ];
+    for (var i = 0; i < lines.length; i++) {
+      if (step < i) break;
+      var alpha = (step === i && prog < 1) ? Math.min(1, prog * 2) : 1;
+      ctx.globalAlpha = 0.35 + 0.65 * alpha;
+      mono(10, 400);
+      ctx.fillStyle = i === 2 ? tokens.warning : tokens.text;
+      ctx.fillText(clip(lines[i], a.w - 24), a.x + 12, a.y + 62 + i * 16);
+      ctx.globalAlpha = 1;
+    }
+    if (step === 7) {
+      mono(10, 400);
+      ctx.fillStyle = tokens.muted;
+      ctx.fillText('key rotated - locked out', a.x + 12, a.y + a.h - 12);
+    }
+  }
+
+  function drawVictim(L) {
+    var v = L.vic;
+    hit.push({ x: v.x, y: v.y, w: v.w, h: v.h, key: 'victim' });
+    rr(v.x, v.y, v.w, v.h, 12);
+    ctx.fillStyle = tokens.elevated;
+    ctx.fill();
+    ctx.strokeStyle = tokens.border;
+    ctx.stroke();
+    mono(11, 700);
+    ctx.fillStyle = tokens.violet;
+    ctx.fillText('LINUX HOST - build-srv-04', v.x + 12, v.y + 22);
+
+    var dx = v.x + 12, dy = v.y + 36, dw = v.w - 24, dh = 62;
+    rr(dx, dy, dw, dh, 10);
+    ctx.fillStyle = tokens.tintViolet;
+    ctx.fill();
+    ctx.strokeStyle = tokens.violet;
+    ctx.stroke();
+    mono(11, 700);
+    ctx.fillStyle = tokens.text;
+    ctx.fillText('ci-runner daemon', dx + 10, dy + 20);
+    mono(9.5, 400);
+    ctx.fillStyle = tokens.muted;
+    ctx.fillText('PID 2147 - trusted build service', dx + 10, dy + 35);
+    var state, scol;
+    if (step < 2) { state = 'running'; scol = tokens.success; }
+    else if (step < 5) { state = 'stopped (T)'; scol = tokens.warning; }
+    else { state = 'runs injected code'; scol = tokens.danger; }
+    mono(10, 700);
+    ctx.fillStyle = scol;
+    ctx.fillText(state, dx + 10, dy + dh - 10);
+    hit.push({ x: dx, y: dy, w: dw, h: dh, key: 'daemon' });
+
+    var ry = dy + dh + 20;
+    mono(10, 400);
+    if (step < 3) { ctx.fillStyle = tokens.muted; ctx.fillText('RIP: not read yet', dx, ry); }
+    else if (step < 5) { ctx.fillStyle = tokens.text; ctx.fillText('RIP: 0x00007f2a41c09a10', dx, ry); }
+    else { ctx.fillStyle = tokens.danger; ctx.fillText('RIP -> injected shellcode', dx, ry); }
+
+    var my = ry + 14, mw = v.w - 24, mh = 30;
+    rr(dx, my, mw, mh, 8);
+    ctx.fillStyle = tokens.surface2;
+    ctx.fill();
+    ctx.strokeStyle = tokens.border;
+    ctx.stroke();
+    mono(9.5, 400);
+    ctx.fillStyle = tokens.muted;
+    ctx.fillText('process memory', dx + 8, my + mh / 2 + 3.5);
+    if (step >= 4) {
+      var ralpha = (step === 4) ? Math.min(1, Math.max(0, (prog - 0.4) * 2.5)) : 1;
+      if (ralpha > 0) {
+        var rx = dx + mw * 0.52, rw2 = mw * 0.4;
+        ctx.globalAlpha = ralpha;
+        rr(rx, my + 4, rw2, mh - 8, 6);
+        ctx.fillStyle = tokens.tintWarning;
+        ctx.fill();
+        ctx.strokeStyle = tokens.warning;
+        ctx.stroke();
+        mono(9.5, 700);
+        ctx.fillStyle = tokens.warning;
+        ctx.fillText('shellcode', rx + 8, my + mh / 2 + 3.5);
+        ctx.globalAlpha = 1;
+      }
+    }
+    mono(9.5, 400);
+    ctx.fillStyle = tokens.muted;
+    ctx.fillText(step === 7 ? 'kernel.yama.ptrace_scope = 2 (hardened)' : 'kernel.yama.ptrace_scope = 0 (permissive)', dx, v.y + v.h - 12);
+    if (step === 7) {
+      rr(v.x + v.w - 78, v.y + 10, 68, 20, 6);
+      ctx.fillStyle = tokens.tintLow;
+      ctx.fill();
+      ctx.strokeStyle = tokens.success;
+      ctx.stroke();
+      mono(9.5, 700);
+      ctx.fillStyle = tokens.success;
+      ctx.fillText('isolated', v.x + v.w - 66, v.y + 24);
+    }
+  }
+
+  function drawC2(L) {
+    var v = L.vic;
+    var cx = v.x + v.w * 0.5, cy = 30, r = 13;
+    var active = step >= 6;
+    ctx.save();
+    ctx.globalAlpha = active ? 1 : 0.4;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = tokens.surface2;
+    ctx.fill();
+    ctx.strokeStyle = active ? tokens.danger : tokens.borderStrong;
+    if (!active) ctx.setLineDash([3, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    mono(9.5, 700);
+    ctx.fillStyle = active ? tokens.danger : tokens.muted;
+    ctx.fillText('C2', cx - 8, cy + 3.5);
+    if (step >= 6) {
+      ctx.strokeStyle = tokens.danger;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + r);
+      ctx.lineTo(cx, v.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (step === 6 && prog < 0.5) {
+        var p6 = prog / 0.5;
+        var py = v.y - (v.y - cy - r) * p6;
+        ctx.beginPath();
+        ctx.arc(cx, py, 4, 0, Math.PI * 2);
+        ctx.fillStyle = tokens.danger;
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawArrows(L) {
+    var a = L.atk, v = L.vic, s = L.soc;
+    var ay = v.y + 66;
+    ctx.strokeStyle = tokens.borderStrong;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(a.x + a.w + 4, ay);
+    ctx.lineTo(v.x - 4, ay);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(v.x + v.w + 4, ay);
+    ctx.lineTo(s.x - 4, ay);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+
+    mono(10, 700);
+    ctx.fillStyle = tokens.warning;
+    var mid1 = (a.x + a.w + v.x) / 2;
+    ctx.textAlign = 'center';
+    ctx.fillText(clip(STEPS[step].label, Math.max(60, v.x - a.x - a.w - 10)), mid1, ay - 8);
+    ctx.textAlign = 'left';
+
+    if (step < 7 && prog < 0.45) {
+      var p = prog / 0.45;
+      var px = a.x + a.w + 6 + (v.x - a.x - a.w - 12) * p;
+      ctx.beginPath();
+      ctx.arc(px, ay, 4, 0, Math.PI * 2);
+      ctx.fillStyle = tokens.warning;
+      ctx.fill();
+    }
+    if (prog >= 0.55) {
+      var q = Math.min(1, (prog - 0.55) / 0.45);
+      var qx = v.x + v.w + 6 + (s.x - v.x - v.w - 12) * q;
+      ctx.fillStyle = tokens.accent;
+      ctx.fillRect(qx - 3, ay - 3, 6, 6);
+    }
+    if (step === 7 && prog < 0.45) {
+      var p7 = prog / 0.45;
+      var x7 = s.x - 6 + (v.x + v.w + 12 - s.x) * p7;
+      ctx.beginPath();
+      ctx.arc(x7, ay, 4, 0, Math.PI * 2);
+      ctx.fillStyle = tokens.success;
+      ctx.fill();
+    }
+  }
+
+  function drawSoc(L) {
+    var s = L.soc;
+    hit.push({ x: s.x, y: s.y, w: s.w, h: s.h, key: 'soc' });
+    rr(s.x, s.y, s.w, s.h, 12);
+    ctx.fillStyle = tokens.surface2;
+    ctx.fill();
+    ctx.strokeStyle = tokens.border;
+    ctx.stroke();
+    mono(11, 700);
+    ctx.fillStyle = tokens.accent2;
+    ctx.fillText('SOC - DEFENDER VIEW', s.x + 12, s.y + 20);
+    var y = s.y + 34;
+    for (var i = 0; i <= step; i++) {
+      var st = SEV_STYLE[STEPS[i].sev];
+      var tagH = 20;
+      if (y + tagH > s.y + s.h - 10) break;
+      var alpha = (i === step && prog < 1) ? Math.min(1, Math.max(0.15, (prog - 0.5) * 3)) : 1;
+      ctx.globalAlpha = alpha;
+      rr(s.x + 10, y, s.w - 20, tagH, 6);
+      ctx.fillStyle = tokens[st.fill];
+      ctx.fill();
+      ctx.strokeStyle = tokens[st.border];
+      ctx.stroke();
+      mono(9.5, 400);
+      ctx.fillStyle = tokens.text;
+      ctx.fillText(clip(STEPS[i].ev, s.w - 28), s.x + 16, y + 13.5);
+      ctx.globalAlpha = 1;
+      y += tagH + 4;
+    }
+  }
+
+  function draw() {
+    if (!ctx) return;
+    var dpr = window.devicePixelRatio || 1;
+    var cw = canvas.clientWidth, ch = canvas.clientHeight;
+    if (cw === 0 || ch === 0) return;
+    if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(ch * dpr)) {
+      canvas.width = Math.round(cw * dpr);
+      canvas.height = Math.round(ch * dpr);
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.fillStyle = tokens.surface;
+    ctx.fillRect(0, 0, cw, ch);
+    var L = layout(cw, ch);
+    hit = [];
+
+    mono(11, 700);
+    ctx.fillStyle = tokens.muted;
+    ctx.fillText('PTRACE INJECTION ON A LINUX HOST - TEACHING DIAGRAM', L.m, 20);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = tokens.accent2;
+    ctx.fillText('STEP ' + (step + 1) + ' OF 8', cw - L.m, 20);
+    ctx.textAlign = 'left';
+
+    drawAttacker(L);
+    drawVictim(L);
+    drawC2(L);
+    drawArrows(L);
+    drawSoc(L);
+  }
+
+  /* ---- tooltip (hover + click) ---- */
+  function findHit(x, y) {
+    for (var i = hit.length - 1; i >= 0; i--) {
+      var h = hit[i];
+      if (x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h) return h.key;
+    }
+    return null;
+  }
+  function showTip(key, cx, cy) {
+    var d = TT[key];
+    if (!d) { hideTip(); return; }
+    tooltip.innerHTML = '<div class="tt-name"></div><div class="tt-desc"></div>';
+    tooltip.firstChild.textContent = d.name;
+    tooltip.lastChild.textContent = d.desc;
+    tooltip.style.opacity = '1';
+    var shell = canvas.parentElement;
+    var maxX = shell.clientWidth - tooltip.offsetWidth - 8;
+    var maxY = shell.clientHeight - tooltip.offsetHeight - 8;
+    var lx = Math.min(Math.max(8, cx + 14), Math.max(8, maxX));
+    var ly = Math.min(Math.max(8, cy + 14), Math.max(8, maxY));
+    tooltip.style.left = lx + 'px';
+    tooltip.style.top = ly + 'px';
+  }
+  function hideTip() { tooltip.style.opacity = '0'; }
+  function localPos(e) {
+    var r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  canvas.addEventListener('mousemove', function (e) {
+    var p = localPos(e);
+    var key = findHit(p.x, p.y);
+    if (key) showTip(key, p.x, p.y); else hideTip();
+  });
+  canvas.addEventListener('mouseleave', hideTip);
+  canvas.addEventListener('click', function (e) {
+    var p = localPos(e);
+    var key = findHit(p.x, p.y);
+    if (key) showTip(key, p.x, p.y); else hideTip();
+  });
+
+  /* ---- step state, chips, captions ---- */
+  var chips = [];
+  (function collectChips() {
+    var wrap = document.getElementById('sim-steps');
+    if (!wrap) return;
+    var btns = wrap.querySelectorAll('.sim-step');
+    for (var i = 0; i < btns.length; i++) {
+      (function (idx, btn) {
+        chips.push(btn);
+        btn.addEventListener('click', function () { goTo(idx); });
+      })(i, btns[i]);
+    }
+  })();
+
+  function setChips() {
+    for (var i = 0; i < chips.length; i++) {
+      if (i === step) chips[i].setAttribute('aria-current', 'true');
+      else chips[i].removeAttribute('aria-current');
+    }
+  }
+  function setTexts() {
+    captionEl.textContent = STEPS[step].cap;
+    while (defenderEl.firstChild) defenderEl.removeChild(defenderEl.firstChild);
+    var strong = document.createElement('strong');
+    strong.textContent = 'SOC view: ';
+    defenderEl.appendChild(strong);
+    defenderEl.appendChild(document.createTextNode(STEPS[step].soc));
+  }
+  function goTo(i) {
+    step = Math.max(0, Math.min(STEPS.length - 1, i));
+    prog = 1; /* chip clicks show the settled state of that step */
+    setChips();
+    setTexts();
+    draw();
+  }
+
+  /* ---- playback ---- */
+  function frame(ts) {
+    if (!playing) return;
+    if (!lastTs) lastTs = ts;
+    var dt = (ts - lastTs) / 1000;
+    lastTs = ts;
+    if (dt > 0.12) dt = 0.12;
+    prog += dt * speed / 2.4;
+    if (prog >= 1) {
+      if (step < STEPS.length - 1) {
+        step += 1;
+        prog = 0;
+        setChips();
+        setTexts();
+      } else {
+        prog = 1;
+        playing = false;
+        lastTs = 0;
+        draw();
+        return;
+      }
+    }
+    draw();
+    window.requestAnimationFrame(frame);
+  }
+  function play() {
+    if (window.ATK_REDUCED) {
+      /* reduced motion: never autoplay, step instantly */
+      if (step < STEPS.length - 1) goTo(step + 1);
+      return;
+    }
+    if (step >= STEPS.length - 1 && prog >= 1) {
+      step = 0;
+      prog = 0;
+      setChips();
+      setTexts();
+    }
+    playing = true;
+    lastTs = 0;
+    window.requestAnimationFrame(frame);
+  }
+  function pause() {
+    playing = false;
+    lastTs = 0;
+  }
+  function restart() {
+    playing = false;
+    lastTs = 0;
+    step = 0;
+    prog = 1;
+    setChips();
+    setTexts();
+    draw();
+  }
+  if (playBtn) playBtn.addEventListener('click', play);
+  if (pauseBtn) pauseBtn.addEventListener('click', pause);
+  if (restartBtn) restartBtn.addEventListener('click', restart);
+  if (speedSel) {
+    speedSel.addEventListener('change', function () {
+      speed = parseFloat(speedSel.value) || 1;
+    });
+  }
+
+  /* ---- resize + theme repaint ---- */
+  function resize() { draw(); }
+  if ('ResizeObserver' in window) {
+    var ro = new ResizeObserver(function () { resize(); });
+    if (canvas.parentElement) ro.observe(canvas.parentElement);
+  } else {
+    window.addEventListener('resize', resize);
+  }
+  document.addEventListener('atkthemechange', function () {
+    readTokens();
+    draw();
+  });
+
+  readTokens();
+  setChips();
+  setTexts();
+  draw();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,2824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Beginner-friendly detection engineering guide for MITRE ATT&amp;CK T1588.003: red team and blue team views, ranked threats, Sigma rules, Splunk SPL, case study, and a response checklist.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1588-Obtain-Capabilities/003-Code-Signing-Certificates.html">
+<meta name="color-scheme" content="dark light">
+<title>T1588.003 · Code Signing Certificates — Detection Engineering Guide (v2.0)</title>
+<script>
+(function () {
+  var root = document.documentElement;
+  try { root.classList.add('js'); } catch (e) {}
+  var theme = 'dark';
+  try {
+    var saved = localStorage.getItem('atk-theme');
+    if (saved === 'light' || saved === 'dark') { theme = saved; }
+    else { theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+  } catch (e) {
+    try { theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch (e2) {}
+  }
+  root.setAttribute('data-theme', theme);
+})();
+</script>
+<style>
+/* ================= Design tokens ================= */
+:root {
+  color-scheme: dark;
+  --bg: #0b0f1a;
+  --surface: #121a2e;
+  --surface-2: #172138;
+  --elevated: #1a2542;
+  --text: #e7edf8;
+  --muted: #9aa8c0;
+  --border: #24314e;
+  --border-strong: #2f4066;
+  --accent: #4f8cff;
+  --accent-2: #22d3ee;
+  --violet: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --high: #fb923c;
+  --low: #4ade80;
+  --code-bg: #0c1322;
+  --shadow: 0 12px 32px rgba(2, 6, 18, 0.38);
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --maxw: 1280px;
+  --sidebar: 264px;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f6fc;
+  --surface: #ffffff;
+  --surface-2: #f5f8ff;
+  --elevated: #e9eefa;
+  --text: #182238;
+  --muted: #5a6a85;
+  --border: #d9e2f2;
+  --border-strong: #c2d0ea;
+  --accent: #2f6fe4;
+  --accent-2: #0891b2;
+  --violet: #7c5ce0;
+  --success: #0d9e6e;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --high: #c2410c;
+  --low: #15803d;
+  --code-bg: #0e1526;
+  --shadow: 0 12px 28px rgba(23, 42, 79, 0.10);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f3f6fc;
+    --surface: #ffffff;
+    --surface-2: #f5f8ff;
+    --elevated: #e9eefa;
+    --text: #182238;
+    --muted: #5a6a85;
+    --border: #d9e2f2;
+    --border-strong: #c2d0ea;
+    --accent: #2f6fe4;
+    --accent-2: #0891b2;
+    --violet: #7c5ce0;
+    --success: #0d9e6e;
+    --warning: #b45309;
+    --danger: #dc2626;
+    --high: #c2410c;
+    --low: #15803d;
+    --code-bg: #0e1526;
+    --shadow: 0 12px 28px rgba(23, 42, 79, 0.10);
+  }
+}
+
+/* ================= Base ================= */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16.5px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+h1, h2, h3, h4 { line-height: 1.22; margin: 0 0 10px; letter-spacing: -0.01em; }
+h2 { font-size: 1.55rem; font-weight: 750; }
+h3 { font-size: 1.16rem; font-weight: 700; margin-top: 26px; }
+h4 { font-size: 1rem; font-weight: 700; }
+p { margin: 0 0 12px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, kbd, pre, .mono { font-family: var(--mono); }
+code { font-size: 0.86em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; overflow-wrap: anywhere; }
+pre code { border: 0; padding: 0; background: transparent; white-space: inherit; }
+ul, ol { margin: 0 0 14px; padding-left: 22px; }
+li { margin-bottom: 6px; }
+::selection { background: rgba(79, 140, 255, 0.35); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+[id] { scroll-margin-top: 96px; }
+.muted { color: var(--muted); }
+.small { font-size: 0.87rem; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 26px 0; }
+
+/* ================= Progress bar ================= */
+#progress {
+  position: fixed; top: 0; left: 0; right: 0; height: 3px;
+  background: transparent; z-index: 80; pointer-events: none;
+}
+.progress-fill {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+html:not(.js) #progress, html:not(.js) .fab { display: none !important; }
+
+/* ================= Layout ================= */
+.page-max { max-width: var(--maxw); margin: 0 auto; padding: 0 22px; }
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+  gap: 36px;
+  align-items: start;
+  padding-top: 10px;
+  padding-bottom: 80px;
+}
+
+/* ================= Hero ================= */
+.hero {
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  padding: 44px 0 30px;
+}
+.kicker {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.hero-title { font-size: clamp(1.9rem, 4.4vw, 2.75rem); font-weight: 800; margin: 0 0 12px; }
+.tech-id {
+  font-family: var(--mono);
+  font-size: 0.62em;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(79, 140, 255, 0.13);
+  border: 1px solid rgba(79, 140, 255, 0.4);
+  border-radius: 10px;
+  padding: 3px 12px;
+  margin-right: 12px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.hero-intro { max-width: 68ch; color: var(--text); opacity: 0.92; font-size: 1.03rem; }
+.chip-row { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 16px 0 0; }
+.chip {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 11px;
+  white-space: nowrap;
+}
+.chip b, .chip strong { color: var(--text); font-weight: 600; }
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+.fact-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.fact-value { display: block; font-weight: 750; font-size: 1.02rem; margin-bottom: 4px; }
+.fact-note { display: block; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
+
+/* ================= Sidebar TOC ================= */
+.toc-col { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow: auto; scrollbar-width: thin; }
+.toc-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 12px;
+}
+.toc-title {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+  padding: 0 10px;
+}
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-list > li { margin: 0 0 2px; }
+.toc-list a {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 10px; border-radius: 8px;
+  color: var(--muted); font-size: 0.85rem; line-height: 1.35;
+}
+.toc-list a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.toc-list a.active { background: rgba(79, 140, 255, 0.13); color: var(--accent); font-weight: 650; }
+:root[data-theme="light"] .toc-list a.active { background: rgba(47, 111, 228, 0.10); }
+.toc-num {
+  flex: none; font-family: var(--mono); font-size: 0.7rem; font-weight: 700;
+  color: var(--accent-2); min-width: 22px;
+}
+.toc-sub { list-style: none; margin: 2px 0 4px; padding: 0 0 0 18px; border-left: 1px solid var(--border); margin-left: 16px; }
+.toc-sub a { font-size: 0.78rem; padding: 4px 8px; }
+.toc-sub .toc-num { min-width: 30px; }
+.toc-note { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); margin: 12px 10px 0; }
+
+/* ================= Sections ================= */
+.section { margin: 0 0 58px; }
+.section-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 18px; }
+.sec-num {
+  flex: none; width: 32px; height: 32px; display: grid; place-items: center;
+  font-family: var(--mono); font-size: 0.85rem; font-weight: 800;
+  color: var(--accent); background: rgba(79, 140, 255, 0.13);
+  border: 1px solid rgba(79, 140, 255, 0.42);
+  border-radius: 9px; margin-top: 4px;
+}
+:root[data-theme="light"] .sec-num { background: rgba(47, 111, 228, 0.10); }
+.section-head h2 { margin-bottom: 4px; }
+.section-intro { color: var(--muted); max-width: 74ch; margin: 0; font-size: 0.95rem; }
+.sub-num {
+  font-family: var(--mono); font-size: 0.78rem; font-weight: 700;
+  color: var(--accent-2); margin-right: 8px;
+}
+
+/* ================= Cards and grids ================= */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.card-title { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 1rem; margin: 0 0 8px; }
+.card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+.card-accent { border-top: 2px solid var(--accent); }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
+.grid-2 .card, .grid-3 .card { box-shadow: none; }
+
+/* ================= Callouts ================= */
+.callout {
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 11px;
+  padding: 13px 16px;
+  margin: 14px 0;
+  background: var(--surface-2);
+}
+.callout-title {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 750; font-size: 0.9rem; margin: 0 0 5px;
+}
+.callout p:last-child { margin-bottom: 0; }
+.co-icon {
+  flex: none; width: 18px; height: 18px; display: inline-grid; place-items: center;
+  border-radius: 6px; font-size: 11px; font-weight: 800; font-family: var(--mono); color: #fff;
+}
+.callout-note { border-left-color: var(--accent); }
+.callout-note .co-icon { background: var(--accent); }
+.callout-warning { border-left-color: var(--warning); }
+.callout-warning .co-icon { background: var(--warning); color: #1a1a1a; }
+.callout-danger { border-left-color: var(--danger); }
+.callout-danger .co-icon { background: var(--danger); }
+.callout-success { border-left-color: var(--success); }
+.callout-success .co-icon { background: var(--success); }
+.callout-ethics { border-left-color: var(--violet); }
+.callout-ethics .co-icon { background: var(--violet); }
+
+/* ================= Tables ================= */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  margin: 14px 0;
+}
+.table-wrap table { width: 100%; border-collapse: collapse; min-width: 620px; font-size: 0.9rem; }
+.table-wrap th {
+  text-align: left; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+  padding: 10px 14px; background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong); white-space: nowrap;
+}
+.table-wrap td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.table-wrap tbody tr:last-child td { border-bottom: 0; }
+.table-wrap tbody tr:hover td { background: var(--surface-2); }
+.table-wrap td ul { margin: 0; padding-left: 16px; }
+.table-wrap .mono, .table-wrap code { white-space: nowrap; }
+
+/* ================= Code blocks ================= */
+.code-block {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--code-bg);
+  box-shadow: var(--shadow);
+}
+.code-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.code-title {
+  font-family: var(--mono); font-size: 0.74rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.copy-btn {
+  flex: none; font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+  padding: 4px 11px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: transparent; color: var(--muted);
+}
+.copy-btn:hover { color: var(--text); border-color: var(--accent); }
+.copy-btn.ok { color: var(--success); border-color: var(--success); }
+.code-block pre {
+  margin: 0; padding: 14px 16px; overflow-x: auto;
+  font-size: 0.8rem; line-height: 1.55; color: #d9e4f5;
+  scrollbar-width: thin;
+}
+:root[data-theme="light"] .code-block pre { color: #dbe5f4; }
+
+/* ================= Badges ================= */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+  padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border-strong);
+  color: var(--muted); white-space: nowrap; vertical-align: middle;
+}
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.sev-critical { color: var(--danger); border-color: var(--danger); background: rgba(248, 113, 113, 0.10); }
+.sev-high { color: var(--high); border-color: var(--high); background: rgba(251, 146, 60, 0.10); }
+.sev-medium { color: var(--warning); border-color: var(--warning); background: rgba(251, 191, 36, 0.10); }
+.sev-low { color: var(--low); border-color: var(--low); background: rgba(74, 222, 128, 0.10); }
+.badge-cat { color: var(--accent-2); border-color: var(--accent-2); background: rgba(34, 211, 238, 0.08); }
+.badge-plain::before { display: none; }
+
+/* ================= Key/value lists ================= */
+.kv-list { display: grid; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 14px 0; }
+.kv-row { display: grid; grid-template-columns: 210px minmax(0, 1fr); }
+.kv-row + .kv-row { border-top: 1px solid var(--border); }
+.kv-key {
+  background: var(--surface-2); padding: 10px 14px;
+  font-weight: 650; font-size: 0.85rem; border-right: 1px solid var(--border);
+}
+.kv-val { padding: 10px 14px; font-size: 0.92rem; }
+
+/* ================= Timeline ================= */
+.timeline { position: relative; margin: 16px 0 6px; padding-left: 30px; }
+.timeline::before {
+  content: ""; position: absolute; left: 8px; top: 8px; bottom: 8px;
+  width: 2px; background: var(--border-strong); border-radius: 2px;
+}
+.t-item { position: relative; padding: 0 0 20px 10px; }
+.t-item:last-child { padding-bottom: 4px; }
+.t-item::before {
+  content: ""; position: absolute; left: -27px; top: 6px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--surface); border: 3px solid var(--accent);
+}
+.t-date { font-family: var(--mono); font-size: 0.74rem; font-weight: 700; color: var(--accent-2); }
+.t-title { font-weight: 700; margin: 3px 0 4px; font-size: 0.98rem; }
+.t-body { font-size: 0.92rem; }
+
+/* ================= Checklists ================= */
+.check-list { list-style: none; padding: 0; margin: 10px 0; }
+.check-list li { position: relative; padding-left: 32px; margin-bottom: 10px; }
+.check-list li::before {
+  content: "✓"; position: absolute; left: 0; top: 2px;
+  width: 20px; height: 20px; border-radius: 6px;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 800;
+  color: var(--success); background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+}
+
+/* ================= Simulation ================= */
+.sim-wrap {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  overflow: hidden;
+  margin: 16px 0;
+  box-shadow: var(--shadow);
+}
+.sim-stage { position: relative; background: var(--bg); }
+.sim-stage canvas { display: block; width: 100%; aspect-ratio: 16 / 9; touch-action: pan-y; }
+.sim-tooltip {
+  position: absolute; z-index: 6; pointer-events: none;
+  background: var(--elevated); border: 1px solid var(--border-strong);
+  border-radius: 10px; padding: 9px 12px; max-width: 250px;
+  font-size: 0.78rem; line-height: 1.45; box-shadow: var(--shadow);
+}
+.sim-tooltip strong { display: block; margin-bottom: 2px; font-size: 0.8rem; }
+.sim-controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 12px 14px; border-top: 1px solid var(--border);
+}
+.sim-btn {
+  font-family: var(--sans); font-size: 0.82rem; font-weight: 700;
+  padding: 7px 14px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text);
+}
+.sim-btn:hover { border-color: var(--accent); color: var(--accent); }
+.sim-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 92px; }
+.sim-btn.primary:hover { filter: brightness(1.08); color: #fff; }
+.sim-select {
+  font-family: var(--mono); font-size: 0.8rem;
+  padding: 7px 9px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text);
+}
+.sim-status { margin-left: auto; font-family: var(--mono); font-size: 0.74rem; color: var(--muted); }
+.sim-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 12px; }
+.sim-chip {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+  padding: 4px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: transparent; color: var(--muted);
+}
+.sim-chip:hover { color: var(--text); border-color: var(--accent); }
+.sim-chip.active { color: var(--accent); border-color: var(--accent); background: rgba(79, 140, 255, 0.12); }
+:root[data-theme="light"] .sim-chip.active { background: rgba(47, 111, 228, 0.10); }
+.sim-caption { padding: 14px 16px 4px; border-top: 1px solid var(--border); }
+.sim-caption h4 { margin: 0 0 5px; font-size: 0.95rem; }
+.sim-caption p { margin: 0 0 10px; font-size: 0.92rem; }
+.sim-defender { padding: 0 16px 14px; }
+.sim-defender-box {
+  background: var(--surface-2); border: 1px dashed var(--border-strong);
+  border-radius: 10px; padding: 10px 13px; font-size: 0.89rem;
+}
+.sim-defender-label {
+  display: block; font-family: var(--mono); font-size: 0.66rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px;
+}
+.sim-evidence { list-style: none; display: flex; flex-wrap: wrap; gap: 7px; padding: 0 16px 14px; margin: 0; }
+.sim-evidence li {
+  font-family: var(--mono); font-size: 0.7rem; color: var(--success);
+  background: rgba(52, 211, 153, 0.09); border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: 7px; padding: 3px 9px; margin: 0;
+}
+.sim-actors {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+  gap: 10px; padding: 14px 16px; border-top: 1px solid var(--border);
+}
+.actor-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.actor-name { display: block; font-weight: 700; font-size: 0.83rem; margin-bottom: 2px; }
+.actor-role { display: block; font-family: var(--mono); font-size: 0.68rem; color: var(--accent-2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.actor-info { display: block; font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+.sim-note { padding: 0 16px 14px; font-size: 0.8rem; color: var(--muted); }
+
+/* ================= Floating buttons ================= */
+.fab {
+  position: fixed; bottom: 18px; z-index: 65;
+  display: none; align-items: center; gap: 7px;
+  font-family: var(--sans); font-size: 0.82rem; font-weight: 700;
+  padding: 11px 16px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border-strong);
+  background: var(--elevated); color: var(--text);
+  box-shadow: var(--shadow);
+}
+.fab:hover { border-color: var(--accent); color: var(--accent); }
+.fab-top.show { display: flex; }
+.fab-toc { left: 16px; }
+.fab-top { right: 16px; }
+
+/* ================= Mobile overlay ================= */
+.toc-overlay { position: fixed; inset: 0; z-index: 90; display: none; }
+.toc-overlay.open { display: block; }
+.overlay-backdrop { position: absolute; inset: 0; background: rgba(3, 7, 16, 0.62); }
+.overlay-panel {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  width: min(330px, 88vw);
+  background: var(--bg);
+  border-right: 1px solid var(--border-strong);
+  padding: 18px 14px; overflow: auto;
+  box-shadow: var(--shadow);
+}
+.overlay-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.overlay-head .toc-title { margin: 0; }
+#overlay-toc .toc-list a { font-size: 0.95rem; padding: 9px 10px; }
+#overlay-toc .toc-sub a { font-size: 0.85rem; padding: 7px 8px; }
+
+/* ================= Responsive ================= */
+@media (max-width: 1080px) {
+  .layout { display: block; }
+  .toc-col { display: none; }
+  .fab-toc { display: flex; }
+  .hero { padding: 32px 0 24px; }
+}
+@media (max-width: 680px) {
+  body { font-size: 16px; }
+  .page-max { padding: 0 14px; }
+  .hero { padding: 24px 0 20px; }
+  .hero-title .tech-id { display: inline-block; margin: 0 0 8px; }
+  .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .kv-row { grid-template-columns: 1fr; }
+  .kv-key { border-right: 0; border-bottom: 1px solid var(--border); }
+  .section { margin-bottom: 44px; }
+  .sim-btn { flex: 1 1 auto; }
+  .sim-status { width: 100%; margin: 0; order: 9; }
+  .fab { bottom: 14px; padding: 10px 14px; }
+}
+@media (max-width: 420px) {
+  .fact-grid { grid-template-columns: 1fr; }
+}
+
+/* ================= Reduced motion ================= */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ================= Print ================= */
+@media print {
+  #progress, .toc-col, .fab, .toc-overlay, .sim-controls, .sim-chips,
+  .copy-btn, .sim-status, .sim-select, .sim-note { display: none !important; }
+  body { background: #fff; color: #101418; font-size: 11pt; }
+  .layout { display: block; padding: 0; }
+  .hero { background: none; border-bottom: 1px solid #999; }
+  .card, .callout, .code-block, .table-wrap, .sim-wrap, .fact-card {
+    box-shadow: none; break-inside: avoid;
+  }
+  .code-block { background: #f4f4f4; border: 1px solid #bbb; }
+  .code-block pre { color: #111; white-space: pre-wrap; }
+  a { color: #0a58ca; }
+  .section { margin-bottom: 26pt; }
+  h2 { font-size: 15pt; } h3 { font-size: 12.5pt; }
+  [id] { scroll-margin-top: 0; }
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1588.003"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<div id="progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="progress-fill"></span></div>
+<div class="page-max">
+<div class="layout">
+  <aside class="toc-col" aria-label="Table of contents">
+    <div class="toc-card">
+      <p class="toc-title">Contents</p>
+      <nav aria-label="Page sections">
+        <ol class="toc-list" id="toc-list">
+          <li><a href="#sec-1-overview"><span class="toc-num">1</span>Overview</a></li>
+          <li><a href="#sec-2-simulation"><span class="toc-num">2</span>Animated Simulation</a></li>
+          <li><a href="#sec-3-red-team"><span class="toc-num">3</span>Red Team Perspective</a></li>
+          <li><a href="#sec-4-blue-team"><span class="toc-num">4</span>Blue Team Perspective</a></li>
+          <li>
+            <a href="#sec-5-detection"><span class="toc-num">5</span>Detection Engineering Deep Dive</a>
+            <ol class="toc-sub">
+              <li><a href="#sec-5-1-regulation"><span class="toc-num">5.1</span>Regulation mapping</a></li>
+              <li><a href="#sec-5-2-threat-intel"><span class="toc-num">5.2</span>Threat intelligence</a></li>
+              <li><a href="#sec-5-3-threats"><span class="toc-num">5.3</span>Threats ranking and categorization</a></li>
+              <li><a href="#sec-5-4-logs"><span class="toc-num">5.4</span>Logs and patterns</a></li>
+              <li><a href="#sec-5-5-detections"><span class="toc-num">5.5</span>Sigma rules and Splunk SPL</a></li>
+            </ol>
+          </li>
+          <li><a href="#sec-6-case-study"><span class="toc-num">6</span>Real-World Case Study</a></li>
+          <li><a href="#sec-7-mitigation"><span class="toc-num">7</span>Mitigation and Defense</a></li>
+          <li><a href="#sec-8-mistakes"><span class="toc-num">8</span>Common Mistakes and Best Practices</a></li>
+          <li><a href="#sec-9-cheat-sheet"><span class="toc-num">9</span>Cheat Sheet and Quick Reference</a></li>
+        </ol>
+      </nav>
+      <p class="toc-note">MITRE ATT&amp;CK &middot; <span class="mono">T1588.003</span></p>
+    </div>
+  </aside>
+  <main id="main-content" class="content">
+<header class="hero">
+  <div class="page-max">
+    <p class="kicker">MITRE ATT&amp;CK &middot; Resource Development &middot; Sub-technique</p>
+    <h1 class="hero-title"><span class="tech-id">T1588.003</span> Code Signing Certificates</h1>
+    <p class="hero-intro">A code signing certificate works like an identity card for software. When a program is signed, Windows, macOS, and security tools trust it more and show fewer warnings. Attackers know this, so they buy or steal these certificates and use them to sign malware. This guide explains the technique in plain language, shows an animated example, and gives defenders Sigma rules, Splunk queries, and a full detection playbook.</p>
+    <ul class="chip-row" aria-label="Technique metadata">
+      <li class="chip">ID: <b>T1588.003</b></li>
+      <li class="chip">Tactic: <b>Resource Development (TA0042)</b></li>
+      <li class="chip">Version: <b>1.1</b></li>
+      <li class="chip">Created: <b>2020-10-01</b></li>
+      <li class="chip">Last modified: <b>2025-10-24</b></li>
+      <li class="chip">Platform: <b>PRE (pre-compromise)</b></li>
+      <li class="chip">Parent: <b>T1588</b></li>
+      <li class="chip">Guide version: <b>2.0</b></li>
+    </ul>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <span class="fact-label">What it is</span>
+        <span class="fact-value">Buying or stealing signing certificates</span>
+        <span class="fact-note">The attacker gets the keys used to sign programs, then signs malware so it looks legitimate.</span>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Detection difficulty</span>
+        <span class="fact-value">Invisible buy, visible use</span>
+        <span class="fact-note">The purchase happens outside your network. The signing abuse shows up when the file loads.</span>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Typical evidence</span>
+        <span class="fact-value">Signer identity and thumbprint</span>
+        <span class="fact-note">Sysmon driver and image loads, CodeIntegrity events, and threat intelligence reports on abused signers.</span>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Known users</span>
+        <span class="fact-value">Many actor types</span>
+        <span class="fact-note">Wizard Spider, OilRig, BlackTech, Mustang Panda, Lazarus, APT41, MegaCortex, and NIMBUS MANTICORE per ATT&amp;CK.</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="section" id="sec-1-overview" data-num="1">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">1</span>
+    <div>
+      <h2>Overview</h2>
+      <p class="section-intro">What code signing certificates are, why attackers want them, and where this sub-technique sits in the attack chain.</p>
+    </div>
+  </div>
+  <div class="grid-3">
+    <div class="card card-accent">
+      <h4 class="card-title">What it is</h4>
+      <p><strong>Code signing</strong> is the process of adding a digital signature to a program or script. The signature says two things: who published the file, and that nobody changed the file after signing. The signature is made with a secret key, the <strong>private key</strong>, which lives inside a code signing certificate issued by a <strong>certificate authority (CA)</strong>, a company whose job is to check identities and hand out certificates.</p>
+      <p>T1588.003 covers attackers who <strong>buy or steal</strong> these certificates before an attack. They can buy them using a fake company that passes the CA checks, or steal them from a compromised software vendor. The malware they sign then carries a valid signature from a real certificate.</p>
+    </div>
+    <div class="card card-accent">
+      <h4 class="card-title">Why it matters</h4>
+      <p>Operating systems and security products trust signed files more than unsigned ones. A signed program can skip warning dialogs, pass software allowlists, and look safe in a mail gateway. ATT&amp;CK states it plainly: users and tools may trust signed code even when they do not know the signer.</p>
+      <p>For defenders, the signature is both a problem and a gift. It is a problem because the file looks legitimate. It is a gift because the signer identity is a <strong>stable marker</strong>: attackers can rebuild the malware to change its hash, but the certificate stays the same. Learn one abused certificate, and you can find every payload signed with it.</p>
+    </div>
+    <div class="card card-accent">
+      <h4 class="card-title">Where it fits</h4>
+      <p>This sub-technique sits under <strong>T1588 Obtain Capabilities</strong> in the Resource Development tactic (TA0042), the phase before any contact with the target. It pairs naturally with T1588.001 (Malware), because the malware is the thing being signed, and with T1588.002 (Tool).</p>
+      <p>Two related techniques complete the picture: <strong>T1552.004</strong> (Private Keys) describes how attackers steal signing keys from a victim company, and <strong>T1553.002</strong> (Code Signing, under Defense Evasion) describes the abuse itself, when malware runs because of its valid signature. Signing is stronger than plain masquerading: it abuses real trust instead of just imitating it.</p>
+    </div>
+  </div>
+  <h3>What you will learn</h3>
+  <p>This page is a complete working reference for detection engineers and security operations center (SOC) analysts. By the end you will be able to explain the technique to a colleague, follow one full example in the animated simulation, and run the hunts and rules in your own environment.</p>
+  <ul>
+    <li>How a signature and its <strong>trust chain</strong> work, and what Authenticode means on Windows.</li>
+    <li>The three ways attackers obtain certificates: buy with a front company, steal from a vendor, or abuse the issuing process.</li>
+    <li>Which evidence each path leaves behind, on endpoints, in the cloud, and in macOS telemetry.</li>
+    <li>How to write Sigma rules and Splunk SPL queries for six realistic threats, TH-1 to TH-6.</li>
+    <li>How to protect your own signing keys, so your company never becomes the stolen-certificate headline.</li>
+  </ul>
+  <h3>Key facts</h3>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">ATT&amp;CK ID and name</div><div class="kv-val">T1588.003 &mdash; Code Signing Certificates (parent: T1588 Obtain Capabilities)</div></div>
+    <div class="kv-row"><div class="kv-key">Tactic</div><div class="kv-val">Resource Development (TA0042), pre-compromise</div></div>
+    <div class="kv-row"><div class="kv-key">Platform</div><div class="kv-val">PRE &mdash; the acquisition happens outside victim telemetry</div></div>
+    <div class="kv-row"><div class="kv-key">Direct visibility</div><div class="kv-val">Very low; detection happens when signed malware loads, or when a vendor publishes the abuse</div></div>
+    <div class="kv-row"><div class="kv-key">Main data sources</div><div class="kv-val">Sysmon driver and image load events, CodeIntegrity events, cloud audit logs, macOS process logs, threat intelligence feeds</div></div>
+    <div class="kv-row"><div class="kv-key">Key defense</div><div class="kv-val">A signer inventory plus blocking by certificate thumbprint, not by file hash</div></div>
+    <div class="kv-row"><div class="kv-key">Notable users</div><div class="kv-val">Wizard Spider, OilRig, BlackTech, Mustang Panda, Lazarus, APT41, HomeLand Justice, MegaCortex</div></div>
+  </div>
+  <h3>The T1588 family at a glance</h3>
+  <p>The parent technique T1588 groups seven ways to obtain a capability. This page covers the third row of the table. The others have their own pages in this guide.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">ID</th><th scope="col">Sub-technique</th><th scope="col">What the attacker gets</th><th scope="col">Typical use</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">T1588.001</td><td>Malware</td><td>Ransomware, stealers, backdoors, packers</td><td>Payload for the intrusion &mdash; often signed with T1588.003</td></tr>
+        <tr><td class="mono">T1588.002</td><td>Tool</td><td>Hacking software such as Cobalt Strike or Mimikatz</td><td>Moving through the network</td></tr>
+        <tr><td class="mono">T1588.003</td><td><strong>Code Signing Certificates</strong></td><td>Certificates and private keys used to sign programs</td><td>Making malware look trusted and pass checks</td></tr>
+        <tr><td class="mono">T1588.004</td><td>Digital Certificates</td><td>SSL/TLS certificates for websites</td><td>Trusted-looking phishing and C2 sites</td></tr>
+        <tr><td class="mono">T1588.005</td><td>Exploits</td><td>Working attack code for specific flaws</td><td>Breaking into systems</td></tr>
+        <tr><td class="mono">T1588.006</td><td>Vulnerabilities</td><td>Knowledge of unpatched weaknesses</td><td>Planning exploits before patches exist</td></tr>
+        <tr><td class="mono">T1588.007</td><td>Artificial Intelligence</td><td>Access to generative AI services</td><td>Cheap phishing text, code help, deepfakes</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section" id="sec-2-simulation" data-num="2">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">2</span>
+    <div>
+      <h2>Animated Simulation</h2>
+      <p class="section-intro">Watch a complete code signing certificate abuse story, step by step. The attacker view is on the stage; the defender view is on the right panel and under the canvas.</p>
+    </div>
+  </div>
+  <div class="sim-wrap">
+    <div class="sim-stage">
+      <canvas id="sim-canvas" width="960" height="540" aria-label="Animated attack simulation for the Code Signing Certificates technique. A written version of every step follows below.">
+        Enable JavaScript to see the animated simulation of the Code Signing Certificates technique.
+      </canvas>
+      <div class="sim-tooltip" id="sim-tooltip" hidden></div>
+    </div>
+    <div class="sim-controls">
+      <button class="sim-btn primary" id="sim-play" type="button">Play</button>
+      <button class="sim-btn" id="sim-restart" type="button">Restart</button>
+      <button class="sim-btn" id="sim-prev" type="button" aria-label="Previous step">Prev</button>
+      <button class="sim-btn" id="sim-next" type="button" aria-label="Next step">Next</button>
+      <label class="small muted" for="sim-speed">Speed</label>
+      <select class="sim-select" id="sim-speed" aria-label="Simulation speed">
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+      </select>
+      <span class="sim-status" id="sim-status">Step 1 / 8</span>
+    </div>
+    <div class="sim-chips" id="sim-chips" role="group" aria-label="Simulation steps"></div>
+    <div class="sim-caption">
+      <h4 id="sim-step-title">Step 1 of 8</h4>
+      <p id="sim-step-caption"></p>
+    </div>
+    <div class="sim-defender">
+      <div class="sim-defender-box">
+        <span class="sim-defender-label">Defender view</span>
+        <span id="sim-step-defender"></span>
+      </div>
+    </div>
+    <ul class="sim-evidence" id="sim-evidence" aria-label="Evidence left in this step"></ul>
+    <p class="sim-note">Enable JavaScript to view the animated simulation. The written steps below describe the same story. Move the pointer over a card in the picture to read what each player does.</p>
+    <div class="sim-actors" id="sim-actors" aria-label="Players in the simulation"></div>
+  </div>
+  <h3>The same story in words</h3>
+  <p>This written version covers exactly the same eight steps as the animation. Read it if you prefer text, use it with a screen reader, or quote it in a training session.</p>
+  <div class="timeline">
+    <div class="t-item"><span class="t-date">Step 1</span>
+      <p class="t-title">The malware must look trusted</p>
+      <p class="t-body">A threat actor prepares a payload, for example a backdoor and a Windows kernel driver (a program that runs deep inside the operating system). The actor knows an unsigned file raises warnings, so the plan needs a valid code signing certificate. Nothing has touched the victim yet, so the defender sees nothing.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 2</span>
+      <p class="t-title">Buying a stolen certificate</p>
+      <p class="t-body">The actor buys a code signing certificate on a criminal market. The seller stole it weeks earlier from a small software company. The actor now holds the private key and can sign any file so it looks like it came from that company. Intelligence teams sometimes notice this resale, and the certificate identity becomes a fixed marker.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 3</span>
+      <p class="t-title">Signing the payload on the build box</p>
+      <p class="t-body">On a rented workstation, the actor signs the driver and the backdoor with the stolen certificate. Everything here happens on the attacker's own infrastructure. The defender still has nothing to see, which is the honest answer for this step.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 4</span>
+      <p class="t-title">A test sample leaks to a sandbox</p>
+      <p class="t-body">Good practice for attackers is to test the payload first, but testing leaks data. The sample lands in an online sandbox, which records the file hash and, crucially, the signer identity. Malware repositories now know that "Example Software Ltd" signed this file. The first public trace exists.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 5</span>
+      <p class="t-title">Threat intelligence reports the abuse</p>
+      <p class="t-body">A security vendor publishes a report naming the abused certificate: the subject name, the thumbprint (a short fingerprint hash of the certificate), and sample files. Your intelligence pipeline turns this into a hunt. From now on, the SOC can search its own estate for that signer.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 6</span>
+      <p class="t-title">Delivery passes the signature check</p>
+      <p class="t-body">The actor sends phishing mail with the signed payload. The mail gateway checks the signature and finds it valid, so the message is not blocked by trust rules. Only weak signals remain: a low-reputation sender and an unusual attachment type. This is the moment a signature-based defense alone fails.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 7</span>
+      <p class="t-title">The signed driver loads on the victim</p>
+      <p class="t-body">A user runs the installer. The driver loads, and endpoint logging records it: Sysmon Event ID 6 shows a valid signature from a signer nobody has seen before. On hosts that run application control in audit mode, CodeIntegrity event 3076 records that the same file would not meet policy; in enforced mode the driver would be blocked instead. The strong signal finally exists.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 8</span>
+      <p class="t-title">The SOC pivots on the signer</p>
+      <p class="t-body">The SOC matches the signer against the intelligence report, confirms the abuse, and hunts the whole estate for that thumbprint. Affected hosts are isolated, the signer is blocked, and the team asks the vendor for revocation context. One stolen certificate turned into a complete detection chain.</p>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">How to read the animation</h4>
+      <p>Red flows are attacker actions. Amber flows carry the capability or payload itself. Blue elements belong to the defender side. The panel on the right of the canvas lists what a security operations center (SOC) could see at that exact moment, including the steps where the honest answer is nothing.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">What is realistic here</h4>
+      <p>This story is a composite of public reporting: groups such as Wizard Spider, OilRig, and APT41 all used stolen certificates, and MegaCortex used certificates issued to fake companies. Prices, forums, and timings are simplified for teaching. The shape is what matters: the purchase is invisible, the signer identity is the pivot, and the load event is where strong detection starts.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sec-3-red-team" data-num="3">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">3</span>
+    <div>
+      <h2>Red Team / Hacker Perspective</h2>
+      <p class="section-intro">Why a valid signature is worth money to an attacker, how certificates are obtained in principle, and where the process leaks traces.</p>
+    </div>
+  </div>
+  <div class="callout callout-ethics">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">?</span>Ethics and scope</p>
+    <p>This section explains attacker behavior so defenders can detect it. It stays at the level of concepts and public reporting. It gives no operational instructions for obtaining or abusing certificates. Any hands-on practice belongs in an isolated lab you own, with fake data, and clearly labeled as lab-only.</p>
+  </div>
+  <p>A signature changes how the world treats a file. Windows shows fewer warnings for signed programs. Mail gateways score signed attachments as safer. Software allowlists that check signatures let the file run. For an attacker, one valid certificate removes many warnings and checks, which is why stolen signing keys sell well on criminal markets.</p>
+  <p>The trust chain makes this powerful. A certificate is issued by a certificate authority (CA), and operating systems ship with a list of CAs they already trust. A program signed with a certificate from a trusted CA inherits that trust automatically, even if nobody has ever heard of the signer. This is also why <strong>Authenticode</strong>, the Windows technology that checks these signatures on programs and drivers, treats a valid chain as a pass, and why a stolen certificate is far more useful to an attacker than a fake name.</p>
+  <p>ATT&amp;CK documents this technique across many actor types, from financially motivated ransomware crews to state-linked teams. That range tells you the technique is not exotic. It is a standard step in preparing a serious intrusion.</p>
+  <h3>How attackers obtain the certificates</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">Buying with a front company</h4>
+      <p>The attacker registers a fake company and applies for a certificate like a normal business. The CA asks for company documents, and the attacker supplies stolen or forged ones. When validation succeeds, the attacker owns a fresh certificate that no victim can find in any stolen-data list. MegaCortex used certificates issued to fake companies this way.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Stealing from a real vendor</h4>
+      <p>The attacker breaks into a software company and takes the signing material: the private key file, an export from a secrets vault, or a key held on a build server. OilRig, BlackTech, Kimsuky, Lazarus during Operation Dream Job, Threat Group-3390, and APT41 in the DUST campaign all used stolen certificates for their payloads.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Abusing the issuing process</h4>
+      <p>Some certificates were issued wrongly in the first place: validation was tricked, or a CA cut corners. Groups that specialize in fraud sometimes combine this with the front-company path. Once issued, the certificate looks completely normal, and only the CA's own audit can unwind it.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Reusing revoked or expired certificates</h4>
+      <p>Attackers sometimes sign with certificates that are already revoked (formally cancelled by the CA) or expired. This works when the victim does not check revocation status, which many older systems and drivers do not. Mustang Panda used revoked certificates, and FIN8 used an expired test certificate, so signatures that fail strict checks still pass on systems that do not check properly.</p>
+    </div>
+  </div>
+  <h3>Conditions and preparation</h3>
+  <p>Obtaining the certificate is only the start. The actor needs a signing tool that supports the platform format, for example Microsoft's Authenticode signing tools on Windows. The actor should keep the trust chain intact, which usually means adding a trusted timestamp to each signature so the signature survives certificate expiry. And the actor wants to test the signed payload on a clean machine before use, which is exactly the step that sometimes leaks the sample, and with it the signer identity, to researchers. Certificates also have value beyond one campaign: resellers rent or sell the same stolen certificate to several crews, so one identity can appear across unrelated incidents.</p>
+  <div class="callout callout-note">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">i</span>Lab-only practice example</p>
+    <p>A safe classroom exercise looks like this: on your own test machine, inspect the signature of any installed program with a read-only command such as PowerShell's <code>Get-AuthenticodeSignature</code>, and note the subject, issuer, and status. Then compare a Windows system file and a random unsigned tool. You are learning what defenders read from signatures, without touching any real certificate or target. Label the exercise and the lab clearly.</p>
+  </div>
+  <h3>Variations and common mistakes attackers make</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Variation</th><th scope="col">What changes</th><th scope="col">Trace it leaves</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Front-company purchase</td><td>Fresh certificate, full control, cost and paperwork</td><td>CA issuance records; a signer with a young certificate and no history</td></tr>
+        <tr><td>Stolen from a vendor</td><td>Real company identity, high trust, victim may revoke</td><td>Vendor-side intrusion logs; revocation notice; security firm reports</td></tr>
+        <tr><td>Second-hand purchase</td><td>Cheap and fast, but shared with other crews</td><td>The same signer across many unrelated campaigns</td></tr>
+        <tr><td>Revoked or expired reuse</td><td>Works only where revocation is not checked</td><td>Signature status fields; vendor advisories naming the certificate</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h4 class="card-title">Mistakes that expose the abuse</h4>
+    <p>Resellers hand the same certificate to many buyers, so one signer identity links campaigns that believed they were separate. Test samples reach online sandboxes, and the sandbox records the signer. Some crews skip timestamps, so signatures break after expiry. Others reuse a revoked certificate and only find out when the target host refuses to load the file. Each mistake is a pivot for the defender.</p>
+  </div>
+</section>
+
+<section class="section" id="sec-4-blue-team" data-num="4">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">4</span>
+    <div>
+      <h2>Blue Team / SOC Perspective</h2>
+      <p class="section-intro">What the technique looks like from the inside, which artifacts survive, and a short triage flow your team can follow.</p>
+    </div>
+  </div>
+  <p>The purchase itself happens on servers you cannot see, so no alert fires when a stolen certificate changes hands. MITRE notes that most of this activity stays outside the visibility of the target organization. Good teams therefore work two layers. The first layer is intelligence: reports from security vendors name abused certificates, their subjects, and their thumbprints. The second layer is telemetry: your endpoints record every driver and image load together with its signature, and that is where the abuse becomes visible.</p>
+  <p>The signer identity deserves special attention. File hashes change with every rebuild of the malware, so hash blocking becomes an endless chase. The certificate subject and thumbprint do not change. When a vendor report says "payloads signed with certificate CN=Example Software Ltd, thumbprint AB12&hellip;", that identity can match months of history and every future rebuild. This makes signer-based hunting the highest-value action on this page.</p>
+  <p>There is a second, quieter role for the blue team: not becoming the source. The stolen certificate of the next campaign may be yours. Signing keys on build servers, exports of <code>.pfx</code> files (a password-protected container that holds a certificate and its private key), and unusual reads of signing secrets are all things you can detect on your own side, which is what threat TH-2 in section 5 covers.</p>
+  <h3>Artifacts the technique leaves behind</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h4 class="card-title">Certificate artifacts</h4>
+      <p>Every signed file carries the subject, issuer, serial, and thumbprint of the certificate inside its signature metadata. Unlike website certificates, code signing certificates are not published in certificate transparency logs, so the identity is learned from samples, endpoint logs, and vendor reports instead.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Endpoint artifacts</h4>
+      <p>Sysmon Event ID 6 records kernel driver loads and Event ID 7 records DLL and executable image loads, both with Signed, Signature, and SignatureStatus fields. Windows CodeIntegrity events 3076 and 3077 record files that failed application control policy. EDR products expose the same signature data in their process and module views.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Cloud and build artifacts</h4>
+      <p>When the attacker goes for your keys, cloud audit logs show secret reads and key access, CI/CD runners show unexpected signing jobs, and file audit shows <code>.pfx</code> exports. On macOS, Gatekeeper decisions, quarantine attribute changes, and codesign activity show how signing trust is being tested or removed.</p>
+    </div>
+  </div>
+  <h3>Where to look</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Source</th><th scope="col">What it shows</th><th scope="col">Why it helps</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Sysmon Event ID 6 and 7</td><td>Driver and image loads with signature fields</td><td>The primary place a signed payload shows its true signer</td></tr>
+        <tr><td>Windows CodeIntegrity events</td><td>Policy violations (3076 audit, 3077 enforced)</td><td>Independent confirmation that a file failed code policy</td></tr>
+        <tr><td>Threat intelligence feeds</td><td>Abused signer subjects, thumbprints, sample hashes</td><td>Tells you which identities to hunt for, before they hit you</td></tr>
+        <tr><td>Signer inventory</td><td>Every certificate trusted in your estate</td><td>Makes an unknown or abused signer stand out immediately</td></tr>
+        <tr><td>Image-load history archive</td><td>First-seen dates per signer across the estate</td><td>Powers the first-seen publisher detection (TH-6) in section 5</td></tr>
+        <tr><td>Cloud audit logs (CloudTrail)</td><td>Secret vault reads, key usage, new access keys</td><td>Catches the theft of your own signing material</td></tr>
+        <tr><td>macOS process and Gatekeeper logs</td><td>spctl, xattr, and codesign activity</td><td>Shows quarantine removal and re-signing on Mac endpoints</td></tr>
+        <tr><td>Mail gateway logs</td><td>Attachment signature status and sender reputation</td><td>Delivery-side view of signed payloads arriving</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Why this matters for the attack chain</h3>
+  <p>Stopping the signed payload at load time stops the intrusion at step one. A driver that never loads means no persistence, and a backdoor that never runs means no credential theft. That is why this pre-compromise technique has real detection value: it tells you exactly which markers to expect. Teams that keep a signer inventory and hunt abused identities see these campaigns earlier, and at lower cost, than teams that chase file hashes one by one.</p>
+  <h3>Short triage flow</h3>
+  <ol>
+    <li><strong>Receive or find the marker.</strong> A vendor report, a sandbox match, or your own endpoint log gives you a signer subject or thumbprint.</li>
+    <li><strong>Enrich it.</strong> Read the full report: which families used the certificate, when it was first and last seen, whether the CA revoked it, and which thumbprint is current.</li>
+    <li><strong>Check exposure.</strong> Search 90 days of Sysmon 6 and 7, EDR module loads, and mail gateway logs for the subject or thumbprint. One query per source, saved as a scheduled hunt.</li>
+    <li><strong>Validate hits.</strong> For each hit, decide whether the signer is legitimately used in your estate. Check the software vendor's own site, and note that a stolen certificate can still sign real products.</li>
+    <li><strong>Escalate and block.</strong> Real hits become an incident: isolate hosts, block the thumbprint in policy, and record the case. No hits become an intelligence note with an owner and the next review date.</li>
+  </ol>
+  <div class="callout callout-success">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">&#10003;</span>Good practice</p>
+    <p>Block by certificate thumbprint, not by file hash. A thumbprint block survives malware rebuilds, costs almost nothing to store, and works across every file the attacker signs with that certificate. Keep the blocklist next to your signer inventory so allow and deny stay in one place.</p>
+  </div>
+</section>
+
+<section class="section" id="sec-5-detection" data-num="5">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">5</span>
+    <div>
+      <h2>Detection Engineering Deep Dive</h2>
+      <p class="section-intro">The working core of this page: regulations, intelligence, ranked threats, log patterns, and ready-to-adapt Sigma and Splunk content.</p>
+    </div>
+  </div>
+  <p>Everything in this section is written so you can copy it into your detection program and adapt it. The six threats used as examples run through the whole section: the same threat gets a ranking in 5.3, log examples in 5.4, and a Sigma rule plus a Splunk query in 5.5. Keep that thread in mind when you build your own version for your environment.</p>
+  <div class="callout callout-note">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">i</span>What ATT&amp;CK officially says</p>
+    <p>MITRE rates direct detection of this sub-technique as difficult and lists the mitigation <strong>Pre-compromise [M1056]</strong>, because buying and stealing certificates happens outside your boundary. The official detection strategy is <strong>DET0875 &mdash; Detection of Code Signing Certificates</strong>. Its analytic <strong>AN2007</strong> says: consider analyzing code signing certificates for features that may be associated with the adversary and/or their developers, such as the thumbprint, the algorithm used, the validity period, the common name, and the certificate authority. MITRE also points to the follow-on behavior it makes possible: detection efforts may focus on related activity such as Code Signing (T1553.002) or Install Root Certificate.</p>
+    <p><a href="https://attack.mitre.org/techniques/T1588/003/" rel="noopener">Read the official T1588.003 page</a> for the full strategy text. The rest of section 5 turns these official hints into concrete rules.</p>
+  </div>
+
+  <h3 id="sec-5-1-regulation" data-num="5.1"><span class="sub-num">5.1</span>Regulation mapping</h3>
+  <p>A signing-focused threat matters to auditors because a stolen certificate defeats the controls that regulators assume exist: software integrity checks and trusted supply chains. The table below maps the technique to common frameworks. Use it to justify detection engineering work in risk language, and to know which evidence an auditor may ask for.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Framework</th><th scope="col">Control</th><th scope="col">Why it applies</th><th scope="col">Expected evidence</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>GDPR</td>
+          <td class="mono">Art. 32</td>
+          <td>Requires technical measures against unlawful access. Signed malware is a common entry path, so signature enforcement and signer monitoring are part of those measures.</td>
+          <td>Application control policy, signer inventory, incident tickets with containment timelines</td>
+        </tr>
+        <tr>
+          <td>HIPAA Security Rule</td>
+          <td class="mono">&sect;164.308(a)(5)(ii)(B), &sect;164.312(c)(1)</td>
+          <td>Demands protection from malicious software and integrity controls. Code signing abuse breaks the integrity assumption that signed equals safe.</td>
+          <td>Endpoint protection policy, CodeIntegrity monitoring records, audit log retention settings</td>
+        </tr>
+        <tr>
+          <td>ISO/IEC 27001:2022</td>
+          <td class="mono">A.8.24, A.8.15, A.8.16</td>
+          <td>Covers use of cryptography (protect signing keys), logging, and monitoring activities. Key theft from build systems is a direct failure of A.8.24.</td>
+          <td>Statement of Applicability entries, key management procedure, HSM records, monitoring runbooks</td>
+        </tr>
+        <tr>
+          <td>SOC 2</td>
+          <td class="mono">CC6.1, CC7.1, CC7.2</td>
+          <td>Requires logical access controls and monitoring for anomalies. Access to signing keys must be least-privilege and logged.</td>
+          <td>Access reviews for build systems, vault access logs, detection coverage matrix, alert triage records</td>
+        </tr>
+        <tr>
+          <td>PCI DSS 4.0</td>
+          <td class="mono">6.3.2, 12.8.5</td>
+          <td>Bespoke software must be developed securely, and service providers must monitor threats to customers. Signing keys protect exactly that software.</td>
+          <td>Secure development procedure with signing controls, supplier reviews, monitored alert definitions</td>
+        </tr>
+        <tr>
+          <td>NIST CSF 2.0</td>
+          <td class="mono">PR.AA-05, PR.DS-01, DE.CM-09</td>
+          <td>PR.AA-05 asks for least-privilege access to signing keys and build systems, PR.DS-01 covers protection of the stored key material, and DE.CM-09 requires monitoring of software and hardware for adverse events such as unexpected signature loads.</td>
+          <td>Access policies for signing identities, key protection design, monitoring coverage lists</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout callout-note">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">i</span>Auditor-friendly framing</p>
+    <p>When an auditor asks how you address a pre-compromise technique, answer with the downstream controls: signing key protection, signature enforcement, a signer inventory, and a documented intelligence process. Keep one page that lists which control touches which part of T1588.003. That page becomes your evidence pack.</p>
+  </div>
+
+  <h3 id="sec-5-2-threat-intel" data-num="5.2"><span class="sub-num">5.2</span>Threat intelligence</h3>
+  <p>Intelligence is the only way to see the acquisition itself. Your environment cannot log a market purchase, but researchers, vendors, and government agencies do publish abused certificate identities. The job of your team is to move that knowledge through a simple pipeline: collect, analyze, apply, and measure.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Source type</th><th scope="col">Examples</th><th scope="col">What it gives you</th><th scope="col">Collection method</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Vendor reporting</td><td>Microsoft Threat Intelligence, ESET, Kaspersky, Mandiant, Proofpoint</td><td>Abused signer subjects, thumbprints, sample hashes, campaign timelines</td><td>Blogs, RSS, short weekly review meeting</td></tr>
+        <tr><td>Standard frameworks</td><td>MITRE ATT&amp;CK, CISA advisories</td><td>Actor and campaign records that document certificate abuse</td><td>Website, feeds, advisories mailing list</td></tr>
+        <tr><td>Malware repositories</td><td>VirusTotal, MalwareBazaar</td><td>Signature metadata of fresh samples, hunting by signer</td><td>API queries in scheduled hunts</td></tr>
+        <tr><td>Certificate authority status</td><td>CA revocation lists, vendor trust stores</td><td>Whether an abused certificate was revoked and when</td><td>Scheduled checks for certificates on your watchlist</td></tr>
+        <tr><td>ISACs and government</td><td>Sector ISACs, national CERTs</td><td>Sector-relevant warnings, sometimes pre-public advisories</td><td>Membership, protected mailing lists</td></tr>
+        <tr><td>Internal telemetry</td><td>Your own Sysmon 6/7, EDR, mail gateway logs</td><td>The ground truth that external intel must meet</td><td>SIEM scheduled searches, hunt notebook</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>ATT&amp;CK itself documents rich real-world usage for this sub-technique. The table below lists every procedure example from the official T1588.003 page, with the ATT&amp;CK identifiers, so you can cite them in hunt tickets and reports. Treat these entries as seed intelligence for hunts in your own environment.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Actor or campaign</th><th scope="col">ATT&amp;CK ID</th><th scope="col">What ATT&amp;CK documents</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>APT41 &mdash; DUST campaign</td><td class="mono">C0040</td><td>Used stolen code signing certificates to sign DUSTTRAP malware and components</td></tr>
+        <tr><td>BlackTech</td><td class="mono">G0098</td><td>Used stolen code-signing certificates for its malicious payloads</td></tr>
+        <tr><td>FIN8</td><td class="mono">G0061</td><td>Used an expired open-source X.509 test certificate from the OpenSSL repository to connect to actor-controlled C2 servers</td></tr>
+        <tr><td>HomeLand Justice</td><td class="mono">C0038</td><td>Used tools with legitimate code signing certificates</td></tr>
+        <tr><td>Kimsuky</td><td class="mono">G0094</td><td>Stole a valid certificate and used it to sign the malware and the dropper</td></tr>
+        <tr><td>MegaCortex</td><td class="mono">S0576</td><td>Used code signing certificates issued to fake companies to bypass security controls</td></tr>
+        <tr><td>Mustang Panda</td><td class="mono">G0129</td><td>Used revoked code signing certificates for its malicious payloads</td></tr>
+        <tr><td>NIMBUS MANTICORE</td><td class="mono">G1059</td><td>Obtained and used valid digital signatures through the service SSL.com</td></tr>
+        <tr><td>OilRig</td><td class="mono">G0049</td><td>Obtained stolen code signing certificates to digitally sign malware</td></tr>
+        <tr><td>Lazarus Group &mdash; Operation Dream Job</td><td class="mono">G0032 / C0022</td><td>Used code signing certificates issued by Sectigo RSA for some of its malware and tools</td></tr>
+        <tr><td>Threat Group-3390</td><td class="mono">G0027</td><td>Obtained stolen valid certificates, including from VMProtect and the messaging application Youdu</td></tr>
+        <tr><td>Wizard Spider</td><td class="mono">G0102</td><td>Obtained code signing certificates signed by DigiCert, GlobalSign, and COMOOD for malware payloads</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>One more pattern is worth remembering: a certificate does not have to be valid to be useful. FIN8 used an expired test certificate, and Mustang Panda used revoked certificates, because enough target systems do not check. That is why the detections later in this section cover revocation and expiry, not only valid signatures.</p>
+  <h4>Confidence levels</h4>
+  <p>Every certificate identity you ingest needs a confidence level, or your alerts will argue with each other. Use three levels and write them into the detection metadata.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Level</th><th scope="col">Meaning</th><th scope="col">Typical source quality</th><th scope="col">How you act</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge sev-high">High</span></td><td>Multiple independent reports, or observed in your own telemetry</td><td>Two vendors name the same subject and thumbprint</td><td>Build a detection within days, treat hits as incidents</td></tr>
+        <tr><td><span class="badge sev-medium">Medium</span></td><td>One credible report or partial corroboration</td><td>Single vendor blog with the subject and samples</td><td>Schedule a hunt, watch for corroboration</td></tr>
+        <tr><td><span class="badge sev-low">Low</span></td><td>Rumor, unclear sourcing, or stale data</td><td>Forum chatter about a certificate with no samples</td><td>Store in the backlog, revisit on the next review date</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ol>
+    <li><strong>Collect</strong> from at least two source types above, on a fixed weekly rhythm, into one shared place.</li>
+    <li><strong>Analyze</strong> each item: which subject and thumbprint, which malware families, which platforms, what confidence.</li>
+    <li><strong>Apply</strong> by turning identities into hunts and detections, then link each detection back to the intelligence item.</li>
+    <li><strong>Measure</strong> quarterly: which items produced detections, which detections fired, and which feeds never produced anything useful. Drop weak feeds, keep strong ones.</li>
+  </ol>
+
+  <h3 id="sec-5-3-threats" data-num="5.3"><span class="sub-num">5.3</span>Threats ranking and categorization</h3>
+  <p>The six threats below are the realistic ways this technique turns into risk for an organization. They are ranked and categorized by platform. The same six threats are used in 5.4 and 5.5, so the section stays practical.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Threat</th><th scope="col">Rank</th><th scope="col">Category</th><th scope="col">One-line summary</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">TH-1</td><td><span class="badge sev-critical">Critical</span></td><td><span class="badge badge-cat">Endpoint &middot; Windows</span></td><td>Binary or kernel driver signed with a stolen or abused certificate executes or loads</td></tr>
+        <tr><td class="mono">TH-2</td><td><span class="badge sev-high">High</span></td><td><span class="badge badge-cat">Identity &middot; Cloud</span></td><td>Access to code-signing keys on build infrastructure, such as vault reads or .pfx exports</td></tr>
+        <tr><td class="mono">TH-3</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge badge-cat">Network &middot; Intel</span></td><td>Certificate identity from TI reporting used to hunt stored telemetry for an abused signer</td></tr>
+        <tr><td class="mono">TH-4</td><td><span class="badge sev-high">High</span></td><td><span class="badge badge-cat">Endpoint &middot; macOS</span></td><td>Ad-hoc signed or unsigned payloads plus Gatekeeper bypass tooling around obtained signing material</td></tr>
+        <tr><td class="mono">TH-5</td><td><span class="badge sev-high">High</span></td><td><span class="badge badge-cat">Endpoint &middot; Windows</span></td><td>Revoked or watchlisted signer hits at image or driver load, or a Revoked or Expired signature status on a file that still loaded</td></tr>
+        <tr><td class="mono">TH-6</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge badge-cat">Endpoint &middot; Windows</span></td><td>Valid signature from a publisher never seen before in the estate, found by signer rarity</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-critical">Critical</span> TH-1 signed binary or driver loads</h4>
+      <p><strong>Description.</strong> A malicious binary or kernel driver, signed with a stolen, bought, or otherwise abused certificate, executes or loads on a Windows host. <strong>Preconditions.</strong> The attacker already holds the certificate; a user runs the file or an installer stages it. <strong>Impact.</strong> Kernel-level persistence, credential theft, ransomware staging, and a free pass through signature-based checks. <strong>Justification.</strong> This is the direct end point of the technique, documented for many actors including Wizard Spider and OilRig. It is reliably detectable from Sysmon signature fields when you keep a publisher inventory, so it ranks Critical. TH-6 is the subtle first-seen variant; TH-1 is the broad rule that any valid signature outside your inventory is a reason to look.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-high">High</span> TH-2 signing keys accessed on build infrastructure</h4>
+      <p><strong>Description.</strong> An attacker with a foothold, or an insider, reads code-signing material from build infrastructure: CI/CD runner abuse, secrets vault reads, or an export of a <code>.pfx</code> key container. <strong>Preconditions.</strong> Access to build systems or leaked runner credentials. <strong>Impact.</strong> Your company certificate becomes the attacker's trust weapon, and revocation will embarrass you publicly. <strong>Justification.</strong> ATT&amp;CK describes exactly this path: purchase using information stolen from a previously compromised entity. A single success poisons every downstream trust decision, so High.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-medium">Medium</span> TH-3 TI-reported abused signer hunted in stored telemetry</h4>
+      <p><strong>Description.</strong> A vendor report names an abused certificate. You search your stored endpoint history and find that a host loaded a file signed by that identity. <strong>Preconditions.</strong> A working intelligence pipeline plus Sysmon 6/7 history. <strong>Impact.</strong> Confirms the payload reached you, often days before other signals. <strong>Justification.</strong> High value when it fires, but it depends fully on report quality and refresh, so a Medium rank with low false-positive volume. TH-5 is the automated, load-time version of the same idea.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-high">High</span> TH-4 macOS ad-hoc signing and Gatekeeper bypass</h4>
+      <p><strong>Description.</strong> Ad-hoc signed or unsigned binaries, plus Gatekeeper bypass tooling such as <code>spctl</code>, quarantine removal with <code>xattr</code>, and re-signing with <code>codesign</code>, tied to obtained signing tooling on Mac endpoints. <strong>Preconditions.</strong> User execution of an unnotarized app; local access. <strong>Impact.</strong> Malware that Gatekeeper would have blocked runs freely on macOS. <strong>Justification.</strong> Mac fleets are growing attack surface, the bypass leaves clear process evidence, and reporting on this pattern is rising, so High.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-high">High</span> TH-5 revoked or watchlisted signer at load time</h4>
+      <p><strong>Description.</strong> A driver or image loads while its signer sits on a watchlist of revoked or abused code signing certificates, or Sysmon itself records the signature status as Revoked or Expired although the file still loaded. <strong>Preconditions.</strong> The attacker reuses a certificate the CA cancelled or that intelligence has named; the host does not enforce revocation. <strong>Impact.</strong> The documented Mustang Panda and FIN8 patterns: payloads keep loading on hosts that do not check. <strong>Justification.</strong> A load-time control against an explicit list, with very low false-positive volume, so High.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-medium">Medium</span> TH-6 first-seen publisher in the estate</h4>
+      <p><strong>Description.</strong> A file with a perfectly valid signature loads, but the publisher has never been seen in your estate before. A baseline lookup over your own image-load history provides the age of each signer. <strong>Preconditions.</strong> Stored Sysmon 7 history and an enrichment lookup; nothing else. <strong>Impact.</strong> Catches payloads signed with fresh certificates bought for one campaign, before any vendor report exists. <strong>Justification.</strong> NIMBUS MANTICORE obtained valid signatures through the public service SSL.com, per ATT&amp;CK. The rule needs a baseline and tuning, so it ranks Medium and stays experimental.</p>
+    </div>
+  </div>
+
+  <h3 id="sec-5-4-logs" data-num="5.4"><span class="sub-num">5.4</span>Logs and patterns</h3>
+  <p>For each threat: where to look, which fields matter, what normal looks like, what suspicious looks like, and one realistic event-shaped example. Field names follow the most common logging formats; adjust them to your stack.</p>
+
+  <h4>TH-1 &mdash; signed binary or driver loads on Windows</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon Event ID 6 (driver load) and Event ID 7 (image load); Windows CodeIntegrity operational log; EDR module events</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">EventID, UtcTime, Image, ImageLoaded, Signed, Signature, SignatureStatus, Hashes</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Drivers and DLLs from signers in your software inventory; SignatureStatus Valid for known vendors; loads from Program Files</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">A Valid signature from a signer absent from your inventory, or named in a TI report; a driver loading from a user-writable path</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">Event 6 or 7 with Signed true and SignatureStatus Valid, where the signer is not on the expected publisher list; CodeIntegrity 3076 (audit) or 3077 (blocked) as independent confirmation</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">Sysmon Event ID 6 &mdash; driver load (XML, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event&gt;
+  &lt;System&gt;&lt;Provider Name="Sysmon"/&gt;&lt;EventID&gt;6&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-19T08:41:22.113Z"/&gt;&lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-19 08:41:22.113&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{a1b2c3d4-0000-4e21-9f00-aa16b7c2d007}&lt;/Data&gt;
+    &lt;Data Name="ProcessId"&gt;4820&lt;/Data&gt;
+    &lt;Data Name="ImageLoaded"&gt;C:\Windows\System32\drivers\ExampleDisk.sys&lt;/Data&gt;
+    &lt;Data Name="Signed"&gt;true&lt;/Data&gt;
+    &lt;Data Name="Signature"&gt;Example Software Ltd&lt;/Data&gt;
+    &lt;Data Name="SignatureStatus"&gt;Valid&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=4D1F8A2B9C3E5D7081A2B3C4D5E6F708192A3B4C5D6E7F8091A2B3C4D5E6F708&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+  <p>The signer subject is synthetic, chosen for teaching. A driver under <code>C:\Windows\System32\drivers</code> signed by a publisher you have never shipped is the pattern worth waking up for.</p>
+  <div class="callout callout-note">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">i</span>CodeIntegrity 3076 and 3077</p>
+    <p>On hosts that run Windows Defender Application Control (WDAC), the CodeIntegrity operational log writes event 3076 when a file does not meet the policy in audit mode, and event 3077 when the load is blocked in enforced mode. A driver that Sysmon shows as validly signed can still fail WDAC policy, so 3076 and 3077 are strong confirmations for TH-1. Collect them and treat them as high-signal, never as noise.</p>
+  </div>
+
+  <h4>TH-2 &mdash; signing keys accessed on build infrastructure</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">AWS CloudTrail (secretsmanager.amazonaws.com); vault audit logs; CI/CD audit logs; Windows file audit on build hosts</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">eventName, requestParameters.secretId, userIdentity.userName, sourceIPAddress, userAgent</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">The dedicated signing principal reads signing secrets from known runner hosts during release windows</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">GetSecretValue on signing secrets from a new principal or a hosting-provider IP; a .pfx file written to temp; signing jobs outside release windows</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">GetSecretValue where the secret name matches signing keywords and the caller is not the known signing principal</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">AWS CloudTrail &mdash; GetSecretValue (JSON, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.09",
+  "userIdentity": { "type": "IAMUser", "principalId": "AIDA4EXAMPLE7QX3M2T",
+                    "arn": "arn:aws:iam::111122223333:user/svc-build", "userName": "svc-build" },
+  "eventTime": "2026-10-19T03:22:10Z",
+  "eventSource": "secretsmanager.amazonaws.com",
+  "eventName": "GetSecretValue",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "198.51.100.24",
+  "userAgent": "aws-cli/2.15.0",
+  "requestParameters": { "secretId": "prod/code-signing/certificate-pfx" }
+}</code></pre>
+  </figure>
+  <p>The source address uses the reserved documentation range 198.51.100.0/24, which stands in for a hosting provider. The account name and secret name follow the pattern of the Sigma rule below; replace both with your own naming scheme.</p>
+
+  <h4>TH-3 &mdash; TI-reported abused signer matched in stored telemetry</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon Event ID 6 and 7 history across the estate; TI vendor reports; your signer inventory</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">Signature, SignatureStatus, ImageLoaded, Hashes, plus subject and thumbprint from the TI report</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Signature subjects that match your inventory; no overlap with published abused-certificate lists</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">A subject or thumbprint that matches a TI-reported abused certificate, on any host, even once</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">Endpoint signature history matched against the TI abused-signer list from one report; refresh the list monthly as vendors publish new abuse</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">Sysmon Event ID 7 &mdash; image load from abused signer (XML, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event&gt;
+  &lt;System&gt;&lt;Provider Name="Sysmon"/&gt;&lt;EventID&gt;7&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-19T09:12:40.551Z"/&gt;&lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-19 09:12:40.551&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{a1b2c3d4-0000-4e21-9f00-aa16b7c2d031}&lt;/Data&gt;
+    &lt;Data Name="ProcessId"&gt;5512&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\Explorer.EXE&lt;/Data&gt;
+    &lt;Data Name="ImageLoaded"&gt;C:\Users\jdoe\AppData\Roaming\ExampleUpdate\update_helper.dll&lt;/Data&gt;
+    &lt;Data Name="Signed"&gt;true&lt;/Data&gt;
+    &lt;Data Name="Signature"&gt;Sample Hardware Corp&lt;/Data&gt;
+    &lt;Data Name="SignatureStatus"&gt;Valid&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=B3C9E2F7081A2B3C4D5E6F70819A2B3C4D5E6F708192A3B4C5D6E7F8091A2B3C&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+  <p>The subjects in this example, and in the matching Sigma rule later, are synthetic names chosen for teaching. Replace them with the real subjects from your threat intelligence list, and record the report and date next to each entry so you know when the list was last refreshed.</p>
+
+  <h4>TH-4 &mdash; macOS ad-hoc signing and Gatekeeper bypass</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">macOS process telemetry (EDR or unified log); syspolicyd Gatekeeper decisions; MDM software inventory</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">process path, command line, user, parent process, signing status, quarantine attribute changes</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">IT and developer hosts use spctl and codesign during packaging; business users almost never touch them</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val"><code>spctl --master-disable</code> or <code>--add</code> from non-IT users; <code>xattr -d com.apple.quarantine</code> on downloaded apps; <code>codesign -f -s</code> with an unknown identity</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">Process creation for spctl, xattr, or codesign where the arguments show a Gatekeeper bypass or a re-signing operation</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">macOS endpoint &mdash; quarantine removal event (EDR-style JSON, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "timestamp": "2026-10-19T11:04:37.512Z",
+  "host": "mac-finance-04",
+  "user": "jdoe",
+  "parent": "/bin/zsh",
+  "process_path": "/usr/bin/xattr",
+  "command_line": "xattr -d com.apple.quarantine /Applications/ExampleUpdater.app",
+  "target_signing_status": "ad-hoc",
+  "quarantine_removed": true
+}</code></pre>
+  </figure>
+  <p><strong>Ad-hoc signing</strong> means the app carries a signature that proves nothing about the publisher; it is a self-made signature without an identity. Attackers use it to satisfy basic structure checks while avoiding any real identity, which is why a mix of ad-hoc files and bypass tooling on one host is a strong signal.</p>
+
+  <h4>TH-5 &mdash; revoked or watchlisted signer at image or driver load</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon Event ID 6 (driver load) and 7 (image load); a revoked or abused signer watchlist from TI, kept as a lookup; CA revocation status feeds</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">EventID, UtcTime, ImageLoaded, Signed, Signature, SignatureStatus, Hashes</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Loaded files whose signers have a clean revocation record and no watchlist entry</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">A load whose signer is named by TI as revoked or abused, or whose own SignatureStatus reads Revoked or Expired even though the file loaded</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">Event 6 or 7 with Signed true, and either the Signature on the revoked or abused watchlist or SignatureStatus in Revoked or Expired</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">Sysmon Event ID 7 &mdash; image load of a revoked-signer file (XML, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event&gt;
+  &lt;System&gt;&lt;Provider Name="Sysmon"/&gt;&lt;EventID&gt;7&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-19T10:47:18.204Z"/&gt;&lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-19 10:47:18.204&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{a1b2c3d4-0000-4e21-9f00-aa16b7c2d055}&lt;/Data&gt;
+    &lt;Data Name="ProcessId"&gt;7308&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Users\jdoe\AppData\Roaming\DeviceUpdate\updater.exe&lt;/Data&gt;
+    &lt;Data Name="ImageLoaded"&gt;C:\Users\jdoe\AppData\Roaming\DeviceUpdate\device_service.dll&lt;/Data&gt;
+    &lt;Data Name="Signed"&gt;true&lt;/Data&gt;
+    &lt;Data Name="Signature"&gt;Oldbridge Networks&lt;/Data&gt;
+    &lt;Data Name="SignatureStatus"&gt;Revoked&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=7E2A91C4081B2D3C4E5F60718293A4B5C6D7E8F9012A3B4C5D6E7F8091A2B3C4&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+  <p>The signer subject is synthetic. The event shows the core pattern: the file loaded although its certificate is revoked, which happens on systems that do not enforce revocation. This is the documented Mustang Panda pattern, and the FIN8 expired-certificate case behaves the same way with an Expired status. On hosts where the status still reads Valid, only your TI watchlist reveals the abuse, which is the second branch of the rule.</p>
+
+  <h4>TH-6 &mdash; first-seen publisher in the estate</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon Event ID 7 (image load); a signer baseline lookup built from your own image-load history (SIEM or EDR export)</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">UtcTime, Image, ImageLoaded, Signed, Signature, SignatureStatus, Hashes, plus the enrichment field signer_age_days</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Image loads from signers with months or years of history in the estate baseline</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">A valid signature whose signer first appeared in the estate within the last 90 days, or has no baseline entry at all</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">Event 7 with Signed true and SignatureStatus Valid, joined to the baseline lookup: signer_age_days of 90 or less, where the enrichment writes 0 for signers the baseline does not know</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">Sysmon Event ID 7 &mdash; image load from a first-seen publisher (XML, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event&gt;
+  &lt;System&gt;&lt;Provider Name="Sysmon"/&gt;&lt;EventID&gt;7&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-19T12:03:55.917Z"/&gt;&lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-19 12:03:55.917&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{a1b2c3d4-0000-4e21-9f00-aa16b7c2d062}&lt;/Data&gt;
+    &lt;Data Name="ProcessId"&gt;8140&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Users\jdoe\Downloads\ExampleUpdate\setup.exe&lt;/Data&gt;
+    &lt;Data Name="ImageLoaded"&gt;C:\Users\jdoe\Downloads\ExampleUpdate\components\helper_plugin.dll&lt;/Data&gt;
+    &lt;Data Name="Signed"&gt;true&lt;/Data&gt;
+    &lt;Data Name="Signature"&gt;Example Software Ltd&lt;/Data&gt;
+    &lt;Data Name="SignatureStatus"&gt;Valid&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=2B7E4D91F03A5C6E7D8091A2B3C4D5E6F708192A3B4C5D6E7F8091A2B3C4D5E6&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+  <p>Nothing on the host is technically wrong here: the signature is valid. The anomaly is history. No file signed by this publisher has ever loaded in the estate before, and your enrichment lookup therefore returns an age of 0 days. The subject is synthetic. Once a vendor report names the signer, TH-3 and TH-5 take over with higher fidelity; until then, rarity is often the only local hint. Mark the rule experimental, review new publishers monthly, and promote legitimate ones into the baseline.</p>
+
+  <h3 id="sec-5-5-detections" data-num="5.5"><span class="sub-num">5.5</span>Sigma rules and Splunk SPL</h3>
+  <p>One Sigma rule and one matching Splunk query per threat. The Sigma logic and the SPL logic match by design. Replace index names, publisher lists, and watchlist contents with your own values before deploying, and record the mapping from rule to threat in your detection inventory.</p>
+
+  <h4>TH-1 &mdash; Sigma: validly signed driver or image from unexpected publisher</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; valid signature from unexpected publisher</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Validly Signed Driver or Image Loaded from Unexpected Publisher
+id: 8c31e5a4-2f7d-4b69-9e02-7a5c1d8f3b60
+status: stable
+description: Detects kernel driver loads (Sysmon event 6) and DLL or executable image loads (Sysmon event 7) whose
+  signature status is valid but whose signer is not on a short list of expected publishers. Stolen or abused code
+  signing certificates (MITRE ATT&amp;CK T1588.003) produce exactly this pattern, and CodeIntegrity events 3076 and 3077
+  record the same anomaly on hosts with application control policy.
+references:
+  - https://attack.mitre.org/techniques/T1588/003/
+  - https://attack.mitre.org/techniques/T1553/002/
+  - https://learn.microsoft.com/sysinternals/downloads/sysmon
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_events:
+    EventID:
+      - 6
+      - 7
+    Signed: 'true'
+    SignatureStatus: 'Valid'
+  filter_publishers:
+    Signature|contains:
+      - 'Microsoft'
+      - 'Intel'
+      - 'AMD'
+      - 'NVIDIA'
+      - 'VMware'
+  condition: selection_events and not 1 of filter_*
+fields:
+  - Image
+  - ImageLoaded
+  - Signature
+  - SignatureStatus
+  - Hashes
+falsepositives:
+  - Legitimate vendors missing from the publisher list; extend the list, do not disable the rule
+  - Internal enterprise signers; add your own signing identities to the filter
+level: critical
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.003
+  - attack.t1553.002</code></pre>
+  </figure>
+  <p><strong>SPL for TH-1.</strong> Maps to TH-1 (ATT&amp;CK T1588.003, follow-on abuse as T1553.002). Assumes Sysmon data lands in <code>index=sysmon</code> with <code>sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational</code>; adjust to your environment. The selection matches the Sigma rule exactly: events 6 and 7, Signed true, status Valid, and the same five publisher substrings filtered out. The <code>rex</code> extracts a <code>CN=</code> form for readable output only.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-1 valid signature from unexpected publisher</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+  (EventCode=6 OR EventCode=7) Signed=true SignatureStatus="Valid"
+  NOT Signature IN ("*Microsoft*", "*Intel*", "*AMD*", "*NVIDIA*", "*VMware*")
+| rex field=Signature "CN=(?&lt;signer_cn&gt;[^,]+)"
+| eval signer_cn=coalesce(signer_cn, Signature)
+| stats count min(_time) as first_seen max(_time) as last_seen
+        values(ImageLoaded) as images values(Image) as parent_image
+        by signer_cn, dest
+| sort - count</code></pre>
+  </figure>
+
+  <h4>TH-2 &mdash; Sigma: vault access to code signing material</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; GetSecretValue on code signing material</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Secrets Vault Read of Code Signing Material from Unusual Principal
+id: b2d94f7e-8a15-4c3a-a1d6-0e9f4b7c2d81
+status: stable
+description: Detects GetSecretValue calls against secrets whose names point to code signing material such as signing
+  keys or PFX containers. Attackers who want to sign malware with a stolen certificate first steal this material from
+  build infrastructure (MITRE ATT&amp;CK T1588.003, paired with T1552.004). Pair this rule with on-premises scans, for
+  example Sysinternals sigcheck, on build hosts to find exported key files.
+references:
+  - https://attack.mitre.org/techniques/T1588/003/
+  - https://attack.mitre.org/techniques/T1552/004/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection_event:
+    eventName: 'GetSecretValue'
+  selection_secret:
+    requestParameters.secretId|contains:
+      - 'code-signing'
+      - 'signing-key'
+      - '.pfx'
+  filter_known:
+    userIdentity.userName|endswith:
+      - 'svc-code-sign'
+      - 'build-runner'
+  condition: selection_event and selection_secret and not 1 of filter_*
+fields:
+  - userIdentity.userName
+  - requestParameters.secretId
+  - sourceIPAddress
+  - userAgent
+falsepositives:
+  - A new deployment pipeline whose principal name is not on the known list yet
+  - Break-glass access during key rotation, if not pre-approved and ticketed
+level: high
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.003</code></pre>
+  </figure>
+  <p><strong>SPL for TH-2.</strong> Maps to TH-2 (ATT&amp;CK T1588.003 with T1552.004). Assumes CloudTrail in <code>index=aws</code> with <code>sourcetype=aws:cloudtrail</code>. The <code>*...</code> wildcard patterns mirror the Sigma <code>|contains</code> and <code>|endswith</code> modifiers one to one.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-2 vault read of signing secrets</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype=aws:cloudtrail eventName=GetSecretValue
+  requestParameters.secretId IN ("*code-signing*", "*signing-key*", "*.pfx*")
+  NOT userIdentity.userName IN ("*svc-code-sign", "*build-runner")
+| stats count min(_time) as first_seen max(_time) as last_seen
+        values(sourceIPAddress) as src_ips values(userAgent) as agents
+        by userIdentity.userName, requestParameters.secretId
+| sort - first_seen</code></pre>
+  </figure>
+
+  <h4>TH-3 &mdash; Sigma: signer on the TI abused-certificate list</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; image or driver signed by abused certificate subject</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Image or Driver Signed by Known Abused Certificate Subject
+id: 5e1c7b93-6d40-4f28-b3a7-9c2e8d1f4a05
+status: experimental
+description: Detects driver and image loads signed by certificate subjects that threat intelligence has named as
+  abused for malware signing (MITRE ATT&amp;CK T1588.003). The subjects below are synthetic examples for testing;
+  replace them with subjects and thumbprints from your TI reports. Refresh the list monthly, because abused
+  certificates rotate as vendors publish new findings.
+references:
+  - https://attack.mitre.org/techniques/T1588/003/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_events:
+    EventID:
+      - 6
+      - 7
+    Signed: 'true'
+  selection_abused:
+    Signature|contains:
+      - 'Example Software Ltd'
+      - 'Sample Hardware Corp'
+      - 'Demo Semiconductor Inc'
+  condition: selection_events and selection_abused
+fields:
+  - Image
+  - ImageLoaded
+  - Signature
+  - SignatureStatus
+  - Hashes
+falsepositives:
+  - A real product from the named company, if the subject matches a legitimate vendor
+  - Old but valid signed utilities from the same publisher already in use
+level: high
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.003</code></pre>
+  </figure>
+  <p><strong>SPL for TH-3.</strong> Maps to TH-3 (ATT&amp;CK T1588.003). Assumes Sysmon in <code>index=sysmon</code>. The query uses the same three synthetic subjects as the Sigma rule, so the logic is identical; keep the two lists in sync or, better, move both to a shared lookup such as <code>ti_abused_signers</code> that carries the subject, the confidence, and the source report, and refresh it monthly.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-3 abused signer match</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+  (EventCode=6 OR EventCode=7) Signed=true
+  Signature IN ("*Example Software Ltd*", "*Sample Hardware Corp*", "*Demo Semiconductor Inc*")
+| rex field=Signature "CN=(?&lt;signer_cn&gt;[^,]+)"
+| eval signer_cn=coalesce(signer_cn, Signature)
+| stats count min(_time) as first_seen max(_time) as last_seen
+        values(ImageLoaded) as images values(Image) as parent_image
+        by signer_cn, SignatureStatus, dest
+| sort - count</code></pre>
+  </figure>
+
+  <h4>TH-4 &mdash; Sigma: macOS Gatekeeper bypass and re-signing</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; Gatekeeper bypass or re-signing tooling on macOS</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Gatekeeper Bypass or Re-Signing Tooling on macOS
+id: 9a6f2d48-3b7e-4c15-8d92-1f4a6e0c7b53
+status: experimental
+description: Detects use of macOS Gatekeeper assessment and re-signing tools. Attackers test whether an unsigned or
+  ad-hoc signed payload will run by using spctl, removing the quarantine attribute with xattr, or re-signing with
+  codesign. This mirrors the validation step of obtained signing tooling before delivery (MITRE ATT&amp;CK T1588.003).
+references:
+  - https://attack.mitre.org/techniques/T1588/003/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: macos
+  category: process_creation
+detection:
+  selection_spctl:
+    ProcessName|endswith: '/spctl'
+    CommandLine|contains:
+      - '--add'
+      - '--master-disable'
+  selection_xattr:
+    ProcessName|endswith: '/xattr'
+    CommandLine|contains: 'com.apple.quarantine'
+  selection_codesign:
+    ProcessName|endswith: '/codesign'
+    CommandLine|contains|all:
+      - '-f'
+      - '-s'
+  condition: 1 of selection_*
+fields:
+  - ProcessName
+  - CommandLine
+  - User
+falsepositives:
+  - Software deployment scripts that legitimately approve internal packages
+  - Developers re-signing their own test builds on managed hosts
+level: medium
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.003</code></pre>
+  </figure>
+  <p><strong>SPL for TH-4.</strong> Maps to TH-4 (ATT&amp;CK T1588.003). Assumes macOS process telemetry lands in <code>index=macos</code> with <code>sourcetype=macos:process</code>; if your EDR uses <code>index=edr</code>, swap the index and the field names (<code>process_path</code>, <code>command_line</code>) accordingly. The three <code>bypass</code> branches mirror the three Sigma selections one to one.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-4 Gatekeeper bypass tooling</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=macos sourcetype=macos:process
+  (process_path="/usr/bin/spctl" OR process_path="/usr/bin/xattr" OR process_path="/usr/bin/codesign")
+| eval bypass=case(like(process_path,"%spctl") AND (like(command_line,"%--add%") OR like(command_line,"%--master-disable%")), "gatekeeper rule changed",
+                   like(process_path,"%xattr") AND like(command_line,"%com.apple.quarantine%"), "quarantine removed",
+                   like(process_path,"%codesign") AND like(command_line,"%-f%") AND like(command_line,"%-s%"), "binary re-signed")
+| where isnotnull(bypass)
+| stats count min(_time) as first_seen max(_time) as last_seen
+        values(command_line) as commands
+        by host, user, process_path, bypass
+| sort - count</code></pre>
+  </figure>
+
+  <h4>TH-5 &mdash; Sigma: revoked or watchlisted signer at load time</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; driver or image signed by a revoked or abused signer</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Driver or Image Signed by a Revoked or Watchlisted Signer
+id: d4e8f2a6-7b19-4c53-8e02-9a6d1f4c3b75
+status: stable
+description: Detects driver and image loads (Sysmon events 6 and 7) where the signer sits on a watchlist of revoked
+  or abused code signing certificates, or where Sysmon itself reports the signature status as Revoked or Expired
+  although the file loaded. Mustang Panda used revoked certificates and FIN8 used an expired certificate, per ATT&amp;CK
+  (T1588.003, follow-on abuse as T1553.002). The watchlist subjects are synthetic examples; replace them with your
+  TI revoked-signer list and refresh it with revocation dates.
+references:
+  - https://attack.mitre.org/techniques/T1588/003/
+  - https://attack.mitre.org/techniques/T1553/002/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_events:
+    EventID:
+      - 6
+      - 7
+    Signed: 'true'
+  selection_watchlist:
+    Signature|contains:
+      - 'Legacy Security Labs'
+      - 'Oldbridge Networks'
+  selection_status:
+    SignatureStatus:
+      - 'Revoked'
+      - 'Expired'
+  condition: selection_events and (selection_watchlist or selection_status)
+fields:
+  - Image
+  - ImageLoaded
+  - Signature
+  - SignatureStatus
+  - Hashes
+falsepositives:
+  - A vendor product signed with a certificate that has since expired, common for old internal tools
+  - A watchlisted subject that shares its name with a legitimate company
+level: high
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.003
+  - attack.t1553.002</code></pre>
+  </figure>
+  <p><strong>SPL for TH-5.</strong> Maps to TH-5 (ATT&amp;CK T1588.003, follow-on abuse as T1553.002). Assumes Sysmon in <code>index=sysmon</code>. The selection is the Sigma logic written in SPL: events 6 and 7, Signed true, and the same two watchlist subjects or the same two status values. In production, replace the subject list with a lookup such as <code>ti_revoked_signers</code> that carries the subject, the revocation date, and the source report.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-5 revoked or watchlisted signer at load</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational
+  (EventCode=6 OR EventCode=7) Signed=true
+  (Signature IN ("*Legacy Security Labs*", "*Oldbridge Networks*")
+   OR SignatureStatus IN ("Revoked", "Expired"))
+| rex field=Signature "CN=(?&lt;signer_cn&gt;[^,]+)"
+| eval signer_cn=coalesce(signer_cn, Signature)
+| stats count min(_time) as first_seen max(_time) as last_seen
+        values(ImageLoaded) as images values(Image) as parent_image
+        by signer_cn, SignatureStatus, dest
+| sort - count</code></pre>
+  </figure>
+
+  <h4>TH-6 &mdash; Sigma: signature from a publisher never seen in the estate</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; image load signed by a first-seen publisher</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Image Loaded with a Signature from a Publisher Never Seen in the Estate
+id: f1a3c7e9-2d84-46b7-93af-5c8e0b2d6a41
+status: experimental
+description: Detects image loads (Sysmon event 7) whose signature is valid but whose publisher is new to the estate,
+  using the enrichment field signer_age_days (days since this signer was first observed here). The field comes from
+  a lookup over your own image-load history, and the enrichment must write 0 for signers the baseline does not know,
+  so a value of 90 or less means the signer appeared within the last three months. This catches payloads signed with
+  fresh certificates bought for one campaign before any vendor report exists (MITRE ATT&amp;CK T1588.003, follow-on
+  abuse as T1553.002). Experimental — needs the lookup enrichment and monthly tuning.
+references:
+  - https://attack.mitre.org/techniques/T1588/003/
+  - https://attack.mitre.org/techniques/T1553/002/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_load:
+    EventID: 7
+    Signed: 'true'
+    SignatureStatus: 'Valid'
+  selection_new_signer:
+    signer_age_days|lte: 90
+  filter_known_publishers:
+    Signature|contains:
+      - 'Microsoft'
+      - 'Intel'
+      - 'AMD'
+      - 'NVIDIA'
+  condition: selection_load and selection_new_signer and not 1 of filter_*
+fields:
+  - Image
+  - ImageLoaded
+  - Signature
+  - SignatureStatus
+  - signer_age_days
+falsepositives:
+  - Legitimate new software deployments whose publisher is not yet in the baseline
+  - Test machines that install many new signed tools; exclude lab hosts
+level: medium
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.003</code></pre>
+  </figure>
+  <p><strong>SPL for TH-6.</strong> Maps to TH-6 (ATT&amp;CK T1588.003). Assumes Sysmon in <code>index=sysmon</code> plus a KV-store lookup <code>signer_baseline</code> with columns <code>signer_cn</code> and <code>first_seen</code> (date in <code>YYYY-MM-DD</code> form). The lookup enrichment and the <code>coalesce</code> to 0 mirror the Sigma <code>signer_age_days|lte: 90</code> selection exactly, and the same four publishers are filtered out. <code>rex</code> again only normalizes the CN form for grouping.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-6 first-seen publisher on image load</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=7
+  Signed=true SignatureStatus="Valid"
+  NOT Signature IN ("*Microsoft*", "*Intel*", "*AMD*", "*NVIDIA*")
+| rex field=Signature "CN=(?&lt;signer_cn&gt;[^,]+)"
+| eval signer_cn=coalesce(signer_cn, Signature)
+| lookup signer_baseline signer_cn OUTPUT first_seen
+| eval signer_age_days=coalesce(round((now()-strptime(first_seen, "%Y-%m-%d"))/86400, 0), 0)
+| where signer_age_days &lt;= 90
+| stats count min(_time) as first_load max(_time) as last_load
+        values(ImageLoaded) as images values(Image) as parent_image
+        by signer_cn, signer_age_days, dest
+| sort - count</code></pre>
+  </figure>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">Tuning guidance</h4>
+      <p>Start every rule in search-only mode for two weeks and review hits with the data owner. For TH-1, grow the publisher list from your own signer inventory instead of adding suppressions one alert at a time. For TH-2, register every pipeline principal by name and review the list quarterly. For TH-3, refresh the subject list monthly and record the source report next to each entry. For TH-4, allowlist packaging hosts explicitly and keep the rule strict for everyone else. For TH-5, keep the revoked-signer list in a lookup with revocation dates, and check the Expired branch against your oldest deployed software. For TH-6, refresh the baseline monthly, promote legitimate new publishers, and exclude lab hosts.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Validation in the lab</h4>
+      <p>Test each rule in a lab before production. For TH-4 you can remove the quarantine attribute from a file you downloaded yourself, confirm the rule fires with the right fields, and then delete the file. For TH-1, load a signed Microsoft driver and confirm the filter suppresses it. For TH-5 and TH-6, inject one synthetic Sysmon event into a test index and confirm both branches (watchlist and status, or age) fire as expected. Keep the test steps in the rule ticket so the next engineer can re-run them. All subjects and names in these rules are synthetic.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sec-6-case-study" data-num="6">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">6</span>
+    <div>
+      <h2>Real-World Case Study</h2>
+      <p class="section-intro">Stuxnet (2007&ndash;2010) is the classic example of malware signed with stolen code signing certificates, and the reason the industry started treating signing keys as its most protected assets.</p>
+    </div>
+  </div>
+  <p>Stuxnet is the clearest public case of T1588.003. The malware carried drivers signed with certificates that belonged to two real hardware companies, Realtek and JMicron. Public analyses agree that the attackers did not apply for those certificates. They <strong>stole the private keys</strong> from the companies and signed their own kernel drivers with them, so every system that trusted the signature chain loaded the drivers without complaint. All facts below come from public reporting by security vendors and press coverage; where something is an estimate or a reconstruction, the text says so.</p>
+  <h3>Context</h3>
+  <p>Stuxnet targeted industrial controllers, and public reporting links it to the Natanz uranium enrichment facility in Iran. It spread quietly between computers and jumped to isolated networks on USB removable media, which meant it reached machines that had never touched the internet. To install a kernel driver on a modern Windows system, the driver needs a valid signature. Stealing signing certificates solved that problem in one step. The certificates were issued to the real companies, by public CAs, so nothing about the signatures looked wrong.</p>
+  <div class="timeline">
+    <div class="t-item"><span class="t-date">2005&ndash;2007 (estimated)</span>
+      <p class="t-title">Development of the earliest version</p>
+      <p class="t-body">Public vendor analyses date the first Stuxnet version to around this period. The exact start date is an estimate based on code timestamps and exploit choices; no group has publicly claimed authorship.</p>
+    </div>
+    <div class="t-item"><span class="t-date">June 2009 (public analyses)</span>
+      <p class="t-title">Earliest observed version in the wild</p>
+      <p class="t-body">Analysts later reconstructed versions of Stuxnet from 2009. This early build already showed the project's shape: propagation logic, exploit code, and the industrial control attack payload that made the worm famous.</p>
+    </div>
+    <div class="t-item"><span class="t-date">2009&ndash;2010 (estimated)</span>
+      <p class="t-title">Private keys stolen from Realtek and JMicron</p>
+      <p class="t-body">At some point before the signed builds appeared, the attackers obtained the private keys of two Taiwan-based hardware companies. Public reporting describes this as theft from the companies, not fraudulent issuance. The details of the theft were never publicly established, so treat this item as documented in effect but estimated in method.</p>
+    </div>
+    <div class="t-item"><span class="t-date">January 2010</span>
+      <p class="t-title">A build signed with the Realtek certificate</p>
+      <p class="t-body">A Stuxnet version appeared whose kernel driver was signed with a valid certificate belonging to Realtek. Because the certificate was real, current, and from a trusted chain, Windows loaded the driver without the warnings an unsigned driver would face.</p>
+    </div>
+    <div class="t-item"><span class="t-date">March&ndash;April 2010</span>
+      <p class="t-title">A build signed with the JMicron certificate</p>
+      <p class="t-body">A later version was signed with a certificate belonging to JMicron, a second, unrelated company. Using two different stolen identities showed the attackers' operational security: compromise of one certificate would not break the campaign.</p>
+    </div>
+    <div class="t-item"><span class="t-date">17 June 2010</span>
+      <p class="t-title">Discovery by VirusBlokAda</p>
+      <p class="t-body">The Belarus-based antivirus company VirusBlokAda publicly reported the worm on 17 June 2010, after it spread far beyond its intended targets on USB devices. Its unusual signed drivers and exploit chain drew immediate research attention.</p>
+    </div>
+    <div class="t-item"><span class="t-date">July 2010</span>
+      <p class="t-title">Global analysis confirms signed drivers</p>
+      <p class="t-body">Major vendors published deep analyses. Researchers highlighted that Stuxnet's drivers were signed with legitimate, unexpired certificates from Realtek and JMicron, and that the worm used several previously unknown Windows vulnerabilities. The signing abuse became the headline.</p>
+    </div>
+    <div class="t-item"><span class="t-date">July&ndash;August 2010</span>
+      <p class="t-title">Certificates revoked</p>
+      <p class="t-body">Within weeks of the first analyses, the certificate authorities revoked both abused certificates. Exact revocation dates differ between reports, so this entry is a period. Revocation stopped future trust for systems that check it, but it came years after the certificates were stolen, which is the gap attackers count on.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Late 2010 &ndash; 2011</span>
+      <p class="t-title">Impact and lasting lessons</p>
+      <p class="t-body">Public estimates attribute the destruction or damage of roughly 1,000 IR-1 centrifuges at Natanz to the campaign; precise figures were never officially confirmed. Vendor analyses in 2011 documented the full version timeline. The incident permanently changed how the industry protects code signing keys.</p>
+    </div>
+  </div>
+  <div class="callout callout-ethics">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">?</span>What is established and what is estimated</p>
+    <p>Publicly established: the drivers were signed with real certificates from Realtek and JMicron; the certificates were revoked in the weeks after discovery (July to August 2010); VirusBlokAda reported the worm on 17 June 2010. Publicly estimated: the development start date, how the keys were stolen, the exact number of damaged centrifuges, and the attribution of the operation. This page keeps the two categories apart on purpose.</p>
+  </div>
+  <h3>The chain in ATT&amp;CK terms</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Chain step</th><th scope="col">Capability involved</th><th scope="col">Closest technique</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Sign kernel drivers so Windows trusts them</td><td>Stolen private keys of Realtek and JMicron</td><td class="mono">T1588.003 with T1552.004</td></tr>
+        <tr><td>Run and persist because of the valid signature</td><td>Trusted-signed drivers and files loaded by the OS</td><td class="mono">T1553.002 (Code Signing)</td></tr>
+        <tr><td>Move between networks without internet access</td><td>USB removable media propagation</td><td class="mono">T1091</td></tr>
+        <tr><td>Gain kernel access on each host</td><td>Multiple zero-day local privilege escalation exploits</td><td class="mono">T1588.005 / T1068</td></tr>
+        <tr><td>Damage industrial controllers</td><td>Custom attack payload reprogramming controller logic</td><td class="mono">T1587 (developed in-house)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Detection points: what a prepared SOC could have seen</h3>
+  <p>Stuxnet ran mostly where defenders could not see it, so this table is a modern reading. It maps each stage to what a prepared SOC, with today's logging, could have caught. It is written as a lesson for future cases, not as a claim about 2010 telemetry.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Stage in the case</th><th scope="col">Trace it left</th><th scope="col">Where a prepared defender could have seen it</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Signed drivers installed</td><td>Driver signed by Realtek or JMicron on hosts without that hardware</td><td>Signer inventory check on Sysmon 6 or EDR module events; today this is the TH-1 rule</td></tr>
+        <tr><td>Worm copies itself to USB drives</td><td>Executable written to removable media by a system process</td><td>Sysmon Event ID 11 file events filtered to removable devices</td></tr>
+        <tr><td>.LNK exploit runs from the USB drive</td><td>Shell shortcut parsing flaw (MS10-046)</td><td>Patch SLA plus IDS signatures for malformed shortcut files</td></tr>
+        <tr><td>Spread over network shares and the print spooler</td><td>Remote writes to shares and ADMIN$; print spooler flaw (MS10-061)</td><td>File share audit, patch SLA, and IDS signatures for spooler abuse</td></tr>
+        <tr><td>Injection into trusted processes</td><td>Code running inside lsass.exe and services.exe</td><td>EDR behavioral rules and module-load events for injected images</td></tr>
+        <tr><td>Certificates revoked only weeks after discovery</td><td>Abused subjects named in vendor reports</td><td>Revocation checking enabled plus a watchlist from vendor reporting; today this is the TH-5 rule</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Containment, eradication, and recovery</h3>
+  <p><strong>Containment.</strong> For an organization hit by a Stuxnet-class worm, containment means cutting the spread paths first. Freeze or restrict removable media, segment network shares, isolate hosts that show the driver or injection anomalies, and hunt the whole estate for the file hashes and certificate subjects named in vendor reports. Blocking by signer subject and thumbprint catches every file signed with the stolen certificates, including rebuilds. Public reporting never described the victim's internal containment, so the specifics here are a reconstruction from the vendor guidance published at the time.</p>
+  <p><strong>Eradication.</strong> Eradication removes the worm and closes its doors. Run the removal tools vendors shipped; Microsoft added Stuxnet detection to the Malicious Software Removal Tool in 2010. Patch the exploited flaws (MS10-046, MS10-061, MS10-073), rebuild hosts where kernel components ran, and confirm the abused certificates stay revoked. Eradication also has an industry layer: certificate authorities, Microsoft, and antivirus vendors coordinated on revocation and cleanup, which took weeks.</p>
+  <p><strong>Recovery.</strong> Recovery means proving the door is closed. Restore systems from clean images where tampering is suspected, re-verify controller logic against its design, watch a clean telemetry window before reconnecting segments, and keep the signer blocks in place. The Stuxnet case adds one more recovery step for every organization: review whether your own signing keys could be next, and move them into hardware protection if they are not.</p>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">Impact and consequences</h4>
+      <p>Beyond the physical damage, Stuxnet broke an assumption: that a valid signature chain proves a file is safe. Two companies spent years answering for abuse they did not commit, and every Windows release since has tightened driver signing rules. The worm also proved that signing trust, once stolen, multiplies across every target the attacker wants.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Team collaboration, then and now</h4>
+      <p>The victim's team was never publicly documented, so these are the roles the industry learned from this case. <strong>CTI</strong> tracks the samples and names the abused certificates. The <strong>SOC</strong> monitors and hunts for the signer and the hashes. <strong>Incident response (IR)</strong> leads containment, eradication, and recovery. <strong>IT</strong> owns patching and removable-media policy. <strong>Legal</strong> assesses what the abuse means for the impersonated companies and for regulators. <strong>Comms</strong> prepares statements, because vendor reporting will name the certificates publicly anyway. Write these roles into your playbook before you need them, with one decision-maker per stage.</p>
+    </div>
+  </div>
+  <div class="card">
+    <h4 class="card-title">Tools in the response</h4>
+    <p>The public response ran on known tools: antivirus engines and the Microsoft Malicious Software Removal Tool for detection and cleanup; reverse-engineering workstations used by vendor researchers to unpack the drivers; Microsoft patches MS10-046, MS10-061, and MS10-073 to close the exploited flaws; Siemens security advisories and customer guidance for industrial operators; and the certificate authorities' revocation process. A modern SOC adds Sysmon or equivalent logging, a signer watchlist, and a signer baseline, which are the controls this page builds.</p>
+  </div>
+  <h3>Lessons learned</h3>
+  <ul class="check-list">
+    <li>Treat hardware-level and kernel-level trust assumptions as attack surface: a signed driver runs inside the operating system's most protected layer.</li>
+    <li>Code signing keys are the highest-value secrets a software organization owns. Store them in hardware protection, restrict access, and monitor their use.</li>
+    <li>Revocation is not instant protection. Systems that do not check revocation keep trusting a revoked certificate, so detection cannot rely on revocation alone.</li>
+    <li>One campaign can use several stolen identities. Hunt by report, not by one certificate.</li>
+    <li>Log signature fields everywhere. Organizations that kept signature metadata answer scope questions in hours, not weeks.</li>
+    <li>Share fast. Public vendor reporting in 2010 is what made revocation and cleanup possible at all.</li>
+  </ul>
+</section>
+
+<section class="section" id="sec-7-mitigation" data-num="7">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">7</span>
+    <div>
+      <h2>Mitigation and Defense</h2>
+      <p class="section-intro">You cannot stop a certificate from being bought or stolen elsewhere, but you can protect your own keys and make abused certificates fail. Enterprise controls, home advice, and a prioritized action list.</p>
+    </div>
+  </div>
+  <p>ATT&amp;CK is direct about this technique: the official mitigation is <strong>Pre-compromise [M1056]</strong>, and its description says the technique cannot be easily mitigated with preventive controls, because it is based on behaviors performed outside the scope of enterprise defenses. Defense therefore has two goals. First, protect your own signing keys, so nobody can turn your company into the next stolen certificate. Second, reduce what an abused certificate can do once its payloads arrive: enforce policy, block known-abused signers, and monitor the events that expose them.</p>
+  <h3>Enterprise controls</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Area</th><th scope="col">Control</th><th scope="col">What it stops</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Key protection</td><td>Store private keys in an HSM (a tamper-resistant hardware device that never exports the key); least privilege on build systems; key rotation and revocation runbooks</td><td>Theft of your signing keys through build or runner compromise (TH-2)</td></tr>
+        <tr><td>Endpoint enforcement</td><td>Application control with Windows Defender Application Control (WDAC) or Smart App Control; kernel driver signature enforcement; block unsigned drivers</td><td>Signed-by-a-stolen-certificate binaries and drivers from running (TH-1)</td></tr>
+        <tr><td>Signer blocklists</td><td>Block known-abused signers by certificate thumbprint, not only by file hash</td><td>Every payload signed with an abused certificate, including future rebuilds (TH-1, TH-3)</td></tr>
+        <tr><td>Revocation and watchlists</td><td>Keep revocation checking enabled on every platform; load the TI revoked-signer watchlist into EDR or SIEM and alert at load time</td><td>Revoked and expired certificates still passing on hosts that do not check (TH-5)</td></tr>
+        <tr><td>Signer inventory and baseline</td><td>Inventory every signer trusted in the estate and keep a first-seen baseline over image-load history</td><td>Unknown or first-seen publishers standing out immediately (TH-1, TH-6)</td></tr>
+        <tr><td>Logging and monitoring</td><td>Collect Sysmon 6/7 with signature fields and CodeIntegrity 3076/3077; alert on vault reads of signing secrets (TH-2 rule)</td><td>The load and theft events that expose the whole chain</td></tr>
+        <tr><td>Identity and cloud</td><td>MFA and least privilege for vaults and CI/CD; dedicated signing principals; audit logging on runners</td><td>Runner abuse and silent export of key material (TH-2)</td></tr>
+        <tr><td>Supply chain verification</td><td>Validate third-party installers against vendor-published thumbprints; require SBOMs and signing records from suppliers</td><td>Tampered or re-signed vendor software passing as legitimate</td></tr>
+        <tr><td>macOS controls</td><td>Keep Gatekeeper enabled; restrict spctl, xattr, and codesign on standard hosts; notarize internal software</td><td>Quarantine removal and re-signing tricks (TH-4)</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout callout-warning">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">!</span>Common trap</p>
+    <p>Do not allowlist software by signer name alone. A stolen certificate signs malware with a perfectly valid chain, under a name that looks like a real vendor. Combine the signature with path, inventory, and reputation checks so a valid-but-unknown signer still gets reviewed. And make sure revocation checks are actually enabled on the platforms you run, because a revoked certificate is only useless to attackers if somebody checks.</p>
+  </div>
+  <h3>Home and small office</h3>
+  <p>Home users cannot manage certificates, but the same bought capability ends up on home machines. Each habit below removes one thing the signed payload needs.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Habit</th><th scope="col">Why it defeats a bought capability</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Turn on automatic updates for the operating system and browser</td><td>Signed malware still needs an old bug to install or persist, so updates close the door it uses</td></tr>
+        <tr><td>Leave the built-in antivirus or protection stack switched on</td><td>Reputation systems learn abused certificates within days, and they check signatures for you</td></tr>
+        <tr><td>Install software only from official stores or the vendor's own site</td><td>Criminal markets sell certificates so other download sources look safe; official channels rarely carry them</td></tr>
+        <tr><td>Read the publisher name in security warnings before you click</td><td>A valid signature from a company you have never heard of is a reason to stop, not a box to tick</td></tr>
+        <tr><td>On Mac, leave Gatekeeper on and never paste commands that disable it or remove quarantine</td><td>Bypass commands are exactly what ad-hoc signed payloads and obtained signing tooling depend on</td></tr>
+        <tr><td>Keep a 3-2-1 backup: three copies, two media, one offline</td><td>Ransomware delivered behind a valid signature loses its leverage when files survive it</td></tr>
+        <tr><td>Use a password manager plus multi-factor authentication everywhere</td><td>The stealer that runs after a signed payload lands cannot log in without the second factor</td></tr>
+        <tr><td>Update the router and smart devices, and change their default passwords</td><td>Home devices run the same edge software that obtained exploits target</td></tr>
+        <tr><td>Agree on a family code word, and treat urgent payment or identity requests as hostile until verified by a second channel</td><td>A cloned voice cannot answer a code word, and bought deepfake kits depend on speed, not skill</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Prioritized actions</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Priority</th><th scope="col">Action</th><th scope="col">Effort</th><th scope="col">Owner</th><th scope="col">Expected risk reduction</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge sev-critical">1</span></td><td>Move signing keys into an HSM or managed key service and remove export rights</td><td>Medium</td><td>Platform / build team</td><td>High against TH-2; removes the single worst outcome</td></tr>
+        <tr><td><span class="badge sev-critical">2</span></td><td>Collect Sysmon 6/7 with signature fields and CodeIntegrity 3076/3077</td><td>Medium</td><td>SOC / endpoint team</td><td>High against TH-1, TH-3, TH-5, and TH-6; enables all six rules</td></tr>
+        <tr><td><span class="badge sev-high">3</span></td><td>Build the signer inventory and first-seen baseline; alert on signers outside them</td><td>Medium</td><td>Security engineering</td><td>High against TH-1 and TH-6</td></tr>
+        <tr><td><span class="badge sev-high">4</span></td><td>Keep revocation checking on and load the TI revoked-signer watchlist into EDR or SIEM</td><td>Low</td><td>Security engineering</td><td>High against TH-5</td></tr>
+        <tr><td><span class="badge sev-high">5</span></td><td>Deploy WDAC or Smart App Control in audit, then enforced mode</td><td>High</td><td>Endpoint team</td><td>High against TH-1, including unknown families</td></tr>
+        <tr><td><span class="badge sev-medium">6</span></td><td>Schedule the six Sigma rules of section 5.5 in search-only mode, then tune</td><td>Medium</td><td>SOC</td><td>Medium to high across all threats</td></tr>
+        <tr><td><span class="badge sev-medium">7</span></td><td>Lock down vault and CI/CD access to signing secrets with MFA and audit</td><td>Medium</td><td>Cloud / identity team</td><td>High against TH-2</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section" id="sec-8-mistakes" data-num="8">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">8</span>
+    <div>
+      <h2>Common Mistakes and Best Practices</h2>
+      <p class="section-intro">Ten concrete blue-team mistakes around this technique, each with symptom, root cause, fix, and prevention, plus the habits that keep detection quality up.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">#</th><th scope="col">Mistake</th><th scope="col">Symptom</th><th scope="col">Root cause</th><th scope="col">Fix and prevention</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">1</td><td>Trusting any valid signature</td><td>Signed malware runs without review; analysts close tickets because "it is signed"</td><td>Signing treated as proof of safety instead of one signal</td><td>Fix: add signer identity checks to triage playbooks. Prevent: policy that a valid signature is context, never a verdict</td></tr>
+        <tr><td class="mono">2</td><td>Allowlisting by signer name alone</td><td>A lookalike or stolen subject passes every check</td><td>Name matching instead of thumbprint matching</td><td>Fix: allowlist by thumbprint plus vendor verification. Prevent: review allowlists when vendors report abused certificates</td></tr>
+        <tr><td class="mono">3</td><td>No signer inventory</td><td>Nobody can say whether a signer is normal for the estate</td><td>The estate's trusted signers were never listed</td><td>Fix: build the inventory from Sysmon 6/7 and software deployment records. Prevent: keep it current with a quarterly review</td></tr>
+        <tr><td class="mono">4</td><td>Revocation checks disabled or unpinned</td><td>Revoked certificates keep validating on internal hosts (TH-5 fires late or never)</td><td>Revocation checking turned off for speed or compatibility</td><td>Fix: re-enable revocation checks, alert on Revoked and Expired statuses, and pin root trust. Prevent: test revocation behavior in a lab after each OS upgrade</td></tr>
+        <tr><td class="mono">5</td><td>Ignoring expired certificate reuse</td><td>Malware signed with an expired or test certificate still passes</td><td>Assumption that expired certificates are harmless; FIN8 used an expired OpenSSL test certificate this way</td><td>Fix: alert on SignatureStatus values other than Valid and on test signers. Prevent: cover all status values in the rule set, not only Valid</td></tr>
+        <tr><td class="mono">6</td><td>No build-pipeline monitoring</td><td>Key theft is discovered months later, often by a vendor report</td><td>Build systems treated as trusted and unlogged</td><td>Fix: audit vault reads, runner logins, and .pfx exports (TH-2). Prevent: alert on signing outside release windows</td></tr>
+        <tr><td class="mono">7</td><td>Blocking only by file hash</td><td>Each rebuild of the malware passes while the blocklist grows</td><td>Hashes are easy to collect, but they change per build</td><td>Fix: add thumbprint blocks next to hash blocks. Prevent: prefer stable identity markers in blocklist design</td></tr>
+        <tr><td class="mono">8</td><td>Missing Sysmon 6/7 collection</td><td>No signature fields exist, so the TH-1, TH-3, TH-5, and TH-6 rules cannot run</td><td>Sysmon or an equivalent never deployed</td><td>Fix: deploy Sysmon with a signing-aware configuration. Prevent: tie log source onboarding to the detection coverage matrix</td></tr>
+        <tr><td class="mono">9</td><td>Treating CodeIntegrity 3076/3077 as noise</td><td>Policy violations are bulk-cleared without review</td><td>Events fire often during software rollouts, so they get muted</td><td>Fix: route 3076/3077 to a triage queue with path and signer context. Prevent: window-based suppressions with expiry, never permanent ones</td></tr>
+        <tr><td class="mono">10</td><td>No TI feedback into signer blocklists</td><td>Abused certificates from public reports never reach your controls</td><td>Intelligence collection has no apply step</td><td>Fix: every report produces a thumbprint entry or a documented no-action note. Prevent: monthly refresh of the abused-signer list with owners</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Operating habits</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Rhythm</th><th scope="col">Habits</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Daily</td><td>Review fires of the six TH rules; check new signer alerts against the inventory; verify no vault reads of signing secrets happened outside release windows</td></tr>
+        <tr><td>Weekly</td><td>One intel review with apply decisions; hunt one new or reused certificate identity; check vendor advisories for revoked or abused certificates</td></tr>
+        <tr><td>Monthly</td><td>Refresh the TI abused-signer lookup and record the source and date; refresh the TH-6 signer baseline and promote legitimate new publishers; rule health check (volume, failures, drift); test one rule end to end in the lab</td></tr>
+        <tr><td>Quarterly</td><td>Signer inventory review; key access review for vaults and runners; tabletop exercise with a stolen-certificate scenario; retire rules that never fire and document why</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section" id="sec-9-cheat-sheet" data-num="9">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">9</span>
+    <div>
+      <h2>Cheat Sheet and Quick Reference</h2>
+      <p class="section-intro">Everything important from this page on one screen: facts, top detections, a response checklist, and the links to go deeper.</p>
+    </div>
+  </div>
+  <h3>Key facts</h3>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Technique</div><div class="kv-val">T1588.003 &mdash; Code Signing Certificates (Resource Development, TA0042; parent T1588)</div></div>
+    <div class="kv-row"><div class="kv-key">Core idea</div><div class="kv-val">Attackers buy or steal code signing certificates and use them to sign malware so it appears trusted</div></div>
+    <div class="kv-row"><div class="kv-key">How they get it</div><div class="kv-val">Front-company purchase, theft from a compromised vendor, abused issuance, or second-hand, revoked, and expired certificates</div></div>
+    <div class="kv-row"><div class="kv-key">Official guidance</div><div class="kv-val">Mitigation M1056 Pre-compromise; detection strategy DET0875 with analytic AN2007 (thumbprint, algorithm, validity period, common name, certificate authority)</div></div>
+    <div class="kv-row"><div class="kv-key">Where detection happens</div><div class="kv-val">Sysmon 6/7 signature fields, CodeIntegrity 3076/3077, vault and CI/CD audit logs, macOS Gatekeeper tooling, TI matches</div></div>
+    <div class="kv-row"><div class="kv-key">Best early signal</div><div class="kv-val">A valid signature from a signer outside your inventory or baseline, or a signer named in a TI report</div></div>
+    <div class="kv-row"><div class="kv-key">Golden rule</div><div class="kv-val">Block by certificate thumbprint, keep a signer inventory, and treat any signature as one signal, never a verdict</div></div>
+  </div>
+  <h3>Top detections</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Detection</th><th scope="col">Looks for</th><th scope="col">Threat</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Unexpected valid signer</td><td>Sysmon 6/7 with Signed true, SignatureStatus Valid, signer not in inventory</td><td class="mono">TH-1</td></tr>
+        <tr><td>Signing secret vault read</td><td>GetSecretValue on code-signing secrets from an unusual principal</td><td class="mono">TH-2</td></tr>
+        <tr><td>Abused signer match</td><td>Signature field matching a TI-reported abused certificate subject</td><td class="mono">TH-3</td></tr>
+        <tr><td>Gatekeeper bypass</td><td>spctl, xattr quarantine removal, or codesign re-signing on macOS</td><td class="mono">TH-4</td></tr>
+        <tr><td>Revoked or watchlisted signer</td><td>Sysmon 6/7 where the signer is on the revoked watchlist, or SignatureStatus reads Revoked or Expired on a file that loaded</td><td class="mono">TH-5</td></tr>
+        <tr><td>First-seen publisher</td><td>Valid signature whose signer appeared in the estate within 90 days, via the baseline lookup</td><td class="mono">TH-6</td></tr>
+        <tr><td>CodeIntegrity policy hit</td><td>Event 3076 (audit) or 3077 (blocked) for a signed file</td><td class="mono">TH-1</td></tr>
+        <tr><td>.pfx export on build hosts</td><td>Key container files written to temp or user paths on build systems</td><td class="mono">TH-2</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Response checklist</h3>
+  <ul class="check-list">
+    <li>Confirm the report: subject, thumbprint, families, first and last seen, and revocation status of the abused certificate.</li>
+    <li>Check enforcement: whether your platforms honor revocation, and whether the TH-5 watchlist covers this signer yet.</li>
+    <li>Hunt the estate: search 90 days of Sysmon 6/7, EDR module loads, and mail gateway logs for the subject or thumbprint.</li>
+    <li>Check your own keys first: review vault reads, runner logins, and .pfx exports to rule out that your certificate is the abused one.</li>
+    <li>Contain: isolate hosts that loaded the payload, block the thumbprint in policy, and revoke sessions for affected users.</li>
+    <li>Eradicate: remove the signed payload and staged files, rotate any exposed credentials, and close the entry path.</li>
+    <li>Report and prevent: record the case, update the signer inventory, baseline, and blocklists, and share sanitized indicators with your ISAC.</li>
+  </ul>
+  <h3>Official links and related techniques</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">Official ATT&amp;CK</h4>
+      <ul>
+        <li><a href="https://attack.mitre.org/techniques/T1588/003/" rel="noopener">T1588.003 &mdash; Code Signing Certificates (this technique)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/" rel="noopener">T1588 &mdash; Obtain Capabilities (parent)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/002/" rel="noopener">T1588.002 &mdash; Tool (sibling)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/004/" rel="noopener">T1588.004 &mdash; Digital Certificates (sibling)</a></li>
+        <li><a href="https://attack.mitre.org/detect/" rel="noopener">ATT&amp;CK Detection strategies overview</a></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Related techniques and resources</h4>
+      <ul>
+        <li><a href="https://attack.mitre.org/techniques/T1552/004/" rel="noopener">T1552.004 &mdash; Unsecured Credentials: Private Keys</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1553/002/" rel="noopener">T1553.002 &mdash; Subvert Trust Controls: Code Signing</a></li>
+        <li><a href="https://learn.microsoft.com/windows/security/application-security/application-control/windows-defender-application-control/" rel="noopener">Microsoft WDAC documentation</a></li>
+        <li><a href="https://learn.microsoft.com/sysinternals/downloads/sysmon" rel="noopener">Microsoft Sysmon documentation</a></li>
+        <li><a href="https://github.com/SigmaHQ/sigma" rel="noopener">Sigma rule repository</a></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<script>
+window.SIM_CONFIG = {
+  meta: { width: 960, height: 540 },
+  dwell: 7,
+  nodes: [
+    { id: 'attacker', x: 110, y: 110, label: 'Attacker', sub: 'threat actor', type: 'attacker',
+      info: 'Prepares the campaign and decides the malware needs a valid code signing certificate to look trusted.' },
+    { id: 'market', x: 110, y: 310, label: 'Cert reseller', sub: 'criminal market', type: 'market',
+      info: 'Underground seller offering stolen or front-company code signing certificates for cryptocurrency.' },
+    { id: 'build', x: 345, y: 110, label: 'Build box', sub: 'sign workstation', type: 'infra',
+      info: 'Rented workstation where the attacker signs the payload with the obtained certificate, far from victim telemetry.' },
+    { id: 'ti', x: 345, y: 310, label: 'TI and sandbox', sub: 'research pipeline', type: 'service',
+      info: 'Sandboxes, malware repositories, and vendor researchers where the signer identity becomes public intelligence.' },
+    { id: 'victim', x: 545, y: 200, label: 'Target org', sub: 'user + endpoint', type: 'victim',
+      info: 'The target organization. Its endpoints load the signed payload and record the signer identity.' },
+    { id: 'soc', x: 640, y: 435, label: 'SOC', sub: 'blue team', type: 'defender',
+      info: 'Security operations center. Matches the signer against TI reports, hunts the estate, and blocks by thumbprint.' }
+  ],
+  steps: [
+    {
+      title: 'Malware must look trusted',
+      caption: 'The actor prepares a backdoor and a Windows kernel driver. An unsigned file raises warnings, so the plan needs a valid code signing certificate from a trusted chain.',
+      defender: 'Nothing is visible. No packet, file, or account of yours is involved yet.',
+      evidence: [],
+      actors: ['attacker'],
+      flows: [],
+      notes: [{ node: 'attacker', text: 'wishlist: signing cert', color: 'danger' }]
+    },
+    {
+      title: 'Buying a stolen certificate',
+      caption: 'The actor pays a criminal market reseller for a code signing certificate stolen weeks earlier from a small software company. The private key now signs any file the actor wants.',
+      defender: 'Certificate resale is watched by intelligence teams. The identity becomes a fixed marker even before you see it.',
+      evidence: ['TI: stolen cert resale noted'],
+      actors: ['attacker', 'market'],
+      flows: [
+        { from: 'attacker', to: 'market', label: 'buys key+cert', color: 'danger', count: 2, dur: 1.6 },
+        { from: 'market', to: 'attacker', label: 'cert delivered', color: 'warning', count: 2, dur: 1.8 }
+      ],
+      notes: [{ node: 'market', text: 'reseller holds payment', color: 'warning' }]
+    },
+    {
+      title: 'Signing the payload',
+      caption: 'On the build box, the actor signs the driver and the backdoor with the stolen certificate. The files now carry the identity of a real software company.',
+      defender: 'Nothing is visible. Signing happens entirely on attacker-owned infrastructure.',
+      evidence: [],
+      actors: ['attacker', 'build'],
+      flows: [
+        { from: 'attacker', to: 'build', label: 'signs payload', color: 'danger', count: 2, dur: 1.5 }
+      ],
+      notes: [{ node: 'build', text: 'valid signature set', color: 'warning' }]
+    },
+    {
+      title: 'Test sample leaks to sandbox',
+      caption: 'Before delivery, the actor tests the signed sample on a clean machine. The test copy reaches an online sandbox, which records the file hash and the signer identity.',
+      defender: 'First public trace: sandboxes and repositories now know a new hash and a new signer.',
+      evidence: ['Sandbox logs hash and signer', 'Hash indexed in repositories'],
+      actors: ['attacker', 'build', 'ti'],
+      flows: [
+        { from: 'build', to: 'ti', label: 'sample leaks', color: 'warning', count: 2, dur: 1.7 }
+      ],
+      notes: [{ node: 'ti', text: 'signer recorded', color: 'success' }]
+    },
+    {
+      title: 'TI reports abused certificate',
+      caption: 'A vendor publishes a report naming the abused certificate: subject, thumbprint, and sample files. Your intelligence pipeline turns the identity into a hunt.',
+      defender: 'The SOC now holds the marker. Estate-wide hunts for the signer become possible.',
+      evidence: ['Vendor report names certificate', 'Thumbprint added to watchlist'],
+      actors: ['ti', 'soc'],
+      flows: [
+        { from: 'ti', to: 'soc', label: 'intel report', color: 'accent', count: 2, dur: 1.6 }
+      ],
+      notes: [{ node: 'soc', text: 'hunt list updated', color: 'accent' }]
+    },
+    {
+      title: 'Payload delivered to target',
+      caption: 'The actor sends phishing mail carrying the signed payload. The mail gateway checks the signature, finds it valid, and the message passes trust rules.',
+      defender: 'The gateway sees a valid signature but a low-reputation sender. A weak signal, usually not enough to alert alone.',
+      evidence: ['Mail gateway: valid signature', 'Sender reputation is low'],
+      actors: ['build', 'victim'],
+      flows: [
+        { from: 'build', to: 'victim', label: 'phishing mail', color: 'warning', count: 3, dur: 1.5 }
+      ],
+      notes: [{ node: 'victim', text: 'mail delivered', color: 'warning' }]
+    },
+    {
+      title: 'Signed driver loads on victim',
+      caption: 'A user runs the installer. The kernel driver loads, and endpoint logging records it: Sysmon shows a valid signature from a signer nobody in the estate has seen before.',
+      defender: 'Strong signal at last: Sysmon 6 and 7 show a valid signature from a signer outside your inventory. On hosts with application control in audit mode, CodeIntegrity 3076 notes the same file.',
+      evidence: ['Sysmon 6: valid, new signer', 'Signer absent from inventory'],
+      actors: ['victim'],
+      flows: [],
+      notes: [{ node: 'victim', text: 'driver loaded; Sysmon 6/7 hit', color: 'danger' }]
+    },
+    {
+      title: 'SOC pivots on signer identity',
+      caption: 'The SOC matches the signer against the TI report, confirms the abuse, and hunts the whole estate for that thumbprint. Hosts are isolated and the signer is blocked.',
+      defender: 'Each event alone looked weak. Correlation across intelligence and telemetry turns the signer identity into a confirmed case.',
+      evidence: ['Case: hosts matched by signer', 'Host isolated; signer blocked'],
+      actors: ['soc', 'ti', 'victim'],
+      flows: [
+        { from: 'victim', to: 'soc', label: 'telemetry hits', color: 'accent', count: 2, dur: 1.9 },
+        { from: 'ti', to: 'soc', label: 'revocation note', color: 'accent', count: 1, dur: 1.5 }
+      ],
+      notes: [{ node: 'soc', text: 'hunt: thumbprint', color: 'accent' }]
+    }
+  ]
+};
+</script>
+
+  </main>
+</div>
+</div>
+
+<div class="toc-overlay" id="toc-overlay" role="dialog" aria-modal="true" aria-label="Table of contents">
+  <div class="overlay-backdrop" id="overlay-backdrop"></div>
+  <div class="overlay-panel">
+    <div class="overlay-head">
+      <p class="toc-title">Contents</p>
+      <button class="sim-btn" id="overlay-close" type="button">Close</button>
+    </div>
+    <div id="overlay-toc"></div>
+  </div>
+</div>
+
+<button class="fab fab-toc" id="btn-toc" type="button" aria-haspopup="dialog" aria-controls="toc-overlay" aria-expanded="false">Contents</button>
+<button class="fab fab-top" id="btn-top" type="button" aria-label="Back to top">&#8593; Top</button>
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var reduceMotion = false;
+  try { reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ============ Theme helper (the site shell owns the toggle UI) ============ */
+  function applyTheme(t) {
+    if (t !== 'light' && t !== 'dark') { return; }
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('atk-theme', t); } catch (e) {}
+    document.dispatchEvent(new CustomEvent('atk:theme', { detail: t }));
+  }
+  window.__atkSetTheme = applyTheme;
+  window.addEventListener('storage', function (e) {
+    if (e.key === 'atk-theme' && (e.newValue === 'light' || e.newValue === 'dark')) {
+      document.documentElement.setAttribute('data-theme', e.newValue);
+      document.dispatchEvent(new CustomEvent('atk:theme', { detail: e.newValue }));
+    }
+  });
+  try {
+    var schemeMq = window.matchMedia('(prefers-color-scheme: light)');
+    var onSchemeChange = function () {
+      var saved = null;
+      try { saved = localStorage.getItem('atk-theme'); } catch (e) {}
+      if (saved !== 'light' && saved !== 'dark') {
+        var t = schemeMq.matches ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+        document.dispatchEvent(new CustomEvent('atk:theme', { detail: t }));
+      }
+    };
+    if (schemeMq.addEventListener) { schemeMq.addEventListener('change', onSchemeChange); }
+    else if (schemeMq.addListener) { schemeMq.addListener(onSchemeChange); }
+  } catch (e) {}
+
+  /* ============ Reading progress + back to top ============ */
+  var progress = $('#progress');
+  var progressFill = progress ? $('.progress-fill', progress) : null;
+  var topBtn = $('#btn-top');
+  var scrollTicking = false;
+  function onScroll() {
+    if (scrollTicking) { return; }
+    scrollTicking = true;
+    window.requestAnimationFrame(function () {
+      scrollTicking = false;
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      var p = max > 0 ? Math.min(1, Math.max(0, (window.pageYOffset || h.scrollTop || 0) / max)) : 0;
+      if (progressFill) {
+        progressFill.style.width = (p * 100).toFixed(2) + '%';
+        progress.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+      }
+      if (topBtn) {
+        if ((window.pageYOffset || 0) > 700) { topBtn.classList.add('show'); }
+        else { topBtn.classList.remove('show'); }
+      }
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  onScroll();
+  if (topBtn) {
+    topBtn.addEventListener('click', function () {
+      window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    });
+  }
+
+  /* ============ Table of contents: rebuild from real headings ============ */
+  var tocItems = [];
+  function buildToc() {
+    var main = $('#main-content');
+    var list = $('#toc-list');
+    if (!main || !list) { return; }
+    tocItems = [];
+    $$('section.section[id]', main).forEach(function (sec) {
+      var h2 = $('h2', sec);
+      if (!h2) { return; }
+      tocItems.push({ href: '#' + sec.id, num: sec.getAttribute('data-num') || '', text: h2.textContent.trim(), sub: false });
+      if (sec.id === 'sec-5-detection') {
+        $$('h3[id]', sec).forEach(function (h3) {
+          var clone = h3.cloneNode(true);
+          var sn = clone.querySelector('.sub-num');
+          if (sn) { clone.removeChild(sn); }
+          tocItems.push({ href: '#' + h3.id, num: h3.getAttribute('data-num') || '', text: clone.textContent.trim(), sub: true });
+        });
+      }
+    });
+    var htmlStr = '';
+    tocItems.forEach(function (it, idx) {
+      if (it.sub) { return; }
+      htmlStr += '<li><a href="' + it.href + '"><span class="toc-num">' + esc(it.num) + '</span>' + esc(it.text) + '</a>';
+      var subs = [];
+      var k = idx + 1;
+      while (k < tocItems.length && tocItems[k].sub) { subs.push(tocItems[k]); k++; }
+      if (subs.length) {
+        htmlStr += '<ol class="toc-sub">';
+        subs.forEach(function (s2) {
+          htmlStr += '<li><a href="' + s2.href + '"><span class="toc-num">' + esc(s2.num) + '</span>' + esc(s2.text) + '</a></li>';
+        });
+        htmlStr += '</ol>';
+      }
+      htmlStr += '</li>';
+    });
+    list.innerHTML = htmlStr;
+    var overlayList = $('#overlay-toc');
+    if (overlayList) { overlayList.innerHTML = '<ol class="toc-list">' + htmlStr + '</ol>'; }
+  }
+  buildToc();
+
+  /* Active TOC link while scrolling */
+  var tocLinkMap = {};
+  function refreshTocLinks() {
+    tocLinkMap = {};
+    $$('#toc-list a, #overlay-toc a').forEach(function (a) {
+      var href = a.getAttribute('href') || '';
+      if (!tocLinkMap[href]) { tocLinkMap[href] = []; }
+      tocLinkMap[href].push(a);
+    });
+  }
+  refreshTocLinks();
+  function setActiveToc() {
+    var pos = (window.pageYOffset || 0) + 160;
+    var current = tocItems.length ? tocItems[0].href : null;
+    tocItems.forEach(function (it) {
+      var el = document.getElementById(it.href.slice(1));
+      if (el && el.offsetTop <= pos) { current = it.href; }
+    });
+    Object.keys(tocLinkMap).forEach(function (href) {
+      (tocLinkMap[href] || []).forEach(function (a) {
+        if (href === current) { a.classList.add('active'); a.setAttribute('aria-current', 'true'); }
+        else { a.classList.remove('active'); a.removeAttribute('aria-current'); }
+      });
+    });
+  }
+  var tocTicking = false;
+  window.addEventListener('scroll', function () {
+    if (tocTicking) { return; }
+    tocTicking = true;
+    window.requestAnimationFrame(function () { tocTicking = false; setActiveToc(); });
+  }, { passive: true });
+  setActiveToc();
+
+  /* ============ Mobile contents overlay ============ */
+  var overlay = $('#toc-overlay');
+  var tocOpenBtn = $('#btn-toc');
+  var tocCloseBtn = $('#overlay-close');
+  var lastFocused = null;
+  function openOverlay() {
+    if (!overlay) { return; }
+    lastFocused = document.activeElement;
+    overlay.classList.add('open');
+    if (tocOpenBtn) { tocOpenBtn.setAttribute('aria-expanded', 'true'); }
+    document.body.style.overflow = 'hidden';
+    var first = $('#overlay-toc a');
+    if (first) { first.focus(); }
+  }
+  function closeOverlay() {
+    if (!overlay) { return; }
+    overlay.classList.remove('open');
+    if (tocOpenBtn) { tocOpenBtn.setAttribute('aria-expanded', 'false'); }
+    document.body.style.overflow = '';
+    if (lastFocused && lastFocused.focus) { lastFocused.focus(); }
+  }
+  if (tocOpenBtn) { tocOpenBtn.addEventListener('click', openOverlay); }
+  if (tocCloseBtn) { tocCloseBtn.addEventListener('click', closeOverlay); }
+  var backdrop = $('#overlay-backdrop');
+  if (backdrop) { backdrop.addEventListener('click', closeOverlay); }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && overlay && overlay.classList.contains('open')) { closeOverlay(); }
+  });
+  if (overlay) {
+    overlay.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('#overlay-toc a') : null;
+      if (a) { closeOverlay(); }
+    });
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab') { return; }
+      var focusables = $$('a[href], button', overlay).filter(function (el) { return el.offsetParent !== null; });
+      if (!focusables.length) { return; }
+      var first = focusables[0];
+      var last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+  }
+
+  /* ============ Copy buttons ============ */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.copy-btn') : null;
+    if (!btn) { return; }
+    var block = btn.closest('.code-block');
+    var pre = block ? $('pre', block) : null;
+    if (!pre) { return; }
+    var text = pre.innerText || pre.textContent || '';
+    function done() {
+      btn.classList.add('ok');
+      btn.textContent = 'Copied';
+      window.setTimeout(function () {
+        btn.classList.remove('ok');
+        btn.textContent = 'Copy';
+      }, 1600);
+    }
+    function fallbackCopy() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        done();
+      } catch (err) {}
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+  });
+
+  /* ============ Simulation engine ============ */
+  var TOKENS = ['bg', 'surface', 'surface-2', 'elevated', 'text', 'muted', 'border', 'border-strong',
+    'accent', 'accent-2', 'violet', 'success', 'warning', 'danger', 'high', 'low'];
+  var TYPE_VAR = {
+    attacker: 'danger', victim: 'muted', infra: 'violet', service: 'accent-2',
+    defender: 'accent', market: 'warning', tool: 'warning', cloud: 'accent-2', identity: 'violet'
+  };
+
+  function hexToRgba(hex, a) {
+    var h = String(hex).replace('#', '');
+    if (h.length === 3) { h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; }
+    var r = parseInt(h.slice(0, 2), 16) || 0;
+    var g = parseInt(h.slice(2, 4), 16) || 0;
+    var b = parseInt(h.slice(4, 6), 16) || 150;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
+
+  function SimEngine(canvas, cfg) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.cfg = cfg;
+    this.LW = (cfg.meta && cfg.meta.width) || 960;
+    this.LH = (cfg.meta && cfg.meta.height) || 540;
+    this.step = 0;
+    this.playing = false;
+    this.speed = 1;
+    this.stepTime = 0;
+    this.lastTs = 0;
+    this.dirty = true;
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.scale = 1;
+    this.colors = {};
+    this.nodeById = {};
+    (cfg.nodes || []).forEach(function (n) { this.nodeById[n.id] = n; }, this);
+    this.readColors();
+    this.bindUi();
+    this.buildActors();
+    this.buildChips();
+    this.setStep(0);
+    var self = this;
+    document.addEventListener('atk:theme', function () { self.readColors(); self.dirty = true; });
+    window.addEventListener('resize', function () { self.resize(); });
+    this.resize();
+    var loop = function (ts) { self.frame(ts); window.requestAnimationFrame(loop); };
+    window.requestAnimationFrame(loop);
+  }
+
+  SimEngine.prototype.readColors = function () {
+    var cs = getComputedStyle(document.documentElement);
+    var out = {};
+    TOKENS.forEach(function (t) {
+      var v = cs.getPropertyValue('--' + t).trim() || '#888888';
+      out[t] = v;
+      out[t + '_r'] = hexToRgba(v, 1);
+    });
+    this.colors = out;
+  };
+
+  SimEngine.prototype.cvar = function (name, alpha) {
+    var v = this.colors[name] || '#888888';
+    return alpha === undefined ? v : hexToRgba(v, alpha);
+  };
+
+  SimEngine.prototype.typeColor = function (type) {
+    return this.cvar(TYPE_VAR[type] || 'muted');
+  };
+
+  SimEngine.prototype.resize = function () {
+    var wrap = this.canvas.parentNode;
+    var w = wrap.clientWidth || 960;
+    this.canvas.width = Math.round(w * this.dpr);
+    this.canvas.height = Math.round(w * (this.LH / this.LW) * this.dpr);
+    this.scale = this.canvas.width / this.LW;
+    this.dirty = true;
+  };
+
+  SimEngine.prototype.currentStep = function () {
+    return (this.cfg.steps || [])[this.step] || { title: '', caption: '', defender: '', evidence: [], flows: [], actors: [], notes: [] };
+  };
+
+  SimEngine.prototype.bindUi = function () {
+    var self = this;
+    this.ui = {
+      title: $('#sim-step-title'),
+      caption: $('#sim-step-caption'),
+      defender: $('#sim-step-defender'),
+      evidence: $('#sim-evidence'),
+      status: $('#sim-status'),
+      play: $('#sim-play'),
+      restart: $('#sim-restart'),
+      prev: $('#sim-prev'),
+      next: $('#sim-next'),
+      speed: $('#sim-speed'),
+      chips: $('#sim-chips'),
+      tooltip: $('#sim-tooltip')
+    };
+    if (this.ui.play) {
+      this.ui.play.addEventListener('click', function () {
+        self.playing = !self.playing;
+        if (self.playing && self.step >= (self.cfg.steps || []).length - 1 && self.stepTime > 0.4) { self.setStep(0); }
+        self.syncPlay();
+      });
+    }
+    if (this.ui.restart) {
+      this.ui.restart.addEventListener('click', function () { self.setStep(0); self.syncPlay(); });
+    }
+    if (this.ui.prev) { this.ui.prev.addEventListener('click', function () { self.jump(self.step - 1); }); }
+    if (this.ui.next) { this.ui.next.addEventListener('click', function () { self.jump(self.step + 1); }); }
+    if (this.ui.speed) {
+      this.ui.speed.addEventListener('change', function () {
+        self.speed = parseFloat(self.ui.speed.value) || 1;
+      });
+    }
+    this.canvas.setAttribute('tabindex', '0');
+    this.canvas.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') { self.jump(self.step + 1); e.preventDefault(); }
+      if (e.key === 'ArrowLeft') { self.jump(self.step - 1); e.preventDefault(); }
+      if (e.key === ' ' || e.key === 'Enter') {
+        if (self.ui.play) { self.ui.play.click(); }
+        e.preventDefault();
+      }
+    });
+    this.canvas.addEventListener('mousemove', function (e) { self.onHover(e); });
+    this.canvas.addEventListener('mouseleave', function () { self.hideTooltip(); });
+    this.canvas.addEventListener('click', function (e) {
+      var n = self.nodeAt(e);
+      if (n) { self.showTooltip(n, true); } else { self.hideTooltip(); }
+    });
+  };
+
+  SimEngine.prototype.syncPlay = function () {
+    if (this.ui.play) {
+      this.ui.play.textContent = this.playing ? 'Pause' : 'Play';
+      this.ui.play.setAttribute('aria-pressed', this.playing ? 'true' : 'false');
+    }
+  };
+
+  SimEngine.prototype.buildChips = function () {
+    var self = this;
+    if (!this.ui.chips) { return; }
+    this.ui.chips.innerHTML = '';
+    (this.cfg.steps || []).forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sim-chip';
+      b.textContent = String(i + 1);
+      b.setAttribute('aria-label', 'Go to step ' + (i + 1) + ': ' + s.title);
+      b.addEventListener('click', function () { self.jump(i); });
+      self.ui.chips.appendChild(b);
+    });
+  };
+
+  SimEngine.prototype.buildActors = function () {
+    var wrap = $('#sim-actors');
+    if (!wrap) { return; }
+    var htmlStr = '';
+    (this.cfg.nodes || []).forEach(function (n) {
+      htmlStr += '<div class="actor-card"><span class="actor-name">' + esc(n.label) + '</span>' +
+        '<span class="actor-role">' + esc(n.type) + '</span>' +
+        '<span class="actor-info">' + esc(n.info || '') + '</span></div>';
+    });
+    wrap.innerHTML = htmlStr;
+  };
+
+  SimEngine.prototype.jump = function (i) {
+    var n = (this.cfg.steps || []).length;
+    if (!n) { return; }
+    this.setStep(Math.max(0, Math.min(n - 1, i)));
+  };
+
+  SimEngine.prototype.setStep = function (i) {
+    this.step = i;
+    this.stepTime = 0;
+    this.dirty = true;
+    var s = this.currentStep();
+    var total = (this.cfg.steps || []).length;
+    if (this.ui.title) { this.ui.title.textContent = 'Step ' + (i + 1) + ' of ' + total + ': ' + s.title; }
+    if (this.ui.caption) { this.ui.caption.textContent = s.caption || ''; }
+    if (this.ui.defender) { this.ui.defender.textContent = s.defender || ''; }
+    if (this.ui.evidence) {
+      this.ui.evidence.innerHTML = (s.evidence || []).map(function (t) {
+        return '<li>' + esc(t) + '</li>';
+      }).join('');
+    }
+    if (this.ui.status) {
+      this.ui.status.textContent = 'Step ' + (i + 1) + ' / ' + total + (reduceMotion ? ' (reduced motion: static diagrams)' : '');
+    }
+    if (this.ui.chips) {
+      $$('.sim-chip', this.ui.chips).forEach(function (c, k) {
+        if (k === i) { c.classList.add('active'); c.setAttribute('aria-pressed', 'true'); }
+        else { c.classList.remove('active'); c.removeAttribute('aria-pressed'); }
+      });
+    }
+    this.canvas.setAttribute('aria-label', 'Attack simulation, step ' + (i + 1) + ' of ' + total + '. ' + (s.title || '') + '. ' + (s.caption || ''));
+  };
+
+  SimEngine.prototype.frame = function (ts) {
+    var dt = this.lastTs ? (ts - this.lastTs) / 1000 : 0;
+    this.lastTs = ts;
+    if (this.playing) {
+      this.stepTime += dt * this.speed;
+      var dwell = this.cfg.dwell || 7;
+      if (this.stepTime > dwell) {
+        if (this.step < (this.cfg.steps || []).length - 1) { this.setStep(this.step + 1); }
+        else { this.playing = false; this.syncPlay(); this.stepTime = 0; this.dirty = true; }
+      }
+      this.dirty = true;
+    }
+    if (this.dirty) {
+      this.draw();
+      this.dirty = false;
+    }
+  };
+
+  SimEngine.prototype.edgePoint = function (a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var hw = 80, hh = 36;
+    if (dx === 0 && dy === 0) { return { x: a.x, y: a.y }; }
+    var sx = dx !== 0 ? (hw / Math.abs(dx)) : Infinity;
+    var sy = dy !== 0 ? (hh / Math.abs(dy)) : Infinity;
+    var k = Math.min(sx, sy);
+    return { x: a.x + dx * k, y: a.y + dy * k };
+  };
+
+  SimEngine.prototype.roundRect = function (x, y, w, h, r) {
+    var ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
+
+  SimEngine.prototype.wrapText = function (text, maxChars) {
+    var words = String(text).split(/\s+/);
+    var lines = [];
+    var line = '';
+    words.forEach(function (w) {
+      if ((line + ' ' + w).trim().length > maxChars) {
+        if (line) { lines.push(line.trim()); }
+        line = w;
+      } else {
+        line = (line + ' ' + w).trim();
+      }
+    });
+    if (line) { lines.push(line.trim()); }
+    return lines.slice(0, 4);
+  };
+
+  SimEngine.prototype.draw = function () {
+    var ctx = this.ctx;
+    var s = this.currentStep();
+    ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    /* background */
+    ctx.fillStyle = this.cvar('bg');
+    ctx.fillRect(0, 0, this.LW, this.LH);
+    ctx.fillStyle = this.cvar('border', 0.32);
+    for (var gy = 24; gy < this.LH; gy += 34) {
+      for (var gx = 24; gx < this.LW; gx += 34) {
+        ctx.fillRect(gx, gy, 1.6, 1.6);
+      }
+    }
+    /* step banner */
+    ctx.font = '700 12px ' + 'ui-monospace, Menlo, monospace';
+    var banner = 'STEP ' + (this.step + 1) + '/' + (this.cfg.steps || []).length;
+    var tw = ctx.measureText(banner).width;
+    ctx.fillStyle = this.cvar('accent', 0.14);
+    this.roundRect(16, 14, tw + 22, 24, 7);
+    ctx.fill();
+    ctx.strokeStyle = this.cvar('accent', 0.5);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = this.cvar('accent');
+    ctx.textBaseline = 'middle';
+    ctx.fillText(banner, 27, 27);
+    ctx.font = '650 13px ' + '-apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = this.cvar('text');
+    ctx.textAlign = 'left';
+    ctx.fillText(String(s.title || '').slice(0, 52), 16 + tw + 34, 27);
+
+    /* soc panel */
+    var px = this.LW - 224, py = 14, pw = 208, ph = 118;
+    ctx.fillStyle = this.cvar('surface', 0.94);
+    ctx.strokeStyle = this.cvar('border-strong');
+    this.roundRect(px, py, pw, ph, 10);
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.font = '700 9.5px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = this.cvar('accent');
+    ctx.fillText('SOC / DEFENDER VIEW', px + 12, py + 14);
+    var ev = (s.evidence || []).slice(0, 3);
+    ctx.font = '10px ui-monospace, Menlo, monospace';
+    ev.forEach(function (t, i) {
+      var lines = this.wrapText(t, 30);
+      var yy = py + 30 + i * 28;
+      ctx.fillStyle = this.cvar('success');
+      ctx.fillRect(px + 12, yy - 3, 5, 5);
+      ctx.fillStyle = this.cvar('muted');
+      lines.slice(0, 2).forEach(function (ln, li) {
+        ctx.fillText(ln, px + 23, yy + li * 12);
+      });
+    }, this);
+    if (!ev.length) {
+      ctx.fillStyle = this.cvar('muted');
+      ctx.fillText('No visibility yet at this step', px + 12, py + 34);
+    }
+
+    /* legend */
+    var legend = [
+      ['danger', 'attacker action'],
+      ['warning', 'capability / payload'],
+      ['accent', 'defender visibility']
+    ];
+    var lx = 18, ly = this.LH - 18;
+    ctx.font = '10px ui-monospace, Menlo, monospace';
+    legend.forEach(function (L, i) {
+      var x = lx + i * 172;
+      ctx.fillStyle = this.cvar(L[0]);
+      ctx.beginPath();
+      ctx.arc(x, ly, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = this.cvar('muted');
+      ctx.fillText(L[1], x + 9, ly + 1);
+    }, this);
+
+    /* links + packets */
+    var self = this;
+    (s.flows || []).forEach(function (f) {
+      var a = self.nodeById[f.from];
+      var b = self.nodeById[f.to];
+      if (!a || !b) { return; }
+      var p1 = self.edgePoint(a, b);
+      var p2 = self.edgePoint(b, a);
+      var col = TYPE_VAR[f.color] || TYPE_VAR.attacker;
+      var cv = self.cvar(col);
+      ctx.strokeStyle = self.cvar(col, self.playing ? 0.55 : 0.8);
+      ctx.lineWidth = 1.6;
+      if (self.playing && !reduceMotion) {
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        var dur = f.dur || 1.7;
+        var count = f.count || 2;
+        for (var c = 0; c < count; c++) {
+          var t = (self.stepTime / dur + c / count) % 1;
+          var x = p1.x + (p2.x - p1.x) * t;
+          var y = p1.y + (p2.y - p1.y) * t;
+          var fade = Math.sin(Math.PI * t);
+          ctx.fillStyle = self.cvar(col, 0.25 * fade);
+          ctx.beginPath();
+          ctx.arc(x, y, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = self.cvar(col, 0.95);
+          ctx.beginPath();
+          ctx.arc(x, y, 3.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        var ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+        ctx.fillStyle = self.cvar(col, 0.9);
+        ctx.beginPath();
+        ctx.moveTo(p2.x, p2.y);
+        ctx.lineTo(p2.x - 10 * Math.cos(ang - 0.42), p2.y - 10 * Math.sin(ang - 0.42));
+        ctx.lineTo(p2.x - 10 * Math.cos(ang + 0.42), p2.y - 10 * Math.sin(ang + 0.42));
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (f.label) {
+        ctx.font = '10.5px ui-monospace, Menlo, monospace';
+        var mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2 - 8;
+        var wlab = ctx.measureText(f.label).width;
+        ctx.fillStyle = self.cvar('bg', 0.85);
+        self.roundRect(mx - wlab / 2 - 5, my - 9, wlab + 10, 17, 5);
+        ctx.fill();
+        ctx.fillStyle = self.cvar(col);
+        ctx.fillText(f.label, mx - wlab / 2, my + 1);
+      }
+    });
+
+    /* evidence notes near nodes */
+    (s.notes || []).forEach(function (n) {
+      var node = self.nodeById[n.node];
+      if (!node) { return; }
+      ctx.font = '10.5px ui-monospace, Menlo, monospace';
+      var lines = self.wrapText(n.text, 26);
+      var wmax = 0;
+      lines.forEach(function (ln) { wmax = Math.max(wmax, ctx.measureText(ln).width); });
+      var col = TYPE_VAR[n.color] || TYPE_VAR.infra;
+      var bx = node.x - wmax / 2 - 8;
+      var by = node.y + 42;
+      ctx.fillStyle = self.cvar('surface-2', 0.96);
+      ctx.strokeStyle = self.cvar(col, 0.75);
+      self.roundRect(bx, by, wmax + 16, 14 + lines.length * 13, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = self.cvar(col);
+      lines.forEach(function (ln, li) {
+        ctx.fillText(ln, bx + 8, by + 14 + li * 13);
+      });
+    });
+
+    /* nodes */
+    var self2 = this;
+    (this.cfg.nodes || []).forEach(function (n) {
+      var active = (s.actors || []).indexOf(n.id) !== -1;
+      var col = self2.typeColor(n.type);
+      var w = 160, h = 62;
+      var x = n.x - w / 2, y = n.y - h / 2;
+      if (active) {
+        ctx.save();
+        ctx.shadowColor = self2.cvar(TYPE_VAR[n.type] || 'muted', 0.55);
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = self2.cvar('surface-2');
+        self2.roundRect(x - 3, y - 3, w + 6, h + 6, 15);
+        ctx.fill();
+        ctx.restore();
+        ctx.strokeStyle = self2.cvar(TYPE_VAR[n.type] || 'muted', 0.95);
+        ctx.lineWidth = 2;
+        self2.roundRect(x - 3, y - 3, w + 6, h + 6, 15);
+        ctx.stroke();
+      }
+      ctx.fillStyle = self2.cvar('surface');
+      ctx.strokeStyle = self2.cvar(TYPE_VAR[n.type] || 'muted', 0.75);
+      ctx.lineWidth = 1.4;
+      self2.roundRect(x, y, w, h, 13);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = self2.cvar(TYPE_VAR[n.type] || 'muted', 0.16);
+      self2.roundRect(x + 9, y + 15, 10, 10, 3);
+      ctx.fill();
+      ctx.font = '700 12.5px ' + '-apple-system, Segoe UI, Roboto, sans-serif';
+      ctx.fillStyle = self2.cvar('text');
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(n.label).slice(0, 20), x + 27, y + 21);
+      ctx.font = '10px ui-monospace, Menlo, monospace';
+      ctx.fillStyle = self2.cvar('muted');
+      ctx.fillText(String(n.sub || '').slice(0, 26), x + 27, y + 41);
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'start';
+    });
+  };
+
+  SimEngine.prototype.nodeAt = function (e) {
+    var rect = this.canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) * (this.LW / rect.width);
+    var y = (e.clientY - rect.top) * (this.LH / rect.height);
+    var nodes = this.cfg.nodes || [];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (x >= n.x - 84 && x <= n.x + 84 && y >= n.y - 36 && y <= n.y + 52) { return n; }
+    }
+    return null;
+  };
+
+  SimEngine.prototype.onHover = function (e) {
+    var n = this.nodeAt(e);
+    if (n) { this.showTooltip(n, false); } else { this.hideTooltip(); }
+  };
+
+  SimEngine.prototype.showTooltip = function (n, pin) {
+    var tip = this.ui.tooltip;
+    if (!tip) { return; }
+    var rect = this.canvas.getBoundingClientRect();
+    var left = (n.x + 90) * (rect.width / this.LW);
+    var top = (n.y - 20) * (rect.height / this.LH);
+    tip.innerHTML = '<strong>' + esc(n.label) + '</strong>' + esc(n.info || '');
+    tip.hidden = false;
+    tip.style.left = Math.min(left, rect.width - 260) + 'px';
+    tip.style.top = Math.max(4, Math.min(top, rect.height - 90)) + 'px';
+    this.pinnedNode = pin ? n : this.pinnedNode;
+  };
+
+  SimEngine.prototype.hideTooltip = function () {
+    if (this.ui.tooltip) { this.ui.tooltip.hidden = true; }
+    this.pinnedNode = null;
+  };
+
+  /* ============ Boot ============ */
+  function boot() {
+    var canvas = $('#sim-canvas');
+    var cfg = window.SIM_CONFIG;
+    if (!canvas || !cfg) { return; }
+    try {
+      var engine = new SimEngine(canvas, cfg);
+      window.__sim = engine;
+    } catch (e) {
+      if (window.console && console.warn) { console.warn('Simulation failed to start:', e); }
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>

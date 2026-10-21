@@ -1,0 +1,2801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Beginner-friendly detection engineering guide for MITRE ATT&amp;CK T1588: red team and blue team views, ranked threats, Sigma rules, Splunk SPL, case study, and a response checklist.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1588-Obtain-Capabilities.html">
+<meta name="color-scheme" content="dark light">
+<title>T1588 · Obtain Capabilities — Detection Engineering Guide (v2.0)</title>
+<script>
+(function () {
+  var root = document.documentElement;
+  try { root.classList.add('js'); } catch (e) {}
+  var theme = 'dark';
+  try {
+    var saved = localStorage.getItem('atk-theme');
+    if (saved === 'light' || saved === 'dark') { theme = saved; }
+    else { theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+  } catch (e) {
+    try { theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch (e2) {}
+  }
+  root.setAttribute('data-theme', theme);
+})();
+</script>
+<style>
+/* ================= Design tokens ================= */
+:root {
+  color-scheme: dark;
+  --bg: #0b0f1a;
+  --surface: #121a2e;
+  --surface-2: #172138;
+  --elevated: #1a2542;
+  --text: #e7edf8;
+  --muted: #9aa8c0;
+  --border: #24314e;
+  --border-strong: #2f4066;
+  --accent: #4f8cff;
+  --accent-2: #22d3ee;
+  --violet: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --high: #fb923c;
+  --low: #4ade80;
+  --code-bg: #0c1322;
+  --shadow: 0 12px 32px rgba(2, 6, 18, 0.38);
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --maxw: 1280px;
+  --sidebar: 264px;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f6fc;
+  --surface: #ffffff;
+  --surface-2: #f5f8ff;
+  --elevated: #e9eefa;
+  --text: #182238;
+  --muted: #5a6a85;
+  --border: #d9e2f2;
+  --border-strong: #c2d0ea;
+  --accent: #2f6fe4;
+  --accent-2: #0891b2;
+  --violet: #7c5ce0;
+  --success: #0d9e6e;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --high: #c2410c;
+  --low: #15803d;
+  --code-bg: #0e1526;
+  --shadow: 0 12px 28px rgba(23, 42, 79, 0.10);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg: #f3f6fc;
+    --surface: #ffffff;
+    --surface-2: #f5f8ff;
+    --elevated: #e9eefa;
+    --text: #182238;
+    --muted: #5a6a85;
+    --border: #d9e2f2;
+    --border-strong: #c2d0ea;
+    --accent: #2f6fe4;
+    --accent-2: #0891b2;
+    --violet: #7c5ce0;
+    --success: #0d9e6e;
+    --warning: #b45309;
+    --danger: #dc2626;
+    --high: #c2410c;
+    --low: #15803d;
+    --code-bg: #0e1526;
+    --shadow: 0 12px 28px rgba(23, 42, 79, 0.10);
+  }
+}
+
+/* ================= Base ================= */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16.5px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+h1, h2, h3, h4 { line-height: 1.22; margin: 0 0 10px; letter-spacing: -0.01em; }
+h2 { font-size: 1.55rem; font-weight: 750; }
+h3 { font-size: 1.16rem; font-weight: 700; margin-top: 26px; }
+h4 { font-size: 1rem; font-weight: 700; }
+p { margin: 0 0 12px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code, kbd, pre, .mono { font-family: var(--mono); }
+code { font-size: 0.86em; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 6px; overflow-wrap: anywhere; }
+pre code { border: 0; padding: 0; background: transparent; white-space: inherit; }
+ul, ol { margin: 0 0 14px; padding-left: 22px; }
+li { margin-bottom: 6px; }
+::selection { background: rgba(79, 140, 255, 0.35); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+[id] { scroll-margin-top: 96px; }
+.muted { color: var(--muted); }
+.small { font-size: 0.87rem; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 26px 0; }
+
+/* ================= Progress bar ================= */
+#progress {
+  position: fixed; top: 0; left: 0; right: 0; height: 3px;
+  background: transparent; z-index: 80; pointer-events: none;
+}
+.progress-fill {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+html:not(.js) #progress, html:not(.js) .fab { display: none !important; }
+
+/* ================= Layout ================= */
+.page-max { max-width: var(--maxw); margin: 0 auto; padding: 0 22px; }
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+  gap: 36px;
+  align-items: start;
+  padding-top: 10px;
+  padding-bottom: 80px;
+}
+
+/* ================= Hero ================= */
+.hero {
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  padding: 44px 0 30px;
+}
+.kicker {
+  margin: 0 0 10px;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+.hero-title { font-size: clamp(1.9rem, 4.4vw, 2.75rem); font-weight: 800; margin: 0 0 12px; }
+.tech-id {
+  font-family: var(--mono);
+  font-size: 0.62em;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(79, 140, 255, 0.13);
+  border: 1px solid rgba(79, 140, 255, 0.4);
+  border-radius: 10px;
+  padding: 3px 12px;
+  margin-right: 12px;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.hero-intro { max-width: 68ch; color: var(--text); opacity: 0.92; font-size: 1.03rem; }
+.chip-row { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 16px 0 0; }
+.chip {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 11px;
+  white-space: nowrap;
+}
+.chip b, .chip strong { color: var(--text); font-weight: 600; }
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+.fact-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.fact-value { display: block; font-weight: 750; font-size: 1.02rem; margin-bottom: 4px; }
+.fact-note { display: block; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
+
+/* ================= Sidebar TOC ================= */
+.toc-col { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow: auto; scrollbar-width: thin; }
+.toc-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 12px;
+}
+.toc-title {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 10px;
+  padding: 0 10px;
+}
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-list > li { margin: 0 0 2px; }
+.toc-list a {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 6px 10px; border-radius: 8px;
+  color: var(--muted); font-size: 0.85rem; line-height: 1.35;
+}
+.toc-list a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.toc-list a.active { background: rgba(79, 140, 255, 0.13); color: var(--accent); font-weight: 650; }
+:root[data-theme="light"] .toc-list a.active { background: rgba(47, 111, 228, 0.10); }
+.toc-num {
+  flex: none; font-family: var(--mono); font-size: 0.7rem; font-weight: 700;
+  color: var(--accent-2); min-width: 22px;
+}
+.toc-sub { list-style: none; margin: 2px 0 4px; padding: 0 0 0 18px; border-left: 1px solid var(--border); margin-left: 16px; }
+.toc-sub a { font-size: 0.78rem; padding: 4px 8px; }
+.toc-sub .toc-num { min-width: 30px; }
+.toc-note { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); margin: 12px 10px 0; }
+
+/* ================= Sections ================= */
+.section { margin: 0 0 58px; }
+.section-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 18px; }
+.sec-num {
+  flex: none; width: 32px; height: 32px; display: grid; place-items: center;
+  font-family: var(--mono); font-size: 0.85rem; font-weight: 800;
+  color: var(--accent); background: rgba(79, 140, 255, 0.13);
+  border: 1px solid rgba(79, 140, 255, 0.42);
+  border-radius: 9px; margin-top: 4px;
+}
+:root[data-theme="light"] .sec-num { background: rgba(47, 111, 228, 0.10); }
+.section-head h2 { margin-bottom: 4px; }
+.section-intro { color: var(--muted); max-width: 74ch; margin: 0; font-size: 0.95rem; }
+.sub-num {
+  font-family: var(--mono); font-size: 0.78rem; font-weight: 700;
+  color: var(--accent-2); margin-right: 8px;
+}
+
+/* ================= Cards and grids ================= */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+}
+.card-title { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 1rem; margin: 0 0 8px; }
+.card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+.card-accent { border-top: 2px solid var(--accent); }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 14px 0; }
+.grid-2 .card, .grid-3 .card { box-shadow: none; }
+
+/* ================= Callouts ================= */
+.callout {
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: 11px;
+  padding: 13px 16px;
+  margin: 14px 0;
+  background: var(--surface-2);
+}
+.callout-title {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 750; font-size: 0.9rem; margin: 0 0 5px;
+}
+.callout p:last-child { margin-bottom: 0; }
+.co-icon {
+  flex: none; width: 18px; height: 18px; display: inline-grid; place-items: center;
+  border-radius: 6px; font-size: 11px; font-weight: 800; font-family: var(--mono); color: #fff;
+}
+.callout-note { border-left-color: var(--accent); }
+.callout-note .co-icon { background: var(--accent); }
+.callout-warning { border-left-color: var(--warning); }
+.callout-warning .co-icon { background: var(--warning); color: #1a1a1a; }
+.callout-danger { border-left-color: var(--danger); }
+.callout-danger .co-icon { background: var(--danger); }
+.callout-success { border-left-color: var(--success); }
+.callout-success .co-icon { background: var(--success); }
+.callout-ethics { border-left-color: var(--violet); }
+.callout-ethics .co-icon { background: var(--violet); }
+
+/* ================= Tables ================= */
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  margin: 14px 0;
+}
+.table-wrap table { width: 100%; border-collapse: collapse; min-width: 620px; font-size: 0.9rem; }
+.table-wrap th {
+  text-align: left; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+  padding: 10px 14px; background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong); white-space: nowrap;
+}
+.table-wrap td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.table-wrap tbody tr:last-child td { border-bottom: 0; }
+.table-wrap tbody tr:hover td { background: var(--surface-2); }
+.table-wrap td ul { margin: 0; padding-left: 16px; }
+.table-wrap .mono, .table-wrap code { white-space: nowrap; }
+
+/* ================= Code blocks ================= */
+.code-block {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--code-bg);
+  box-shadow: var(--shadow);
+}
+.code-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.code-title {
+  font-family: var(--mono); font-size: 0.74rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.copy-btn {
+  flex: none; font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+  padding: 4px 11px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: transparent; color: var(--muted);
+}
+.copy-btn:hover { color: var(--text); border-color: var(--accent); }
+.copy-btn.ok { color: var(--success); border-color: var(--success); }
+.code-block pre {
+  margin: 0; padding: 14px 16px; overflow-x: auto;
+  font-size: 0.8rem; line-height: 1.55; color: #d9e4f5;
+  scrollbar-width: thin;
+}
+:root[data-theme="light"] .code-block pre { color: #dbe5f4; }
+
+/* ================= Badges ================= */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+  padding: 2px 10px; border-radius: 999px; border: 1px solid var(--border-strong);
+  color: var(--muted); white-space: nowrap; vertical-align: middle;
+}
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.sev-critical { color: var(--danger); border-color: var(--danger); background: rgba(248, 113, 113, 0.10); }
+.sev-high { color: var(--high); border-color: var(--high); background: rgba(251, 146, 60, 0.10); }
+.sev-medium { color: var(--warning); border-color: var(--warning); background: rgba(251, 191, 36, 0.10); }
+.sev-low { color: var(--low); border-color: var(--low); background: rgba(74, 222, 128, 0.10); }
+.badge-cat { color: var(--accent-2); border-color: var(--accent-2); background: rgba(34, 211, 238, 0.08); }
+.badge-plain::before { display: none; }
+
+/* ================= Key/value lists ================= */
+.kv-list { display: grid; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin: 14px 0; }
+.kv-row { display: grid; grid-template-columns: 210px minmax(0, 1fr); }
+.kv-row + .kv-row { border-top: 1px solid var(--border); }
+.kv-key {
+  background: var(--surface-2); padding: 10px 14px;
+  font-weight: 650; font-size: 0.85rem; border-right: 1px solid var(--border);
+}
+.kv-val { padding: 10px 14px; font-size: 0.92rem; }
+
+/* ================= Timeline ================= */
+.timeline { position: relative; margin: 16px 0 6px; padding-left: 30px; }
+.timeline::before {
+  content: ""; position: absolute; left: 8px; top: 8px; bottom: 8px;
+  width: 2px; background: var(--border-strong); border-radius: 2px;
+}
+.t-item { position: relative; padding: 0 0 20px 10px; }
+.t-item:last-child { padding-bottom: 4px; }
+.t-item::before {
+  content: ""; position: absolute; left: -27px; top: 6px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--surface); border: 3px solid var(--accent);
+}
+.t-date { font-family: var(--mono); font-size: 0.74rem; font-weight: 700; color: var(--accent-2); }
+.t-title { font-weight: 700; margin: 3px 0 4px; font-size: 0.98rem; }
+.t-body { font-size: 0.92rem; }
+
+/* ================= Checklists ================= */
+.check-list { list-style: none; padding: 0; margin: 10px 0; }
+.check-list li { position: relative; padding-left: 32px; margin-bottom: 10px; }
+.check-list li::before {
+  content: "✓"; position: absolute; left: 0; top: 2px;
+  width: 20px; height: 20px; border-radius: 6px;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 800;
+  color: var(--success); background: rgba(52, 211, 153, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+}
+
+/* ================= Simulation ================= */
+.sim-wrap {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  overflow: hidden;
+  margin: 16px 0;
+  box-shadow: var(--shadow);
+}
+.sim-stage { position: relative; background: var(--bg); }
+.sim-stage canvas { display: block; width: 100%; aspect-ratio: 16 / 9; touch-action: pan-y; }
+.sim-tooltip {
+  position: absolute; z-index: 6; pointer-events: none;
+  background: var(--elevated); border: 1px solid var(--border-strong);
+  border-radius: 10px; padding: 9px 12px; max-width: 250px;
+  font-size: 0.78rem; line-height: 1.45; box-shadow: var(--shadow);
+}
+.sim-tooltip strong { display: block; margin-bottom: 2px; font-size: 0.8rem; }
+.sim-controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 12px 14px; border-top: 1px solid var(--border);
+}
+.sim-btn {
+  font-family: var(--sans); font-size: 0.82rem; font-weight: 700;
+  padding: 7px 14px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text);
+}
+.sim-btn:hover { border-color: var(--accent); color: var(--accent); }
+.sim-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 92px; }
+.sim-btn.primary:hover { filter: brightness(1.08); color: #fff; }
+.sim-select {
+  font-family: var(--mono); font-size: 0.8rem;
+  padding: 7px 9px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text);
+}
+.sim-status { margin-left: auto; font-family: var(--mono); font-size: 0.74rem; color: var(--muted); }
+.sim-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 14px 12px; }
+.sim-chip {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 700;
+  padding: 4px 11px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: transparent; color: var(--muted);
+}
+.sim-chip:hover { color: var(--text); border-color: var(--accent); }
+.sim-chip.active { color: var(--accent); border-color: var(--accent); background: rgba(79, 140, 255, 0.12); }
+:root[data-theme="light"] .sim-chip.active { background: rgba(47, 111, 228, 0.10); }
+.sim-caption { padding: 14px 16px 4px; border-top: 1px solid var(--border); }
+.sim-caption h4 { margin: 0 0 5px; font-size: 0.95rem; }
+.sim-caption p { margin: 0 0 10px; font-size: 0.92rem; }
+.sim-defender { padding: 0 16px 14px; }
+.sim-defender-box {
+  background: var(--surface-2); border: 1px dashed var(--border-strong);
+  border-radius: 10px; padding: 10px 13px; font-size: 0.89rem;
+}
+.sim-defender-label {
+  display: block; font-family: var(--mono); font-size: 0.66rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px;
+}
+.sim-evidence { list-style: none; display: flex; flex-wrap: wrap; gap: 7px; padding: 0 16px 14px; margin: 0; }
+.sim-evidence li {
+  font-family: var(--mono); font-size: 0.7rem; color: var(--success);
+  background: rgba(52, 211, 153, 0.09); border: 1px solid rgba(52, 211, 153, 0.4);
+  border-radius: 7px; padding: 3px 9px; margin: 0;
+}
+.sim-actors {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+  gap: 10px; padding: 14px 16px; border-top: 1px solid var(--border);
+}
+.actor-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.actor-name { display: block; font-weight: 700; font-size: 0.83rem; margin-bottom: 2px; }
+.actor-role { display: block; font-family: var(--mono); font-size: 0.68rem; color: var(--accent-2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.actor-info { display: block; font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+.sim-note { padding: 0 16px 14px; font-size: 0.8rem; color: var(--muted); }
+
+/* ================= Floating buttons ================= */
+.fab {
+  position: fixed; bottom: 18px; z-index: 65;
+  display: none; align-items: center; gap: 7px;
+  font-family: var(--sans); font-size: 0.82rem; font-weight: 700;
+  padding: 11px 16px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--border-strong);
+  background: var(--elevated); color: var(--text);
+  box-shadow: var(--shadow);
+}
+.fab:hover { border-color: var(--accent); color: var(--accent); }
+.fab-top.show { display: flex; }
+.fab-toc { left: 16px; }
+.fab-top { right: 16px; }
+
+/* ================= Mobile overlay ================= */
+.toc-overlay { position: fixed; inset: 0; z-index: 90; display: none; }
+.toc-overlay.open { display: block; }
+.overlay-backdrop { position: absolute; inset: 0; background: rgba(3, 7, 16, 0.62); }
+.overlay-panel {
+  position: absolute; top: 0; left: 0; bottom: 0;
+  width: min(330px, 88vw);
+  background: var(--bg);
+  border-right: 1px solid var(--border-strong);
+  padding: 18px 14px; overflow: auto;
+  box-shadow: var(--shadow);
+}
+.overlay-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.overlay-head .toc-title { margin: 0; }
+#overlay-toc .toc-list a { font-size: 0.95rem; padding: 9px 10px; }
+#overlay-toc .toc-sub a { font-size: 0.85rem; padding: 7px 8px; }
+
+/* ================= Responsive ================= */
+@media (max-width: 1080px) {
+  .layout { display: block; }
+  .toc-col { display: none; }
+  .fab-toc { display: flex; }
+  .hero { padding: 32px 0 24px; }
+}
+@media (max-width: 680px) {
+  body { font-size: 16px; }
+  .page-max { padding: 0 14px; }
+  .hero { padding: 24px 0 20px; }
+  .hero-title .tech-id { display: inline-block; margin: 0 0 8px; }
+  .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .kv-row { grid-template-columns: 1fr; }
+  .kv-key { border-right: 0; border-bottom: 1px solid var(--border); }
+  .section { margin-bottom: 44px; }
+  .sim-btn { flex: 1 1 auto; }
+  .sim-status { width: 100%; margin: 0; order: 9; }
+  .fab { bottom: 14px; padding: 10px 14px; }
+}
+@media (max-width: 420px) {
+  .fact-grid { grid-template-columns: 1fr; }
+}
+
+/* ================= Reduced motion ================= */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ================= Print ================= */
+@media print {
+  #progress, .toc-col, .fab, .toc-overlay, .sim-controls, .sim-chips,
+  .copy-btn, .sim-status, .sim-select, .sim-note { display: none !important; }
+  body { background: #fff; color: #101418; font-size: 11pt; }
+  .layout { display: block; padding: 0; }
+  .hero { background: none; border-bottom: 1px solid #999; }
+  .card, .callout, .code-block, .table-wrap, .sim-wrap, .fact-card {
+    box-shadow: none; break-inside: avoid;
+  }
+  .code-block { background: #f4f4f4; border: 1px solid #bbb; }
+  .code-block pre { color: #111; white-space: pre-wrap; }
+  a { color: #0a58ca; }
+  .section { margin-bottom: 26pt; }
+  h2 { font-size: 15pt; } h3 { font-size: 12.5pt; }
+  [id] { scroll-margin-top: 0; }
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1588"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<div id="progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span class="progress-fill"></span></div>
+<div class="page-max">
+<div class="layout">
+  <aside class="toc-col" aria-label="Table of contents">
+    <div class="toc-card">
+      <p class="toc-title">Contents</p>
+      <nav aria-label="Page sections">
+        <ol class="toc-list" id="toc-list">
+          <li><a href="#sec-1-overview"><span class="toc-num">1</span>Overview</a></li>
+          <li><a href="#sec-2-simulation"><span class="toc-num">2</span>Animated Simulation</a></li>
+          <li><a href="#sec-3-red-team"><span class="toc-num">3</span>Red Team Perspective</a></li>
+          <li><a href="#sec-4-blue-team"><span class="toc-num">4</span>Blue Team Perspective</a></li>
+          <li>
+            <a href="#sec-5-detection"><span class="toc-num">5</span>Detection Engineering Deep Dive</a>
+            <ol class="toc-sub">
+              <li><a href="#sec-5-1-regulation"><span class="toc-num">5.1</span>Regulation mapping</a></li>
+              <li><a href="#sec-5-2-threat-intel"><span class="toc-num">5.2</span>Threat intelligence</a></li>
+              <li><a href="#sec-5-3-threats"><span class="toc-num">5.3</span>Threats ranking and categorization</a></li>
+              <li><a href="#sec-5-4-logs"><span class="toc-num">5.4</span>Logs and patterns</a></li>
+              <li><a href="#sec-5-5-detections"><span class="toc-num">5.5</span>Sigma rules and Splunk SPL</a></li>
+            </ol>
+          </li>
+          <li><a href="#sec-6-case-study"><span class="toc-num">6</span>Real-World Case Study</a></li>
+          <li><a href="#sec-7-mitigation"><span class="toc-num">7</span>Mitigation and Defense</a></li>
+          <li><a href="#sec-8-mistakes"><span class="toc-num">8</span>Common Mistakes and Best Practices</a></li>
+          <li><a href="#sec-9-cheat-sheet"><span class="toc-num">9</span>Cheat Sheet and Quick Reference</a></li>
+        </ol>
+      </nav>
+      <p class="toc-note">MITRE ATT&amp;CK &middot; <span class="mono">T1588</span></p>
+    </div>
+  </aside>
+  <main id="main-content" class="content">
+<header class="hero">
+  <div class="page-max">
+    <p class="kicker">MITRE ATT&amp;CK &middot; Resource Development &middot; Technique</p>
+    <h1 class="hero-title"><span class="tech-id">T1588</span> Obtain Capabilities</h1>
+    <p class="hero-intro">Before an attack starts, the attacker needs weapons. Instead of building them, adversaries often buy, download, or steal malware, tools, exploits, and certificates. This guide explains the technique in plain language, shows an animated example, and gives defenders practical detections, Sigma rules, and Splunk queries.</p>
+    <ul class="chip-row" aria-label="Technique metadata">
+      <li class="chip">ID: <b>T1588</b></li>
+      <li class="chip">Tactic: <b>Resource Development (TA0042)</b></li>
+      <li class="chip">Version: <b>1.1</b></li>
+      <li class="chip">Created: <b>2020-10-01</b></li>
+      <li class="chip">Last modified: <b>2025-10-24</b></li>
+      <li class="chip">Platform: <b>PRE (pre-compromise)</b></li>
+      <li class="chip">Sub-techniques: <b>7</b></li>
+      <li class="chip">Guide version: <b>2.0</b></li>
+    </ul>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <span class="fact-label">What it is</span>
+        <span class="fact-value">Buying or stealing attack tools</span>
+        <span class="fact-note">The attacker gathers ready-made capabilities instead of writing them from zero.</span>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Detection difficulty</span>
+        <span class="fact-value">High before, easier after</span>
+        <span class="fact-note">The buying itself is invisible to your network. You detect the effects later.</span>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Typical evidence</span>
+        <span class="fact-value">Hashes, certs, domains</span>
+        <span class="fact-note">Fresh TLS certificates, shared tool signatures, and known hashes appear first.</span>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Known users</span>
+        <span class="fact-value">Many actor types</span>
+        <span class="fact-note">Wizard Spider, MuddyWater, LAPSUS$, Ember Bear, Salt Typhoon, and others.</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="section" id="sec-1-overview" data-num="1">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">1</span>
+    <div>
+      <h2>Overview</h2>
+      <p class="section-intro">What this technique is, why it matters to defenders, and where it sits in the attack chain.</p>
+    </div>
+  </div>
+  <div class="grid-3">
+    <div class="card card-accent">
+      <h4 class="card-title">What it is</h4>
+      <p>Obtain Capabilities covers the way attackers <strong>collect the tools of an attack before they use them</strong>. A capability is any ready-made asset that helps an intrusion: malware, hacking tools, code signing certificates, website certificates, working exploits, or knowledge about unpatched weaknesses.</p>
+      <p>The attacker has three main ways to get these assets. They can <strong>buy</strong> them on criminal marketplaces, <strong>download</strong> free or open-source software, or <strong>steal</strong> them from other criminals, from vendors, or from security companies. The result is the same: the attacker starts the attack better armed and with less work done in the open.</p>
+    </div>
+    <div class="card card-accent">
+      <h4 class="card-title">Why it matters</h4>
+      <p>Modern attacks are often assembled, not written. A ransomware crew can rent the malware, buy access tools, and reuse a stolen certificate. This makes attacks faster, cheaper, and harder to link to one actor, because many groups share the same purchased parts.</p>
+      <p>For defenders this changes the focus. You will rarely see the purchase. You <strong>will</strong> see the effects: a fresh certificate for a lookalike domain, a binary signed with a strange certificate, or a tool hash that threat intelligence already knows. Learning to spot these echoes is the core skill this page teaches.</p>
+    </div>
+    <div class="card card-accent">
+      <h4 class="card-title">Where it fits</h4>
+      <p>This technique lives in the <strong>Resource Development</strong> tactic (TA0042), the phase before any contact with the target. It sits next to its sibling techniques: T1583 (set up infrastructure), T1584 (hijack infrastructure), and T1587 (build capabilities).</p>
+      <p>After the capability is ready, it flows into the attack chain: initial access, execution, and later stages. Detection engineers treat T1588 as a <strong>pre-positioning signal</strong>. It rarely triggers an alert on its own, but it decides what you should hunt for tomorrow.</p>
+    </div>
+  </div>
+  <h3>What you will learn</h3>
+  <p>This page is a complete working reference for detection engineers and SOC analysts. By the end you will be able to explain the technique to a colleague, trace one full example attack in the animated simulation, and run real hunts in your own telemetry.</p>
+  <ul>
+    <li>How attackers obtain capabilities, and why buying is usually cheaper than building.</li>
+    <li>Which seven sub-techniques exist under T1588 and how they differ.</li>
+    <li>Which artifacts each acquisition path leaves behind, in certificates, files, and network traffic.</li>
+    <li>How to map the risk to regulations such as GDPR, HIPAA, ISO 27001, SOC 2, and PCI DSS.</li>
+    <li>How to write Sigma rules and Splunk SPL queries for six realistic threats.</li>
+  </ul>
+  <h3>Key facts</h3>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">ATT&amp;CK ID and name</div><div class="kv-val">T1588 &mdash; Obtain Capabilities</div></div>
+    <div class="kv-row"><div class="kv-key">Tactic</div><div class="kv-val">Resource Development (TA0042), pre-compromise</div></div>
+    <div class="kv-row"><div class="kv-key">Sub-techniques</div><div class="kv-val">7: Malware, Tool, Code Signing Certificates, Digital Certificates, Exploits, Vulnerabilities, Artificial Intelligence</div></div>
+    <div class="kv-row"><div class="kv-key">Platform</div><div class="kv-val">PRE &mdash; the activity happens outside victim telemetry</div></div>
+    <div class="kv-row"><div class="kv-key">Direct visibility</div><div class="kv-val">Very low; detection happens through downstream effects and intelligence</div></div>
+    <div class="kv-row"><div class="kv-key">Main data sources</div><div class="kv-val">Threat intelligence feeds, certificate transparency logs, malware repositories, EDR and network telemetry</div></div>
+    <div class="kv-row"><div class="kv-key">Notable users</div><div class="kv-val">Wizard Spider, MuddyWater, TA2541, LAPSUS$, Ember Bear, Kimsuky, Salt Typhoon</div></div>
+  </div>
+  <h3>The seven sub-techniques</h3>
+  <p>Each sub-technique is one kind of capability. They share the same acquisition pattern: buy, download, or steal. Each one has its own page in this guide with a full detection deep dive.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">ID</th><th scope="col">Sub-technique</th><th scope="col">What the attacker gets</th><th scope="col">Typical use</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">T1588.001</td><td>Malware</td><td>Ransomware, stealers, backdoors, packers</td><td>Payload for the intrusion</td></tr>
+        <tr><td class="mono">T1588.002</td><td>Tool</td><td>Hacking software such as Cobalt Strike or Mimikatz</td><td>Moving through the network</td></tr>
+        <tr><td class="mono">T1588.003</td><td>Code Signing Certificates</td><td>Certificates used to sign programs</td><td>Making malware look trusted</td></tr>
+        <tr><td class="mono">T1588.004</td><td>Digital Certificates</td><td>TLS/HTTPS certificates for websites</td><td>Trusted-looking phishing and C2 sites</td></tr>
+        <tr><td class="mono">T1588.005</td><td>Exploits</td><td>Working attack code for specific flaws</td><td>Breaking into systems</td></tr>
+        <tr><td class="mono">T1588.006</td><td>Vulnerabilities</td><td>Knowledge of unpatched weaknesses</td><td>Planning exploits before patches exist</td></tr>
+        <tr><td class="mono">T1588.007</td><td>Artificial Intelligence</td><td>Access to generative AI services</td><td>Cheap phishing text, code help, deepfakes</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section" id="sec-2-simulation" data-num="2">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">2</span>
+    <div>
+      <h2>Animated Simulation</h2>
+      <p class="section-intro">Watch a complete Obtain Capabilities story, step by step. The attacker view is on the stage; the defender view is on the right panel and under the canvas.</p>
+    </div>
+  </div>
+  <div class="sim-wrap">
+    <div class="sim-stage">
+      <canvas id="sim-canvas" width="960" height="540" aria-label="Animated attack simulation for Obtain Capabilities. A written version of every step follows below.">
+        Enable JavaScript to see the animated simulation of the Obtain Capabilities technique.
+      </canvas>
+      <div class="sim-tooltip" id="sim-tooltip" hidden></div>
+    </div>
+    <div class="sim-controls">
+      <button class="sim-btn primary" id="sim-play" type="button">Play</button>
+      <button class="sim-btn" id="sim-restart" type="button">Restart</button>
+      <button class="sim-btn" id="sim-prev" type="button" aria-label="Previous step">Prev</button>
+      <button class="sim-btn" id="sim-next" type="button" aria-label="Next step">Next</button>
+      <label class="small muted" for="sim-speed">Speed</label>
+      <select class="sim-select" id="sim-speed" aria-label="Simulation speed">
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="1.5">1.5x</option>
+        <option value="2">2x</option>
+      </select>
+      <span class="sim-status" id="sim-status">Step 1 / 8</span>
+    </div>
+    <div class="sim-chips" id="sim-chips" role="group" aria-label="Simulation steps"></div>
+    <div class="sim-caption">
+      <h4 id="sim-step-title">Step 1 of 8</h4>
+      <p id="sim-step-caption"></p>
+    </div>
+    <div class="sim-defender">
+      <div class="sim-defender-box">
+        <span class="sim-defender-label">Defender view</span>
+        <span id="sim-step-defender"></span>
+      </div>
+    </div>
+    <ul class="sim-evidence" id="sim-evidence" aria-label="Evidence left in this step"></ul>
+    <p class="sim-note">Enable JavaScript to view the animated simulation. The written steps below describe the same story. Move the pointer over a card in the picture to read what each player does.</p>
+    <div class="sim-actors" id="sim-actors" aria-label="Players in the simulation"></div>
+  </div>
+  <h3>The same story in words</h3>
+  <p>This written version covers exactly the same eight steps as the animation. Read it if you prefer text, use it with a screen reader, or quote it in a training session.</p>
+  <div class="timeline">
+    <div class="t-item"><span class="t-date">Step 1</span>
+      <p class="t-title">Planning the campaign</p>
+      <p class="t-body">A threat actor picks a target industry and lists what the attack needs: a remote access trojan, a lateral movement tool, and a valid code signing certificate so files look trusted. No packet has touched the victim yet, so the defender sees nothing.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 2</span>
+      <p class="t-title">Buying malware on a criminal market</p>
+      <p class="t-body">The actor pays in cryptocurrency for a subscription to a malware-as-a-service stealer. The seller gives a builder panel and support. Vendors later report that groups such as LAPSUS$ used the same stealer, which is how the family enters threat intelligence.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 3</span>
+      <p class="t-title">Buying a stolen code signing certificate</p>
+      <p class="t-body">The actor buys a code signing certificate that was stolen from a small software company. Signing malware with it removes one warning dialog and raises trust. This single purchase shapes the best detection opportunities later, because the certificate identity becomes a fixed marker.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 4</span>
+      <p class="t-title">Setting up staging infrastructure</p>
+      <p class="t-body">The actor rents one virtual server, uploads the toolkit, and requests a free TLS certificate for a fresh lookalike domain. At this moment the defender CAN see something: certificate transparency logs publish the new certificate within minutes. This is the earliest reliable signal in the whole chain.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 5</span>
+      <p class="t-title">Testing the capability</p>
+      <p class="t-body">The actor runs the stealer on a clean virtual machine and confirms the beacon works. Sandboxed uploads of the sample reach malware repositories, so researchers can now assign a hash and publish a report. The sample leaves the private world of the attacker.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 6</span>
+      <p class="t-title">Delivering to the target</p>
+      <p class="t-body">The actor sends phishing mail with a link to the staging server. The payload arrives correctly signed, so the mail security gateway sees a valid signature but an unknown sender reputation. One weak signal appears, but nothing stops the message yet.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 7</span>
+      <p class="t-title">First beacon from the victim</p>
+      <p class="t-body">One user opens the attachment. The implant calls the staging server over HTTPS. The proxy log now holds a connection to a domain that is only days old. The certificate transparency alert from step 4 and this connection now form a matched pair.</p>
+    </div>
+    <div class="t-item"><span class="t-date">Step 8</span>
+      <p class="t-title">The SOC joins the dots</p>
+      <p class="t-body">A threat intelligence alert ties the hash, the certificate, and the domain together. The SOC starts a hunt with the certificate identity as the pivot and finds the infected host within one day. The lesson: each event alone looked weak, but correlation across intelligence and telemetry turned noise into a case.</p>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">How to read the animation</h4>
+      <p>Red flows are attacker actions. Amber flows carry the capability or payload itself. Blue elements belong to the defender side. The panel on the right of the canvas lists what a security operations center (SOC) could see at that exact moment, including the steps where the honest answer is nothing.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">What is realistic here</h4>
+      <p>This story is a composite of public reporting on purchased malware and stolen certificates. The prices, forums, and timings are simplified for teaching. The important part is the shape: capability acquisition happens early, mostly out of sight, and the best detections appear when the capability first touches the internet or the target.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sec-3-red-team" data-num="3">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">3</span>
+    <div>
+      <h2>Red Team / Hacker Perspective</h2>
+      <p class="section-intro">Why attackers prefer buying over building, how the acquisition is done in principle, and where the process leaks traces.</p>
+    </div>
+  </div>
+  <div class="callout callout-ethics">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">?</span>Ethics and scope</p>
+    <p>This section explains attacker behavior so defenders can detect it. It stays at the level of concepts and public reporting. It gives no operational instructions for attacking real systems. Any hands-on practice belongs in an isolated lab you own, with fake data, and clearly labeled as lab-only.</p>
+  </div>
+  <p>An attacker chooses the cheapest path to a working capability. Writing a reliable implant takes skilled people and weeks of work. Renting one costs a few hundred dollars and works the same evening. Market research in vendor reporting keeps showing the same economics: malware-as-a-service subscriptions, one-off tool sales, and access brokers dominate because they cut time and skill requirements at once.</p>
+  <p>Buying also gives the attacker deniability — it becomes harder to say who did the attack. When twenty crews use the same stealer, defenders and law enforcement have a harder time linking an incident to one group. That is why even capable state-linked teams use commercial tooling: MuddyWater has used publicly available malware to blend in, and the ATT&amp;CK entry for T1588.002 lists tool reuse by Turla, Inception, and many others.</p>
+  <h3>Acquisition channels</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">Criminal marketplaces and forums</h4>
+      <p>Dedicated markets sell builders, loaders, botnets, and credentials, usually for cryptocurrency. Reputations and escrow make them work like normal e-commerce. Buyers test samples before use, which is exactly the step that sometimes leaks a sample to researchers.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Malware-as-a-service (MaaS)</h4>
+      <p>The seller operates the malware and the buyer rents it, often with a web panel for building payloads and reading stolen data. This model spreads one malware family across dozens of crews and produces the shared artifacts that intelligence teams track.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Free and open-source software</h4>
+      <p>Legitimate security tools, open-source implant frameworks, and public proof-of-concept code fill many needs for free. ATT&amp;CK documents tool acquisition by dozens of groups. The trade-off is that defenders know these tools very well.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Stealing from others</h4>
+      <p>Attackers steal capabilities from vendors, from other criminals, and even from security companies. Public examples include stolen code signing certificates, leaked exploit frameworks, and the theft of red team tools from a security firm in 2020, which later appeared in criminal hands.</p>
+    </div>
+  </div>
+  <h3>Conditions and preparation</h3>
+  <p>Acquisition has prerequisites of its own. The actor needs a payment method that survives law enforcement takedowns, usually cryptocurrency. It needs infrastructure to test and host what it bought. And it needs a minimum of skill to wire the parts together: purchased malware still needs delivery, configuration, and a place in the attack chain. Groups with fewer skills buy more complete packages; capable groups buy components and assemble bespoke attacks.</p>
+  <div class="callout callout-note">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">i</span>Lab-only practice example</p>
+    <p>A safe classroom exercise looks like this: in an offline lab, download a well-known open-source security tool from its official repository, run it against a deliberately vulnerable test machine you own, and record every artifact it creates on disk and the network. You are simulating what a blue team sees after an attacker uses an obtained tool, without touching any real target. Label the exercise and the lab network clearly.</p>
+  </div>
+  <h3>Variations and common mistakes attackers make</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Variation</th><th scope="col">What changes</th><th scope="col">Trace it leaves</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Buy or subscribe</td><td>Fast, supported, shared with other crews</td><td>Family signatures, panel infrastructure, watermark strings</td></tr>
+        <tr><td>Download free tooling</td><td>No seller, but well-known to defenders</td><td>Known hashes, default configurations, public signatures</td></tr>
+        <tr><td>Steal certificates or code</td><td>High trust, but the victim may notice and revoke</td><td>Certificate identity, revocation events, victim-side intrusion logs</td></tr>
+        <tr><td>Test in rented cloud</td><td>Cheap scalable staging</td><td>New cloud accounts, bulk TLS certificate issuance, scan traffic</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <h4 class="card-title">Mistakes that expose the acquisition</h4>
+    <p>Sellers water down trust by reselling the same samples, so hashes reach repositories early. Buyers skip changing default ports, default certificates, or watermark strings, so the shared family signature survives. Staging servers get certificates on lookalike domains and land in certificate transparency logs minutes later. Reused infrastructure across campaigns lets analysts link two incidents that the buyer believed were separate. Each mistake is a pivot for the defender.</p>
+  </div>
+</section>
+
+<section class="section" id="sec-4-blue-team" data-num="4">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">4</span>
+    <div>
+      <h2>Blue Team / SOC Perspective</h2>
+      <p class="section-intro">What the technique looks like from the inside, which artifacts survive, and a short triage flow your team can follow.</p>
+    </div>
+  </div>
+  <p>One honest fact first: the purchase itself happens on servers you cannot see, so no SIEM alert fires when money changes hands. MITRE itself notes that most of this activity stays outside the visibility of the target organization. Good teams therefore work on two layers. The first layer is intelligence: you learn that a capability exists before it ever reaches you. The second layer is telemetry: you detect the capability the moment it touches your endpoints, your mail, or your network.</p>
+  <h3>Artifacts the technique leaves behind</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h4 class="card-title">Certificate artifacts</h4>
+      <p>Newly issued TLS certificates for lookalike domains appear in certificate transparency (CT) logs within minutes. Stolen code signing certificates carry a fixed issuer and subject that you can inventory and hunt for across the estate.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">File artifacts</h4>
+      <p>Purchased malware and tools eventually land on disk: installers in download folders, staged archives in temp directories, or binaries signed by an unexpected certificate. Hashes of shared samples accumulate in public repositories.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Network artifacts</h4>
+      <p>Staging infrastructure needs DNS names, TLS handshakes, and beacon traffic. Fresh domains, certificate mismatches, and default tool fingerprints such as known TLS client signatures all show up in proxy, DNS, and firewall logs.</p>
+    </div>
+  </div>
+  <h3>Where to look</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Source</th><th scope="col">What it shows</th><th scope="col">Why it helps</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Certificate transparency logs</td><td>Every public TLS certificate issued</td><td>Earliest public trace of staging and phishing infrastructure</td></tr>
+        <tr><td>Threat intelligence feeds</td><td>Hashes, families, actor reports, CISA advisories</td><td>Tells you which purchased capabilities are active in your sector</td></tr>
+        <tr><td>Malware repositories</td><td>Samples, signatures, YARA hits</td><td>Lets you hunt for a family before and after it hits you</td></tr>
+        <tr><td>EDR telemetry</td><td>File events, signatures, module loads</td><td>Confirms whether a known capability reached an endpoint</td></tr>
+        <tr><td>Proxy, DNS, firewall logs</td><td>Contact to staging and C2 infrastructure</td><td>Connects endpoints to the fresh domains and certificates</td></tr>
+        <tr><td>Code signing inventory</td><td>Every signer trusted in the estate</td><td>Makes an unknown or abused signer stand out immediately</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Why this matters for the attack chain</h3>
+  <p>Catching a capability early collapses the rest of the chain. A stealer blocked at delivery never reaches credential theft. A beacon that never connects means no lateral movement. That is why the Resource Development tactic, although pre-compromise, has real detection value: it defines the exact markers your downstream detections should expect. Teams that track families and certificates see attacks days earlier than teams that only watch endpoints.</p>
+  <h3>Short triage flow</h3>
+  <ol>
+    <li><strong>Receive or find the marker.</strong> A TI report, a CT log alert, or an EDR match gives you a hash, a certificate identity, or a domain.</li>
+    <li><strong>Enrich it.</strong> Check the hash in malware repositories, the domain in registration databases, the certificate in CT logs. Note the age and the overlap with your industry.</li>
+    <li><strong>Check exposure.</strong> Search your own telemetry for the marker over the last 90 days: proxy, DNS, EDR, mail gateway. One query per source, saved as a scheduled hunt.</li>
+    <li><strong>Validate hits.</strong> For each hit, decide benign or malicious using the full context: file path, signer, process ancestry, user, timing. Never trust a hash alone for blocking decisions without context.</li>
+    <li><strong>Escalate or document.</strong> Real hits become an incident with scope, containment, and eradication steps. No hits become an intelligence note with the next review date, so the hunt stays alive.</li>
+  </ol>
+  <div class="callout callout-success">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">&#10003;</span>Good practice</p>
+    <p>Turn every credible public report into one scheduled hunt plus one saved query, and record the owner and the review date. Detection coverage for T1588 is built from many small, maintained hunts, not from one perfect rule.</p>
+  </div>
+</section>
+
+<section class="section" id="sec-5-detection" data-num="5">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">5</span>
+    <div>
+      <h2>Detection Engineering Deep Dive</h2>
+      <p class="section-intro">The working core of this page: regulations, intelligence, ranked threats, log patterns, and ready-to-adapt Sigma and Splunk content.</p>
+    </div>
+  </div>
+  <p>Everything in this section is written so you can copy it into your detection program and adapt it. The six threats used as examples run through the whole section: the same threat gets a ranking in 5.3, log examples in 5.4, and a Sigma rule plus a Splunk query in 5.5. Keep that thread in mind when you build your own version for your environment.</p>
+  <div class="callout callout-note">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">i</span>What ATT&amp;CK officially says</p>
+    <p>MITRE rates direct detection of T1588 as difficult and lists the mitigation <strong>Pre-compromise [M1056]</strong>, because the buying happens outside your boundary. The official detection strategy <strong>DET0850 — Detection of Obtain Capabilities</strong> gives one main analytic, <strong>AN1982</strong>: use services that track newly issued certificates, and certificates in use on internet sites. The sub-technique pages add more analytics — for example <strong>AN1977</strong> (monitor contextual data about malicious payloads: compilation metadata, hashes, watermarks) and <strong>AN2007</strong> (analyze code signing certificates by thumbprint, algorithm, validity period, common name, and issuing authority). For the exploits, vulnerabilities, and AI sub-techniques, MITRE is honest that most activity stays invisible until it is used.</p>
+    <p><a href="https://attack.mitre.org/techniques/T1588/" rel="noopener">Read the official T1588 page</a> for the full strategy text. The rest of section 5 turns these official hints into concrete rules.</p>
+  </div>
+
+  <h3 id="sec-5-1-regulation" data-num="5.1"><span class="sub-num">5.1</span>Regulation mapping</h3>
+  <p>A capability-focused threat matters to auditors because purchased malware and exploits are the delivery vehicles behind most reportable incidents. The table below maps the technique to common frameworks. Use it to justify detection engineering work in risk language, and to know which evidence an auditor may ask for.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Framework</th><th scope="col">Control</th><th scope="col">Why it applies</th><th scope="col">Expected evidence</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>GDPR</td>
+          <td class="mono">Art. 32</td>
+          <td>Requires security measures against unlawful access. Purchased malware is the most common entry path, so its detection is part of the technical measures.</td>
+          <td>Malware detection records, threat intelligence process description, incident tickets with containment timelines</td>
+        </tr>
+        <tr>
+          <td>HIPAA Security Rule</td>
+          <td class="mono">&sect;164.308(a)(5)(ii)(B), &sect;164.312(b)</td>
+          <td>Demands protection from malicious software and audit controls. E-health records are prime targets for stealers obtained through T1588.001.</td>
+          <td>Endpoint protection policy, SIEM alert review logs, access and audit log retention settings</td>
+        </tr>
+        <tr>
+          <td>ISO/IEC 27001:2022</td>
+          <td class="mono">A.8.7, A.8.8, A.5.7, A.8.16</td>
+          <td>Covers malware protection, technical vulnerability management, threat intelligence, and monitoring. T1588 sits exactly where these controls meet.</td>
+          <td>Statement of Applicability entries, vulnerability scan reports, threat intel intake procedure, monitoring runbooks</td>
+        </tr>
+        <tr>
+          <td>SOC 2</td>
+          <td class="mono">CC3.2, CC7.1, CC7.2</td>
+          <td>Requires analysis of threats and monitoring for anomalies. Capability intelligence feeds the threat analysis; endpoint and network detections feed the monitoring.</td>
+          <td>Risk register entries referencing threat actors, detection coverage matrix, alert triage records</td>
+        </tr>
+        <tr>
+          <td>PCI DSS 4.0</td>
+          <td class="mono">5.2, 11.3, 12.8.5</td>
+          <td>Cardholder environments must run malware mechanisms and internal scans, and service providers must monitor threats to their customers.</td>
+          <td>Anti-malware deployment records, scan reports, TI sharing agreements, monitored alert definitions</td>
+        </tr>
+        <tr>
+          <td>NIST CSF 2.0</td>
+          <td class="mono">ID.RA-02, ID.RA-05, DE.CM-01, DE.CM-09</td>
+          <td>ID.RA-02 asks for threat intelligence from information sharing forums; ID.RA-05 uses threats, vulnerabilities, likelihoods, and impacts to inform risk response. DE.CM-01 and DE.CM-09 require monitoring of networks, services, hardware, and software for adverse events.</td>
+          <td>Intel intake and sharing records, risk register entries that cite actor capabilities, monitoring coverage lists, detection engineering backlog</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout callout-note">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">i</span>Auditor-friendly framing</p>
+    <p>When an auditor asks how you address a pre-compromise technique, answer with the downstream controls: signed-code enforcement, certificate monitoring, malware detection, and a documented intelligence process. Keep one page that lists which T1588 sub-technique each control touches. That page becomes your evidence pack.</p>
+  </div>
+
+  <h3 id="sec-5-2-threat-intel" data-num="5.2"><span class="sub-num">5.2</span>Threat intelligence</h3>
+  <p>Intelligence is the only way to see the acquisition itself. Your environment cannot log a marketplace purchase, but researchers, vendors, and government agencies can and do publish what they find. The job of your team is to move that knowledge through a simple pipeline: collect, analyze, apply, and measure.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Source type</th><th scope="col">Examples</th><th scope="col">What it gives you</th><th scope="col">Collection method</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Standard frameworks</td><td>MITRE ATT&amp;CK, CISA KEV, CISA advisories</td><td>Which capabilities are actively used, which flaws are exploited now</td><td>Website, feeds, advisories mailing list</td></tr>
+        <tr><td>Vendor reporting</td><td>Mandiant, Microsoft Threat Intelligence, ESET, Kaspersky, Proofpoint</td><td>Actor tracking, malware families, campaign timelines</td><td>Blogs, RSS, short weekly review meeting</td></tr>
+        <tr><td>Malware repositories</td><td>VirusTotal, MalwareBazaar, URLhaus</td><td>Fresh hashes, family signatures, hunting tags</td><td>API queries in scheduled hunts</td></tr>
+        <tr><td>Certificate intelligence</td><td>crt.sh, CertStream, CT log search</td><td>New certificates on lookalike domains within minutes</td><td>Stream subscription or daily queries</td></tr>
+        <tr><td>ISACs and government</td><td>Sector ISACs, national CERTs</td><td>Sector-relevant warnings, sometimes pre-public advisories</td><td>Membership, protected mailing lists</td></tr>
+        <tr><td>Commercial feeds</td><td>Recorded Future, vendor intel platforms</td><td>Enrichment, actor profiles, finished risk reports</td><td>Platform API, analyst dashboards</td></tr>
+        <tr><td>Internal telemetry</td><td>Your own EDR, proxy, DNS, mail logs</td><td>The ground truth that external intel must meet</td><td>SIEM scheduled searches, hunt notebook</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>ATT&amp;CK itself documents rich real-world usage of this technique. For T1588 the platform records, among others: <strong>MuddyWater</strong> using publicly available malware to blend in, <strong>TA2541</strong> buying malware strains on criminal forums, <strong>LAPSUS$</strong> acquiring the Redline password stealer, <strong>APT-C-36</strong> using packer-as-a-service products such as HeartCrypt, <strong>Ember Bear</strong> acquiring malware from dark web forums, and <strong>Night Dragon</strong> using trojans from underground websites during its long-running campaign. Treat these entries as seed intelligence for hunts in your own environment. The table below shows verified usage for each sub-technique, taken from the official ATT&amp;CK pages.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Sub-technique</th><th scope="col">Documented users (ATT&amp;CK)</th><th scope="col">What they obtained</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">T1588.001</td><td>LAPSUS$, TA2541, APT-C-36, Ember Bear, Turla</td><td>Redline stealer; forum-bought strains; HeartCrypt packer service; dark web malware; malware taken from OilRig</td></tr>
+        <tr><td class="mono">T1588.002</td><td>TEMP.Veles, FIN7, Inception, Magic Hound, BITTER, MirrorFace</td><td>Mimikatz and PsExec; Impacket and Cobalt Strike; LaZagne; Havij; PuTTY; Operation AkaiRy&#363; tooling</td></tr>
+        <tr><td class="mono">T1588.003</td><td>Wizard Spider, OilRig, BlackTech, Kimsuky, MegaCortex, Mustang Panda</td><td>Stolen signing certs from DigiCert, GlobalSign, and others; certs issued to fake companies; revoked certs reused</td></tr>
+        <tr><td class="mono">T1588.004</td><td>Lazarus Group, Mustang Panda, Sea Turtle, BlackTech, Operation Honeybee</td><td>TLS certificates for C2 domains; spoofed certificates; a stolen Adobe signing signature for a dropper</td></tr>
+        <tr><td class="mono">T1588.005</td><td>Salt Typhoon, Ember Bear, Kimsuky</td><td>Exploits for Cisco IOS, Palo Alto PAN-OS, and Ivanti Connect Secure; exploit scripts from public repositories; exploit code for CVEs</td></tr>
+        <tr><td class="mono">T1588.006</td><td>Storm-0501, Volt Typhoon, Leviathan, Sandworm Team</td><td>N-day exploit capability for Zoho ManageEngine, Citrix Bleed, and ColdFusion; public exploit code; vulnerability research</td></tr>
+        <tr><td class="mono">T1588.007</td><td>APT28, ShinyHunters, NIMBUS MANTICORE, Contagious Interview, Anthropic campaign C0062</td><td>LLM access to generate commands (LAMEHUG); Bland AI voice phishing paths; AI-assisted malware generation</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h4>Confidence levels</h4>
+  <p>Every item you ingest needs a confidence level, or your alerts will argue with each other. Use three levels and write them into the detection metadata.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Level</th><th scope="col">Meaning</th><th scope="col">Typical source quality</th><th scope="col">How you act</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge sev-high">High</span></td><td>Multiple independent reports, or observed in your own telemetry</td><td>Two vendors plus a repository sample</td><td>Build a detection within days, treat hits as incidents</td></tr>
+        <tr><td><span class="badge sev-medium">Medium</span></td><td>One credible report or partial corroboration</td><td>Single vendor blog with technical detail</td><td>Schedule a hunt, watch for corroboration</td></tr>
+        <tr><td><span class="badge sev-low">Low</span></td><td>Rumor, unclear sourcing, or old data</td><td>Forum chatter, unverified screenshots</td><td>Store in the backlog, revisit on the next review date</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ol>
+    <li><strong>Collect</strong> from at least two source types above, on a fixed weekly rhythm, into one shared place.</li>
+    <li><strong>Analyze</strong> each item: which T1588 sub-technique does it touch, which platforms, which sectors, what confidence.</li>
+    <li><strong>Apply</strong> by turning markers (hashes, certificate identities, domains) into hunts and detections, then link each detection back to the intelligence item.</li>
+    <li><strong>Measure</strong> quarterly: which intelligence items produced detections, which detections fired, and which feeds never produced anything useful. Drop weak feeds, keep strong ones.</li>
+  </ol>
+
+  <h3 id="sec-5-3-threats" data-num="5.3"><span class="sub-num">5.3</span>Threats ranking and categorization</h3>
+  <p>The six threats below are the realistic ways this technique turns into risk for an organization. They are ranked and categorized by platform. The same six threats are used in 5.4 and 5.5, so the section stays practical.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Threat</th><th scope="col">Rank</th><th scope="col">Category</th><th scope="col">One-line summary</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">TH-1</td><td><span class="badge sev-high">High</span></td><td><span class="badge badge-cat">Endpoint &middot; Windows</span></td><td>Purchased malware or tooling staged on a workstation from web or mail delivery</td></tr>
+        <tr><td class="mono">TH-2</td><td><span class="badge sev-high">High</span></td><td><span class="badge badge-cat">Network &middot; Intel</span></td><td>Capability staging on freshly registered domains with new TLS certificates</td></tr>
+        <tr><td class="mono">TH-3</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge badge-cat">Network &middot; Endpoint</span></td><td>Contact to threat-intelligence-listed staging or panel infrastructure</td></tr>
+        <tr><td class="mono">TH-4</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge badge-cat">Cloud &middot; Identity</span></td><td>Fraudulent cloud and AI service accounts used to build or test capabilities</td></tr>
+        <tr><td class="mono">TH-5</td><td><span class="badge sev-high">High</span></td><td><span class="badge badge-cat">Endpoint &middot; Windows</span></td><td>Payload signed with an abused or stolen code signing certificate</td></tr>
+        <tr><td class="mono">TH-6</td><td><span class="badge sev-critical">Critical</span></td><td><span class="badge badge-cat">Network &middot; Cloud</span></td><td>Obtained exploit aimed at an internet-facing edge appliance</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-high">High</span> TH-1 purchased capability staged on an endpoint</h4>
+      <p><strong>Description.</strong> An employee receives or downloads a purchased loader, stealer, or hacktool. The file lands in a download or temp path and waits for execution. <strong>Preconditions.</strong> User interaction or a vulnerable downloader; attacker already bought the capability. <strong>Impact.</strong> Credential theft, ransomware staging, or full workstation compromise. <strong>Justification.</strong> The most common real-world outcome of acquisition, seen across many actor reports, and reliably detectable from file events and signatures, so a High rank with good detection odds.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-high">High</span> TH-2 staging on fresh domains with new certificates</h4>
+      <p><strong>Description.</strong> The attacker registers a lookalike domain, gets a free TLS certificate, and hosts the payload or a phishing page. <strong>Preconditions.</strong> Cheap registrar access and free certificate authorities; nothing on your side. <strong>Impact.</strong> Trusted-looking delivery infrastructure for the purchased capability. <strong>Justification.</strong> Extremely common in public reporting and visible early in certificate transparency logs, which makes it High even though it needs log enrichment to alert well.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-medium">Medium</span> TH-3 contact to listed staging infrastructure</h4>
+      <p><strong>Description.</strong> A host in your network talks to an IP or domain that intelligence already flagged as a seller panel or staging server. <strong>Preconditions.</strong> The capability is already inside, or a user reached a scam page. <strong>Impact.</strong> Confirms active compromise or exposes users interacting with criminal infrastructure. <strong>Justification.</strong> High value when it fires but it depends fully on feed quality, so a Medium rank with low false-positive volume.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-medium">Medium</span> TH-4 fraudulent cloud and AI service accounts</h4>
+      <p><strong>Description.</strong> Attackers open cloud or AI platform accounts with stolen payment data to build, obfuscate, or test capabilities, or abuse trial credits. <strong>Preconditions.</strong> Payment fraud and identity reuse; your exposure is indirect. <strong>Impact.</strong> Better armed attackers; sometimes abuse of your own tenant via social engineering into AI services. <strong>Justification.</strong> Growing fast in 2025-2026 reporting, but harder to see from inside the target, so Medium.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-high">High</span> TH-5 payload signed with an abused certificate</h4>
+      <p><strong>Description.</strong> The attacker signs a purchased payload with a stolen or fraudulently bought code signing certificate, or with a paid signing service that does not check buyers. The file shows a valid signature chain, which lowers endpoint suspicion. <strong>Preconditions.</strong> A stolen key, an impostor company registration, or an abusive signing service. <strong>Impact.</strong> Malware that passes casual signature checks and even some application control lists. <strong>Justification.</strong> Repeatedly documented, from Stuxnet in 2010 to recent loader families. The signature identity is stable, so a signer inventory plus reputation turns this into a reliable High-value detection.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title"><span class="badge sev-critical">Critical</span> TH-6 obtained exploit against an edge appliance</h4>
+      <p><strong>Description.</strong> The attacker obtains a working exploit for an internet-facing device, such as a VPN gateway or file transfer appliance, and runs it before a patch is in place. <strong>Preconditions.</strong> The flaw is real, a working exploit exists, and the asset is exposed. <strong>Impact.</strong> Direct foothold, often with device-level credentials and a path to identity attacks. <strong>Justification.</strong> This is how many of the most damaging 2023-2026 incidents started. Ranked Critical because a single hit usually means active compromise, not preparation.</p>
+    </div>
+  </div>
+
+  <h3 id="sec-5-4-logs" data-num="5.4"><span class="sub-num">5.4</span>Logs and patterns</h3>
+  <p>For each threat: where to look, which fields matter, what normal looks like, what suspicious looks like, and one realistic event-shaped example. Field names follow the most common logging formats; adjust them to your stack.</p>
+
+  <h4>TH-1 &mdash; purchased capability staged on an endpoint</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon Event ID 11 (file create) and 1 (process create); EDR file events; mail gateway logs</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">UtcTime, Image, TargetFilename, Hashes, User, ProcessGuid</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Executables appear in Program Files, managed software folders, or signed installers from known vendors</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">Executable written to user-writable temp paths, double extensions, or an unsigned binary in an archive staged by the browser or mail client</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">Executable file creation in user temp or download paths, combined with a known-bad hash list or an unexpected signature. (Tip: some SIEM add-ons add an <code>is_executable</code> enrichment field to Sysmon data. That field comes from the add-on, not from Sysmon itself, so treat it as optional.)</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">Sysmon Event ID 11 &mdash; file create (XML, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event&gt;
+  &lt;System&gt;&lt;Provider Name="Sysmon"/&gt;&lt;EventID&gt;11&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-19T08:41:22.113Z"/&gt;&lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-19 08:41:22.113&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{a1b2c3d4-0000-4e21-9f00-aa16b7c2d001}&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Program Files\Google\Chrome\Application\chrome.exe&lt;/Data&gt;
+    &lt;Data Name="TargetFilename"&gt;C:\Users\jdoe\Downloads\invoice_tool_v2\setup_helper.exe&lt;/Data&gt;
+    &lt;Data Name="CreationUtcTime"&gt;2026-10-19 08:41:22.113&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=9F2C41AB77D0E5133C88B4D6A90E2F71C4B8D5A2E1F3096B7C8D2E1F0A3B4C5D&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\jdoe&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>TH-2 &mdash; staging on fresh domains with new certificates</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Certificate transparency streams (crt.sh, CertStream); proxy logs; DNS logs; passive DNS</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">common_name, issuer, not_before, domain, domain_age_days, resp_mime_types, action</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Your own brand gets certificates from a few known CAs on known domains; users visit established domains</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">A certificate issued yesterday for a domain containing your brand plus extra words; executable downloads from domains younger than 30 days</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">CT stream match on brand keywords joined to proxy records showing users reaching that domain, or executable MIME from a young domain</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">Certificate transparency record (crt.sh JSON style, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "issuer_ca_id": 16418,
+  "issuer_name": "C=US, O=Let's Encrypt, CN=R11",
+  "common_name": "secure-corp-portal-login.top",
+  "name_value": "secure-corp-portal-login.top",
+  "not_before": "2026-10-19T04:12:55",
+  "not_after": "2027-01-17T04:12:54",
+  "serial_number": "04a2f19c8b7d6e5f4a3b2c1d0e9f8a7b6c5d",
+  "entry_timestamp": "2026-10-19T04:13:02.884"
+}</code></pre>
+  </figure>
+
+  <h4>TH-3 &mdash; contact to listed staging infrastructure</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon Event ID 3 (network connection); firewall and next-gen firewall logs; Suricata or Zeek records</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">DestinationIp, DestinationPort, DestinationHostname, rule_category, alert_signature, src_ip</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Business traffic to known SaaS ranges; occasional flagged IPs that belong to documented internal services</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">Repeated connections to an IP on a TI watchlist for seller panels, especially from servers or non-user endpoints</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">Destination IP in TI watchlist, enriched with feed confidence, matched against connection logs from all endpoints</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">Sysmon Event ID 3 &mdash; network connection (XML, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event&gt;
+  &lt;System&gt;&lt;Provider Name="Sysmon"/&gt;&lt;EventID&gt;3&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-19T09:02:51.700Z"/&gt;&lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="Image"&gt;C:\Users\jdoe\Downloads\invoice_tool_v2\setup_helper.exe&lt;/Data&gt;
+    &lt;Data Name="DestinationIp"&gt;203.0.113.77&lt;/Data&gt;
+    &lt;Data Name="DestinationHostname"&gt;cdn-update-svc.top&lt;/Data&gt;
+    &lt;Data Name="DestinationPort"&gt;443&lt;/Data&gt;
+    &lt;Data Name="Initiated"&gt;true&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\jdoe&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+  <p>The IP in the example uses the reserved documentation range 203.0.113.0/24, which is safe for teaching material and must be replaced by your real watchlist in production.</p>
+
+  <h4>TH-4 &mdash; fraudulent cloud and AI service accounts</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">AWS CloudTrail; Azure sign-in and audit logs; SaaS admin logs; proxy logs to AI service domains</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">eventName, sourceIPAddress, userIdentity.type, MFAUsed, user_agent, account age</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Console logins from corporate ranges with MFA; AI service usage from documented teams and apps</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">Console login without MFA from a hosting provider range; sudden AI API usage from a service account that never used it; uploads of code archives to AI endpoints</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">ConsoleLogin success where MFAUsed is No and the source IP is not in corporate ranges, or new AI service usage by a dormant identity</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">AWS CloudTrail &mdash; ConsoleLogin (JSON, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.09",
+  "userIdentity": { "type": "IAMUser", "principalId": "AIDA4EXAMPLE7QX3M2T",
+                    "arn": "arn:aws:iam::111122223333:user/svc-build", "userName": "svc-build" },
+  "eventTime": "2026-10-19T03:22:10Z",
+  "eventSource": "signin.amazonaws.com",
+  "eventName": "ConsoleLogin",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "198.51.100.24",
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+  "additionalEventData": { "MFAUsed": "No", "LoginTo": "https://console.aws.amazon.com" },
+  "responseElements": { "ConsoleLogin": "Success" }
+}</code></pre>
+  </figure>
+
+  <h4>TH-5 &mdash; payload signed with an abused certificate</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon Event ID 7 (image load) and 6 (driver load); EDR signature fields; code signing inventory lookups</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">Image, Signed, Signature, SignatureStatus, Hashes, Company, User</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Signers match the approved publisher inventory; SignatureStatus is Valid for known vendors</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">A valid signature from a publisher that is not in your inventory, or a subject that intelligence has linked to abused or stolen certificates</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">Signed equals true, and the Signature value sits on a threat intelligence signer watchlist or fails the publisher inventory check</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">Sysmon Event ID 7 &mdash; image load (XML, trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event&gt;
+  &lt;System&gt;&lt;Provider Name="Sysmon"/&gt;&lt;EventID&gt;7&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-19T10:15:04.331Z"/&gt;&lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-19 10:15:04.331&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{a1b2c3d4-0000-4e21-9f00-aa16b7c2d042}&lt;/Data&gt;
+    &lt;Data Name="ProcessId"&gt;6104&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Users\jdoe\Downloads\invoice_tool_v2\setup_helper.exe&lt;/Data&gt;
+    &lt;Data Name="Product"&gt;Invoice Helper Pro&lt;/Data&gt;
+    &lt;Data Name="Company"&gt;Example Software Ltd&lt;/Data&gt;
+    &lt;Data Name="OriginalFileName"&gt;loader.exe&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=C3A85F19D2E447B8A9013F5C6D7E8F901234567890ABCDEF1234567890ABCDEF&lt;/Data&gt;
+    &lt;Data Name="Signed"&gt;true&lt;/Data&gt;
+    &lt;Data Name="Signature"&gt;Example Software Ltd&lt;/Data&gt;
+    &lt;Data Name="SignatureStatus"&gt;Valid&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+  <p>The publisher name in this example is synthetic, and the file path continues the TH-1 story: the staged file now runs, and its valid signature comes from a publisher nobody in your estate has ever shipped. In production the watchlist values come from your threat intelligence platform, not from a fixed list in the rule.</p>
+
+  <h4>TH-6 &mdash; obtained exploit against an edge appliance</h4>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Suricata or Zeek alerts at the perimeter; appliance web logs; WAF logs; CISA KEV catalog as enrichment</div></div>
+    <div class="kv-row"><div class="kv-key">Key fields</div><div class="kv-val">event_type, alert.category, alert.signature, src_ip, dest_ip, http.url, http.http_user_agent</div></div>
+    <div class="kv-row"><div class="kv-key">Normal behavior</div><div class="kv-val">Low, steady volumes of administrative logins from corporate and VPN ranges; scanner noise filtered at the IDS</div></div>
+    <div class="kv-row"><div class="kv-key">Suspicious behavior</div><div class="kv-val">An exploit-class alert aimed at an edge appliance address, especially a signature family that matches a flaw listed in the CISA KEV catalog</div></div>
+    <div class="kv-row"><div class="kv-key">Detection logic</div><div class="kv-val">Alert category attempted-admin or web-application-attack, destination inside your edge address space, source not on the authorized testing list</div></div>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">Suricata EVE JSON &mdash; exploit-class alert (trimmed)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "timestamp": "2026-10-19T11:26:41.882114+0000",
+  "flow_id": 1183447221,
+  "event_type": "alert",
+  "src_ip": "198.51.100.24",
+  "src_port": 51244,
+  "dest_ip": "203.0.113.10",
+  "dest_port": 443,
+  "proto": "TCP",
+  "alert": {
+    "action": "blocked",
+    "gid": 1,
+    "signature_id": 2027865,
+    "rev": 3,
+    "signature": "ET EXPLOIT Known Appliance Exploit Pattern Inbound (CISA KEV)",
+    "category": "attempted-admin",
+    "severity": 1
+  },
+  "http": {
+    "http_method": "GET",
+    "url": "/remote/logincheck",
+    "http_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+  }
+}</code></pre>
+  </figure>
+  <p>Both addresses are reserved documentation ranges: the source stands in for the attacker and the destination stands in for your edge appliance. The signature name follows the style of the Emerging Threats ruleset but is written for teaching, without naming a real CVE. In production, pair each fired signature with its KEV entry so the ticket carries the official context.</p>
+
+  <h3 id="sec-5-5-detections" data-num="5.5"><span class="sub-num">5.5</span>Sigma rules and Splunk SPL</h3>
+  <p>One Sigma rule and one matching Splunk query per threat. The Sigma logic and the SPL logic match by design. Replace index names, watchlist contents, and hash lists with your own values before deploying, and record the mapping from rule to threat in your detection inventory.</p>
+
+  <h4>TH-1 &mdash; Sigma: suspicious executable staged in user paths</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; executable staged in user-writable path by browser or mail client</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Executable Staged in User-Writable Path by Browser or Mail Client
+id: 7c2f9d31-8a4e-4b6d-9f2a-1e5c3b7d8a09
+status: stable
+description: Detects executable files written by browser, mail, or archive processes into user-writable
+  paths. This is the typical landing pattern of purchased malware and tools obtained through
+  resource development (MITRE ATT&amp;CK T1588, T1588.001, T1588.002).
+references:
+  - https://attack.mitre.org/techniques/T1588/
+  - https://attack.mitre.org/techniques/T1588/001/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_process:
+    Image|endswith:
+      - '\chrome.exe'
+      - '\msedge.exe'
+      - '\firefox.exe'
+      - '\outlook.exe'
+      - '\winrar.exe'
+      - '\7zFM.exe'
+  selection_target:
+    TargetFilename|startswith:
+      - 'C:\Users\'
+    TargetFilename|contains|all:
+      - 'Downloads\'
+    TargetFilename|endswith:
+      - '.exe'
+      - '.msi'
+      - '.scr'
+      - '.hta'
+  filter_admin_tools:
+    TargetFilename|contains:
+      - '\Downloads\sysinternals\'
+      - '\Downloads\wireshark'
+  condition: selection_process and selection_target and not 1 of filter_*
+fields:
+  - Image
+  - TargetFilename
+  - Hashes
+  - User
+falsepositives:
+  - Users downloading legitimate signed installers from known vendor sites
+  - Approved software deployment that uses the Downloads folder
+level: high
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.001
+  - attack.t1588.002</code></pre>
+  </figure>
+  <p><strong>SPL for TH-1.</strong> Assumes Sysmon data lands in <code>index=sysmon</code> with <code>sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational</code>; adjust to your environment.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-1 staged executable</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=11
+  Image IN ("*\chrome.exe", "*\msedge.exe", "*\firefox.exe", "*\outlook.exe", "*\winrar.exe", "*\7zFM.exe")
+  TargetFilename="C:\Users\*\Downloads\*" (TargetFilename="*.exe" OR TargetFilename="*.msi" OR TargetFilename="*.scr" OR TargetFilename="*.hta")
+  NOT TargetFilename IN ("*\Downloads\sysinternals\*", "*\Downloads\wireshark*")
+| rex field=Hashes "SHA256=(?&lt;sha256&gt;[A-F0-9]{64})"
+| stats count min(_time) as first_seen max(_time) as last_seen values(TargetFilename) as files
+        values(sha256) as sha256 values(user) as users values(Image) as source_apps by dest
+| sort - first_seen</code></pre>
+  </figure>
+
+  <h4>TH-2 &mdash; Sigma: executable download from young or high-risk domain</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; executable download from fresh or risky-tld domain</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Executable Downloaded from Young or High-Risk TLD Domain
+id: 2b8e4f67-3c9d-4e2a-b1d5-6f8a0c4e9b17
+status: experimental
+description: Detects executable downloads from domains on cheap high-risk top level domains or
+  domains younger than 30 days. Attackers stage purchased capabilities on such fresh domains and
+  equip them with newly issued TLS certificates (MITRE ATT&amp;CK T1588 with T1588.004).
+references:
+  - https://attack.mitre.org/techniques/T1588/
+  - https://attack.mitre.org/techniques/T1588/004/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  category: proxy
+detection:
+  selection_ext:
+    c-uri-extension:
+      - 'exe'
+      - 'msi'
+      - 'ps1'
+      - 'hta'
+  selection_tld:
+    r-dns|endswith:
+      - '.top'
+      - '.xyz'
+      - '.icu'
+      - '.cfd'
+      - '.live'
+  selection_young:
+    domain_age_days|lte: 30
+  condition: selection_ext and (selection_tld or selection_young)
+fields:
+  - c-uri
+  - r-dns
+  - resp_mime_types
+  - c-useragent
+  - domain_age_days
+falsepositives:
+  - Software vendors that distribute installers from new marketing domains
+  - Internal sandboxes and research hosts downloading samples on purpose
+level: high
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.004</code></pre>
+  </figure>
+  <p>The custom field <code>domain_age_days</code> must come from an enrichment lookup of your domain registration or passive DNS data. If you do not enrich, keep only the TLD selection. Assumes proxy data in <code>index=proxy</code> with <code>sourcetype=stream:http</code> plus a lookup <code>domain_intel</code> carrying the age field.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-2 fresh domain payload delivery</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=proxy sourcetype=stream:http
+| rex field=url "(?:https?://)?(?&lt;r_dns&gt;[^/]+)"
+| lookup domain_intel r_dns OUTPUT domain_age_days
+| eval risky_tld=if(match(r_dns, "\.(top|xyz|icu|cfd|live)$"), 1, 0)
+| eval young=if(isnotnull(domain_age_days) AND domain_age_days &lt;= 30, 1, 0)
+| where risky_tld=1 OR young=1
+| where match(url, "\.(exe|msi|ps1|hta)(\?|$)")
+| stats count values(url) as urls values(src_ip) as clients values(resp_mime_types) as mime
+        max(domain_age_days) as oldest_age by r_dns
+| sort - count</code></pre>
+  </figure>
+
+  <h4>TH-3 &mdash; Sigma: connection to listed staging infrastructure</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; endpoint connects to capability-staging watchlist IP</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Endpoint Connects to Known Capability Staging Infrastructure
+id: 9d3a6e12-5f7b-4c8d-a2e4-0b9c1d3f5a26
+status: experimental
+description: Detects network connections from endpoints to IP addresses on a threat intelligence
+  watchlist for seller panels, staging servers, and payload delivery hosts. Uses the reserved
+  documentation range 203.0.113.0/24 as a safe example list for testing (MITRE ATT&amp;CK T1588).
+references:
+  - https://attack.mitre.org/techniques/T1588/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 3
+    Initiated: 'true'
+    DestinationIp|startswith:
+      - '203.0.113.'
+  filter_internal:
+    DestinationPort:
+      - 443
+    DestinationHostname|endswith:
+      - '.yourcompany.example'
+  condition: selection and not 1 of filter_*
+fields:
+  - Image
+  - DestinationIp
+  - DestinationHostname
+  - DestinationPort
+  - User
+falsepositives:
+  - Research or lab hosts intentionally contacting the watchlist for testing
+  - Any real service that shares the documented example range (replace before production)
+level: high
+tags:
+  - attack.resource-development
+  - attack.t1588</code></pre>
+  </figure>
+  <p><strong>SPL for TH-3.</strong> Assumes Sysmon in <code>index=sysmon</code> and a KV-store lookup <code>ti_staging_ips</code> with columns <code>ip</code> and <code>confidence</code>.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-3 watchlist contact</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=3 Initiated=true
+| lookup ti_staging_ips ip AS DestinationIp OUTPUT confidence, note
+| where isnotnull(confidence)
+| stats count min(_time) as first_seen max(_time) as last_seen
+        values(DestinationHostname) as hostnames values(DestinationPort) as ports
+        values(Image) as processes by DestinationIp, confidence, dest
+| eval confidence=coalesce(confidence, "unknown")
+| sort - confidence - count</code></pre>
+  </figure>
+
+  <h4>TH-4 &mdash; Sigma: cloud console login without MFA from new infrastructure</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; cloud console login without MFA from hosting range</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Cloud Console Login Without MFA from Unknown Infrastructure
+id: 5e8b2c40-1d6f-4a9e-8b3c-7a2d4e6f8b35
+status: stable
+description: Detects successful cloud console logins where MFA was not used and the source address
+  is outside corporate ranges. Fraudulent accounts used to build or test capabilities, including
+  AI services, are often operated this way (MITRE ATT&amp;CK T1588, notably T1588.007).
+references:
+  - https://attack.mitre.org/techniques/T1588/
+  - https://attack.mitre.org/techniques/T1588/007/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection_event:
+    eventName: 'ConsoleLogin'
+    responseElements.ConsoleLogin: 'Success'
+  selection_mfa:
+    additionalEventData.MFAUsed: 'No'
+  selection_src:
+    sourceIPAddress|startswith:
+      - '198.51.100.'
+      - '203.0.113.'
+  filter_service:
+    userIdentity.type: 'AssumedRole'
+  condition: selection_event and selection_mfa and selection_src and not 1 of filter_*
+fields:
+  - userIdentity.userName
+  - sourceIPAddress
+  - userAgent
+  - additionalEventData.LoginTo
+falsepositives:
+  - Break-glass admin accounts with documented no-MFA procedures
+  - Corporate ranges missing from the allowlist
+level: high
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.007</code></pre>
+  </figure>
+  <p><strong>SPL for TH-4.</strong> Assumes CloudTrail in <code>index=aws</code> with <code>sourcetype=aws:cloudtrail</code>. The example uses the reserved documentation ranges 198.51.100.0/24 and 203.0.113.0/24 as the "outside corporate ranges" selection, exactly like the Sigma rule above; swap them for your real out-of-range logic (for example <code>NOT cidrmatch("10.0.0.0/8", sourceIPAddress)</code> over your corporate CIDRs).</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-4 console login without MFA</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype=aws:cloudtrail eventName=ConsoleLogin responseElements.ConsoleLogin=Success
+  additionalEventData.MFAUsed="No"
+  NOT userIdentity.type="AssumedRole"
+  (sourceIPAddress=198.51.100.* OR sourceIPAddress=203.0.113.*)
+| stats count min(_time) as first_seen max(_time) as last_seen values(userAgent) as agents
+        values(City) as cities values(Country) as countries by userIdentity.userName, sourceIPAddress, aws_account_id
+| sort - first_seen</code></pre>
+  </figure>
+
+  <h4>TH-5 &mdash; Sigma: image loaded with a watchlisted signer</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; image load signed by abused or unknown publisher</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Image Loaded with Signature from Watchlisted Publisher
+id: 3f7a1c58-9d24-4b6e-8f31-5c9d0e7a4b62
+status: stable
+description: Detects image loads where the file is signed but the signing certificate
+  subject sits on a watchlist of abused or stolen code signing certificates. This catches
+  payloads whose signing capability was obtained through resource development
+  (MITRE ATT&amp;CK T1588, notably T1588.003). The example subjects are synthetic;
+  replace them with your threat intelligence signer list.
+references:
+  - https://attack.mitre.org/techniques/T1588/
+  - https://attack.mitre.org/techniques/T1588/003/
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_load:
+    EventID: 7
+    Signed: 'true'
+    Signature|endswith:
+      - 'Example Software Ltd'
+      - 'Sample Hardware Corp'
+      - 'Demo Semiconductor Inc'
+  filter_known_good:
+    Signature|contains:
+      - 'Microsoft'
+      - 'Google'
+  condition: selection_load and not 1 of filter_*
+fields:
+  - Image
+  - Signature
+  - SignatureStatus
+  - Hashes
+  - User
+falsepositives:
+  - A legitimate vendor that uses a watchlisted subject name
+  - Test signers used by internal development teams
+level: high
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.003</code></pre>
+  </figure>
+  <p><strong>SPL for TH-5.</strong> Assumes Sysmon in <code>index=sysmon</code>. In production, replace the fixed list with a lookup such as <code>ti_signers</code> that carries the subject, the confidence, and a review date.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-5 watchlisted signer on image load</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=7 Signed=true
+  Signature IN ("*Example Software Ltd", "*Sample Hardware Corp", "*Demo Semiconductor Inc")
+  NOT Signature IN ("*Microsoft*", "*Google*")
+| stats count min(_time) as first_seen max(_time) as last_seen values(Image) as images
+        values(Computer) as hosts values(user) as users by Signature, SignatureStatus
+| sort - count</code></pre>
+  </figure>
+
+  <h4>TH-6 &mdash; Sigma: exploit-class IDS alert against the edge</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">sigma.yml &mdash; IDS exploit alert against edge appliance</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: IDS Exploit-Class Alert Against Edge Appliance
+id: 8a4d2f91-6b37-4e58-9c02-1f7b3d5e8a74
+status: stable
+description: Fires when the network intrusion detection system raises an exploit-class
+  alert aimed at an internet-facing appliance such as a VPN gateway. Attackers often run
+  exploits they obtained through resource development (MITRE ATT&amp;CK T1588 with
+  T1588.005) against such devices. The destination range is a reserved documentation
+  range that stands in for your edge address space.
+references:
+  - https://attack.mitre.org/techniques/T1588/
+  - https://attack.mitre.org/techniques/T1588/005/
+  - https://www.cisa.gov/known-exploited-vulnerabilities-catalog
+author: Detection Engineering Guide
+date: 2026-10-20
+logsource:
+  category: network
+  product: suricata
+detection:
+  selection_alert:
+    event_type: 'alert'
+    alert.category|contains:
+      - 'attempted-admin'
+      - 'web-application-attack'
+  selection_dst:
+    dest_ip|startswith:
+      - '203.0.113.'
+  filter_pentest:
+    src_ip|startswith: '10.99.'
+  condition: selection_alert and selection_dst and not filter_pentest
+fields:
+  - src_ip
+  - dest_ip
+  - alert.signature
+  - alert.signature_id
+  - http.url
+falsepositives:
+  - Authorized penetration tests against the appliance
+  - Vendor security scanning of the device
+level: critical
+tags:
+  - attack.resource-development
+  - attack.t1588
+  - attack.t1588.005
+  - attack.initial-access</code></pre>
+  </figure>
+  <p><strong>SPL for TH-6.</strong> Assumes EVE JSON from Suricata lands in <code>index=ids</code> with <code>sourcetype=suricata</code> (for example through the Splunk add-on for Suricata). Replace <code>203.0.113.0/24</code> with your real edge ranges and <code>10.99.0.0/16</code> with your testing network.</p>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-title">splunk_spl &mdash; TH-6 exploit alert at the edge</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=ids sourcetype=suricata event_type=alert
+  alert.category IN ("attempted-admin", "web-application-attack")
+  dest_ip=203.0.113.*
+  src_ip!=10.99.*
+| stats count min(_time) as first_seen max(_time) as last_seen
+        values(alert.signature) as signatures values(http.url) as urls by src_ip, dest_ip
+| sort - count</code></pre>
+  </figure>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">Tuning guidance</h4>
+      <p>Start every rule in search-only mode for two weeks and review hits with the data owner. Add allowlists for your software deployment paths and break-glass accounts instead of lowering severity. For TH-2 keep the TLD list short and local; for TH-3 refresh the watchlist monthly with feed confidence; for TH-1 review the top downloaded legitimate installers and allowlist them explicitly; for TH-5 keep the signer list in a lookup with confidence and review dates; for TH-6 join fired signatures with the CISA KEV catalog so tickets carry the official context.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Validation in the lab</h4>
+      <p>Test each rule in a lab before production: trigger the event once with a harmless action, such as renaming a text file to end with <code>.hta</code> in your own Downloads folder for TH-1, and confirm the rule fires with the right fields. Keep the test steps in the rule ticket so the next engineer can re-run them. The example IP ranges in TH-3 and TH-4 are reserved documentation ranges, safe for demos.</p>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="sec-6-case-study" data-num="6">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">6</span>
+    <div>
+      <h2>Real-World Case Study</h2>
+      <p class="section-intro">Anatomy of a bought attack: eight documented events that show every face of capability acquisition, from stolen certificates to deepfake video calls.</p>
+    </div>
+  </div>
+  <div class="callout callout-note">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">i</span>How to read this case</p>
+    <p>This is a composite case. Every event below is real and publicly documented, but they happened to different victims at different times. We line them up in one story to show the full anatomy of Obtain Capabilities: what was bought or stolen, how it was used, and what defenders could see. Each timeline item names its public source.</p>
+  </div>
+  <h3>Context</h3>
+  <p>No single intrusion covers all seven sub-techniques. But across the last fifteen years, the same pattern repeats: an actor needs a capability, finds a seller or a victim to steal from, pays or raids, and then runs the capability against a target. The events below were chosen because each one documents a different acquisition path, and each one left public traces that defenders still study today.</p>
+  <div class="timeline">
+    <div class="t-item"><span class="t-date">June 2010</span>
+      <p class="t-title">Stuxnet runs on stolen signing certificates</p>
+      <p class="t-body">The Stuxnet worm signed its driver files with valid certificates stolen from the hardware vendors Realtek and JMicron, so Windows trusted the files at the highest level. Security vendors published the certificate details, and the private keys were revoked. This is T1588.003 in its purest form: steal the signing capability. Detection point: a driver signed by a vendor that never shipped it.</p>
+    </div>
+    <div class="t-item"><span class="t-date">March 2017</span>
+      <p class="t-title">Microsoft patches the flaw before the leak</p>
+      <p class="t-body">Microsoft released security bulletin MS17-010 on 14 March 2017, fixing a remote code execution flaw in the SMBv1 protocol used for file sharing on Windows networks. The patch existed weeks before most organizations applied it. This is the precondition every obtained exploit hopes for: a real flaw and a slow patch cycle.</p>
+    </div>
+    <div class="t-item"><span class="t-date">April 2017</span>
+      <p class="t-title">A leak hands working exploits to everyone</p>
+      <p class="t-body">The group calling itself the Shadow Brokers published stolen exploit tools, including EternalBlue, the exploit for MS17-010. Overnight, a military-grade capability became free for anyone to download. This is T1588.005 by theft and leak: no purchase, no research, just a download link.</p>
+    </div>
+    <div class="t-item"><span class="t-date">May 2017</span>
+      <p class="t-title">WannaCry turns the leak into a global event</p>
+      <p class="t-body">The WannaCry ransomware used EternalBlue to spread by itself across unpatched networks. Press and agency reporting estimated more than 200,000 systems in over 150 countries, with the United Kingdom's National Health Service among the hardest hit, cancelling appointments across many hospitals. A patch released in March could have stopped almost all of it. Detection point: IDS signatures for SMB exploit patterns, published within days of the leak.</p>
+    </div>
+    <div class="t-item"><span class="t-date">August 2018</span>
+      <p class="t-title">Lazarus dresses a fake site in TLS</p>
+      <p class="t-body">The United States agency CISA, in advisory AA18-224A, documented the Lazarus Group campaign AppleJeus: fake cryptocurrency trading sites that delivered trojanized installers, with valid TLS certificates making the sites look legitimate in browsers. This is T1588.004: buy or obtain website certificates so the victim's trust bar stays green. Detection point: certificate transparency logs showing certificates for brand-new domains.</p>
+    </div>
+    <div class="t-item"><span class="t-date">2021 &ndash; 2022</span>
+      <p class="t-title">Conti buys its toolbox, then the receipts leak</p>
+      <p class="t-body">The Conti ransomware syndicate used Cobalt Strike, Mimikatz, and many other off-the-shelf tools, as documented in the United States advisory AA21-265A. In early 2022, a disgruntled member leaked thousands of internal chat messages, showing how the group paid for tooling and licenses. This is T1588.002 at criminal scale: buying proven tools instead of writing them. Detection point: Cobalt Strike default beacon settings and public licensing records.</p>
+    </div>
+    <div class="t-item"><span class="t-date">2023</span>
+      <p class="t-title">AI itself becomes a product on criminal markets</p>
+      <p class="t-body">Security vendors reported subscription services such as WormGPT and FraudGPT, sold on criminal forums to write phishing content in fluent language. This is T1588.007: the capability being obtained is model access, not code. Detection point so far is weak, which is why the defense leans on process controls, shown in the mitigation section.</p>
+    </div>
+    <div class="t-item"><span class="t-date">January &ndash; February 2024</span>
+      <p class="t-title">A deepfake video call moves 200 million dollars</p>
+      <p class="t-body">The engineering firm Arup confirmed in May 2024 that an employee in its Hong Kong office joined a video call with digitally faked versions of senior colleagues, and then carried out about fifteen transfers worth roughly 200 million Hong Kong dollars, about 25 million United States dollars, as press reporting described. The fake faces and voices were the obtained capability. Detection point: the payment process itself, which lacked an out-of-band verification step.</p>
+    </div>
+  </div>
+  <h3>The attack chain, mapped to the technique</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Capability</th><th scope="col">How it was obtained</th><th scope="col">Sub-technique</th><th scope="col">What it enabled</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Code signing certificates</td><td>Stolen from hardware vendors</td><td class="mono">T1588.003</td><td>Stuxnet drivers passed Windows trust checks</td></tr>
+        <tr><td>SMB exploit (EternalBlue)</td><td>Leaked from a state stockpile</td><td class="mono">T1588.005</td><td>Self-spreading ransomware across unpatched networks</td></tr>
+        <tr><td>TLS certificates</td><td>Obtained from public certificate authorities</td><td class="mono">T1588.004</td><td>Fake trading sites looked legitimate</td></tr>
+        <tr><td>Attack tools</td><td>Bought, with leaked receipts</td><td class="mono">T1588.002</td><td>Lateral movement and persistence for extortion</td></tr>
+        <tr><td>Ransomware platform</td><td>Rented as a service (RaaS)</td><td class="mono">T1588.001</td><td>Affiliates extorted without writing malware</td></tr>
+        <tr><td>AI model access</td><td>Bought as a subscription service</td><td class="mono">T1588.007</td><td>Fluent phishing text and fake video calls</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Detection points across the timeline</h3>
+  <p>Each event had at least one moment where a prepared defender could have caught it. The table collects them in one view, because the whole lesson of this case is that the traces were public before the harm was done.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Event</th><th scope="col">Earliest public trace</th><th scope="col">Where a defender could have seen it</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Stuxnet certificates</td><td>Certificate issuer and subject on samples</td><td>Signing inventory check: driver signed by Realtek on machines that never had Realtek hardware</td></tr>
+        <tr><td>EternalBlue leak</td><td>Tools published online; IDS signatures days later</td><td>Patch SLA for MS17-010 plus IDS rules on the perimeter</td></tr>
+        <tr><td>AppleJeus sites</td><td>New TLS certificates for fresh domains</td><td>Certificate transparency watch on brand and sector keywords</td></tr>
+        <tr><td>Conti tooling</td><td>Beacon traffic; forum chatter; later the leaks</td><td>Default Cobalt Strike settings flagged by proxy and EDR rules</td></tr>
+        <tr><td>RaaS platforms</td><td>Victim shaming sites; ISAC warnings</td><td>Intel review: know which RaaS brands target your sector</td></tr>
+        <tr><td>AI services and deepfakes</td><td>Vendor reporting; fraud complaints</td><td>Payment callback verification; staff training with a code word</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Containment, eradication, and recovery</h3>
+  <p>Containment in a bought-capability incident starts with cutting what the capability needs. That means blocking the known hashes and domains at mail, proxy, and firewall, isolating hosts that ran the payload, and revoking active sessions for affected users. In the WannaCry case, containment also meant closing the protocol door itself: disabling SMBv1 on every remaining machine, because the capability attacked a service, not a person.</p>
+  <p>Eradication removes the capability and the door it used. Teams remove implants and staged files, patch the exploited flaw, rotate exposed credentials and signing material, and rebuild affected systems from clean images. When the capability is a stolen certificate, eradication includes the certificate authority: revoke the certificate, publish the update, and re-verify every binary that carries the signer. When the capability is AI-assisted fraud, eradication is mostly process: add out-of-band verification for payments and approvals.</p>
+  <p>Recovery proves the door is closed. Teams watch a clean telemetry window, restore data from offline backups where ransomware landed, and re-open services in stages. The strongest teams close with a review that answers three questions: which capability did the attacker have, where did our telemetry first touch it, and which of the six threats in section 5.3 would have caught it sooner.</p>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">Impact and consequences</h4>
+      <p>The direct costs repeat across the timeline: hospitals cancelled care, manufacturers stopped production lines, and one finance department lost about 25 million dollars in an afternoon. The indirect costs last longer: trust in software updates and video calls took real damage, regulators wrote new rules for build pipelines and payment controls, and insurers raised the bar for ransomware coverage.</p>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Team response and communication</h4>
+      <p>Every event needed a team, not a tool. Threat intelligence tracked the families and the sellers. The SOC triaged alerts and ran the hunts. Incident response led containment and rebuilt systems. IT and vulnerability management owned the patching race. Legal and communications handled extortion contact and public statements, and finance owned payment verification. Write these roles into your playbook before you need them, with one decision-maker per stage.</p>
+    </div>
+  </div>
+  <h3>Lessons learned</h3>
+  <ul class="check-list">
+    <li>Stolen trust is the highest-value capability. Inventory your signers and monitor their use, not just their storage.</li>
+    <li>A leaked exploit plus a slow patch cycle is a global incident. Patch KEV-listed flaws on internet-facing systems first.</li>
+    <li>Fresh TLS certificates on fresh domains are the earliest reliable trace of staged attacks. Watch certificate transparency.</li>
+    <li>Tooling purchases leave fingerprints: default settings, shared watermarks, and licensing records. Hunt for the defaults.</li>
+    <li>AI capabilities attack people and process, not code. Out-of-band payment verification and staff code words are detections too.</li>
+    <li>Share what you learn. The leaks and advisories in this case gave every defender the same homework at the same time.</li>
+  </ul>
+</section>
+
+<section class="section" id="sec-7-mitigation" data-num="7">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">7</span>
+    <div>
+      <h2>Mitigation and Defense</h2>
+      <p class="section-intro">You cannot stop the purchase, but you can make purchased capabilities fail. Enterprise controls, home advice, and a prioritized action list.</p>
+    </div>
+  </div>
+  <p>ATT&amp;CK is direct about this technique: the official mitigation is <strong>Pre-compromise [M1056]</strong>, and its description says the technique cannot be easily mitigated with preventive controls because the behavior happens outside enterprise defenses. Defense therefore has two goals. First, reduce what a purchased capability can do once it arrives. Second, shorten the time between a capability appearing in the wild and your organization knowing about it.</p>
+  <h3>Enterprise controls</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Area</th><th scope="col">Control</th><th scope="col">What it stops</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Policy</td><td>Software allowlisting policy; code signing governance; supplier security requirements</td><td>Unsigned or unexpectedly signed software; weak suppliers becoming capability suppliers</td></tr>
+        <tr><td>Identity</td><td>Phishing-resistant MFA; least privilege for build and signing systems; out-of-band payment verification</td><td>Certificate theft; fraudulent cloud and AI account abuse (TH-4); deepfake payment fraud</td></tr>
+        <tr><td>Endpoint</td><td>Application control (for example WDAC or Smart App Control), EDR with reputation, block unsigned drivers</td><td>Purchased malware execution and staged hacktools (TH-1); payloads signed by abused certificates (TH-5)</td></tr>
+        <tr><td>Network</td><td>Egress filtering, DNS filtering, TLS inspection where lawful, proxy category blocks for new domains</td><td>Staging and beacon traffic to fresh infrastructure (TH-2, TH-3)</td></tr>
+        <tr><td>Perimeter</td><td>Patch SLA tied to the CISA KEV catalog; virtual patching at the WAF or IDS while patches are tested</td><td>Obtained exploits against edge appliances (TH-6)</td></tr>
+        <tr><td>Cloud</td><td>MFA enforcement, guardrails for new accounts, AI service usage policies and logging</td><td>Fraudulent accounts used to build or test capabilities (TH-4)</td></tr>
+        <tr><td>Logging and monitoring</td><td>Sysmon or equivalent, certificate transparency monitoring, code signing inventory, TI-driven hunts</td><td>The six threats of section 5 end to end</td></tr>
+        <tr><td>Backup and response</td><td>Offline backups, tested playbooks for signed-malware, exploit, and fraud cases</td><td>Recovery time when a capability still lands</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout callout-warning">
+    <p class="callout-title"><span class="co-icon" aria-hidden="true">!</span>Common trap</p>
+    <p>Do not allowlist software by signer name alone. Stolen certificates sign malware with a perfectly valid chain. Combine signature checks with path, publisher inventory, and reputation so a valid-but-unknown signer still gets reviewed.</p>
+  </div>
+  <h3>Home and small office</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Habit</th><th scope="col">Why it defeats a bought capability</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Turn on automatic updates for the operating system and browser</td><td>Most purchased exploits and loaders only work on unpatched machines, so updates close their entry door</td></tr>
+        <tr><td>Leave the built-in antivirus or protection stack switched on</td><td>Cloud reputation checks catch stealer and loader families days after they first appear</td></tr>
+        <tr><td>Keep a 3-2-1 backup: three copies, two media, one offline</td><td>Ransomware rented from a platform loses its leverage when files survive it</td></tr>
+        <tr><td>Use a password manager plus multi-factor authentication everywhere</td><td>A stealer that grabs your password still cannot log in without the second factor</td></tr>
+        <tr><td>Update the router and smart devices, and change default passwords</td><td>Home devices run the same edge software that purchased exploits target</td></tr>
+        <tr><td>Agree on a family code word for urgent voice or video requests</td><td>A cloned voice cannot answer a question only your family knows</td></tr>
+        <tr><td>Treat urgent payment or identity requests as hostile until verified by a second channel</td><td>Most purchased phishing kits and deepfake scams depend on speed, not skill</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Prioritized actions</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Priority</th><th scope="col">Action</th><th scope="col">Effort</th><th scope="col">Owner</th><th scope="col">Expected risk reduction</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge sev-critical">1</span></td><td>Enforce MFA everywhere and block console logins without it</td><td>Low</td><td>Identity team</td><td>High against TH-4 and delivery follow-ups</td></tr>
+        <tr><td><span class="badge sev-critical">2</span></td><td>Patch internet-facing appliances on a KEV-driven SLA, with virtual patching meanwhile</td><td>Medium</td><td>IT and security engineering</td><td>High against TH-6, the costliest threat in this set</td></tr>
+        <tr><td><span class="badge sev-critical">3</span></td><td>Deploy EDR tamper protection and unsigned-driver blocking</td><td>Medium</td><td>Endpoint team</td><td>High against TH-1</td></tr>
+        <tr><td><span class="badge sev-high">4</span></td><td>Stand up certificate transparency monitoring for brand lookalikes</td><td>Low</td><td>Security engineering</td><td>High against TH-2, earliest warning available</td></tr>
+        <tr><td><span class="badge sev-high">5</span></td><td>Build code signing inventory and alert on unknown or watchlisted signers</td><td>Medium</td><td>Security engineering</td><td>High against TH-5</td></tr>
+        <tr><td><span class="badge sev-medium">6</span></td><td>Schedule the six Sigma rules of section 5.5 in search-only mode, then tune</td><td>Medium</td><td>SOC</td><td>Medium to high across all threats</td></tr>
+        <tr><td><span class="badge sev-medium">7</span></td><td>Add AI and cloud account governance with usage logging and payment callbacks</td><td>Medium</td><td>Cloud and finance</td><td>Medium against TH-4 and deepfake fraud</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section" id="sec-8-mistakes" data-num="8">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">8</span>
+    <div>
+      <h2>Common Mistakes and Best Practices</h2>
+      <p class="section-intro">Ten concrete blue-team mistakes around this technique, each with symptom, root cause, fix, and prevention, plus the habits that keep detection quality up.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">#</th><th scope="col">Mistake</th><th scope="col">Symptom</th><th scope="col">Root cause</th><th scope="col">Fix and prevention</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">1</td><td>Dismiss T1588 as undetectable</td><td>No detections reference resource development at all</td><td>The PRE platform label is misread as no telemetry exists</td><td>Fix: map downstream effects to detections. Prevent: coverage matrix that includes PRE tactics</td></tr>
+        <tr><td class="mono">2</td><td>Trust signatures blindly</td><td>Signed malware runs without review</td><td>Signing treated as proof of safety</td><td>Fix: inventory signers, alert on unknown ones. Prevent: policy that signature is one signal, never the decision</td></tr>
+        <tr><td class="mono">3</td><td>Hash-only blocking</td><td>New builds of the same malware pass</td><td>Blocklists age out; sellers recompile</td><td>Fix: add behavior and family rules. Prevent: hunt weekly for family traits, not just hashes</td></tr>
+        <tr><td class="mono">4</td><td>Ignore certificate transparency</td><td>Phishing domains found only after user reports</td><td>CT logs not monitored</td><td>Fix: subscribe to a CT stream for brand keywords. Prevent: weekly review of new certificates</td></tr>
+        <tr><td class="mono">5</td><td>Alerts without owners</td><td>Fired detections sit unreviewed for days</td><td>No assigned owner per rule</td><td>Fix: assign every rule an owner and SLA. Prevent: ownership check in the weekly detection review</td></tr>
+        <tr><td class="mono">6</td><td>Intel feeds without workflow</td><td>Reports pile up, nothing changes in the SIEM</td><td>Collection without an apply step</td><td>Fix: every report must produce a hunt or a note. Prevent: measure quarterly which feeds produced detections</td></tr>
+        <tr><td class="mono">7</td><td>Overtuned rules</td><td>Real attacks missed while noise drops</td><td>Suppressions added after every annoyance</td><td>Fix: re-enable and re-tune with data owners. Prevent: track recall on test cases, not only alert volume</td></tr>
+        <tr><td class="mono">8</td><td>Missing log sources</td><td>TH-2, TH-3, and TH-6 rules cannot run</td><td>Proxy, DNS, IDS, or Sysmon not collected</td><td>Fix: audit rule inputs against log coverage. Prevent: log source onboarding checklist tied to detections</td></tr>
+        <tr><td class="mono">9</td><td>Red team alerts treated as noise</td><td>Exercise traffic trains analysts to dismiss real hits</td><td>No marking of authorized testing</td><td>Fix: ticketed exercise windows with explicit rules. Prevent: allowlists with expiry dates, reviewed monthly</td></tr>
+        <tr><td class="mono">10</td><td>No AI usage governance</td><td>Unknown AI service traffic and uploads from corporate hosts; no payment callback rule</td><td>AI adoption outran policy (TH-4)</td><td>Fix: log and proxy categories for AI services, documented allowlist, out-of-band verification for payments. Prevent: quarterly review of AI service usage</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Operating habits</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Rhythm</th><th scope="col">Habits</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Daily</td><td>Review fires of the six TH rules; check CT stream alerts for brand keywords; verify new detections have owners</td></tr>
+        <tr><td>Weekly</td><td>One intel review meeting with apply decisions; hunt one new family or certificate identity; update watchlists with confidence labels</td></tr>
+        <tr><td>Monthly</td><td>Rule health check (volume, failures, drift); allowlist expiry review; test one rule end to end in the lab; feed quality review</td></tr>
+        <tr><td>Quarterly</td><td>Coverage matrix refresh for T1588 sub-techniques; tabletop with a bought-capability scenario; retire rules that never fire and document why</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section" id="sec-9-cheat-sheet" data-num="9">
+  <div class="section-head">
+    <span class="sec-num" aria-hidden="true">9</span>
+    <div>
+      <h2>Cheat Sheet and Quick Reference</h2>
+      <p class="section-intro">Everything important from this page on one screen: facts, top detections, a response checklist, and the links to go deeper.</p>
+    </div>
+  </div>
+  <h3>Key facts</h3>
+  <div class="kv-list">
+    <div class="kv-row"><div class="kv-key">Technique</div><div class="kv-val">T1588 &mdash; Obtain Capabilities (Resource Development, TA0042)</div></div>
+    <div class="kv-row"><div class="kv-key">Core idea</div><div class="kv-val">Attackers buy, download, or steal malware, tools, exploits, certificates, vulnerability knowledge, and AI services before attacking</div></div>
+    <div class="kv-row"><div class="kv-key">Sub-techniques</div><div class="kv-val">Malware, Tool, Code Signing Certificates, Digital Certificates, Exploits, Vulnerabilities, Artificial Intelligence</div></div>
+    <div class="kv-row"><div class="kv-key">Official guidance</div><div class="kv-val">Mitigation M1056 Pre-compromise; detection strategy DET0850 with analytic AN1982 (track newly issued certificates)</div></div>
+    <div class="kv-row"><div class="kv-key">Where detection happens</div><div class="kv-val">Downstream effects: staging infrastructure, first file events, first beacon, certificate logs, intelligence matches</div></div>
+    <div class="kv-row"><div class="kv-key">Best early signal</div><div class="kv-val">Certificate transparency logs for lookalike domains and unknown signer alerts</div></div>
+  </div>
+  <h3>Top detections</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th scope="col">Detection</th><th scope="col">Looks for</th><th scope="col">Threat</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Executable staged in user paths</td><td>Browser or mail writes <code>.exe</code> or <code>.msi</code> into Downloads or temp</td><td class="mono">TH-1</td></tr>
+        <tr><td>Payload from fresh domain</td><td>Executable download from young or risky-TLD domain</td><td class="mono">TH-2</td></tr>
+        <tr><td>Staging watchlist contact</td><td>Endpoint connects to TI-listed seller or staging IP</td><td class="mono">TH-3</td></tr>
+        <tr><td>Console login without MFA</td><td>Cloud console success with MFAUsed No from outside corporate ranges</td><td class="mono">TH-4</td></tr>
+        <tr><td>Watchlisted signer on image load</td><td>Signed binary whose publisher sits on the abused-certificate watchlist</td><td class="mono">TH-5</td></tr>
+        <tr><td>Exploit alert at the edge</td><td>IDS exploit-class alert against an internet-facing appliance, joined to the KEV catalog</td><td class="mono">TH-6</td></tr>
+        <tr><td>CT lookalike alert</td><td>New certificate containing your brand on a fresh domain</td><td class="mono">TH-2</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Response checklist</h3>
+  <ul class="check-list">
+    <li>Pivot the marker (hash, certificate identity, domain) across 90 days of proxy, DNS, EDR, and mail logs.</li>
+    <li>Enrich: malware repository for the hash, registration data for the domain, CT logs for the certificate, KEV catalog for the CVE.</li>
+    <li>Confirm scope: which hosts, users, and mailboxes touched the capability; note first and last seen.</li>
+    <li>Contain: block the domain and hash, isolate affected hosts, revoke sessions for affected users.</li>
+    <li>Eradicate: remove implants and staged files, patch the exploited flaw, rotate exposed credentials and signing material.</li>
+    <li>Recover: restore from offline backups, watch a clean telemetry window, then reopen services in stages.</li>
+    <li>Report and prevent: record the case, update detections and watchlists, share sanitized indicators with your ISAC.</li>
+  </ul>
+  <h3>Official links and related techniques</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h4 class="card-title">Official ATT&amp;CK</h4>
+      <ul>
+        <li><a href="https://attack.mitre.org/techniques/T1588/" rel="noopener">T1588 &mdash; Obtain Capabilities</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/001/" rel="noopener">T1588.001 &mdash; Malware</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/002/" rel="noopener">T1588.002 &mdash; Tool</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/003/" rel="noopener">T1588.003 &mdash; Code Signing Certificates</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/004/" rel="noopener">T1588.004 &mdash; Digital Certificates</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/005/" rel="noopener">T1588.005 &mdash; Exploits</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/006/" rel="noopener">T1588.006 &mdash; Vulnerabilities</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1588/007/" rel="noopener">T1588.007 &mdash; Artificial Intelligence</a></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4 class="card-title">Related techniques and resources</h4>
+      <ul>
+        <li><a href="https://attack.mitre.org/techniques/T1583/" rel="noopener">T1583 &mdash; Establish Infrastructure</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1584/" rel="noopener">T1584 &mdash; Compromise Infrastructure</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1587/" rel="noopener">T1587 &mdash; Develop Capabilities</a></li>
+        <li><a href="https://attack.mitre.org/detect/" rel="noopener">ATT&amp;CK Detection strategies overview</a></li>
+        <li><a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" rel="noopener">CISA Known Exploited Vulnerabilities catalog</a></li>
+        <li><a href="https://github.com/SigmaHQ/sigma" rel="noopener">Sigma rule repository</a></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<script>
+window.SIM_CONFIG = {
+  meta: { width: 960, height: 540 },
+  dwell: 7,
+  nodes: [
+    { id: 'attacker', x: 110, y: 110, label: 'Attacker', sub: 'threat actor', type: 'attacker',
+      info: 'Plans the campaign and decides which capabilities to buy, download, or steal.' },
+    { id: 'market', x: 110, y: 310, label: 'Underground market', sub: 'MaaS and forums', type: 'market',
+      info: 'Criminal marketplace selling malware subscriptions, tools, and stolen certificates for cryptocurrency.' },
+    { id: 'staging', x: 345, y: 110, label: 'Staging server', sub: 'fresh VPS + TLS', type: 'infra',
+      info: 'Rented server that hosts the toolkit. Its new domain and certificate are the first public traces.' },
+    { id: 'lab', x: 345, y: 310, label: 'Sandbox and repos', sub: 'research pipeline', type: 'service',
+      info: 'Sandboxes and malware repositories where tested samples surface as hashes and reports.' },
+    { id: 'victim', x: 545, y: 200, label: 'Target org', sub: 'user + endpoint', type: 'victim',
+      info: 'The target organization. Its telemetry shows the first real contact with the capability.' },
+    { id: 'soc', x: 640, y: 435, label: 'SOC', sub: 'blue team', type: 'defender',
+      info: 'Security operations center. Correlates intelligence with endpoint and network telemetry.' }
+  ],
+  steps: [
+    {
+      title: 'Planning the campaign',
+      caption: 'The attacker lists what the attack needs: a stealer for credentials, a post-exploitation tool, and a valid code signing certificate so files look trusted.',
+      defender: 'Nothing is visible. No packet, file, or account of yours is involved yet.',
+      evidence: [],
+      actors: ['attacker'],
+      flows: [],
+      notes: [{ node: 'attacker', text: 'wishlist: RAT, tool, cert', color: 'danger' }]
+    },
+    {
+      title: 'Buying malware as a service',
+      caption: 'The attacker pays a criminal marketplace for a stealer subscription and receives a builder panel. Groups such as LAPSUS$ used the same commercial stealer families.',
+      defender: 'You still see nothing, but vendors track the family. Its hashes and behavior will reach threat intelligence reports.',
+      evidence: ['TI: MaaS family tracked by vendors'],
+      actors: ['attacker', 'market'],
+      flows: [
+        { from: 'attacker', to: 'market', label: 'buys stealer', color: 'danger', count: 3, dur: 1.6 },
+        { from: 'market', to: 'attacker', label: 'panel access', color: 'warning', count: 2, dur: 1.9 }
+      ],
+      notes: [{ node: 'market', text: 'escrow payment', color: 'warning' }]
+    },
+    {
+      title: 'Buying a stolen certificate',
+      caption: 'The attacker buys a code signing certificate stolen from a small software company. Signing the payload removes a trust warning at the victim.',
+      defender: 'Certificate resale is monitored by intelligence teams. The certificate identity becomes a fixed marker for later hunting.',
+      evidence: ['TI: stolen cert resale noted'],
+      actors: ['attacker', 'market'],
+      flows: [
+        { from: 'attacker', to: 'market', label: 'buys cert', color: 'warning', count: 2, dur: 1.5 },
+        { from: 'market', to: 'attacker', label: 'stolen cert', color: 'warning', count: 2, dur: 1.8 }
+      ],
+      notes: [{ node: 'attacker', text: 'signing key ready', color: 'warning' }]
+    },
+    {
+      title: 'Setting up staging infrastructure',
+      caption: 'The attacker rents a server, uploads the toolkit, and requests a free TLS certificate for a fresh lookalike domain.',
+      defender: 'First real visibility: certificate transparency logs publish the new certificate within minutes of issuance.',
+      evidence: ['CT log: new cert, lookalike domain', 'Passive DNS: domain is 1 day old'],
+      actors: ['attacker', 'staging'],
+      flows: [
+        { from: 'attacker', to: 'staging', label: 'uploads kit', color: 'danger', count: 3, dur: 1.5 }
+      ],
+      notes: [{ node: 'staging', text: 'new TLS cert issued', color: 'accent' }]
+    },
+    {
+      title: 'Testing the capability',
+      caption: 'The attacker runs the signed stealer on a clean virtual machine and confirms the beacon works before any victim is touched.',
+      defender: 'Test samples leak into sandboxes and repositories. A hash now exists that intelligence can match later.',
+      evidence: ['Sandbox detonates new sample', 'Hash visible in repositories'],
+      actors: ['attacker', 'staging', 'lab'],
+      flows: [
+        { from: 'attacker', to: 'staging', label: 'test beacon', color: 'danger', count: 2, dur: 1.4 },
+        { from: 'staging', to: 'lab', label: 'sample leaks', color: 'warning', count: 2, dur: 1.9 }
+      ],
+      notes: [{ node: 'lab', text: 'new hash recorded', color: 'success' }]
+    },
+    {
+      title: 'Delivering to the target',
+      caption: 'The attacker sends phishing mail with a link to the staging server. The payload is correctly signed, so endpoint warnings stay quiet.',
+      defender: 'The mail gateway sees a valid signature but a low-reputation sender. One weak signal appears and is usually not enough to alert alone.',
+      evidence: ['Mail: low-reputation sender domain'],
+      actors: ['staging', 'victim'],
+      flows: [
+        { from: 'staging', to: 'victim', label: 'phishing link', color: 'warning', count: 3, dur: 1.5 }
+      ],
+      notes: [{ node: 'victim', text: 'mail delivered', color: 'warning' }]
+    },
+    {
+      title: 'First beacon from the victim',
+      caption: 'A user opens the lure. The implant calls the staging server over HTTPS and waits for instructions.',
+      defender: 'Proxy and DNS logs now hold a connection to a days-old domain. Paired with the CT alert from step 4, this is a strong signal.',
+      evidence: ['Proxy: contact to days-old domain', 'EDR: signed binary, unknown publisher'],
+      actors: ['victim', 'staging'],
+      flows: [
+        { from: 'victim', to: 'staging', label: 'HTTPS check-in', color: 'danger', count: 3, dur: 1.3 }
+      ],
+      notes: [{ node: 'staging', text: 'beacon received', color: 'danger' }]
+    },
+    {
+      title: 'The SOC joins the dots',
+      caption: 'Threat intelligence matches the hash, the certificate, and the domain. The SOC pivots on the certificate identity and finds the infected host within a day.',
+      defender: 'Each event alone looked weak. Correlation across intelligence and telemetry turns the fragments into a confirmed case.',
+      evidence: ['Case opened: hunt on cert identity', 'Host isolated, credentials reset'],
+      actors: ['soc', 'lab', 'victim'],
+      flows: [
+        { from: 'lab', to: 'soc', label: 'intel match', color: 'accent', count: 2, dur: 1.6 },
+        { from: 'victim', to: 'soc', label: 'telemetry hits', color: 'accent', count: 2, dur: 1.9 }
+      ],
+      notes: [{ node: 'soc', text: 'hunt: cert identity', color: 'accent' }]
+    }
+  ]
+};
+</script>
+
+  </main>
+</div>
+</div>
+
+<div class="toc-overlay" id="toc-overlay" role="dialog" aria-modal="true" aria-label="Table of contents">
+  <div class="overlay-backdrop" id="overlay-backdrop"></div>
+  <div class="overlay-panel">
+    <div class="overlay-head">
+      <p class="toc-title">Contents</p>
+      <button class="sim-btn" id="overlay-close" type="button">Close</button>
+    </div>
+    <div id="overlay-toc"></div>
+  </div>
+</div>
+
+<button class="fab fab-toc" id="btn-toc" type="button" aria-haspopup="dialog" aria-controls="toc-overlay" aria-expanded="false">Contents</button>
+<button class="fab fab-top" id="btn-top" type="button" aria-label="Back to top">&#8593; Top</button>
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var reduceMotion = false;
+  try { reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ============ Theme helper (the site shell owns the toggle UI) ============ */
+  function applyTheme(t) {
+    if (t !== 'light' && t !== 'dark') { return; }
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('atk-theme', t); } catch (e) {}
+    document.dispatchEvent(new CustomEvent('atk:theme', { detail: t }));
+  }
+  window.__atkSetTheme = applyTheme;
+  window.addEventListener('storage', function (e) {
+    if (e.key === 'atk-theme' && (e.newValue === 'light' || e.newValue === 'dark')) {
+      document.documentElement.setAttribute('data-theme', e.newValue);
+      document.dispatchEvent(new CustomEvent('atk:theme', { detail: e.newValue }));
+    }
+  });
+  try {
+    var schemeMq = window.matchMedia('(prefers-color-scheme: light)');
+    var onSchemeChange = function () {
+      var saved = null;
+      try { saved = localStorage.getItem('atk-theme'); } catch (e) {}
+      if (saved !== 'light' && saved !== 'dark') {
+        var t = schemeMq.matches ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+        document.dispatchEvent(new CustomEvent('atk:theme', { detail: t }));
+      }
+    };
+    if (schemeMq.addEventListener) { schemeMq.addEventListener('change', onSchemeChange); }
+    else if (schemeMq.addListener) { schemeMq.addListener(onSchemeChange); }
+  } catch (e) {}
+
+  /* ============ Reading progress + back to top ============ */
+  var progress = $('#progress');
+  var progressFill = progress ? $('.progress-fill', progress) : null;
+  var topBtn = $('#btn-top');
+  var scrollTicking = false;
+  function onScroll() {
+    if (scrollTicking) { return; }
+    scrollTicking = true;
+    window.requestAnimationFrame(function () {
+      scrollTicking = false;
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      var p = max > 0 ? Math.min(1, Math.max(0, (window.pageYOffset || h.scrollTop || 0) / max)) : 0;
+      if (progressFill) {
+        progressFill.style.width = (p * 100).toFixed(2) + '%';
+        progress.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+      }
+      if (topBtn) {
+        if ((window.pageYOffset || 0) > 700) { topBtn.classList.add('show'); }
+        else { topBtn.classList.remove('show'); }
+      }
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  onScroll();
+  if (topBtn) {
+    topBtn.addEventListener('click', function () {
+      window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    });
+  }
+
+  /* ============ Table of contents: rebuild from real headings ============ */
+  var tocItems = [];
+  function buildToc() {
+    var main = $('#main-content');
+    var list = $('#toc-list');
+    if (!main || !list) { return; }
+    tocItems = [];
+    $$('section.section[id]', main).forEach(function (sec) {
+      var h2 = $('h2', sec);
+      if (!h2) { return; }
+      tocItems.push({ href: '#' + sec.id, num: sec.getAttribute('data-num') || '', text: h2.textContent.trim(), sub: false });
+      if (sec.id === 'sec-5-detection') {
+        $$('h3[id]', sec).forEach(function (h3) {
+          var clone = h3.cloneNode(true);
+          var sn = clone.querySelector('.sub-num');
+          if (sn) { clone.removeChild(sn); }
+          tocItems.push({ href: '#' + h3.id, num: h3.getAttribute('data-num') || '', text: clone.textContent.trim(), sub: true });
+        });
+      }
+    });
+    var htmlStr = '';
+    tocItems.forEach(function (it, idx) {
+      if (it.sub) { return; }
+      htmlStr += '<li><a href="' + it.href + '"><span class="toc-num">' + esc(it.num) + '</span>' + esc(it.text) + '</a>';
+      var subs = [];
+      var k = idx + 1;
+      while (k < tocItems.length && tocItems[k].sub) { subs.push(tocItems[k]); k++; }
+      if (subs.length) {
+        htmlStr += '<ol class="toc-sub">';
+        subs.forEach(function (s2) {
+          htmlStr += '<li><a href="' + s2.href + '"><span class="toc-num">' + esc(s2.num) + '</span>' + esc(s2.text) + '</a></li>';
+        });
+        htmlStr += '</ol>';
+      }
+      htmlStr += '</li>';
+    });
+    list.innerHTML = htmlStr;
+    var overlayList = $('#overlay-toc');
+    if (overlayList) { overlayList.innerHTML = '<ol class="toc-list">' + htmlStr + '</ol>'; }
+  }
+  buildToc();
+
+  /* Active TOC link while scrolling */
+  var tocLinkMap = {};
+  function refreshTocLinks() {
+    tocLinkMap = {};
+    $$('#toc-list a, #overlay-toc a').forEach(function (a) {
+      var href = a.getAttribute('href') || '';
+      if (!tocLinkMap[href]) { tocLinkMap[href] = []; }
+      tocLinkMap[href].push(a);
+    });
+  }
+  refreshTocLinks();
+  function setActiveToc() {
+    var pos = (window.pageYOffset || 0) + 160;
+    var current = tocItems.length ? tocItems[0].href : null;
+    tocItems.forEach(function (it) {
+      var el = document.getElementById(it.href.slice(1));
+      if (el && el.offsetTop <= pos) { current = it.href; }
+    });
+    Object.keys(tocLinkMap).forEach(function (href) {
+      (tocLinkMap[href] || []).forEach(function (a) {
+        if (href === current) { a.classList.add('active'); a.setAttribute('aria-current', 'true'); }
+        else { a.classList.remove('active'); a.removeAttribute('aria-current'); }
+      });
+    });
+  }
+  var tocTicking = false;
+  window.addEventListener('scroll', function () {
+    if (tocTicking) { return; }
+    tocTicking = true;
+    window.requestAnimationFrame(function () { tocTicking = false; setActiveToc(); });
+  }, { passive: true });
+  setActiveToc();
+
+  /* ============ Mobile contents overlay ============ */
+  var overlay = $('#toc-overlay');
+  var tocOpenBtn = $('#btn-toc');
+  var tocCloseBtn = $('#overlay-close');
+  var lastFocused = null;
+  function openOverlay() {
+    if (!overlay) { return; }
+    lastFocused = document.activeElement;
+    overlay.classList.add('open');
+    if (tocOpenBtn) { tocOpenBtn.setAttribute('aria-expanded', 'true'); }
+    document.body.style.overflow = 'hidden';
+    var first = $('#overlay-toc a');
+    if (first) { first.focus(); }
+  }
+  function closeOverlay() {
+    if (!overlay) { return; }
+    overlay.classList.remove('open');
+    if (tocOpenBtn) { tocOpenBtn.setAttribute('aria-expanded', 'false'); }
+    document.body.style.overflow = '';
+    if (lastFocused && lastFocused.focus) { lastFocused.focus(); }
+  }
+  if (tocOpenBtn) { tocOpenBtn.addEventListener('click', openOverlay); }
+  if (tocCloseBtn) { tocCloseBtn.addEventListener('click', closeOverlay); }
+  var backdrop = $('#overlay-backdrop');
+  if (backdrop) { backdrop.addEventListener('click', closeOverlay); }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && overlay && overlay.classList.contains('open')) { closeOverlay(); }
+  });
+  if (overlay) {
+    overlay.addEventListener('click', function (e) {
+      var a = e.target.closest ? e.target.closest('#overlay-toc a') : null;
+      if (a) { closeOverlay(); }
+    });
+    overlay.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab') { return; }
+      var focusables = $$('a[href], button', overlay).filter(function (el) { return el.offsetParent !== null; });
+      if (!focusables.length) { return; }
+      var first = focusables[0];
+      var last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+  }
+
+  /* ============ Copy buttons ============ */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.copy-btn') : null;
+    if (!btn) { return; }
+    var block = btn.closest('.code-block');
+    var pre = block ? $('pre', block) : null;
+    if (!pre) { return; }
+    var text = pre.innerText || pre.textContent || '';
+    function done() {
+      btn.classList.add('ok');
+      btn.textContent = 'Copied';
+      window.setTimeout(function () {
+        btn.classList.remove('ok');
+        btn.textContent = 'Copy';
+      }, 1600);
+    }
+    function fallbackCopy() {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        done();
+      } catch (err) {}
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+  });
+
+  /* ============ Simulation engine ============ */
+  var TOKENS = ['bg', 'surface', 'surface-2', 'elevated', 'text', 'muted', 'border', 'border-strong',
+    'accent', 'accent-2', 'violet', 'success', 'warning', 'danger', 'high', 'low'];
+  var TYPE_VAR = {
+    attacker: 'danger', victim: 'muted', infra: 'violet', service: 'accent-2',
+    defender: 'accent', market: 'warning', tool: 'warning', cloud: 'accent-2', identity: 'violet'
+  };
+
+  function hexToRgba(hex, a) {
+    var h = String(hex).replace('#', '');
+    if (h.length === 3) { h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; }
+    var r = parseInt(h.slice(0, 2), 16) || 0;
+    var g = parseInt(h.slice(2, 4), 16) || 0;
+    var b = parseInt(h.slice(4, 6), 16) || 150;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
+
+  function SimEngine(canvas, cfg) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.cfg = cfg;
+    this.LW = (cfg.meta && cfg.meta.width) || 960;
+    this.LH = (cfg.meta && cfg.meta.height) || 540;
+    this.step = 0;
+    this.playing = false;
+    this.speed = 1;
+    this.stepTime = 0;
+    this.lastTs = 0;
+    this.dirty = true;
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.scale = 1;
+    this.colors = {};
+    this.nodeById = {};
+    (cfg.nodes || []).forEach(function (n) { this.nodeById[n.id] = n; }, this);
+    this.readColors();
+    this.bindUi();
+    this.buildActors();
+    this.buildChips();
+    this.setStep(0);
+    var self = this;
+    document.addEventListener('atk:theme', function () { self.readColors(); self.dirty = true; });
+    window.addEventListener('resize', function () { self.resize(); });
+    this.resize();
+    var loop = function (ts) { self.frame(ts); window.requestAnimationFrame(loop); };
+    window.requestAnimationFrame(loop);
+  }
+
+  SimEngine.prototype.readColors = function () {
+    var cs = getComputedStyle(document.documentElement);
+    var out = {};
+    TOKENS.forEach(function (t) {
+      var v = cs.getPropertyValue('--' + t).trim() || '#888888';
+      out[t] = v;
+      out[t + '_r'] = hexToRgba(v, 1);
+    });
+    this.colors = out;
+  };
+
+  SimEngine.prototype.cvar = function (name, alpha) {
+    var v = this.colors[name] || '#888888';
+    return alpha === undefined ? v : hexToRgba(v, alpha);
+  };
+
+  SimEngine.prototype.typeColor = function (type) {
+    return this.cvar(TYPE_VAR[type] || 'muted');
+  };
+
+  SimEngine.prototype.resize = function () {
+    var wrap = this.canvas.parentNode;
+    var w = wrap.clientWidth || 960;
+    this.canvas.width = Math.round(w * this.dpr);
+    this.canvas.height = Math.round(w * (this.LH / this.LW) * this.dpr);
+    this.scale = this.canvas.width / this.LW;
+    this.dirty = true;
+  };
+
+  SimEngine.prototype.currentStep = function () {
+    return (this.cfg.steps || [])[this.step] || { title: '', caption: '', defender: '', evidence: [], flows: [], actors: [], notes: [] };
+  };
+
+  SimEngine.prototype.bindUi = function () {
+    var self = this;
+    this.ui = {
+      title: $('#sim-step-title'),
+      caption: $('#sim-step-caption'),
+      defender: $('#sim-step-defender'),
+      evidence: $('#sim-evidence'),
+      status: $('#sim-status'),
+      play: $('#sim-play'),
+      restart: $('#sim-restart'),
+      prev: $('#sim-prev'),
+      next: $('#sim-next'),
+      speed: $('#sim-speed'),
+      chips: $('#sim-chips'),
+      tooltip: $('#sim-tooltip')
+    };
+    if (this.ui.play) {
+      this.ui.play.addEventListener('click', function () {
+        self.playing = !self.playing;
+        if (self.playing && self.step >= (self.cfg.steps || []).length - 1 && self.stepTime > 0.4) { self.setStep(0); }
+        self.syncPlay();
+      });
+    }
+    if (this.ui.restart) {
+      this.ui.restart.addEventListener('click', function () { self.setStep(0); self.syncPlay(); });
+    }
+    if (this.ui.prev) { this.ui.prev.addEventListener('click', function () { self.jump(self.step - 1); }); }
+    if (this.ui.next) { this.ui.next.addEventListener('click', function () { self.jump(self.step + 1); }); }
+    if (this.ui.speed) {
+      this.ui.speed.addEventListener('change', function () {
+        self.speed = parseFloat(self.ui.speed.value) || 1;
+      });
+    }
+    this.canvas.setAttribute('tabindex', '0');
+    this.canvas.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') { self.jump(self.step + 1); e.preventDefault(); }
+      if (e.key === 'ArrowLeft') { self.jump(self.step - 1); e.preventDefault(); }
+      if (e.key === ' ' || e.key === 'Enter') {
+        if (self.ui.play) { self.ui.play.click(); }
+        e.preventDefault();
+      }
+    });
+    this.canvas.addEventListener('mousemove', function (e) { self.onHover(e); });
+    this.canvas.addEventListener('mouseleave', function () { self.hideTooltip(); });
+    this.canvas.addEventListener('click', function (e) {
+      var n = self.nodeAt(e);
+      if (n) { self.showTooltip(n, true); } else { self.hideTooltip(); }
+    });
+  };
+
+  SimEngine.prototype.syncPlay = function () {
+    if (this.ui.play) {
+      this.ui.play.textContent = this.playing ? 'Pause' : 'Play';
+      this.ui.play.setAttribute('aria-pressed', this.playing ? 'true' : 'false');
+    }
+  };
+
+  SimEngine.prototype.buildChips = function () {
+    var self = this;
+    if (!this.ui.chips) { return; }
+    this.ui.chips.innerHTML = '';
+    (this.cfg.steps || []).forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sim-chip';
+      b.textContent = String(i + 1);
+      b.setAttribute('aria-label', 'Go to step ' + (i + 1) + ': ' + s.title);
+      b.addEventListener('click', function () { self.jump(i); });
+      self.ui.chips.appendChild(b);
+    });
+  };
+
+  SimEngine.prototype.buildActors = function () {
+    var wrap = $('#sim-actors');
+    if (!wrap) { return; }
+    var htmlStr = '';
+    (this.cfg.nodes || []).forEach(function (n) {
+      htmlStr += '<div class="actor-card"><span class="actor-name">' + esc(n.label) + '</span>' +
+        '<span class="actor-role">' + esc(n.type) + '</span>' +
+        '<span class="actor-info">' + esc(n.info || '') + '</span></div>';
+    });
+    wrap.innerHTML = htmlStr;
+  };
+
+  SimEngine.prototype.jump = function (i) {
+    var n = (this.cfg.steps || []).length;
+    if (!n) { return; }
+    this.setStep(Math.max(0, Math.min(n - 1, i)));
+  };
+
+  SimEngine.prototype.setStep = function (i) {
+    this.step = i;
+    this.stepTime = 0;
+    this.dirty = true;
+    var s = this.currentStep();
+    var total = (this.cfg.steps || []).length;
+    if (this.ui.title) { this.ui.title.textContent = 'Step ' + (i + 1) + ' of ' + total + ': ' + s.title; }
+    if (this.ui.caption) { this.ui.caption.textContent = s.caption || ''; }
+    if (this.ui.defender) { this.ui.defender.textContent = s.defender || ''; }
+    if (this.ui.evidence) {
+      this.ui.evidence.innerHTML = (s.evidence || []).map(function (t) {
+        return '<li>' + esc(t) + '</li>';
+      }).join('');
+    }
+    if (this.ui.status) {
+      this.ui.status.textContent = 'Step ' + (i + 1) + ' / ' + total + (reduceMotion ? ' (reduced motion: static diagrams)' : '');
+    }
+    if (this.ui.chips) {
+      $$('.sim-chip', this.ui.chips).forEach(function (c, k) {
+        if (k === i) { c.classList.add('active'); c.setAttribute('aria-pressed', 'true'); }
+        else { c.classList.remove('active'); c.removeAttribute('aria-pressed'); }
+      });
+    }
+    this.canvas.setAttribute('aria-label', 'Attack simulation, step ' + (i + 1) + ' of ' + total + '. ' + (s.title || '') + '. ' + (s.caption || ''));
+  };
+
+  SimEngine.prototype.frame = function (ts) {
+    var dt = this.lastTs ? (ts - this.lastTs) / 1000 : 0;
+    this.lastTs = ts;
+    if (this.playing) {
+      this.stepTime += dt * this.speed;
+      var dwell = this.cfg.dwell || 7;
+      if (this.stepTime > dwell) {
+        if (this.step < (this.cfg.steps || []).length - 1) { this.setStep(this.step + 1); }
+        else { this.playing = false; this.syncPlay(); this.stepTime = 0; this.dirty = true; }
+      }
+      this.dirty = true;
+    }
+    if (this.dirty) {
+      this.draw();
+      this.dirty = false;
+    }
+  };
+
+  SimEngine.prototype.edgePoint = function (a, b) {
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var hw = 80, hh = 36;
+    if (dx === 0 && dy === 0) { return { x: a.x, y: a.y }; }
+    var sx = dx !== 0 ? (hw / Math.abs(dx)) : Infinity;
+    var sy = dy !== 0 ? (hh / Math.abs(dy)) : Infinity;
+    var k = Math.min(sx, sy);
+    return { x: a.x + dx * k, y: a.y + dy * k };
+  };
+
+  SimEngine.prototype.roundRect = function (x, y, w, h, r) {
+    var ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
+
+  SimEngine.prototype.wrapText = function (text, maxChars) {
+    var words = String(text).split(/\s+/);
+    var lines = [];
+    var line = '';
+    words.forEach(function (w) {
+      if ((line + ' ' + w).trim().length > maxChars) {
+        if (line) { lines.push(line.trim()); }
+        line = w;
+      } else {
+        line = (line + ' ' + w).trim();
+      }
+    });
+    if (line) { lines.push(line.trim()); }
+    return lines.slice(0, 4);
+  };
+
+  SimEngine.prototype.draw = function () {
+    var ctx = this.ctx;
+    var s = this.currentStep();
+    ctx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    /* background */
+    ctx.fillStyle = this.cvar('bg');
+    ctx.fillRect(0, 0, this.LW, this.LH);
+    ctx.fillStyle = this.cvar('border', 0.32);
+    for (var gy = 24; gy < this.LH; gy += 34) {
+      for (var gx = 24; gx < this.LW; gx += 34) {
+        ctx.fillRect(gx, gy, 1.6, 1.6);
+      }
+    }
+    /* step banner */
+    ctx.font = '700 12px ' + 'ui-monospace, Menlo, monospace';
+    var banner = 'STEP ' + (this.step + 1) + '/' + (this.cfg.steps || []).length;
+    var tw = ctx.measureText(banner).width;
+    ctx.fillStyle = this.cvar('accent', 0.14);
+    this.roundRect(16, 14, tw + 22, 24, 7);
+    ctx.fill();
+    ctx.strokeStyle = this.cvar('accent', 0.5);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = this.cvar('accent');
+    ctx.textBaseline = 'middle';
+    ctx.fillText(banner, 27, 27);
+    ctx.font = '650 13px ' + '-apple-system, Segoe UI, Roboto, sans-serif';
+    ctx.fillStyle = this.cvar('text');
+    ctx.textAlign = 'left';
+    ctx.fillText(String(s.title || '').slice(0, 52), 16 + tw + 34, 27);
+
+    /* soc panel */
+    var px = this.LW - 224, py = 14, pw = 208, ph = 118;
+    ctx.fillStyle = this.cvar('surface', 0.94);
+    ctx.strokeStyle = this.cvar('border-strong');
+    this.roundRect(px, py, pw, ph, 10);
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.font = '700 9.5px ui-monospace, Menlo, monospace';
+    ctx.fillStyle = this.cvar('accent');
+    ctx.fillText('SOC / DEFENDER VIEW', px + 12, py + 14);
+    var ev = (s.evidence || []).slice(0, 3);
+    ctx.font = '10px ui-monospace, Menlo, monospace';
+    ev.forEach(function (t, i) {
+      var lines = this.wrapText(t, 30);
+      var yy = py + 30 + i * 28;
+      ctx.fillStyle = this.cvar('success');
+      ctx.fillRect(px + 12, yy - 3, 5, 5);
+      ctx.fillStyle = this.cvar('muted');
+      lines.slice(0, 2).forEach(function (ln, li) {
+        ctx.fillText(ln, px + 23, yy + li * 12);
+      });
+    }, this);
+    if (!ev.length) {
+      ctx.fillStyle = this.cvar('muted');
+      ctx.fillText('No visibility yet at this step', px + 12, py + 34);
+    }
+
+    /* legend */
+    var legend = [
+      ['danger', 'attacker action'],
+      ['warning', 'capability / payload'],
+      ['accent', 'defender visibility']
+    ];
+    var lx = 18, ly = this.LH - 18;
+    ctx.font = '10px ui-monospace, Menlo, monospace';
+    legend.forEach(function (L, i) {
+      var x = lx + i * 172;
+      ctx.fillStyle = this.cvar(L[0]);
+      ctx.beginPath();
+      ctx.arc(x, ly, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = this.cvar('muted');
+      ctx.fillText(L[1], x + 9, ly + 1);
+    }, this);
+
+    /* links + packets */
+    var self = this;
+    (s.flows || []).forEach(function (f) {
+      var a = self.nodeById[f.from];
+      var b = self.nodeById[f.to];
+      if (!a || !b) { return; }
+      var p1 = self.edgePoint(a, b);
+      var p2 = self.edgePoint(b, a);
+      var col = TYPE_VAR[f.color] || TYPE_VAR.attacker;
+      var cv = self.cvar(col);
+      ctx.strokeStyle = self.cvar(col, self.playing ? 0.55 : 0.8);
+      ctx.lineWidth = 1.6;
+      if (self.playing && !reduceMotion) {
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        var dur = f.dur || 1.7;
+        var count = f.count || 2;
+        for (var c = 0; c < count; c++) {
+          var t = (self.stepTime / dur + c / count) % 1;
+          var x = p1.x + (p2.x - p1.x) * t;
+          var y = p1.y + (p2.y - p1.y) * t;
+          var fade = Math.sin(Math.PI * t);
+          ctx.fillStyle = self.cvar(col, 0.25 * fade);
+          ctx.beginPath();
+          ctx.arc(x, y, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = self.cvar(col, 0.95);
+          ctx.beginPath();
+          ctx.arc(x, y, 3.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+        var ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+        ctx.fillStyle = self.cvar(col, 0.9);
+        ctx.beginPath();
+        ctx.moveTo(p2.x, p2.y);
+        ctx.lineTo(p2.x - 10 * Math.cos(ang - 0.42), p2.y - 10 * Math.sin(ang - 0.42));
+        ctx.lineTo(p2.x - 10 * Math.cos(ang + 0.42), p2.y - 10 * Math.sin(ang + 0.42));
+        ctx.closePath();
+        ctx.fill();
+      }
+      if (f.label) {
+        ctx.font = '10.5px ui-monospace, Menlo, monospace';
+        var mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2 - 8;
+        var wlab = ctx.measureText(f.label).width;
+        ctx.fillStyle = self.cvar('bg', 0.85);
+        self.roundRect(mx - wlab / 2 - 5, my - 9, wlab + 10, 17, 5);
+        ctx.fill();
+        ctx.fillStyle = self.cvar(col);
+        ctx.fillText(f.label, mx - wlab / 2, my + 1);
+      }
+    });
+
+    /* evidence notes near nodes */
+    (s.notes || []).forEach(function (n) {
+      var node = self.nodeById[n.node];
+      if (!node) { return; }
+      ctx.font = '10.5px ui-monospace, Menlo, monospace';
+      var lines = self.wrapText(n.text, 26);
+      var wmax = 0;
+      lines.forEach(function (ln) { wmax = Math.max(wmax, ctx.measureText(ln).width); });
+      var col = TYPE_VAR[n.color] || TYPE_VAR.infra;
+      var bx = node.x - wmax / 2 - 8;
+      var by = node.y + 42;
+      ctx.fillStyle = self.cvar('surface-2', 0.96);
+      ctx.strokeStyle = self.cvar(col, 0.75);
+      self.roundRect(bx, by, wmax + 16, 14 + lines.length * 13, 7);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = self.cvar(col);
+      lines.forEach(function (ln, li) {
+        ctx.fillText(ln, bx + 8, by + 14 + li * 13);
+      });
+    });
+
+    /* nodes */
+    var self2 = this;
+    (this.cfg.nodes || []).forEach(function (n) {
+      var active = (s.actors || []).indexOf(n.id) !== -1;
+      var col = self2.typeColor(n.type);
+      var w = 160, h = 62;
+      var x = n.x - w / 2, y = n.y - h / 2;
+      if (active) {
+        ctx.save();
+        ctx.shadowColor = self2.cvar(TYPE_VAR[n.type] || 'muted', 0.55);
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = self2.cvar('surface-2');
+        self2.roundRect(x - 3, y - 3, w + 6, h + 6, 15);
+        ctx.fill();
+        ctx.restore();
+        ctx.strokeStyle = self2.cvar(TYPE_VAR[n.type] || 'muted', 0.95);
+        ctx.lineWidth = 2;
+        self2.roundRect(x - 3, y - 3, w + 6, h + 6, 15);
+        ctx.stroke();
+      }
+      ctx.fillStyle = self2.cvar('surface');
+      ctx.strokeStyle = self2.cvar(TYPE_VAR[n.type] || 'muted', 0.75);
+      ctx.lineWidth = 1.4;
+      self2.roundRect(x, y, w, h, 13);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = self2.cvar(TYPE_VAR[n.type] || 'muted', 0.16);
+      self2.roundRect(x + 9, y + 15, 10, 10, 3);
+      ctx.fill();
+      ctx.font = '700 12.5px ' + '-apple-system, Segoe UI, Roboto, sans-serif';
+      ctx.fillStyle = self2.cvar('text');
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(n.label).slice(0, 20), x + 27, y + 21);
+      ctx.font = '10px ui-monospace, Menlo, monospace';
+      ctx.fillStyle = self2.cvar('muted');
+      ctx.fillText(String(n.sub || '').slice(0, 26), x + 27, y + 41);
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'start';
+    });
+  };
+
+  SimEngine.prototype.nodeAt = function (e) {
+    var rect = this.canvas.getBoundingClientRect();
+    var x = (e.clientX - rect.left) * (this.LW / rect.width);
+    var y = (e.clientY - rect.top) * (this.LH / rect.height);
+    var nodes = this.cfg.nodes || [];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (x >= n.x - 84 && x <= n.x + 84 && y >= n.y - 36 && y <= n.y + 52) { return n; }
+    }
+    return null;
+  };
+
+  SimEngine.prototype.onHover = function (e) {
+    var n = this.nodeAt(e);
+    if (n) { this.showTooltip(n, false); } else { this.hideTooltip(); }
+  };
+
+  SimEngine.prototype.showTooltip = function (n, pin) {
+    var tip = this.ui.tooltip;
+    if (!tip) { return; }
+    var rect = this.canvas.getBoundingClientRect();
+    var left = (n.x + 90) * (rect.width / this.LW);
+    var top = (n.y - 20) * (rect.height / this.LH);
+    tip.innerHTML = '<strong>' + esc(n.label) + '</strong>' + esc(n.info || '');
+    tip.hidden = false;
+    tip.style.left = Math.min(left, rect.width - 260) + 'px';
+    tip.style.top = Math.max(4, Math.min(top, rect.height - 90)) + 'px';
+    this.pinnedNode = pin ? n : this.pinnedNode;
+  };
+
+  SimEngine.prototype.hideTooltip = function () {
+    if (this.ui.tooltip) { this.ui.tooltip.hidden = true; }
+    this.pinnedNode = null;
+  };
+
+  /* ============ Boot ============ */
+  function boot() {
+    var canvas = $('#sim-canvas');
+    var cfg = window.SIM_CONFIG;
+    if (!canvas || !cfg) { return; }
+    try {
+      var engine = new SimEngine(canvas, cfg);
+      window.__sim = engine;
+    } catch (e) {
+      if (window.console && console.warn) { console.warn('Simulation failed to start:', e); }
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+</script>
+</body>
+</html>
