@@ -1,0 +1,2876 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1529 - System Shutdown/Reboot · Detection Engineering Guide</title>
+<meta name="description" content="Beginner-friendly detection guide for MITRE ATT&amp;CK T1529 (System Shutdown/Reboot): attacker view, SOC view, Sigma rules, Splunk SPL, mitigations and a real case study.">
+<script>(function(){try{var t=null;try{t=localStorage.getItem("atk-theme")}catch(e){}if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})();</script>
+<style>
+/* ============================================================
+   Detection Engineering Guide — shared design system
+   Dark + light themes, layout, components. No external assets.
+   ============================================================ */
+
+:root {
+  --bg: #0b0f1a;
+  --surface: #121a2e;
+  --surface-2: #172138;
+  --elevated: #1a2542;
+  --text: #e7edf8;
+  --muted: #9aa8c0;
+  --border: #24314e;
+  --border-strong: #2f4066;
+  --accent: #4f8cff;
+  --accent-2: #22d3ee;
+  --violet: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --high: #fb923c;
+  --low: #4ade80;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --radius-card: 14px;
+  --radius-ctl: 9px;
+  --shadow-soft: 0 10px 30px rgba(2, 6, 18, 0.35);
+  --max-w: 1280px;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f3f6fc;
+  --surface: #ffffff;
+  --surface-2: #f5f8ff;
+  --elevated: #e9eefa;
+  --text: #182238;
+  --muted: #5a6a85;
+  --border: #d9e2f2;
+  --border-strong: #c2d0ea;
+  --accent: #2f6fe4;
+  --accent-2: #0891b2;
+  --violet: #7c5ce0;
+  --success: #0d9e6e;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --high: #c2410c;
+  --low: #15803d;
+  --shadow-soft: 0 10px 30px rgba(24, 34, 56, 0.10);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 96px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16.5px;
+  line-height: 1.65;
+  overflow-x: clip;
+}
+
+img, canvas { max-width: 100%; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+p, li, dd, dt { overflow-wrap: break-word; }
+p { max-width: 78ch; }
+
+h1, h2, h3, h4 {
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.5em;
+  font-weight: 750;
+  text-wrap: balance;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:where(p, li, td, th, dd, h3, h4) > code:not(pre code) {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.08em 0.4em;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+  overflow: hidden; white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px; top: -48px;
+  z-index: 200;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 0 0 10px 10px;
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 0; text-decoration: none; }
+
+/* ---------- progress bar ---------- */
+
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 90;
+  background: transparent;
+  pointer-events: none;
+}
+#progressFill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.08s linear;
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(900px 320px at 12% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    radial-gradient(700px 300px at 88% -20%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 70%),
+    linear-gradient(color-mix(in srgb, var(--surface) 55%, var(--bg)), var(--bg));
+}
+.hero-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 44px 24px 36px;
+}
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 14px;
+}
+.page-title {
+  font-size: clamp(1.8rem, 3.6vw, 2.65rem);
+  margin: 0 0 14px;
+  max-width: 22ch;
+}
+.tech-id {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62em;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 12px;
+  padding: 0.08em 0.5em;
+  margin-right: 0.45em;
+  vertical-align: 0.18em;
+  white-space: nowrap;
+}
+.hero-intro {
+  color: var(--muted);
+  font-size: 1.06rem;
+  max-width: 68ch;
+  margin: 0 0 20px;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 24px;
+}
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+.chip b, .chip strong { color: var(--text); font-weight: 600; }
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-soft);
+}
+.fact-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.fact-value { font-weight: 700; font-size: 1.02rem; line-height: 1.35; }
+.fact-sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+
+/* ---------- layout: sticky TOC + main ---------- */
+
+.layout {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 40px 24px 110px;
+  display: grid;
+  grid-template-columns: 262px minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.sidebar { position: relative; }
+.toc-card {
+  position: sticky;
+  top: 28px;
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px 12px;
+  scrollbar-width: thin;
+}
+.toc-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  padding: 0 10px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-list li { margin: 2px 0; }
+.toc-list a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  box-shadow: inset 3px 0 0 transparent;
+}
+.toc-list a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.toc-list a.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.toc-list li.sub a { padding-left: 22px; font-size: 0.84rem; }
+.content { min-width: 0; }
+
+/* ---------- sections ---------- */
+
+.sec { margin-top: 64px; }
+.content > .sec:first-child { margin-top: 0; }
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.sec-num {
+  flex: none;
+  min-width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.sec-head h2 {
+  font-size: clamp(1.45rem, 2.4vw, 1.85rem);
+  margin: 0;
+}
+.sec-intro {
+  color: var(--muted);
+  margin: 2px 0 22px 56px;
+  max-width: 74ch;
+}
+.sec h3 {
+  font-size: 1.16rem;
+  margin: 30px 0 12px;
+  scroll-margin-top: 92px;
+}
+.sec h4 { font-size: 1rem; margin: 20px 0 8px; }
+
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
+.reveal.in { opacity: 1; transform: none; }
+
+/* ---------- cards & grids ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-soft);
+}
+.card > h3:first-child, .card > h4:first-child { margin-top: 0; }
+.card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+.card-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+  margin: 0 0 8px;
+}
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.grid-2 > *, .grid-3 > * { min-width: 0; }
+
+.kv-list { margin: 0; display: grid; gap: 0; }
+.kv-list > div {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.kv-list > div:last-child { border-bottom: 0; }
+.kv-list dt {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding-top: 2px;
+}
+.kv-list dd { margin: 0; font-size: 0.95rem; }
+/* ---------- callouts ---------- */
+
+.callout {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  padding: 13px 16px;
+  margin: 14px 0;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .callout-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+  color: var(--accent);
+}
+.callout.warning { border-left-color: var(--warning); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); }
+.callout.warning .callout-label { color: var(--warning); }
+.callout.good { border-left-color: var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); }
+.callout.good .callout-label { color: var(--success); }
+.callout.danger { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+.callout.danger .callout-label { color: var(--danger); }
+.callout.note { border-left-color: var(--violet); background: color-mix(in srgb, var(--violet) 8%, var(--surface)); }
+.callout.note .callout-label { color: var(--violet); }
+
+/* ---------- badges ---------- */
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.badge.sev-critical { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.badge.sev-high { color: var(--high); border-color: color-mix(in srgb, var(--high) 55%, transparent); background: color-mix(in srgb, var(--high) 12%, transparent); }
+.badge.sev-medium { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.badge.sev-low { color: var(--low); border-color: color-mix(in srgb, var(--low) 55%, transparent); background: color-mix(in srgb, var(--low) 12%, transparent); }
+.badge.cat { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 50%, transparent); background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
+.badge.ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 50%, transparent); background: color-mix(in srgb, var(--success) 10%, transparent); }
+
+/* ---------- tables ---------- */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  margin: 14px 0;
+}
+.table-wrap table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.table-wrap.wide table { min-width: 780px; }
+.table-wrap th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: var(--surface-2);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table-wrap td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.table-wrap tbody tr:last-child td { border-bottom: 0; }
+.table-wrap tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+
+/* ---------- code blocks ---------- */
+
+.code-block {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--elevated);
+  border-bottom: 1px solid var(--border);
+}
+.code-lang {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.code-block pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  scrollbar-width: thin;
+}
+.code-block pre code { white-space: pre; }
+
+/* ---------- buttons & controls ---------- */
+
+.btn, .step-chip {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+.btn:hover, .step-chip:hover { background: var(--elevated); border-color: var(--accent); }
+.btn:active, .step-chip:active { transform: translateY(1px); }
+.btn:disabled, .step-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.copied { color: var(--success); border-color: var(--success); }
+.copy-btn { padding: 4px 12px; font-size: 0.8rem; }
+.select {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 10px;
+}
+
+/* ---------- timeline ---------- */
+
+.timeline {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0 0 0 24px;
+  border-left: 2px solid var(--border);
+}
+.timeline li { position: relative; margin: 0 0 18px; }
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: -31px;
+  top: 5px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.tl-when {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-2);
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+.tl-what { font-weight: 700; margin-bottom: 4px; }
+.timeline p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- triage flow ---------- */
+
+.flow {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  counter-reset: flow;
+}
+.flow li {
+  counter-increment: flow;
+  position: relative;
+  padding: 0 0 18px 52px;
+}
+.flow li::before {
+  content: counter(flow);
+  position: absolute;
+  left: 0; top: 0;
+  width: 34px; height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.flow li::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 38px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--border);
+}
+.flow li:last-child::after { display: none; }
+.flow .flow-step { font-weight: 700; display: block; margin-bottom: 3px; }
+.flow p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- checklists ---------- */
+
+.check { list-style: none; margin: 12px 0; padding: 0; }
+.check li {
+  position: relative;
+  padding: 6px 0 6px 34px;
+  border-bottom: 1px dashed var(--border);
+}
+.check li:last-child { border-bottom: 0; }
+.check li::before {
+  content: "";
+  position: absolute;
+  left: 4px; top: 11px;
+  width: 15px; height: 15px;
+  border-radius: 4px;
+  border: 2px solid var(--accent);
+  background: transparent;
+}
+
+/* ---------- attack chain strip ---------- */
+
+.chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.chain-step {
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+.chain-step.hot {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  font-weight: 700;
+}
+.chain-arrow { color: var(--muted); }
+
+/* ---------- misc helpers ---------- */
+
+.muted { color: var(--muted); }
+.small { font-size: 0.86rem; }
+.mt-0 { margin-top: 0; }
+.mono { font-family: var(--font-mono); }
+.stack > * + * { margin-top: 12px; }
+/* ---------- simulation ---------- */
+
+.sim-shell { padding: 0; overflow: hidden; }
+.sim-stage {
+  position: relative;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.sim-stage canvas { display: block; width: 100%; }
+.sim-tip {
+  position: absolute;
+  z-index: 5;
+  max-width: 240px;
+  background: var(--elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+  pointer-events: none;
+}
+.sim-tip strong { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--accent-2); margin-bottom: 2px; }
+.sim-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sim-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+.sim-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 12px 14px 2px;
+}
+.step-chip { font-size: 0.8rem; padding: 4px 11px; border-radius: 999px; }
+.step-chip.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 700;
+}
+.sim-caption {
+  padding: 12px 14px 16px;
+}
+.sim-cap-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+}
+.sim-cap-text { margin: 0 0 10px; }
+.sim-hint {
+  border-left: 3px solid var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+  border-radius: 0 10px 10px 0;
+  padding: 9px 13px;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+/* ---------- floating controls ---------- */
+
+.fab {
+  position: fixed;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s ease;
+}
+.fab:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.theme-fab { left: 18px; bottom: 18px; width: 46px; height: 46px; font-size: 1.05rem; }
+.back-top { right: 18px; bottom: 74px; padding: 0 16px; opacity: 0; pointer-events: none; transform: translateY(8px); }
+.back-top.show { opacity: 1; pointer-events: auto; transform: none; }
+.contents-fab { right: 18px; bottom: 18px; padding: 0 16px; display: none; }
+
+/* ---------- mobile contents overlay ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: rgba(4, 8, 18, 0.55);
+  border: 0;
+  padding: 0;
+}
+.toc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 24px;
+  overflow: auto;
+}
+.toc-overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.toc-overlay-head span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.toc-overlay .toc-list a { font-size: 1rem; padding: 10px 12px; }
+.toc-overlay .toc-list li.sub a { padding-left: 30px; font-size: 0.9rem; }
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1040px) {
+  .layout { display: block; padding-top: 28px; }
+  .sidebar { display: none; }
+  .contents-fab { display: inline-flex; }
+  .sec { margin-top: 48px; }
+  .sec-intro { margin-left: 0; }
+}
+
+@media (max-width: 900px) {
+  .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .hero-inner { padding: 30px 16px 26px; }
+  .layout { padding: 24px 16px 96px; }
+  .fact-grid { grid-template-columns: 1fr; gap: 10px; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .kv-list > div { grid-template-columns: 1fr; gap: 2px; }
+  .sec { margin-top: 40px; }
+  .sec-head { gap: 10px; }
+  .sec-num { min-width: 36px; height: 36px; font-size: 0.95rem; border-radius: 10px; }
+  .sec-intro { margin-bottom: 16px; }
+  .sim-speed { margin-left: 0; width: 100%; }
+  .sim-toolbar .btn { flex: 1 1 auto; }
+  .theme-fab { left: 12px; bottom: 12px; }
+  .back-top { right: 12px; bottom: 78px; }
+  .contents-fab { right: 12px; bottom: 12px; }
+  .page-title { font-size: clamp(1.55rem, 7.2vw, 2rem); }
+}
+
+@media (max-width: 400px) {
+  .hero-inner { padding: 24px 12px 20px; }
+  .layout { padding: 18px 12px 90px; }
+  .chip { font-size: 11px; padding: 3px 9px; }
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; }
+  #progressFill { transition: none; }
+}
+
+/* ---------- print ---------- */
+
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f6fa;
+    --elevated: #eef1f7;
+    --text: #111827;
+    --muted: #4b5563;
+    --border: #d1d5db;
+    --border-strong: #9ca3af;
+    --accent: #1d4ed8;
+    --accent-2: #0e7490;
+    --violet: #6d28d9;
+    --success: #047857;
+    --warning: #92400e;
+    --danger: #b91c1c;
+    --high: #9a3412;
+    --low: #166534;
+    --shadow-soft: none;
+  }
+  body { background: #fff; color: #111827; font-size: 11.5pt; }
+  .sidebar, .progress-bar, .fab, .back-top, .contents-fab, .theme-fab,
+  .sim-toolbar, .sim-steps, .copy-btn, .scrim, .toc-overlay, .skip-link {
+    display: none !important;
+  }
+  .hero { border-bottom: 1px solid #ccc; background: #fff; }
+  .layout { display: block; max-width: none; padding: 0; }
+  .sec { margin-top: 22pt; }
+  .sec-intro { margin-left: 0; }
+  a { color: #1d4ed8; text-decoration: underline; }
+  .code-block, .table-wrap, .card, .callout { box-shadow: none; break-inside: avoid; }
+  .code-block pre { white-space: pre-wrap; overflow: visible; }
+  .table-wrap { overflow: visible; }
+  .table-wrap table { min-width: 0; }
+  h2, h3 { break-after: avoid; }
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1529"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip-link" href="#mainContent">Skip to main content</a>
+<div class="progress-bar" aria-hidden="true"><div id="progressFill"></div></div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&amp;CK · Impact</p>
+    <h1 class="page-title" id="pageTitle"><span class="tech-id">T1529</span> System Shutdown/Reboot</h1>
+    <p class="hero-intro">This guide explains how attackers shut down or reboot systems to interrupt work, hide their tracks, or finish a destructive attack. It shows the commands, the events, and the alerts.</p>
+    <div class="chip-row">
+      <span class="chip">Tactic: Impact</span>
+      <span class="chip">Platforms: Windows · macOS · Linux · ESXi · Network Devices</span>
+      <span class="chip">Technique version 1.5 · created 04 October 2019</span>
+      <span class="chip">Detection strategy: DET0559</span>
+      <span class="chip">Guide v2.0</span>
+    </div>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <div class="fact-label">Attack stage</div>
+        <div class="fact-value">Final impact move</div>
+        <div class="fact-sub">Often after wiping or encryption</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Attacker goal</div>
+        <div class="fact-value">Interrupt access and response</div>
+        <div class="fact-sub">Drop live sessions and slow forensics</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Key evidence</div>
+        <div class="fact-value">Event ID 1074 and friends</div>
+        <div class="fact-sub">Plus shutdown command execution</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Detection effort</div>
+        <div class="fact-value">Medium</div>
+        <div class="fact-sub">Context decides normal versus attack</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar" aria-label="Table of contents">
+    <nav class="toc-card" aria-label="Sections">
+      <div class="toc-title">Contents</div>
+      <ul class="toc-list" id="tocList"></ul>
+    </nav>
+  </aside>
+  <main class="content" id="mainContent">
+<section class="sec" id="sec-1-overview">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2>Overview</h2></div>
+  <p class="sec-intro">A short tour of the technique: what a forced shutdown or reboot is, why attackers use it, and what this guide teaches you.</p>
+
+  <p><strong>System Shutdown/Reboot</strong> means an attacker switches a computer off or restarts it on purpose. Every operating system ships commands for this. Windows has <code>shutdown</code> and the PowerShell restart tools. Linux has <code>reboot</code>, <code>shutdown</code>, <code>halt</code>, and <code>poweroff</code>. macOS has <code>shutdown</code> and <code>osascript</code>, the command-line tool that runs AppleScript control commands. Network devices use the <code>reload</code> command. Attackers abuse these normal features. A reboot interrupts everyone who is working, drops remote sessions, and destroys what lives only in memory. A shutdown can even stop a machine from starting again when it is combined with damage to the boot process.</p>
+  <p>This technique rarely stands alone. ATT&amp;CK records show it arriving at the end of destructive attacks. Wipers such as NotPetya, Shamoon, and AcidRain wipe disks first and then force a reboot so the damage takes effect. Ransomware crews such as Black Basta and Qilin shut down or restart machines to interrupt response work. Qilin specifically rebooted a backup server to slow recovery. A reboot also destroys the evidence an incident responder needs most. <em>Volatile memory</em> is the working memory that holds running programs and open connections. It is gone the moment power drops.</p>
+
+  <div class="card">
+    <h3 class="card-title">Where it sits in the attack chain</h3>
+    <p>Attackers reach this stage late. They must already control the machine with strong rights, because ordinary users cannot usually restart servers or hypervisors. When you see a forced reboot, the attacker is either finishing a destructive payload or clearing their path.</p>
+    <p class="chain">
+      <span class="chain-step">Initial Access</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Execution</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Lateral Movement</span><span class="chain-arrow">→</span>
+      <span class="chain-step hot">Impact — T1529</span>
+    </p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What you will learn in this guide</h3>
+      <ul class="check">
+        <li>How attackers force shutdowns and reboots on every platform in this guide.</li>
+        <li>Which exact events appear in the logs, especially Windows Event ID 1074 and Kernel-Power 41.</li>
+        <li>Five ready-to-use Sigma rules and matching Splunk queries.</li>
+        <li>How to tell a planned maintenance reboot from an attack within seconds.</li>
+        <li>How to limit this abuse even though ATT&amp;CK calls it hard to prevent.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Key facts at a glance</h3>
+      <dl class="kv-list">
+        <div><dt>ATT&amp;CK ID</dt><dd>T1529 — System Shutdown/Reboot.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact (availability).</dd></div>
+        <div><dt>Platforms</dt><dd>ESXi, Linux, Network Devices, Windows, macOS, plus cloud consoles.</dd></div>
+        <div><dt>Sub-techniques</dt><dd>None.</dd></div>
+        <div><dt>Version</dt><dd>1.5 (created 04 October 2019, last modified 12 May 2026).</dd></div>
+        <div><dt>Detection strategy</dt><dd>DET0559 — Multi-Platform Shutdown or Reboot Detection via Execution and Host Status Events.</dd></div>
+        <div><dt>Typical actors</dt><dd>Wiper teams (NotPetya, Shamoon, AcidRain) and ransomware crews (Black Basta, Qilin, Maze).</dd></div>
+        <div><dt>Main data sources</dt><dd>Windows System log, process command lines, Linux auditd, ESXi hostd logs, cloud audit trails.</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">Note</div>
+    <p>ATT&amp;CK lists no sub-techniques under T1529. The same idea appears everywhere, though. It can be <code>shutdown /r</code> on Windows, <code>systemctl reboot</code> on Linux, or <code>reload</code> on a network device. It can also be <code>vim-cmd vmsvc/power.off</code> on an ESXi host or a <code>StopInstances</code> call in the cloud. This guide covers the Windows core first and then those variants, because one stolen account can often reach all of them.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-2-simulation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2>Animated simulation</h2></div>
+  <p class="sec-intro">Watch the attack unfold step by step, from one stolen operations account to a reboot wave. See at the same time what the SOC (security operations center) can observe. Hover over any box for details, or use the step buttons to jump around.</p>
+
+  <div class="sim-shell card">
+    <div class="sim-stage">
+      <canvas id="simCanvas" width="960" height="540" role="img" aria-label="Animated simulation of T1529: an attacker with a stolen operations account confirms shutdown rights, schedules and forces reboots, pushes a reboot wave to servers, powers off virtual machines on a hypervisor, and is caught when the SOC correlates shutdown and unclean-stop events."></canvas>
+      <div class="sim-tip" id="simTip" hidden></div>
+    </div>
+    <div class="sim-toolbar">
+      <button class="btn" id="simPlay" type="button">Play</button>
+      <button class="btn" id="simPause" type="button" disabled>Pause</button>
+      <button class="btn" id="simRestart" type="button">Restart</button>
+      <label class="sim-speed">Speed
+        <select id="simSpeed" class="select">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+    </div>
+    <div class="sim-steps" id="simSteps" aria-label="Simulation steps"></div>
+    <div class="sim-caption" aria-live="polite">
+      <div class="sim-cap-label" id="simCapLabel">Step 1 of 8</div>
+      <p class="sim-cap-text" id="simCaption">Press Play to start the simulation.</p>
+      <div class="sim-hint" id="simHint">Defender hints appear here during playback.</div>
+    </div>
+  </div>
+
+  <h3>Written version of the simulation</h3>
+  <p>The same story in text, for screen readers and for printing. Each step names the action, the evidence it leaves, and what the defender should notice.</p>
+
+  <div class="grid-2">
+    <div class="card"><h3 class="card-title">Step 1 — Get in with a stolen ops account</h3><p>The attacker signs in to OPS01, an operations workstation, with an account bought from an infostealer market. The logon comes from an unknown outside address. Evidence: a Security event 4624 logon whose source does not match the jump-host list. The SOC should compare logon sources for operations accounts against known locations.</p></div>
+    <div class="card"><h3 class="card-title">Step 2 — Check the power rights</h3><p>The attacker runs <code>whoami /priv</code> and sees <code>SeShutdownPrivilege</code> in the list. This user right allows the account to switch the machine off. Evidence: a Sysmon event 1 process creation with a rare parent chain. The SOC should flag privilege checks on workstations and record which rights the caller looked for.</p></div>
+    <div class="card"><h3 class="card-title">Step 3 — Schedule a sneaky reboot</h3><p>The attacker schedules a delayed reboot on APP01 with <code>shutdown /r /t 300</code> and the reason text "maintenance". A timer appears, and Windows logs event 1074 at once with the caller and the reason. Evidence: System event 1074 from shutdown.exe outside any change window. The SOC should treat every 1074 as a question, not as noise.</p></div>
+    <div class="card"><h3 class="card-title">Step 4 — Force the reboot now</h3><p>Tired of waiting, the attacker forces an immediate reboot of APP01 with <code>shutdown /r /t 0 /f</code>. The server goes dark, live sessions drop, and the unclean stop leaves Kernel-Power 41 behind. Evidence: event 1074 again plus Kernel-Power 41 on the next boot. The SOC should page on forced server reboots that have no change ticket.</p></div>
+    <div class="card"><h3 class="card-title">Step 5 — Push a reboot wave</h3><p>The attacker pushes the same command to many servers through remote execution. SQL01 and WEB01 power off one after another, and users see errors across the company. Evidence: Sysmon event 1 for shutdown.exe with a remote-service parent, one account on many hosts. The SOC should correlate shutdown commands across hosts by the same user.</p></div>
+    <div class="card"><h3 class="card-title">Step 6 — Turn the VMs off</h3><p>On the hypervisor, the attacker runs power-off commands against virtual machines. Several VM icons go dark at once, and whole services disappear even though their physical hosts are fine. Evidence: ESXi hostd log entries and shell history for power-off commands. The SOC should require an approved admin name behind every hypervisor power action.</p></div>
+    <div class="card"><h3 class="card-title">Step 7 — The SOC connects the dots</h3><p>The SIEM — short for security information and event management — links events 1074, 6008, and Kernel-Power 41. It links them to one unusual account across many hosts and raises a single critical incident for T1529. The reboot wave becomes one clear attack instead of scattered noise. Evidence: a correlated alert with the shared user and host fields. The SOC should build this correlation before the attack, not during it.</p></div>
+    <div class="card"><h3 class="card-title">Step 8 — Contain and recover</h3><p>The SOC isolates OPS01, blocks the stolen account, and boots the affected hosts from a known-good state. Services return and the attacker is locked out. Evidence: incident ticket with the timeline and the restore records. The lesson: alert on event 1074 with unexpected callers, because that single event announced this whole attack.</p></div>
+  </div>
+</section>
+<section class="sec" id="sec-3-red-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2>Red team / hacker perspective</h2></div>
+  <p class="sec-intro">Understanding the attacker's choices helps you predict the move and place your sensors. Everything here is described for defense and for labs you own.</p>
+
+  <h3>When and why attackers use it</h3>
+  <p>Timing is the whole point. Wiper teams force the reboot at the moment their damage must take effect. NotPetya rebooted each infected machine about one hour after infection. APT37 ran <code>shutdown /r /t 1</code> one second after wiping the master boot record, so the machine woke up broken. AcidRain and AcidPour rebooted their victim systems once wiping finished, and Shamoon restarted machines after its own wipe. The reboot is what turns disk damage into an outage.</p>
+  <p>Ransomware crews use the same move for a different reason: control. Black Basta used ShellExecuteA to shut down and restart the victim system. ShrinkLocker forced a shutdown after encrypting drives. Qilin rebooted a backup server so recovery work stopped while the encryption spread. Maze once shut machines down so its ransomware would run inside a virtual machine after the reboot. A reboot also drops the defender's live response sessions and erases memory. That is exactly what an attacker wants while they move to the next target.</p>
+  <p>Some attackers use the command in their own favor. A delayed reboot with a friendly reason string, such as a fake maintenance message, buys them time and cover. The machine logs the shutdown as planned work, and the timer lets them leave the network before it fires. This is why the caller behind event 1074 matters more than the reason text the caller typed.</p>
+
+  <h3>How it is performed</h3>
+  <p>The commands are short, built-in, and quiet. On Windows, the attacker needs the shutdown user right, which admins hold by default. Then the attacker runs a small set of native tools. The commands below are shown for lab study only. Run them exclusively inside a disposable virtual machine that you own, and take a snapshot before you start.</p>
+
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">CMD and PowerShell · lab-only on a VM you own</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>:: 1. Reboot the local machine now, forcing programs to close
+shutdown /r /t 0 /f
+
+:: 2. Schedule a delayed reboot with a reason string (the alibi trick)
+shutdown /r /t 300 /c "Planned maintenance"
+
+:: 3. Reboot a remote host (needs remote shutdown rights)
+shutdown /r /t 0 /f /m \\APP01
+
+:: 4. PowerShell variants
+Restart-Computer -Force
+Stop-Computer -Force
+
+:: 5. The WMI one-liner
+wmic os where "Primary=TRUE" call reboot</code></pre>
+  </figure>
+
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Linux, macOS, ESXi, network devices · lab-only</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code># Linux - lab VM only
+sudo systemctl reboot
+sudo shutdown -h now
+sudo init 6
+
+# macOS - lab machine only
+sudo shutdown -h now
+osascript -e 'tell app "System Events" to shut down'
+
+# ESXi shell - lab host only (The Gentlemen Ransomware used the first two)
+vim-cmd vmsvc/power.off &lt;vmid&gt;
+esxcli vm process kill -t force -w &lt;world-id&gt;
+vim-cmd vmsvc/power.shutdown &lt;vmid&gt;
+esxcli system shutdown poweroff -d 5 -r "planned work"
+
+# Network device CLI - lab device only
+reload</code></pre>
+  </figure>
+
+  <p>Two more paths matter. Attackers with cloud keys call APIs such as <code>StopInstances</code>, <code>RebootInstances</code>, or <code>TerminateInstances</code> to switch off fleets at once. And destructive malware can skip the shutdown command entirely. It calls the Windows function <code>NtRaiseHardError</code> (or <code>ZwRaiseHardError</code>) with the shutdown option, which forces a blue screen crash. The machine reboots anyway, but the crash leaves only unclean-stop events behind instead of a tidy 1074 with a caller name.</p>
+
+  <h3>Prerequisites and conditions</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What the attacker needs first</h3>
+      <ul class="check">
+        <li>A local account that holds the shutdown user right, or admin rights on the host.</li>
+        <li>Remote shutdown rights on the target, or a remote execution path such as a service, scheduled task, or WMI (Windows Management Instrumentation, the built-in remote management system).</li>
+        <li>For hypervisors: root or shell access to the ESXi host.</li>
+        <li>For cloud: standing IAM permissions (identity and access management rights) such as <code>ec2:StopInstances</code>.</li>
+        <li>For network devices: enable or admin access through AAA-managed logins (AAA means authentication, authorization, and accounting).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">What limits them</h3>
+      <ul class="check">
+        <li>Windows logs event 1074 for API-based shutdowns, with the caller named.</li>
+        <li>Hard crashes still leave Kernel-Power 41 and 6008 events behind.</li>
+        <li>AAA command accounting records every device <code>reload</code>.</li>
+        <li>Cloud audit trails name the identity behind every stop or reboot call.</li>
+        <li>Change windows make unexpected reboots stand out from planned work.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Common variations and attacker mistakes</h3>
+  <p>Variations are wide because every platform has a native switch. KillDisk rebooted machines by terminating critical processes instead of calling a shutdown command, which produced a different trail. Olympic Destroyer shut systems down after changing their configuration, and HermeticWiper simply initiated a shutdown once its damage was done. WhisperGate used the Windows <code>ExitWindowsEx</code> function with the <code>EXW_SHUTDOWN</code> flag, so no shutdown.exe process ever appeared on the screen or in the logs.</p>
+  <p>Attacker mistakes are useful to know. Asking for a shutdown without the right privilege fails, and the failed access attempt is itself a signal. Using a delayed timer does not hide anything, because 1074 is written the moment the command runs, not when the timer ends. Reusing the stolen operations account across many hosts turns a small incident into an obvious pattern. And rebooting does not clear logs, so attackers who reboot and walk away leave a complete record for the SOC.</p>
+
+  <div class="callout danger">
+    <div class="callout-label">Danger · lab-only</div>
+    <p>Never run the commands above on a production or shared system. They interrupt real work, drop other people's sessions, and can leave a machine unable to start if other damage is present. Use an isolated virtual machine with a fresh snapshot, and treat every command as if a real SOC were watching it.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-4-blue-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2>Blue team / SOC perspective</h2></div>
+  <p class="sec-intro">Shutdowns happen every day for honest reasons, so the job is to separate planned reboots from attacker actions quickly. Here is what the technique leaves behind and how to triage it fast.</p>
+
+  <h3>How defenders can see it</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">Windows System log</h3>
+      <p>Event 1074 names the process and user that requested a shutdown or restart, plus the reason text. Events 6005 and 6006 mark the event log starting and stopping cleanly. Event 6008 marks an unexpected shutdown. Kernel-Power 41 marks a reboot without a clean shutdown. This is the strongest single source.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Process telemetry</h3>
+      <p>Sysmon event 1 or Security event 4688 with command-line auditing shows shutdown.exe, Restart-Computer, Stop-Computer, and wmic calls with their parent processes. The parent often reveals remote execution.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Linux, ESXi, network, cloud</h3>
+      <p>auditd records the command and user on Linux. hostd logs record power actions on ESXi. AAA accounting records device commands. CloudTrail or Azure logs name the identity behind instance power actions.</p>
+    </div>
+  </div>
+
+  <h3>Artifacts the technique leaves behind</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Artifact</th><th>Where you find it</th><th>What it tells you</th></tr></thead>
+      <tbody>
+        <tr><td>Event 1074 with process, user, and reason.</td><td>Windows System log.</td><td>Who asked for the shutdown or restart, when, and with which reason text.</td></tr>
+        <tr><td>Event 1076 with a reason after an unplanned restart.</td><td>Windows System log.</td><td>Someone explained an uncontrolled restart; compare with the change calendar.</td></tr>
+        <tr><td>Event 6005 / 6006 (log service started / clean stop).</td><td>Windows System log.</td><td>Normal boot and shutdown markers that build the timeline of each host.</td></tr>
+        <tr><td>Event 6008 (unexpected shutdown).</td><td>Windows System log.</td><td>The machine went down without a clean stop, for example after a forced power action.</td></tr>
+        <tr><td>Kernel-Power 41 (critical).</td><td>Windows System log.</td><td>Reboot without a clean shutdown; a spike across hosts means a storm or a crash-forcing malware.</td></tr>
+        <tr><td>Process event for shutdown.exe, Restart-Computer, Stop-Computer, wmic.</td><td>Sysmon 1, Security 4688.</td><td>Direct proof of the command, with user, parent process, and full arguments.</td></tr>
+        <tr><td>EXECVE records for reboot, shutdown, halt, poweroff, systemctl.</td><td>Linux auditd, journald, wtmp.</td><td>Command and user on Linux; <code>last reboot</code> adds the boot history.</td></tr>
+        <tr><td>Power actions and shell history (vim-cmd, esxcli, reload).</td><td>ESXi hostd.log, AAA/TACACS+ accounting.</td><td>Hypervisor and network device power actions with the accountable account. TACACS+ is a protocol that checks device commands against a central server.</td></tr>
+        <tr><td>StopInstances, RebootInstances, TerminateInstances calls.</td><td>CloudTrail, Azure Activity Log.</td><td>Cloud power actions with the exact identity and source address.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Where to look, in priority order</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Log source</th><th>What to pull</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>Windows System log on all servers.</td><td>1074, 1076, 6005, 6006, 6008, Kernel-Power 41.</td><td>Covers both the request and the result of every power action.</td></tr>
+        <tr><td>Sysmon / process auditing on all servers.</td><td>Event 1 or 4688 for shutdown.exe, PowerShell restart tools, wmic.</td><td>Catches the command at the moment of execution, with the parent process.</td></tr>
+        <tr><td>Linux auditd and journald.</td><td>EXECVE for reboot, shutdown, halt, poweroff, systemctl.</td><td>Names the account behind Linux power actions.</td></tr>
+        <tr><td>ESXi hostd.log and shell history.</td><td>vim-cmd, esxcli, and host power actions.</td><td>Covers the hypervisor layer where one command stops many machines.</td></tr>
+        <tr><td>AAA/TACACS+ accounting on network devices.</td><td>Command records for <code>reload</code> and config changes.</td><td>Device restarts are invisible without command accounting.</td></tr>
+        <tr><td>Cloud audit trails.</td><td>StopInstances, RebootInstances, TerminateInstances, Azure powerDeallocate.</td><td>Fleet-wide power actions with an identity attached.</td></tr>
+        <tr><td>SIEM correlation.</td><td>One account behind many shutdown events in a short window.</td><td>Turns scattered reboots into one incident with a name on it.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Why it matters and how it fits the chain</h3>
+  <p>A reboot is not just downtime; it is an evidence problem. The moment power drops, you lose the memory image that would show the malware, the injected code, and the live connections. Every remote response session dies with it. Attackers know this and reboot specifically to slow your investigation. In the worst case the machine never comes back, because the reboot activated a bootkit or completed a wipe. Treat any unexpected power action on a server as a possible last step of a destructive attack. Then check what else that account has touched.</p>
+
+  <h3>Short triage flow</h3>
+  <ol class="flow">
+    <li><span class="flow-step">Open the 1074 event</span><p>Read the caller process, the user, and the reason text. Compare them with your change calendar and with the patch schedule before you decide anything.</p></li>
+    <li><span class="flow-step">Check who and from where</span><p>Pull the logon events for that account around the same minute. A server reboot driven from a workstation instead of a jump host is a strong warning.</p></li>
+    <li><span class="flow-step">Scope across the fleet</span><p>Search the last 24 hours for shutdown commands and 1074 events by the same account. Many hosts mean a campaign, not a mistake.</p></li>
+    <li><span class="flow-step">Look for the follow-up damage</span><p>Check for wipe or encryption signals on the affected hosts: mass file renames, shadow copy deletion, boot configuration changes, or a crash storm.</p></li>
+    <li><span class="flow-step">Contain without powering off</span><p>Isolate hosts through the EDR (endpoint detection and response) tool or the network layer. Do not switch them off, so you keep memory evidence and logs. Then reset the involved account and escalate.</p></li>
+  </ol>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>Write the triage steps above into your incident runbook before you need them. Teams that capture memory before any restart keep the evidence that proves how the attack moved. Teams that reboot first often never learn what they lost.</p>
+  </div>
+</section>
+<section class="sec" id="sec-5-detection">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2>Detection engineering deep dive</h2></div>
+  <p class="sec-intro">This is the practical core of the guide. It covers regulation mapping, threat intelligence, ranked threats, and real log examples. It ends with five Sigma rules and matching Splunk queries you can adapt today.</p>
+
+  <div class="callout note">
+    <div class="callout-label">How ATT&amp;CK detects this technique</div>
+    <p>The official ATT&amp;CK detection strategy is DET0559, named Multi-Platform Shutdown or Reboot Detection via Execution and Host Status Events. It has five analytics, and each one pairs a command with a host status signal. AN1538 pairs Windows shutdown and restart commands with event 1074 and 6006 records. AN1539 pairs Linux shutdown, reboot, and <code>systemctl poweroff</code> execution with auditd and syslog. AN1540 pairs macOS shutdown, reboot, and <code>osascript</code> calls with the unified log. AN1541 pairs ESXi commands such as <code>esxcli system shutdown</code> and <code>vim-cmd vmsvc/power.shutdown</code> with hostd and shell logs outside maintenance windows. AN1542 pairs network device <code>reload</code> commands with TACACS+/AAA privilege records.</p>
+  </div>
+
+  <h3 id="sec-5-1-regulation">5.1 Regulation mapping</h3>
+  <p>Forced shutdowns and reboots attack the availability of your services, so they map to continuity and monitoring controls. Auditors expect proof that planned power actions are controlled, that unexpected ones raise alerts, and that recovery works after an unplanned stop. The table below shows what each framework expects and the evidence a detection program provides.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Framework and control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>GDPR</strong> — Article 32 (security of processing)</td>
+          <td>Requires the ability to restore the availability of and access to personal data after an incident. A forced reboot that destroys memory evidence and prolongs an outage makes a breach harder to contain and longer to report.</td>
+          <td>Availability incident records, alerts on unexpected shutdowns, incident reports that show recovery time and evidence handling.</td>
+        </tr>
+        <tr>
+          <td><strong>HIPAA Security Rule</strong> — §164.308(a)(7) contingency plan</td>
+          <td>Covered entities must plan for emergencies that take critical systems offline, which is exactly what this technique does to servers and hypervisors.</td>
+          <td>Contingency plan covering forced outages, downtime procedures, records of unexpected shutdown alerts, and recovery test results.</td>
+        </tr>
+        <tr>
+          <td><strong>ISO/IEC 27001:2022</strong> — A.8.14 (redundancy), A.8.16 (monitoring activities)</td>
+          <td>Redundant capacity only helps if the loss of a node is noticed. Annex A expects anomalies such as unexplained reboots to be monitored and investigated.</td>
+          <td>Monitoring rules for shutdown events, tickets for reboot storms, uptime and availability dashboards with investigated gaps.</td>
+        </tr>
+        <tr>
+          <td><strong>SOC 2</strong> — CC7.2 (anomaly detection), A1.2 (recovery infrastructure)</td>
+          <td>Trust services criteria expect detection of unusual system behavior and tested recovery of the processing infrastructure after interruptions.</td>
+          <td>Detection rule documentation, alert and response records for power actions, recovery drills that include unclean shutdowns.</td>
+        </tr>
+        <tr>
+          <td><strong>PCI DSS</strong> — 12.10.x (incident response plan and testing)</td>
+          <td>Organizations handling cardholder data must prepare for attacks that disable systems, including destructive malware that reboots hosts to complete its work.</td>
+          <td>IR plan covering outage and wipe scenarios, staff drills, monitoring evidence that cardholder-data hosts restart only inside approved windows.</td>
+        </tr>
+        <tr>
+          <td><strong>NIST SP 800-53 Rev.5</strong> — AC-6 (least privilege), SI-4 (system monitoring), CP-10 (recovery)</td>
+          <td>The shutdown right should be restricted to approved admins, and power actions should be monitored. Recovery from organization-level outages must be reconstituted and tested.</td>
+          <td>User rights assignment records, SIEM monitoring coverage for shutdown events, documented and tested recovery procedures.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="sec-5-2-threat-intel">5.2 Threat intelligence</h3>
+  <p>Intelligence makes your detection rules stronger and your priorities honest. For this technique, the picture is clear, because destructive campaigns since 2016 have reused the same small set of commands. Collect from several source types, then record how confident you are in each finding before you change a rule or a runbook.</p>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">MITRE ATT&amp;CK</h3>
+      <p>Start with the technique page and its procedure examples. The list of malware and groups that use T1529 spans wipers, ransomware crews, and state-linked teams, which makes rule coverage easy to justify.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Vendor reporting</h3>
+      <p>Security vendor blogs publish exact commands, timelines, and API calls for each campaign. Turn their incident timelines into your detection logic and tuning notes.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">OSINT and ISACs</h3>
+      <p>Free sources such as CISA advisories and sector ISAC bulletins share indicators and tactics early. Sector-specific advice tells you which crews target organizations like yours.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Commercial feeds</h3>
+      <p>Paid feeds add actor tracking, infrastructure, and malware families. Use them for context and prioritization rather than as a replacement for your own telemetry.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Internal telemetry</h3>
+      <p>Your own logs are the most valuable source. Reboots without tickets, failed shutdown attempts, and near misses show what attackers actually try in your environment.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Confidence levels</h3>
+      <p><strong>High</strong> means several independent reports plus your own sightings. <strong>Medium</strong> means one solid public report. <strong>Low</strong> means a hypothesis that still needs testing. Write the level next to every intelligence note.</p>
+    </div>
+  </div>
+
+  <p>Known actors and malware:</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Actor or malware</th><th>Observed behavior</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>NotPetya (2017 wiper)</td><td>Rebooted each infected system one hour after infection, so the wiped boot records took effect.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>APT37</td><td>Ran <code>shutdown /r /t 1</code> one second after wiping the master boot record, leaving no time to react.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Shamoon</td><td>Rebooted machines after wiping their disks so the destroyed systems came back unusable.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>AcidRain and AcidPour</td><td>AcidRain reboots the target system once wiping completes, and AcidPour copies that pattern. AcidRain is documented as a modem wiper.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Olympic Destroyer</td><td>Shut systems down after changing their configuration so the tampering survived the restart.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>HermeticWiper</td><td>Initiated a shutdown once its disk damage was complete, ending all response access.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>WhisperGate</td><td>Called the Windows <code>ExitWindowsEx</code> function (with the <code>EXW_SHUTDOWN</code> flag) to shut the system down without a shutdown.exe process.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>KillDisk</td><td>Tried to reboot machines by terminating specific processes, leaving unclean-stop events instead of a tidy shutdown record.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>Black Basta</td><td>Used <code>ShellExecuteA</code> to shut down and restart the victim system, interrupting users and defenders during attacks.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Qilin</td><td>Rebooted the backup server to hinder recovery while encryption continued elsewhere.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>ShrinkLocker</td><td>Forced a shutdown after encrypting drives to lock out victim users, and could also restart the system on execution errors.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>The Gentlemen Ransomware</td><td>Used <code>vim-cmd vmsvc/power.off</code> and <code>esxcli vm process kill</code> to power off virtual machines on ESXi hosts.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>Maze</td><td>Shut systems down so its ransomware would run inside a virtual machine after the reboot.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>DynoWiper (2025 Poland Wiper Attacks)</td><td>Used the Windows <code>ExitWindowsEx</code> function to log off the interactive user and shut the system down, finalizing the destruction.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>BFG Agonizer</td><td>Used elevated privileges to call <code>NtRaiseHardError</code> and force a blue screen crash. After the shutdown, the system no longer booted.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Medusa Group</td><td>Manually turned off and encrypted virtual machines during ransomware attacks.</td><td><span class="badge ok">High</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">How to apply this</div>
+    <p>Use the actor list to justify rule coverage in reviews. Use it to write threat profiles for your team and to decide which platforms to extend first. If you run large virtualization estates, the ESXi power-off row is your argument for shipping hostd logs to the SIEM this month.</p>
+  </div>
+
+  <h3 id="sec-5-3-threat-ranking">5.3 Threats ranking and categorization</h3>
+  <p>Five realistic threats cover this technique well. The rank reflects how likely the threat is and how much damage it causes when it works. Preconditions describe what an attacker must already have; the justification explains the rank so you can defend it in planning meetings.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Threat</th><th>Rank</th><th>Platform</th><th>Description and preconditions</th><th>Impact and justification</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>THR-01 — Forced shutdown or reboot of servers via command line</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>One command drops every session on a server. Examples are <code>shutdown /r /t 0 /f</code> and <code>Restart-Computer -Force</code>. Preconditions: an account with the shutdown right and command execution.</td>
+          <td>Interrupts service and destroys memory evidence on the most valuable hosts. Very common across campaigns, but single-host scope keeps it below Critical.</td>
+        </tr>
+        <tr>
+          <td>THR-02 — Mass reboot across many hosts via remote execution</td>
+          <td><span class="badge sev-critical">Critical</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>A reboot wave pushed through PsExec, WMI, scheduled tasks, or GPO (Group Policy), or forced with a delayed timer. Preconditions: domain credentials with remote shutdown rights.</td>
+          <td>Takes out many servers at once and is the classic shape of a destructive campaign. The fleet-wide blast radius earns the Critical rank.</td>
+        </tr>
+        <tr>
+          <td>THR-03 — Unexpected reboot storm with unclean shutdowns</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>Spikes of Kernel-Power 41 and event 6008, including malware that forces a blue screen through <code>NtRaiseHardError</code>. Preconditions: code execution, no special rights needed to crash a host.</td>
+          <td>Signals either a crash-forcing payload or coordinated power abuse, and it destroys evidence without leaving a named caller. Harder to attribute, so the rank is High.</td>
+        </tr>
+        <tr>
+          <td>THR-04 — Linux reboot, halt, or poweroff by unexpected user or outside maintenance</td>
+          <td><span class="badge sev-medium">Medium</span></td>
+          <td><span class="badge cat">Linux</span></td>
+          <td>Commands such as <code>systemctl reboot</code> or <code>poweroff</code> run outside the change window. The account sits outside the ops group. Preconditions: root, sudo, or a privileged service account.</td>
+          <td>Disrupts services and can hide cleanup activity, but Linux estates usually need root, which lowers likelihood compared with Windows.</td>
+        </tr>
+        <tr>
+          <td>THR-05 — Cloud, hypervisor, and network device power actions</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Cloud / ESXi / Network / macOS</span></td>
+          <td><code>StopInstances</code> in the cloud. <code>vim-cmd vmsvc/power.off</code> or <code>esxcli vm process kill</code> on ESXi. <code>reload</code> on network devices. macOS <code>shutdown -h now</code> is a lower-priority variant of the same move. Preconditions: cloud IAM rights, ESXi root, or device admin access.</td>
+          <td>One action can stop many machines or a whole site, and Qilin showed the backup-server variant. Rising with cloud-focused attacks, so the rank is High.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="sec-5-4-logs-patterns">5.4 Logs and patterns</h3>
+  <p>Each threat below lists the log sources that see it and the fields that matter. It also shows what normal and suspicious behavior look like, plus the detection logic in plain words. A realistic event example follows each table so you can validate your pipeline against real shapes.</p>
+
+  <h4>Threat 1 (THR-01) — Forced server shutdown or reboot via command line</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Windows System log event 1074 records the request. It names the caller process, user, and reason. Sysmon event 1 or Security event 4688 shows shutdown.exe, Restart-Computer, Stop-Computer, and wmic.</td></tr>
+        <tr><td>Key fields</td><td><code>param1</code> (calling process), <code>param3</code> (user on whose behalf), <code>param4</code> (reason), <code>Image</code>, <code>CommandLine</code>, <code>ParentImage</code>, <code>User</code>, <code>host</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Planned reboots inside change windows by named admins. Patch or monitoring agents restart hosts with tickets. UPS agents shut machines down gracefully during power tests.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Event 1074 names shutdown.exe or PowerShell on a server outside any change window. The command carries forced flags such as <code>/f</code> or <code>-Force</code>. The reason text says "maintenance", but the account never does maintenance.</td></tr>
+        <tr><td>Detection logic</td><td>Alert when event 1074 names a shutdown utility and the caller, time, or reason does not match an approved change. Also alert on forced shutdown commands on servers from Sysmon or 4688.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · System EID 1074 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Eventlog" Guid="{fc65ddd8-d6ef-4962-83d5-6e5cfe9ce148}"/&gt;
+    &lt;EventID Qualifiers="32768"&gt;1074&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-11-05T02:41:07.512Z"/&gt;
+    &lt;Computer&gt;APP01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="param1"&gt;C:\Windows\System32\shutdown.exe (APP01)&lt;/Data&gt;
+    &lt;Data Name="param2"&gt;APP01&lt;/Data&gt;
+    &lt;Data Name="param3"&gt;on behalf of user CORP\svc_ops&lt;/Data&gt;
+    &lt;Data Name="param4"&gt;Other (Planned)&lt;/Data&gt;
+    &lt;Data Name="param5"&gt;Shutdown Type: restart Comment: maintenance&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 2 (THR-02) — Mass reboot across many hosts via remote execution</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Sysmon event 1 with parent process detail. Security 4688 with command lines. Logon events 4624 type 3 for remote sessions. Scheduled task creation 4698.</td></tr>
+        <tr><td>Key fields</td><td><code>Image</code> (shutdown.exe), <code>ParentImage</code> (PSEXESVC, WmiPrvSE, wsmprovhost), <code>CommandLine</code>, <code>User</code>, <code>host</code>, <code>TargetServerName</code> for remote calls.</td></tr>
+        <tr><td>Normal behavior</td><td>Platform teams push reboots from jump hosts with approved tooling inside maintenance windows. Patch automation uses fixed service accounts.</td></tr>
+        <tr><td>Suspicious behavior</td><td>shutdown.exe runs with a PsExec, WMI, or WinRM parent on several hosts. One account stands behind shutdown commands on many machines. New scheduled tasks call shutdown. Reboots arrive in a tight time burst.</td></tr>
+        <tr><td>Detection logic</td><td>Alert when shutdown.exe runs under a remote-execution parent, then count distinct hosts per account. Three or more hosts in one hour means a reboot wave in progress.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Sysmon EID 1 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-c22a-43e0-bf4c-06f5698ffbd9}"/&gt;
+    &lt;EventID&gt;1&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-11-05T02:47:19.204Z"/&gt;
+    &lt;Computer&gt;SQL01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-11-05 02:47:19.204&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\System32\shutdown.exe&lt;/Data&gt;
+    &lt;Data Name="CommandLine"&gt;"shutdown.exe" /r /t 0 /f&lt;/Data&gt;
+    &lt;Data Name="ParentImage"&gt;C:\Windows\PSEXESVC.exe&lt;/Data&gt;
+    &lt;Data Name="ParentCommandLine"&gt;PSEXESVC.exe -s shutdown.exe /r /t 0 /f&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\svc_ops&lt;/Data&gt;
+    &lt;Data Name="IntegrityLevel"&gt;High&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 3 (THR-03) — Unexpected reboot storm with unclean shutdowns</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Windows System log events Kernel-Power 41 (critical) and 6008 (unexpected shutdown). Event 1076 records the reason after an unplanned restart. Event 1001 from BugCheck marks blue screens.</td></tr>
+        <tr><td>Key fields</td><td><code>EventID</code>, <code>Provider_Name</code>, <code>Computer</code>, <code>BugcheckCode</code>, <code>PowerButtonTimestamp</code>, plus time buckets for the burst count.</td></tr>
+        <tr><td>Normal behavior</td><td>Rare hardware faults, power cuts, and end users holding the power button. These show up scattered in time and concentrated on few machines.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Many hosts log 41 or 6008 inside the same short window. Servers reboot uncleanly again and again. Bursts are followed by logons from the same account. Blue screens appear with no matching bugcheck record.</td></tr>
+        <tr><td>Detection logic</td><td>Count 6008 and Kernel-Power 41 events in 15-minute buckets per host and across the fleet. Alert when the fleet count or the per-host count passes your baseline.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Kernel-Power EID 41 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Kernel-Power" Guid="{331c3b3a-2005-44c2-ac5e-77220c37d6b4}"/&gt;
+    &lt;EventID&gt;41&lt;/EventID&gt;
+    &lt;Level&gt;1&lt;/Level&gt;
+    &lt;TimeCreated SystemTime="2026-11-05T02:49:02.881Z"/&gt;
+    &lt;Computer&gt;APP01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="BugcheckCode"&gt;0&lt;/Data&gt;
+    &lt;Data Name="BugcheckParameter1"&gt;0x0&lt;/Data&gt;
+    &lt;Data Name="BugcheckParameter2"&gt;0x0&lt;/Data&gt;
+    &lt;Data Name="BugcheckParameter3"&gt;0x0&lt;/Data&gt;
+    &lt;Data Name="BugcheckParameter4"&gt;0x0&lt;/Data&gt;
+    &lt;Data Name="PowerButtonTimestamp"&gt;0&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 4 (THR-04) — Linux reboot, halt, or poweroff outside maintenance</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>auditd EXECVE and SYSCALL records. systemd-journald. wtmp boot records seen with <code>last reboot</code>. sudo logs for privilege escalation.</td></tr>
+        <tr><td>Key fields</td><td><code>type</code>, <code>a0</code> and <code>a1</code> (command and first arguments), <code>exe</code>, <code>uid</code>, <code>auid</code>, <code>pid</code>, <code>ppid</code>, <code>host</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Patch and infrastructure automation restarts servers inside the maintenance window under fixed service accounts. Admins follow runbooks from bastion hosts.</td></tr>
+        <tr><td>Suspicious behavior</td><td>An interactive reboot, shutdown, halt, poweroff, or <code>systemctl reboot</code> runs by a human account outside the window. Commands come from sessions with new source addresses. A reboot follows right after suspicious file writes.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on auditd EXECVE records whose command is reboot, shutdown, halt, or poweroff, or systemctl with a power argument. Exclude the accounts and times that match the maintenance allow list.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Linux auditd (plain text)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>type=SYSCALL msg=audit(1793841600.221:9142): arch=c000003e syscall=59 success=yes exit=0
+    a0=1f5c2a0 a1=1f5b1e0 a2=1f5a120 a3=8 items=2 ppid=2104 pid=3321 auid=4242 uid=0 gid=0
+    euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts1 ses=117 comm="reboot"
+    exe="/usr/sbin/reboot" key="privileged-reboot"
+type=EXECVE msg=audit(1793841600.221:9142): argc=1 a0="reboot"
+type=USER_CMD msg=audit(1793841600.205:9141): pid=3321 uid=1002 auid=4242 msg='cwd="/home/dbagel"
+    cmd=reboot terminal=pts1 res=success'</code></pre>
+  </figure>
+
+  <h4>Threat 5 (THR-05) — Cloud, hypervisor, and network device power actions</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>CloudTrail and Azure Activity Log record instance power actions. ESXi hostd.log and shell history show <code>vim-cmd</code> and <code>esxcli</code> use. AAA/TACACS+ command accounting records device <code>reload</code>. The macOS unified log records shutdown entries.</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>eventSource</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code>, <code>requestParameters.instancesSet.items</code>, <code>awsRegion</code>. On ESXi: the account and command. On devices: the AAA username and command.</td></tr>
+        <tr><td>Normal behavior</td><td>Automation roles stop or reboot instances on schedules. Virtualization admins run power actions inside windows. Device reloads follow approved changes.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Stop or Terminate calls come from interactive identities or new source IPs. Power actions hit backup servers, as Qilin did. <code>vim-cmd vmsvc/power.off</code> or <code>esxcli vm process kill</code> runs outside changes. <code>reload</code> comes from unapproved addresses.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on cloud power actions when the caller is not on the automation allow list. Alert on any ESXi or device power command that lacks a matching change record.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · AWS CloudTrail (JSON)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.08",
+  "userIdentity": {
+    "type": "IAMUser",
+    "principalId": "AIDA4EXAMPLEJJ7VQ2WM",
+    "arn": "arn:aws:iam::111122223333/user/backup-operator",
+    "accountId": "111122223333",
+    "userName": "backup-operator"
+  },
+  "eventTime": "2026-11-05T02:46:12Z",
+  "eventSource": "ec2.amazonaws.com",
+  "eventName": "StopInstances",
+  "awsRegion": "eu-west-1",
+  "sourceIPAddress": "203.0.113.77",
+  "userAgent": "aws-cli/2.15.0",
+  "requestParameters": {
+    "instancesSet": { "items": [ { "instanceId": "i-0a1b2c3d4e5f60001" } ] }
+  },
+  "responseElements": {
+    "instancesSet": { "items": [ { "instanceId": "i-0a1b2c3d4e5f60001",
+      "currentState": { "code": 64, "name": "stopping" } } ] }
+  }
+}</code></pre>
+  </figure>
+  <h3 id="sec-5-5-sigma-spl">5.5 Sigma rules and Splunk SPL</h3>
+  <p>Five complete Sigma rules follow, one per ranked threat, each with a matching Splunk query. The rules target Windows Sysmon, the Windows System log, Linux auditd, and AWS CloudTrail. If you collect Security 4688 instead of Sysmon, swap the logsource and keep the field logic. The Splunk queries assume the index and sourcetype conventions listed below. Adjust the index names to your environment and document the change.</p>
+  <div class="callout note">
+    <div class="callout-label">Field assumptions for Splunk</div>
+    <p><code>index=sysmon</code> holds Sysmon XML events with fields like <code>Image</code>, <code>CommandLine</code>, and <code>ParentImage</code>. <code>index=wineventlog</code> holds the System channel as <code>XmlWinEventLog:System</code>. <code>index=linux</code> holds auditd data with fields like <code>a0</code> and <code>type</code>. <code>index=aws</code> holds <code>aws:cloudtrail</code> data with JSON fields like <code>eventName</code>. Field extraction must be enabled for XML inputs before these queries work.</p>
+  </div>
+
+  <h4>Rule 1 — Forced shutdown or reboot via command line</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Forced Shutdown or Reboot of Servers via Command Line
+id: a7e3f1b2-4c5d-4e8f-9a01-2b3c4d5e6f70
+status: stable
+description: Detects forced shutdown and restart commands on servers using shutdown.exe,
+  PowerShell, or wmic. Destructive malware such as APT37 tools and Black Basta use
+  these commands to drop sessions and trigger boot-level payloads.
+references:
+  - https://attack.mitre.org/techniques/T1529/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_shutdown_reboot:
+    EventID: 1
+    Image|endswith: '\shutdown.exe'
+    CommandLine|contains: ' /r'
+  selection_shutdown_poweroff:
+    EventID: 1
+    Image|endswith: '\shutdown.exe'
+    CommandLine|contains: ' /s'
+  selection_powershell_restart:
+    EventID: 1
+    Image|endswith:
+      - '\powershell.exe'
+      - '\pwsh.exe'
+    CommandLine|contains|all:
+      - 'restart-computer'
+      - '-force'
+  selection_powershell_stop:
+    EventID: 1
+    Image|endswith:
+      - '\powershell.exe'
+      - '\pwsh.exe'
+    CommandLine|contains|all:
+      - 'stop-computer'
+      - '-force'
+  selection_wmic:
+    EventID: 1
+    Image|endswith: '\wbem\WMIC.exe'
+    CommandLine|contains|all:
+      - 'os where'
+      - 'reboot'
+  condition: 1 of selection_*
+fields:
+  - CommandLine
+  - ParentImage
+  - User
+  - Hostname
+falsepositives:
+  - Administrators running planned reboots inside an approved change window
+level: high
+tags:
+  - attack.impact
+  - attack.t1529</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  (Image="*\\shutdown.exe" (CommandLine="* /r*" OR CommandLine="* /s*"))
+  OR (Image="*\\powershell.exe" CommandLine="*restart-computer*" CommandLine="*-force*")
+  OR (Image="*\\powershell.exe" CommandLine="*stop-computer*" CommandLine="*-force*")
+  OR (Image="*\\wbem\\WMIC.exe" CommandLine="*os where*" CommandLine="*reboot*")
+| table _time host User Image CommandLine ParentImage
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> each Sigma <code>endswith</code> becomes a wildcard path match in Splunk. Each <code>contains</code> modifier becomes a repeated <code>CommandLine</code> token joined by AND. <strong>False positives:</strong> planned reboots in a change window. <strong>Tuning:</strong> join the results with your change calendar lookup, drop the known patch-window accounts, and raise severity when the caller is not a named administrator.</p>
+
+  <h4>Rule 2 — Mass reboot across many hosts via remote execution</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Mass Reboot of Multiple Hosts via Remote Execution
+id: b8f4a2c3-5d6e-4f90-8b12-3c4d5e6f7a81
+status: stable
+description: Detects shutdown or restart commands started by remote-execution services
+  such as PsExec, WMI, or WinRM. A reboot wave across many hosts is a destructive
+  attack step, not normal administration.
+references:
+  - https://attack.mitre.org/techniques/T1529/
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_psexec:
+    EventID: 1
+    Image|endswith: '\shutdown.exe'
+    ParentImage|endswith: '\PSEXESVC.exe'
+  selection_wmi:
+    EventID: 1
+    Image|endswith: '\shutdown.exe'
+    ParentImage|endswith: '\WmiPrvSE.exe'
+  selection_winrm:
+    EventID: 1
+    Image|endswith: '\shutdown.exe'
+    ParentImage|endswith: '\wsmprovhost.exe'
+  condition: 1 of selection_*
+fields:
+  - CommandLine
+  - ParentImage
+  - User
+  - Hostname
+falsepositives:
+  - Remote administration by the platform team during a documented maintenance window
+level: critical
+tags:
+  - attack.impact
+  - attack.t1529</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  Image="*\\shutdown.exe"
+  (ParentImage="*\\PSEXESVC.exe" OR ParentImage="*\\WmiPrvSE.exe" OR ParentImage="*\\wsmprovhost.exe")
+| stats dc(host) AS hosts_rebooted values(host) AS hosts values(CommandLine) AS commands by User
+| where hosts_rebooted &gt;= 3
+| sort - hosts_rebooted</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> Sigma cannot count hosts by itself. The volume check moves into the SPL <code>dc(host)</code> aggregation. The three selections collapse into one OR block over <code>ParentImage</code>. <strong>False positives:</strong> bulk reboots by platform automation. <strong>Tuning:</strong> allow-list the automation accounts, and keep the host threshold at three or more in an hour. Page immediately when the caller is interactive rather than a service.</p>
+
+  <h4>Rule 3 — Burst of unclean shutdowns and critical reboots</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Burst of Unclean Shutdowns and Critical Reboots
+id: c9a5b3d4-6e7f-4a01-9c23-4d5e6f7a8b92
+status: stable
+description: Detects unexpected shutdown events and Kernel-Power critical reboot
+  events in the Windows System log. A spike often means forced power actions or
+  malware that triggers a blue screen through NtRaiseHardError.
+references:
+  - https://attack.mitre.org/techniques/T1529/
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: system
+detection:
+  selection_unexpected:
+    EventID: 6008
+  selection_kernel_power:
+    Provider_Name: 'Microsoft-Windows-Kernel-Power'
+    EventID: 41
+  condition: 1 of selection_*
+fields:
+  - EventID
+  - Provider_Name
+  - Computer
+falsepositives:
+  - Power cuts, battery failures, and forced power-off during hardware maintenance
+level: high
+tags:
+  - attack.impact
+  - attack.t1529</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=wineventlog sourcetype="XmlWinEventLog:System" (EventCode=6008 OR EventCode=41)
+| bin _time span=15m
+| stats count AS unclean_events dc(host) AS hosts_affected by _time EventCode
+| where unclean_events &gt;= 5 OR hosts_affected &gt;= 3</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> the System log selection maps to the <code>XmlWinEventLog:System</code> sourcetype. The time-window logic that Sigma leaves to the alert engine becomes the <code>bin</code> plus <code>stats</code> pair here. <strong>False positives:</strong> genuine power failures and hardware maintenance. <strong>Tuning:</strong> learn your baseline first, and exclude known maintenance nights. Add event 1001 BugCheck records to the same search when you hunt for crash-forcing malware.</p>
+
+  <h4>Rule 4 — Linux reboot, halt, or poweroff outside maintenance</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Linux Reboot or Poweroff by Unexpected User or Time
+id: d0b6c4e5-7f80-4b12-8d34-5e6f7a8b9ca3
+status: stable
+description: Detects reboot, shutdown, halt, and poweroff commands executed on Linux
+  through auditd. Matches outside approved maintenance windows point to sabotage or
+  an attacker clearing a session.
+references:
+  - https://attack.mitre.org/techniques/T1529/
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection_direct:
+    type: EXECVE
+    a0:
+      - 'reboot'
+      - 'shutdown'
+      - 'halt'
+      - 'poweroff'
+  selection_init:
+    type: EXECVE
+    a0: 'init'
+    a1:
+      - '0'
+      - '6'
+  selection_systemctl:
+    type: EXECVE
+    a0: 'systemctl'
+    a1:
+      - 'reboot'
+      - 'poweroff'
+      - 'halt'
+  condition: 1 of selection_*
+fields:
+  - a0
+  - a1
+  - exe
+  - uid
+  - host
+falsepositives:
+  - Patch or infrastructure automation that restarts servers inside the maintenance window
+level: medium
+tags:
+  - attack.impact
+  - attack.t1529</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=linux sourcetype="linux:audit" type="EXECVE"
+  (a0 IN ("reboot", "shutdown", "halt", "poweroff", "init")
+     OR (a0="systemctl" a1 IN ("reboot", "poweroff", "halt")))
+| stats count AS reboots values(a1) AS args first(_time) AS first_seen by host, a0, uid
+| sort - first_seen</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> Sigma lists map to the Splunk <code>IN</code> clause. The separate systemctl selection becomes a bracketed OR group, because it matches on two fields at once. <strong>False positives:</strong> patch automation and scheduled maintenance. <strong>Tuning:</strong> allow-list the automation accounts and window, and watch <code>uid</code> versus <code>auid</code> to catch sudo misuse. Add <code>last reboot</code> checks to quarterly reviews to find hosts that rebooted silently.</p>
+
+  <h4>Rule 5 — Cloud instance stop, reboot, or terminate by unusual identity</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Cloud Instance Stop, Reboot, or Terminate by Unusual Identity
+id: e1c7d5f6-8091-4c23-9e45-6f7a8b9cadb4
+status: stable
+description: Detects EC2 power actions in CloudTrail. Stolen cloud keys can stop,
+  reboot, or terminate many instances in minutes, which interrupts services and
+  destroys live evidence just like an on-premises reboot.
+references:
+  - https://attack.mitre.org/techniques/T1529/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: 'ec2.amazonaws.com'
+    eventName:
+      - 'StopInstances'
+      - 'RebootInstances'
+      - 'TerminateInstances'
+  condition: selection
+fields:
+  - eventName
+  - userIdentity.arn
+  - sourceIPAddress
+  - requestParameters.instancesSet.items
+  - awsRegion
+falsepositives:
+  - Autoscaling, cost scripts, and change automation that stop instances under known roles
+level: high
+tags:
+  - attack.impact
+  - attack.t1529</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype="aws:cloudtrail" eventSource="ec2.amazonaws.com"
+  eventName IN ("StopInstances", "RebootInstances", "TerminateInstances")
+| table _time userIdentity.arn sourceIPAddress eventName requestParameters.instancesSet.items awsRegion
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> CloudTrail JSON fields map directly to Splunk search-time extractions. The Sigma list of event names becomes the <code>IN</code> clause. <strong>False positives:</strong> scheduled lifecycle actions under fixed role ARNs. <strong>Tuning:</strong> allow-list those automation roles. Page on any interactive identity, any new source IP, and any call that touches a backup or domain-controller instance. Add ESXi hostd and AAA command records to the same incident review for the hypervisor and device variants.</p>
+</section>
+<section class="sec" id="sec-6-case-study">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2>Real-world case study</h2></div>
+  <p class="sec-intro">Petya, 2016: the attack that made the forced reboot the weapon itself. The payload was harmless-looking until the machine restarted, and that single power action is the T1529 moment.</p>
+
+  <div class="card">
+    <h3 class="card-title">Context</h3>
+    <p>In 2016, researchers at ESET and Kaspersky documented Petya, a ransomware family delivered through fake job-application emails. This case study is a training reconstruction based on that public reporting. The attachments looked like ordinary CV documents, and opening them launched the payload with the user's own rights. Instead of encrypting files one by one, Petya took a harder path. It overwrote the master boot record, the small boot program area at the start of the disk. It wrote its own bootkit there, a small malicious loader that starts before Windows. Then it forced a reboot. The reboot was not a side effect. It was the switch that activated the whole attack.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Attack chain mapping</h3>
+    <p>Petya followed the same chain this guide describes for T1529. The technique arrived last and flipped the attack from stealth to destruction.</p>
+    <p class="chain">
+      <span class="chain-step">Phishing email</span><span class="chain-arrow">→</span>
+      <span class="chain-step">User execution</span><span class="chain-arrow">→</span>
+      <span class="chain-step">MBR overwrite</span><span class="chain-arrow">→</span>
+      <span class="chain-step hot">Forced reboot (T1529)</span><span class="chain-arrow">→</span>
+      <span class="chain-step">MFT encryption and extortion</span>
+    </p>
+  </div>
+
+  <h3>Timeline</h3>
+  <ol class="timeline">
+    <li><div class="tl-when">Day 0 · morning</div><div class="tl-what">The bait arrives</div><p>A fake job application lands in an inbox. The victim opens the attachment, a dropper runs, and the Petya payload is released on the workstation. Admin rights arrive through the user confirmation dialog.</p></li>
+    <li><div class="tl-when">Seconds later</div><div class="tl-what">Boot record overwritten</div><p>The payload writes its bootkit over the master boot record. Nothing visible changes on screen, and the machine still works normally, which is exactly why the victim keeps using it.</p></li>
+    <li><div class="tl-when">Right after the overwrite</div><div class="tl-what">Forced reboot (T1529)</div><p>The payload forces a system reboot. The moment power cycles, the tampered boot program starts instead of Windows, and the attacker's code takes control of the boot process.</p></li>
+    <li><div class="tl-when">After the reboot</div><div class="tl-what">Fake repair screen</div><p>A screen that looks like a normal CHKDSK disk check appears, claiming to repair the drive. While the user waits patiently, the fake check is encrypting the master file table in the background. That table is the NTFS index of every file.</p></li>
+    <li><div class="tl-when">When encryption ends</div><div class="tl-what">The ransom note</div><p>The repair screen is replaced by a red ransom note demanding payment. The system can no longer start normally, and without specialist recovery the files stay out of reach.</p></li>
+    <li><div class="tl-when">Response phase</div><div class="tl-what">Recovery is painful</div><p>Because the file index itself was encrypted, normal restore tools failed. Researchers later published ways to recover the encryption keys from memory, but many victims simply rebuilt their machines from scratch.</p></li>
+  </ol>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Detection point</h3>
+      <p>The best moment was the forced reboot itself. Event 1074 appeared in the System log immediately before the machine restarted. It named the malicious process as the caller. Process logging showed the payload writing to disk boot structures. A defender watching 1074 with an unexpected caller had a clean early warning. The warning came while the machine still worked, minutes after an office document ran.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Containment</h3>
+      <p>Teams isolated affected machines from the network before they rebooted, where they could. They blocked the sender domains. They warned users not to open new job-application attachments. The attack encrypted the file index only after the reboot. So every hour of warning saved machines that would otherwise have been lost with the next restart.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Eradication</h3>
+      <p>Cleaning meant rewriting the boot record from trusted media, removing the bootkit, and scanning for the dropper everywhere. Machines that had already rebooted into the fake repair screen needed full reimaging. The file index could not be restored without the specialist key-recovery methods published later.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Recovery</h3>
+      <p>Organizations with clean backups restored their data after rebuilding the operating systems. Those without backups weighed the ransom demand against data loss. Response teams also named their tools from then on: memory capture with a tool such as Volatility came before any restart. The event pushed many teams to treat boot-level protection features as part of ransomware defense, not as hardware settings. Those features include secure boot and measured boot.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Impact and consequences</h3>
+    <p>Petya 2016 was small compared with its 2017 successor NotPetya, but its design shaped everything that followed. It proved that a single forced reboot could move an attack from the user session into the boot path. Antivirus tools of that era were blind there. Security teams learned to care about events 1074 and 6008, and ransomware authors copied the reboot-activated pattern in later families. The fake CHKDSK screen also became a reminder that even a familiar-looking screen during startup deserves suspicion.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Team response and communication</h3>
+    <p>Response teams sorted machines into three groups: never rebooted, rebooted but not yet encrypted, and already encrypted. That ordering made the work tractable, because the first group only needed cleanup and the last group needed rebuilds. Help desk staff were briefed with one instruction: do not restart infected machines. The message spread faster through the service desk than through any technical control.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Lessons learned</h3>
+    <ul class="check">
+      <li>Alert on event 1074 with unexpected callers; the forced reboot announced this attack before any encryption started.</li>
+      <li>Never power off or restart a suspicious machine by reflex; you may be executing the attacker's final step for them.</li>
+      <li>Capture memory first, because Petya's keys could later be recovered from it, not from disk.</li>
+      <li>Protect the boot path with secure boot, and monitor for boot configuration changes.</li>
+      <li>Treat office-document processes that touch disk boot structures as critical alerts, not curiosities.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec" id="sec-7-mitigation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2>Mitigation and defense</h2></div>
+  <p class="sec-intro">Be honest about this one: ATT&amp;CK states that this technique cannot be easily mitigated with preventive controls. It abuses the normal power features of every system. The defense is to reduce who can do it, make every action leave a trace, and recover fast.</p>
+
+  <div class="callout warning">
+    <div class="callout-label">What ATT&amp;CK says</div>
+    <p>The technique page notes that shutdown and reboot are legitimate system features, so there is no simple block that stops abuse without breaking operations. The controls below therefore focus on least privilege, change control, tamper-resistant logging, and fast detection and response, which together remove most of the risk.</p>
+  </div>
+
+  <h3>Controls that actually reduce the risk</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Least privilege for power actions</h3>
+      <p>Use User Rights Assignment to reserve the two Windows shutdown rights for approved admins. The rights are <em>Shut down the system</em> and <em>Force shutdown from a remote system</em>. Apply this on servers first. It removes the <code>SeShutdownPrivilege</code> that attackers check for with <code>whoami /priv</code>. This follows the least-privilege principle that ATT&amp;CK mitigation guidance promotes across its technique pages.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Change-controlled maintenance windows</h3>
+      <p>Make every planned reboot carry a change ticket and a window, and feed that calendar into the SIEM as a lookup. A reboot with a ticket is noise; a reboot without one is a signal. This single habit powers the tuning for every rule in section 5.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Network device AAA and command authorization</h3>
+      <p>Put devices behind AAA with TACACS+. That protocol centralizes device logins and command checks. Authorize commands, so <code>reload</code> requires an approved role. Command accounting then records who reloaded what, which is the only visibility many devices offer.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Cloud and hypervisor guardrails</h3>
+      <p>Use cloud service control policies to deny Stop and Terminate calls outside automation roles. Keep ESXi in lockdown mode with a small, named root group. Locking down who can press the power switch protects every machine that lives behind it.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Tamper-resistant, remote logging</h3>
+      <p>Ship System log, Sysmon, auditd, hostd, and AAA records off the host to the SIEM in near real time. A reboot cannot hide a trail that already left the machine. Remote shipping keeps evidence safe when the attacker forces a restart to cover their work.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Fast detection and response</h3>
+      <p>Deploy the five rules from section 5, write a reboot-storm runbook, and rehearse it. The runbook should say clearly: isolate through EDR or network controls, never power off first, capture memory, and reset the involved account.</p>
+    </div>
+  </div>
+
+  <h3>Prioritized actions</h3>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Risk reduction</th><th>How to verify</th></tr></thead>
+      <tbody>
+        <tr><td>Restrict shutdown user rights to approved admins on servers.</td><td><span class="badge sev-low">Low</span></td><td>Platform team.</td><td><span class="badge sev-high">High</span></td><td>A test account attempts a shutdown and the system denies it.</td></tr>
+        <tr><td>Ship the System log plus Sysmon from every server to the SIEM.</td><td><span class="badge sev-medium">Medium</span></td><td>Logging team.</td><td><span class="badge sev-high">High</span></td><td>A lab reboot shows 1074 and 41 in the SIEM within minutes.</td></tr>
+        <tr><td>Deploy the five detection rules from section 5.</td><td><span class="badge sev-low">Low</span></td><td>Detection engineering.</td><td><span class="badge sev-high">High</span></td><td>A lab test in each platform triggers each rule once.</td></tr>
+        <tr><td>Feed the change calendar into the SIEM as a lookup.</td><td><span class="badge sev-medium">Medium</span></td><td>IT service management.</td><td><span class="badge sev-high">High</span></td><td>Rule 1 suppresses a scheduled reboot and keeps alerting on the rest.</td></tr>
+        <tr><td>Apply cloud service control policies for instance power actions.</td><td><span class="badge sev-medium">Medium</span></td><td>Cloud team.</td><td><span class="badge sev-high">High</span></td><td>A standard role attempts StopInstances and the call is denied.</td></tr>
+        <tr><td>Enable AAA command authorization and accounting on network devices.</td><td><span class="badge sev-medium">Medium</span></td><td>Network team.</td><td><span class="badge sev-medium">Medium</span></td><td>A non-approved account cannot run <code>reload</code>, and approved runs are logged.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Home and small office advice</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Protect your own machines</h3>
+      <ul class="check">
+        <li>Use a standard (non-admin) account for daily work, so malware cannot restart or damage the system freely.</li>
+        <li>Turn on File History (Windows) or Time Machine (macOS) to an external drive you unplug after backups.</li>
+        <li>Read before clicking restart dialogs that appear right after opening an email attachment.</li>
+        <li>Keep the recovery USB or installer media for each computer in a safe place, made while the machine was healthy.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Small-office quick wins</h3>
+      <ul class="check">
+        <li>Schedule updates and restarts at night from one central place, so daytime reboots stand out.</li>
+        <li>Keep one admin account and one daily account per person, and never share the admin one.</li>
+        <li>Use a small UPS (battery backup) for the server, and test that a power cut does not corrupt it.</li>
+        <li>Write down who may restart the server, and treat any other restart as an incident to review.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>You cannot remove the power switch from a computer. But you can decide who is allowed to press it. You can record every press off-box and notice the ones you did not plan. Teams with rights restrictions, a change calendar in the SIEM, and a rehearsed runbook turn this technique from an outage into an alert.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-8-mistakes">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2>Common mistakes and best practices</h2></div>
+  <p class="sec-intro">Most teams miss this attack for fixable process reasons, not because the signals are weak. Here are the twelve mistakes we see most, with the symptom, the root cause, the fix, and the prevention.</p>
+
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>Mistake 1 — Treating every 1074 as safe</td><td>The attacker's reboot is logged as "maintenance" and nobody reads it.</td><td>Event 1074 seen as routine noise.</td><td>Score each 1074 by caller, time, and reason against the change calendar.</td><td>Feed planned reboots into the SIEM as a lookup list.</td></tr>
+        <tr><td>Mistake 2 — Not shipping the Windows System log</td><td>1074, 6008, and Kernel-Power 41 never reach the SIEM.</td><td>Only Sysmon was considered worth shipping.</td><td>Add the System channel to the log shipping baseline.</td><td>Include the System log in the logging coverage matrix.</td></tr>
+        <tr><td>Mistake 3 — Ignoring Kernel-Power 41 on workstations</td><td>Crash-forcing malware spreads while analysts chase server alerts.</td><td>Event 41 treated as a hardware problem only.</td><td>Include 41 and 6008 bursts in impact detections.</td><td>Baseline crash rates per host and alert on deviation.</td></tr>
+        <tr><td>Mistake 4 — Powering off machines during response</td><td>Memory evidence and live sessions vanish mid-investigation.</td><td>Old habit of "turn it off and on again".</td><td>Isolate through EDR or network controls and capture memory first.</td><td>Runbook states: never power off before memory capture.</td></tr>
+        <tr><td>Mistake 5 — Broad shutdown rights on workstations and servers</td><td>Any domain user or stolen service account can restart production.</td><td>Default user rights never reviewed.</td><td>Restrict shutdown and remote-shutdown rights to approved admins.</td><td>Quarterly user rights assignment review.</td></tr>
+        <tr><td>Mistake 6 — Network devices without AAA accounting</td><td>A <code>reload</code> leaves no record at all.</td><td>Devices managed with local accounts.</td><td>Enable AAA with TACACS+ command accounting and authorization.</td><td>Add device commands to the detection scope.</td></tr>
+        <tr><td>Mistake 7 — ESXi hosts that log only to themselves</td><td>Power-off commands are invisible after the VMs die.</td><td>Hypervisors treated as appliances.</td><td>Ship hostd.log and shell history to the SIEM.</td><td>Add hypervisors to the logging coverage matrix.</td></tr>
+        <tr><td>Mistake 8 — No cloud guardrails for instance power actions</td><td>Stolen keys stop or terminate a fleet in minutes.</td><td>Everyone holds broad EC2 permissions.</td><td>Service control policies deny Stop and Terminate outside automation roles.</td><td>Quarterly IAM review of power-action permissions.</td></tr>
+        <tr><td>Mistake 9 — Disabling reboot rules after Patch Tuesday noise</td><td>Real attacks pass silently months later.</td><td>Alert fatigue with no tuning process.</td><td>Re-enable with change-window exceptions instead of removing the rule.</td><td>Formal tuning workflow with second reviewer.</td></tr>
+        <tr><td>Mistake 10 — No baseline of planned reboots</td><td>Every alert becomes a manual debate.</td><td>No change calendar feed.</td><td>Document windows and automation accounts, then suppress only those.</td><td>Review the suppression list monthly.</td></tr>
+        <tr><td>Mistake 11 — Assuming the attacker's reboot was the end</td><td>Scope stops at the rebooted host and misses the rest.</td><td>Boot events never used for scoping.</td><td>Use 6005 and boot records to timeline every affected host.</td><td>Scope with boot history, not just alerts.</td></tr>
+        <tr><td>Mistake 12 — Never testing recovery from an unclean shutdown</td><td>File system checks fail during the real incident.</td><td>Tests always use clean reboots.</td><td>Run one recovery test per year from a forced unclean stop.</td><td>Track restore success as a published metric.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Healthy operating habits</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">Daily</h3>
+      <ul class="check">
+        <li>Confirm the System log and auditd sources are reporting to the SIEM.</li>
+        <li>Review every shutdown alert from the last 24 hours against the change calendar.</li>
+        <li>Check dashboards for unexplained reboots or crash events on critical hosts.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Weekly</h3>
+      <ul class="check">
+        <li>Walk one reboot alert end-to-end and time the triage.</li>
+        <li>Review new suppressions and tuning changes with a second reviewer.</li>
+        <li>Sync with the platform team about upcoming maintenance windows.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Monthly</h3>
+      <ul class="check">
+        <li>Test one rule against a lab host performing a safe simulated reboot.</li>
+        <li>Review shutdown rights, cloud power permissions, and AAA roles.</li>
+        <li>Update actor notes from new public incident reports.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="sec-9-cheatsheet">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2>Cheat sheet and quick reference</h2></div>
+  <p class="sec-intro">Everything important on one screen, for the wall and for the incident channel.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Key facts</h3>
+      <dl class="kv-list">
+        <div><dt>Technique</dt><dd>T1529 — System Shutdown/Reboot.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact.</dd></div>
+        <div><dt>Version</dt><dd>1.5, created 04 October 2019.</dd></div>
+        <div><dt>Detection strategy</dt><dd>DET0559.</dd></div>
+        <div><dt>What it does</dt><dd>Switches systems off or restarts them to interrupt access, activate damage, or slow response.</dd></div>
+        <div><dt>Typical timing</dt><dd>Right after a wipe or encryption, or when the attacker wants to escape.</dd></div>
+        <div><dt>Signature commands</dt><dd><code>shutdown /r /t 0 /f</code>, <code>Restart-Computer -Force</code>, <code>systemctl reboot</code>, <code>vim-cmd vmsvc/power.off</code>, <code>reload</code>.</dd></div>
+        <div><dt>Best evidence</dt><dd>System 1074 with caller and reason, plus Kernel-Power 41 and 6008.</dd></div>
+        <div><dt>Best defense</dt><dd>Least privilege for power actions plus change windows and fast alerts.</dd></div>
+      </dl>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Top detections</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Signal</th><th>Source</th><th>First action</th></tr></thead>
+          <tbody>
+            <tr><td>1074 with shutdown.exe or PowerShell outside a change window.</td><td>Windows System log.</td><td>Page; check the caller account and scope the fleet.</td></tr>
+            <tr><td>shutdown.exe under PsExec, WMI, or WinRM parent.</td><td>Sysmon 1 / 4688.</td><td>Treat as a reboot wave; count hosts per account.</td></tr>
+            <tr><td>Spike of 6008 and Kernel-Power 41 across hosts.</td><td>Windows System log.</td><td>Open a reboot-storm incident and hunt for crash-forcing malware.</td></tr>
+            <tr><td>auditd EXECVE reboot, shutdown, halt, or poweroff.</td><td>Linux auditd.</td><td>Check the account, session source, and change window.</td></tr>
+            <tr><td>StopInstances or TerminateInstances by unusual identity.</td><td>CloudTrail.</td><td>Revoke sessions and check instance inventory.</td></tr>
+            <tr><td>vim-cmd or esxcli power actions, device <code>reload</code>.</td><td>ESXi hostd, AAA accounting.</td><td>Confirm a change ticket or contain the hypervisor or device.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Response checklist</h3>
+    <ul class="check">
+      <li>Open the raw 1074 event: caller process, user, reason text, and time.</li>
+      <li>Compare with the change calendar before treating it as an incident.</li>
+      <li>Check logon events for the caller account and its source address.</li>
+      <li>Search all hosts for shutdown commands by the same account in the last 24 hours.</li>
+      <li>Look for wipe or encryption signals on the affected hosts before they reboot.</li>
+      <li>Isolate through EDR or network controls; do not power off, and capture memory first.</li>
+      <li>Reset the involved account and review every host it touched.</li>
+      <li>After containment, verify one restore path works before declaring safety.</li>
+    </ul>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Official and related references</h3>
+      <ul class="check">
+        <li><a href="https://attack.mitre.org/techniques/T1529/" target="_blank" rel="noopener">MITRE ATT&amp;CK — T1529 System Shutdown/Reboot</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1485/" target="_blank" rel="noopener">Related — T1485 Data Destruction</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1561/001/" target="_blank" rel="noopener">Related — T1561.001 Disk Structure Wipe</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1490/" target="_blank" rel="noopener">Related — T1490 Inhibit System Recovery</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1489/" target="_blank" rel="noopener">Related — T1489 Service Stop</a>.</li>
+        <li><a href="https://www.cisa.gov/stopransomware" target="_blank" rel="noopener">CISA — StopRansomware guidance</a>.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">One-line summary</h3>
+      <p>A reboot can be the last step of an attack, not the end of one. Watch the caller behind event 1074, treat unexplained unclean stops as a storm warning, and never press the power switch yourself until memory is captured. The team that knows its planned reboots spots the unplanned one in minutes.</p>
+    </div>
+  </div>
+</section>
+  </main>
+</div>
+
+<button class="fab back-top" id="backTop" type="button" aria-label="Back to top">Top</button>
+<button class="fab contents-fab" id="contentsFab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="fab theme-fab" id="themeToggle" type="button" aria-label="Switch between dark and light theme">&#9680;</button>
+<div class="scrim" id="scrim" hidden></div>
+<div class="toc-overlay" id="tocOverlay" role="dialog" aria-modal="true" aria-label="Contents" hidden>
+  <div class="toc-overlay-head"><span>Contents</span><button class="btn" id="overlayClose" type="button">Close</button></div>
+  <ul class="toc-list" id="overlayList"></ul>
+</div>
+
+<script>
+window.SIM_STORY = function () {
+  var N = [
+    { id: "attacker", x: 40, y: 64, w: 168, h: 62, label: "Attacker host", desc: "The laptop the attacker controls, using a stolen operations account." },
+    { id: "ops", x: 292, y: 54, w: 198, h: 66, label: "OPS01 workstation", desc: "The operations workstation the attacker signed in to with the stolen account." },
+    { id: "app", x: 292, y: 168, w: 198, h: 60, label: "APP01 app server", desc: "A production application server that users depend on every day." },
+    { id: "sql", x: 566, y: 26, w: 176, h: 52, label: "SQL01 server", desc: "A database server hit first by the reboot wave." },
+    { id: "web", x: 566, y: 96, w: 176, h: 52, label: "WEB01 server", desc: "A web server hit seconds after SQL01 in the reboot wave." },
+    { id: "esx", x: 566, y: 168, w: 176, h: 60, label: "ESXi host", desc: "A hypervisor that can power off many virtual machines with one command." },
+    { id: "siem", x: 352, y: 306, w: 240, h: 62, label: "SIEM", desc: "Collects System, Sysmon, auditd, and hostd logs from every host." },
+    { id: "soc", x: 678, y: 306, w: 212, h: 74, label: "SOC analyst", desc: "Watches correlated alerts and leads containment and recovery." }
+  ];
+
+  var VMS = [
+    { x: 578, y: 240, w: 50, h: 22, label: "VM1" },
+    { x: 636, y: 240, w: 50, h: 22, label: "VM2" },
+    { x: 694, y: 240, w: 50, h: 22, label: "VM3" }
+  ];
+
+  function byId(id) {
+    for (var i = 0; i < N.length; i++) { if (N[i].id === id) return N[i]; }
+    return null;
+  }
+
+  function drawNode(ctx, id, state, S, H, C) {
+    var n = byId(id);
+    var o = { label: n.label, state: state };
+    if (S.hover === id) { o.state = "active"; }
+    H.node(ctx, n.x, n.y, n.w, n.h, o);
+  }
+
+  function logLine(ctx, H, C, x1, y1, x2, y2) {
+    H.flow(ctx, x1, y1, x2, y2, C.border, { n: 0, speed: 0, dash: [3, 4] });
+  }
+
+  function vmDark(S) {
+    return (S.i === 5 && S.p > 0.35) || S.i === 6;
+  }
+
+  function base(ctx, w, h, S, H, C) {
+    drawNode(ctx, "attacker", S.i >= 7 ? "dead" : "active", S, H, C);
+    var opsState = S.i === 7 ? "warn" : ((S.i === 0 && S.p > 0.4) || S.i >= 1 ? "active" : "idle");
+    drawNode(ctx, "ops", opsState, S, H, C);
+    var appState = "idle";
+    if ((S.i === 3 && S.p > 0.3) || (S.i > 3 && S.i < 7)) { appState = "dead"; }
+    if (S.i === 7) { appState = "good"; }
+    drawNode(ctx, "app", appState, S, H, C);
+    var sqlState = "idle";
+    if ((S.i === 4 && S.p > 0.25) || (S.i > 4 && S.i < 7)) { sqlState = "dead"; }
+    if (S.i === 7) { sqlState = "warn"; }
+    drawNode(ctx, "sql", sqlState, S, H, C);
+    var webState = "idle";
+    if ((S.i === 4 && S.p > 0.55) || (S.i > 4 && S.i < 7)) { webState = "dead"; }
+    if (S.i === 7) { webState = "warn"; }
+    drawNode(ctx, "web", webState, S, H, C);
+    var esxState = S.i === 7 ? "good" : (S.i >= 5 ? "warn" : "idle");
+    drawNode(ctx, "esx", esxState, S, H, C);
+    drawNode(ctx, "siem", S.i >= 6 ? "active" : "idle", S, H, C);
+    drawNode(ctx, "soc", S.i === 7 ? "good" : (S.i === 6 ? "alert" : "idle"), S, H, C);
+
+    for (var v = 0; v < VMS.length; v++) {
+      var m = VMS[v];
+      var dark = vmDark(S);
+      H.rr(ctx, m.x, m.y, m.w, m.h, 5);
+      ctx.fillStyle = dark ? H.hexA(C.danger, 0.10) : H.hexA(C.success, 0.13);
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = dark ? H.hexA(C.danger, 0.8) : H.hexA(C.success, 0.6);
+      ctx.stroke();
+      H.text(ctx, m.label, m.x + m.w / 2, m.y + m.h / 2 + 0.5,
+        { size: 10, color: dark ? C.muted : C.text, mono: true, align: "center", maxWidth: 46 });
+    }
+
+    logLine(ctx, H, C, 340, 120, 430, 306);
+    logLine(ctx, H, C, 390, 228, 470, 306);
+    logLine(ctx, H, C, 700, 228, 560, 306);
+    H.text(ctx, "event logs", 488, 258, { size: 10, color: C.muted, mono: true, maxWidth: 90 });
+    H.text(ctx, "power actions", 690, 278, { size: 10, color: C.muted, mono: true, align: "center", maxWidth: 120 });
+  }
+
+  function evidence(ctx, S, H, C) {
+    var x = 40;
+    if (S.i >= 2) { x += H.chip(ctx, "System EID 1074", x, 416, C.warning) + 10; }
+    if (S.i >= 3) { x += H.chip(ctx, "Kernel-Power 41", x, 416, C.warning) + 10; }
+    if (S.i >= 4) { x += H.chip(ctx, "EID 6008", x, 416, C.warning) + 10; }
+    if (S.i >= 5) { x += H.chip(ctx, "ESXi power.off", x, 416, C.warning) + 10; }
+    if (S.i >= 6) { x += H.chip(ctx, "CORRELATED: T1529", x, 416, C.danger) + 10; }
+    if (S.i >= 7) { x += H.chip(ctx, "Hosts restored", x, 416, C.success) + 10; }
+    var cmds = [
+      "RDP logon on OPS01 as CORP\\svc_ops from 203.0.113.77",
+      "whoami /priv  (SeShutdownPrivilege is present)",
+      "shutdown /r /t 300 /c \"Planned maintenance\"",
+      "shutdown /r /t 0 /f /m \\\\APP01  (forced now)",
+      "psexec @servers.txt shutdown /r /t 0 /f  (6 hosts)",
+      "vim-cmd vmsvc/power.off 3  (on the ESXi host)",
+      "correlation: 1074 + 6008 + 41, 1 account, 7 hosts",
+      "block account, boot from known-good state, restore"
+    ];
+    H.text(ctx, "CMD>", 40, 458, { size: 12, color: C.muted, mono: true, weight: "700" });
+    H.text(ctx, cmds[S.i] || "", 86, 458, { size: 12, color: C.text, mono: true, maxWidth: 820 });
+    H.text(ctx, "EVIDENCE", 40, 396, { size: 10, color: C.muted, mono: true, weight: "700" });
+  }
+
+  var S = [
+    {
+      label: "Stolen ops logon", dur: 5,
+      caption: "The attacker signs in to OPS01, an operations workstation, with an account stolen by an infostealer. Nothing looks broken yet, but this account controls many servers. The logon comes from an unknown outside address.",
+      hint: "Alert on admin logons to operations workstations that do not come from your VPN or jump hosts.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 208, 95, 292, 87, C.danger, { t: S.t, n: 3 });
+        H.text(ctx, "stolen credentials", 250, 74, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 130 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Check the power rights", dur: 5,
+      caption: "The attacker runs whoami /priv and sees SeShutdownPrivilege in the list. This user right allows the account to switch machines off. Now they know they hold the power switch.",
+      hint: "Flag privilege checks on workstations and record which user rights the caller looked for.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.pulse(ctx, 391, 87, 56, C.accent, { t: S.t });
+        H.text(ctx, "whoami /priv", 391, 40, { size: 11, color: C.accent, mono: true, align: "center", maxWidth: 160 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Sneaky delayed reboot", dur: 5.5,
+      caption: "The attacker schedules a delayed reboot on APP01 with shutdown /r /t 300 and a fake maintenance reason. Windows logs event 1074 at once, but the reason text looks like normal work. The timer gives them an alibi.",
+      hint: "Treat every 1074 as a question: does the caller, time, and reason match an approved change ticket?",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        var remain = Math.max(3, Math.round(300 - S.p * 297));
+        H.text(ctx, "reboot timer: T-" + remain + "s", 391, 148,
+          { size: 11, color: C.warning, mono: true, align: "center", maxWidth: 180 });
+        H.flow(ctx, 391, 120, 391, 168, C.warning, { t: S.t, n: 2, speed: 0.3 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Force the reboot now", dur: 5.5,
+      caption: "Tired of waiting, the attacker forces an immediate reboot of APP01 with shutdown /r /t 0 /f. The server goes dark and every live session drops. The unclean stop leaves a Kernel-Power 41 event behind.",
+      hint: "A forced reboot of a production server outside a change window deserves a page, not a ticket.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 460, 120, 420, 168, C.danger, { t: S.t, n: 4, speed: 0.55 });
+        if (S.p > 0.3) { H.pulse(ctx, 391, 198, 52, C.danger, { t: S.t }); }
+        H.text(ctx, "sessions dropped", 520, 198, { size: 10, color: C.danger, mono: true, maxWidth: 130 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Push a reboot wave", dur: 6,
+      caption: "The attacker pushes the same command to many servers through remote execution. SQL01 and WEB01 power off one after another. Users see service errors across the whole company.",
+      hint: "Correlate shutdown commands across hosts by the same user; one account on many hosts is an incident.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 470, 80, 566, 52, C.danger, { t: S.t, n: 3, speed: 0.5 });
+        H.flow(ctx, 470, 100, 566, 122, C.danger, { t: S.t + 0.4, n: 3, speed: 0.5 });
+        if (S.p > 0.25) { H.pulse(ctx, 654, 52, 42, C.danger, { t: S.t }); }
+        if (S.p > 0.55) { H.pulse(ctx, 654, 122, 42, C.danger, { t: S.t, phase: 0.5 }); }
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Turn the VMs off", dur: 5.5,
+      caption: "On the hypervisor, the attacker runs power-off commands against the virtual machines. The VM icons go dark one after another. Whole services disappear even though their physical hosts are fine.",
+      hint: "Ship ESXi hostd and shell logs to the SIEM; every power action must name an approved admin.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 470, 140, 566, 192, C.violet, { t: S.t, n: 3, speed: 0.5 });
+        if (S.p > 0.35) { H.pulse(ctx, 654, 198, 46, C.danger, { t: S.t }); }
+        H.text(ctx, "power.off x3", 654, 276, { size: 10, color: C.violet, mono: true, align: "center", maxWidth: 120 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "SOC connects the dots", dur: 6,
+      caption: "The SIEM links events 1074, 6008, and Kernel-Power 41 to one unusual account across many hosts. It raises a single critical incident for T1529. The SOC analyst starts containment.",
+      hint: "Build this correlation before an attack: same account, many shutdown events, short time window.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 440, 306, 440, 140, C["accent-2"], { t: S.t, n: 4, speed: 0.45 });
+        H.flow(ctx, 700, 228, 560, 306, C["accent-2"], { t: S.t + 0.3, n: 3, speed: 0.45 });
+        H.arrow(ctx, 592, 337, 678, 337, C["accent-2"], { width: 2 });
+        H.pulse(ctx, 784, 337, 60, C.danger, { t: S.t });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Contain and recover", dur: 6,
+      caption: "The SOC isolates OPS01, blocks the stolen account, and boots the affected hosts from a known-good state. Services come back and the attacker is locked out. The lesson: alert on 1074 with unexpected callers.",
+      hint: "Keep tested boot images and backups so recovery is a runbook, not an improvisation.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        drawNode(ctx, "attacker", "dead", S, H, C);
+        H.text(ctx, "account blocked", 124, 40, { size: 11, color: C.danger, mono: true, align: "center", maxWidth: 140 });
+        H.arrow(ctx, 678, 316, 500, 214, C.success, { dash: [4, 4] });
+        H.text(ctx, "known-good boot", 596, 248, { size: 10, color: C.success, mono: true, align: "center", maxWidth: 130 });
+        evidence(ctx, S, H, C);
+      }
+    }
+  ];
+
+  SimEngine.init({ nodes: N, steps: S });
+};
+</script>
+<script>
+/* ============================================================
+   Detection Engineering Guide — shared page behavior
+   Theme, progress bar, TOC (generated from real headings),
+   mobile overlay, back-to-top, copy buttons, reveal-on-scroll.
+   No external libraries. No alert/prompt/confirm.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  var doc = document;
+  var rootEl = doc.documentElement;
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  /* ---------- theme toggle ---------- */
+  var themeBtn = doc.getElementById("themeToggle");
+  function setTheme(t, save) {
+    rootEl.setAttribute("data-theme", t);
+    if (save) { try { localStorage.setItem("atk-theme", t); } catch (e) {} }
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      setTheme(next, true);
+    });
+  }
+
+  /* ---------- progress bar + back to top ---------- */
+  var fill = doc.getElementById("progressFill");
+  var backTop = doc.getElementById("backTop");
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      var st = window.scrollY || doc.documentElement.scrollTop || 0;
+      var dh = (doc.documentElement.scrollHeight - window.innerHeight) || 1;
+      if (fill) fill.style.width = Math.min(100, (st / dh) * 100) + "%";
+      if (backTop) backTop.classList.toggle("show", st > 520);
+      trackActive();
+      ticking = false;
+    });
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  if (backTop) {
+    backTop.addEventListener("click", function () {
+      var smooth = !reduced.matches;
+      window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+    });
+  }
+
+  /* ---------- table of contents (generated from real headings) ---------- */
+  var secEls = [].slice.call(doc.querySelectorAll("main.content > section.sec"));
+  var tocList = doc.getElementById("tocList");
+  var ovList = doc.getElementById("overlayList");
+  var targets = []; // { id, el, linkEls }
+
+  function makeLink(t) {
+    var a = doc.createElement("a");
+    a.href = "#" + t.id;
+    a.textContent = t.text;
+    a.addEventListener("click", function () { closeOverlay(); });
+    return a;
+  }
+
+  secEls.forEach(function (sec) {
+    var numEl = sec.querySelector(".sec-num");
+    var h2 = sec.querySelector("h2");
+    if (!h2 || !sec.id) return;
+    var num = numEl ? numEl.textContent.trim() : "";
+    var t = { id: sec.id, el: sec, text: (num ? num + ". " : "") + h2.textContent.trim(), linkEls: [] };
+    [tocList, ovList].forEach(function (list) {
+      if (!list) return;
+      var li = doc.createElement("li");
+      li.appendChild(makeLink(t));
+      list.appendChild(li);
+      t.linkEls.push(li.firstChild);
+    });
+    targets.push(t);
+    if (sec.id === "sec-5-detection") {
+      [].slice.call(sec.querySelectorAll("h3[id]")).forEach(function (h3) {
+        var st = { id: h3.id, el: h3, text: h3.textContent.trim(), linkEls: [] };
+        [tocList, ovList].forEach(function (list) {
+          if (!list) return;
+          var li = doc.createElement("li");
+          li.className = "sub";
+          li.appendChild(makeLink(st));
+          list.appendChild(li);
+          st.linkEls.push(li.firstChild);
+        });
+        targets.push(st);
+      });
+    }
+  });
+
+  var activeId = null;
+  function trackActive() {
+    if (!targets.length) return;
+    var probe = (window.scrollY || 0) + 140;
+    var cur = targets[0];
+    for (var i = 0; i < targets.length; i++) {
+      var el = targets[i].el;
+      var top = el.getBoundingClientRect().top + (window.scrollY || 0);
+      if (top <= probe) cur = targets[i];
+    }
+    if (cur.id !== activeId) {
+      activeId = cur.id;
+      targets.forEach(function (t) {
+        t.linkEls.forEach(function (a) { a.classList.toggle("active", t.id === activeId); });
+      });
+    }
+  }
+
+  /* ---------- mobile contents overlay ---------- */
+  var contentsFab = doc.getElementById("contentsFab");
+  var overlay = doc.getElementById("tocOverlay");
+  var scrim = doc.getElementById("scrim");
+  var overlayClose = doc.getElementById("overlayClose");
+
+  function openOverlay() {
+    if (!overlay) return;
+    overlay.hidden = false;
+    if (scrim) scrim.hidden = false;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "true");
+    doc.body.style.overflow = "hidden";
+    var first = overlay.querySelector("a, button");
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    if (scrim) scrim.hidden = true;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "false");
+    doc.body.style.overflow = "";
+    if (contentsFab) contentsFab.focus();
+  }
+  if (contentsFab) contentsFab.addEventListener("click", openOverlay);
+  if (overlayClose) overlayClose.addEventListener("click", closeOverlay);
+  if (scrim) scrim.addEventListener("click", closeOverlay);
+  doc.addEventListener("keydown", function (e) {
+    if (overlay && !overlay.hidden) {
+      if (e.key === "Escape") { closeOverlay(); return; }
+      if (e.key === "Tab") {
+        var f = [].slice.call(overlay.querySelectorAll("a[href], button:not([disabled])"));
+        if (!f.length) return;
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && doc.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && doc.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+  });
+
+  /* ---------- copy buttons ---------- */
+  function flash(btn) {
+    var old = btn.getAttribute("data-label") || btn.textContent;
+    btn.setAttribute("data-label", old);
+    btn.textContent = "Copied";
+    btn.classList.add("copied");
+    window.setTimeout(function () {
+      btn.textContent = old;
+      btn.classList.remove("copied");
+    }, 1600);
+  }
+  function copyText(txt, btn) {
+    function legacy() {
+      var ta = doc.createElement("textarea");
+      ta.value = txt;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      doc.body.appendChild(ta);
+      ta.select();
+      try { doc.execCommand("copy"); flash(btn); } catch (err) {}
+      doc.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(function () { flash(btn); }, legacy);
+    } else { legacy(); }
+  }
+  [].slice.call(doc.querySelectorAll(".code-block")).forEach(function (block) {
+    var btn = block.querySelector(".copy-btn");
+    var code = block.querySelector("pre code");
+    if (!btn || !code) return;
+    btn.addEventListener("click", function () { copyText(code.innerText || code.textContent, btn); });
+  });
+
+  /* ---------- reveal on scroll ---------- */
+  if (!reduced.matches && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          en.target.classList.add("in");
+          io.unobserve(en.target);
+        }
+      });
+    }, { rootMargin: "0px 0px -6% 0px" });
+    secEls.forEach(function (s) { s.classList.add("reveal"); io.observe(s); });
+  }
+
+  /* ---------- initial paint ---------- */
+  onScroll();
+  /* ============================================================
+     SimEngine — shared canvas simulation engine
+     Techniques provide: nodes (tooltip hit areas) + steps with
+     { label, caption, hint, dur, draw(ctx, w, h, S, H, C) }.
+     Handles play/pause/restart/speed, step chips, captions,
+     tooltips, scaling, theme refresh and reduced motion.
+     ============================================================ */
+  window.SimEngine = (function () {
+    var SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+    var MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+    var DW = 960, DH = 540;
+
+    function hexA(hex, a) {
+      hex = (hex || "").trim();
+      if (hex.charAt(0) === "#") {
+        if (hex.length === 4) hex = "#" + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2) + hex.charAt(3) + hex.charAt(3);
+        var n = parseInt(hex.slice(1), 16);
+        if (isNaN(n)) return hex;
+        return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+      }
+      return hex;
+    }
+    function resolveColors() {
+      var cs = window.getComputedStyle(rootEl);
+      var names = ["bg", "surface", "surface-2", "elevated", "text", "muted", "border", "border-strong",
+        "accent", "accent-2", "violet", "success", "warning", "danger", "high", "low"];
+      var c = {};
+      for (var i = 0; i < names.length; i++) {
+        var v = cs.getPropertyValue("--" + names[i]);
+        c[names[i]] = v ? v.trim() : "#888888";
+      }
+      return c;
+    }
+
+    var H = {
+      hexA: hexA,
+      _C: null,
+      rr: function (ctx, x, y, w, h, r) {
+        r = Math.min(r || 8, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      },
+      grid: function (ctx, w, h, C) {
+        ctx.save();
+        ctx.fillStyle = hexA(C.border, 0.42);
+        for (var x = 24; x < w; x += 48) {
+          for (var y = 24; y < h; y += 48) {
+            ctx.beginPath();
+            ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      },
+      node: function (ctx, x, y, w, h, o) {
+        o = o || {};
+        var C = this._C;
+        var state = o.state || "idle";
+        var fill = C["surface-2"];
+        var stroke = C["border-strong"];
+        if (state === "active") stroke = C.accent;
+        if (state === "alert") stroke = C.danger;
+        if (state === "good") stroke = C.success;
+        if (state === "warn") stroke = C.warning;
+        if (state === "dead") { stroke = C.danger; fill = hexA(C.danger, 0.10); }
+        ctx.save();
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.lineWidth = state === "idle" ? 1 : 1.7;
+        ctx.strokeStyle = stroke;
+        ctx.stroke();
+        if (state === "dead") {
+          ctx.strokeStyle = hexA(C.danger, 0.95);
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(x + 9, y + 9);
+          ctx.lineTo(x + w - 9, y + h - 9);
+          ctx.moveTo(x + w - 9, y + 9);
+          ctx.lineTo(x + 9, y + h - 9);
+          ctx.stroke();
+        }
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        var cx = x + w / 2;
+        if (o.sub) {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2 - 8, w - 14);
+          ctx.fillStyle = C.muted;
+          ctx.font = "400 10.5px " + MONO;
+          ctx.fillText(o.sub, cx, y + h / 2 + 10, w - 14);
+        } else {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2, w - 14);
+        }
+        ctx.restore();
+      },
+      arrow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var ang = Math.atan2(y2 - y1, x2 - x1);
+        var head = o.head || 9;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = o.width || 1.6;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2 - Math.cos(ang) * head, y2 - Math.sin(ang) * head);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - Math.cos(ang - 0.42) * head, y2 - Math.sin(ang - 0.42) * head);
+        ctx.lineTo(x2 - Math.cos(ang + 0.42) * head, y2 - Math.sin(ang + 0.42) * head);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      },
+      flow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var t = o.t || 0;
+        var n = o.n || 3;
+        var speed = o.speed == null ? 0.32 : o.speed;
+        var size = o.size || 3.2;
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.32);
+        ctx.lineWidth = 1.2;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        for (var i = 0; i < n; i++) {
+          var f = (t * speed + i / n) % 1;
+          var px = x1 + (x2 - x1) * f;
+          var py = y1 + (y2 - y1) * f;
+          ctx.beginPath();
+          ctx.arc(px, py, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      },
+      pulse: function (ctx, x, y, r, color, o) {
+        o = o || {};
+        var p = ((o.t || 0) * 0.8 + (o.phase || 0)) % 1;
+        var rr2 = r * (0.4 + p * 0.9);
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.55 * (1 - p));
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, rr2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      },
+      text: function (ctx, str, x, y, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.fillStyle = o.color || C.text;
+        ctx.font = (o.weight || "400") + " " + (o.size || 13) + "px " + (o.mono ? MONO : SANS);
+        ctx.textAlign = o.align || "left";
+        ctx.textBaseline = o.baseline || "middle";
+        ctx.fillText(str, x, y, o.maxWidth);
+        ctx.restore();
+      },
+      chip: function (ctx, str, x, y, color, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.font = "700 11px " + MONO;
+        var w = ctx.measureText(str).width + 18;
+        var h = 21;
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = hexA(color, o.bgA == null ? 0.13 : o.bgA);
+        ctx.fill();
+        ctx.strokeStyle = hexA(color, 0.55);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(str, x + 9, y + h / 2 + 0.5);
+        ctx.restore();
+        return w;
+      }
+    };
+
+    function init(cfg) {
+      var canvas = doc.getElementById(cfg.canvas || "simCanvas");
+      if (!canvas || !canvas.getContext) return null;
+      var stage = canvas.parentElement;
+      var ctx = canvas.getContext("2d");
+      var steps = cfg.steps || [];
+      var nodes = cfg.nodes || [];
+      var C = resolveColors();
+      H._C = C;
+      var st = { i: 0, p: 0, t: 0, playing: false, speed: 1, last: 0, hover: null, scale: 1 };
+      var rm = reduced.matches;
+
+      var playBtn = doc.getElementById("simPlay");
+      var pauseBtn = doc.getElementById("simPause");
+      var restartBtn = doc.getElementById("simRestart");
+      var speedSel = doc.getElementById("simSpeed");
+      var stepsBox = doc.getElementById("simSteps");
+      var capLabel = doc.getElementById("simCapLabel");
+      var capText = doc.getElementById("simCaption");
+      var capHint = doc.getElementById("simHint");
+      var tip = doc.getElementById("simTip");
+
+      var chips = [];
+      steps.forEach(function (s, idx) {
+        var b = doc.createElement("button");
+        b.type = "button";
+        b.className = "step-chip";
+        b.textContent = (idx + 1) + ". " + s.label;
+        b.addEventListener("click", function () { go(idx); });
+        if (stepsBox) stepsBox.appendChild(b);
+        chips.push(b);
+      });
+
+      function syncCaption() {
+        var s = steps[st.i];
+        if (!s) return;
+        if (capLabel) capLabel.textContent = "Step " + (st.i + 1) + " of " + steps.length + " — " + s.label;
+        if (capText) capText.textContent = s.caption;
+        if (capHint) capHint.textContent = "Defender hint: " + s.hint;
+        chips.forEach(function (c, i) {
+          c.classList.toggle("active", i === st.i);
+          if (i === st.i) c.setAttribute("aria-current", "step");
+          else c.removeAttribute("aria-current");
+        });
+      }
+      function syncButtons() {
+        if (playBtn) playBtn.disabled = st.playing;
+        if (pauseBtn) pauseBtn.disabled = !st.playing;
+      }
+      function go(i) {
+        st.i = Math.max(0, Math.min(steps.length - 1, i));
+        st.p = 0;
+        syncCaption();
+      }
+      function play() {
+        if (!steps.length) return;
+        if (st.i === steps.length - 1 && st.p >= 1) go(0);
+        st.playing = true;
+        syncButtons();
+      }
+      function pause() { st.playing = false; syncButtons(); }
+      function restart() { st.t = 0; go(0); }
+      if (playBtn) playBtn.addEventListener("click", play);
+      if (pauseBtn) pauseBtn.addEventListener("click", pause);
+      if (restartBtn) restartBtn.addEventListener("click", restart);
+      if (speedSel) speedSel.addEventListener("change", function () { st.speed = parseFloat(speedSel.value) || 1; });
+
+      function fit() {
+        var w = (stage && stage.clientWidth) || 960;
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var cssH = Math.round(w * DH / DW);
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(cssH * dpr);
+        canvas.style.height = cssH + "px";
+        st.scale = canvas.width / DW;
+      }
+      window.addEventListener("resize", function () { fit(); render(); });
+
+      function toDesign(e) {
+        var r = canvas.getBoundingClientRect();
+        return { x: (e.clientX - r.left) / r.width * DW, y: (e.clientY - r.top) / r.height * DH };
+      }
+      function hit(d) {
+        for (var i = nodes.length - 1; i >= 0; i--) {
+          var n = nodes[i];
+          if (d.x >= n.x && d.x <= n.x + n.w && d.y >= n.y && d.y <= n.y + n.h) return n;
+        }
+        return null;
+      }
+      canvas.addEventListener("pointermove", function (e) {
+        if (!nodes.length) return;
+        var n = hit(toDesign(e));
+        st.hover = n ? n.id : null;
+        canvas.style.cursor = n ? "pointer" : "default";
+        if (tip) {
+          if (n) {
+            tip.textContent = "";
+            var b1 = doc.createElement("strong");
+            b1.textContent = n.label;
+            var p1 = doc.createElement("span");
+            p1.textContent = n.desc || "";
+            tip.appendChild(b1);
+            tip.appendChild(p1);
+            var wrapR = stage.getBoundingClientRect();
+            var lx = e.clientX - wrapR.left + 14;
+            var ly = e.clientY - wrapR.top + 14;
+            lx = Math.max(4, Math.min(lx, wrapR.width - 250));
+            ly = Math.max(4, Math.min(ly, wrapR.height - 90));
+            tip.style.left = lx + "px";
+            tip.style.top = ly + "px";
+            tip.hidden = false;
+          } else { tip.hidden = true; }
+        }
+      });
+      canvas.addEventListener("pointerleave", function () {
+        st.hover = null;
+        if (tip) tip.hidden = true;
+      });
+
+      if (window.MutationObserver) {
+        var mo = new MutationObserver(function () {
+          C = resolveColors();
+          H._C = C;
+          render();
+        });
+        mo.observe(rootEl, { attributes: true, attributeFilter: ["data-theme"] });
+      }
+
+      function render() {
+        var s = st.scale || 1;
+        ctx.setTransform(s, 0, 0, s, 0, 0);
+        ctx.fillStyle = C.bg;
+        ctx.fillRect(0, 0, DW, DH);
+        H.grid(ctx, DW, DH, C);
+        var step = steps[st.i];
+        if (step && step.draw) {
+          step.draw(ctx, DW, DH, { i: st.i, p: st.p, t: st.t, hover: st.hover, playing: st.playing, reduced: rm }, H, C);
+        }
+      }
+
+      function frame(ts) {
+        var dt = st.last ? Math.min((ts - st.last) / 1000, 0.08) : 0;
+        st.last = ts;
+        st.t += dt;
+        if (st.playing && steps.length) {
+          var d = steps[st.i].dur || 4.5;
+          st.p += dt * st.speed / d;
+          if (st.p >= 1) {
+            if (st.i < steps.length - 1) { st.i++; st.p = 0; syncCaption(); }
+            else { st.p = 1; pause(); }
+          }
+        }
+        render();
+        window.requestAnimationFrame(frame);
+      }
+
+      fit();
+      syncCaption();
+      syncButtons();
+      if (rm) { st.p = 1; } // reduced motion: static first step, no autoplay
+      window.requestAnimationFrame(frame);
+      return { go: go, play: play, pause: pause, restart: restart, state: st };
+    }
+
+    return { init: init, h: H };
+  })();
+
+  /* ---------- boot the simulation if present ---------- */
+  if (typeof window.SIM_STORY === "function") {
+    try { window.SIM_STORY(); } catch (e) { /* keep the rest of the page working */ }
+  }
+})();
+
+</script>
+</body>
+</html>

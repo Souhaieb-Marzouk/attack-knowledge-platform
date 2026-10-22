@@ -1,0 +1,2761 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1490 - Inhibit System Recovery · Detection Engineering Guide</title>
+<meta name="description" content="Beginner-friendly detection guide for MITRE ATT&amp;CK T1490 (Inhibit System Recovery): attacker view, SOC view, Sigma rules, Splunk SPL, mitigations and a real case study.">
+<script>(function(){try{var t=null;try{t=localStorage.getItem("atk-theme")}catch(e){}if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})();</script>
+<style>
+/* ============================================================
+   Detection Engineering Guide — shared design system
+   Dark + light themes, layout, components. No external assets.
+   ============================================================ */
+
+:root {
+  --bg: #0b0f1a;
+  --surface: #121a2e;
+  --surface-2: #172138;
+  --elevated: #1a2542;
+  --text: #e7edf8;
+  --muted: #9aa8c0;
+  --border: #24314e;
+  --border-strong: #2f4066;
+  --accent: #4f8cff;
+  --accent-2: #22d3ee;
+  --violet: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --high: #fb923c;
+  --low: #4ade80;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --radius-card: 14px;
+  --radius-ctl: 9px;
+  --shadow-soft: 0 10px 30px rgba(2, 6, 18, 0.35);
+  --max-w: 1280px;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f3f6fc;
+  --surface: #ffffff;
+  --surface-2: #f5f8ff;
+  --elevated: #e9eefa;
+  --text: #182238;
+  --muted: #5a6a85;
+  --border: #d9e2f2;
+  --border-strong: #c2d0ea;
+  --accent: #2f6fe4;
+  --accent-2: #0891b2;
+  --violet: #7c5ce0;
+  --success: #0d9e6e;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --high: #c2410c;
+  --low: #15803d;
+  --shadow-soft: 0 10px 30px rgba(24, 34, 56, 0.10);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 96px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16.5px;
+  line-height: 1.65;
+  overflow-x: clip;
+}
+
+img, canvas { max-width: 100%; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+p, li, dd, dt { overflow-wrap: break-word; }
+p { max-width: 78ch; }
+
+h1, h2, h3, h4 {
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.5em;
+  font-weight: 750;
+  text-wrap: balance;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:where(p, li, td, th, dd, h3, h4) > code:not(pre code) {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.08em 0.4em;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+  overflow: hidden; white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px; top: -48px;
+  z-index: 200;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 0 0 10px 10px;
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 0; text-decoration: none; }
+
+/* ---------- progress bar ---------- */
+
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 90;
+  background: transparent;
+  pointer-events: none;
+}
+#progressFill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.08s linear;
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(900px 320px at 12% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    radial-gradient(700px 300px at 88% -20%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 70%),
+    linear-gradient(color-mix(in srgb, var(--surface) 55%, var(--bg)), var(--bg));
+}
+.hero-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 44px 24px 36px;
+}
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 14px;
+}
+.page-title {
+  font-size: clamp(1.8rem, 3.6vw, 2.65rem);
+  margin: 0 0 14px;
+  max-width: 22ch;
+}
+.tech-id {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62em;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 12px;
+  padding: 0.08em 0.5em;
+  margin-right: 0.45em;
+  vertical-align: 0.18em;
+  white-space: nowrap;
+}
+.hero-intro {
+  color: var(--muted);
+  font-size: 1.06rem;
+  max-width: 68ch;
+  margin: 0 0 20px;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 24px;
+}
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+.chip b, .chip strong { color: var(--text); font-weight: 600; }
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-soft);
+}
+.fact-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.fact-value { font-weight: 700; font-size: 1.02rem; line-height: 1.35; }
+.fact-sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+
+/* ---------- layout: sticky TOC + main ---------- */
+
+.layout {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 40px 24px 110px;
+  display: grid;
+  grid-template-columns: 262px minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.sidebar { position: relative; }
+.toc-card {
+  position: sticky;
+  top: 28px;
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px 12px;
+  scrollbar-width: thin;
+}
+.toc-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  padding: 0 10px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-list li { margin: 2px 0; }
+.toc-list a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  box-shadow: inset 3px 0 0 transparent;
+}
+.toc-list a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.toc-list a.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.toc-list li.sub a { padding-left: 22px; font-size: 0.84rem; }
+.content { min-width: 0; }
+
+/* ---------- sections ---------- */
+
+.sec { margin-top: 64px; }
+.content > .sec:first-child { margin-top: 0; }
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.sec-num {
+  flex: none;
+  min-width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.sec-head h2 {
+  font-size: clamp(1.45rem, 2.4vw, 1.85rem);
+  margin: 0;
+}
+.sec-intro {
+  color: var(--muted);
+  margin: 2px 0 22px 56px;
+  max-width: 74ch;
+}
+.sec h3 {
+  font-size: 1.16rem;
+  margin: 30px 0 12px;
+  scroll-margin-top: 92px;
+}
+.sec h4 { font-size: 1rem; margin: 20px 0 8px; }
+
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
+.reveal.in { opacity: 1; transform: none; }
+
+/* ---------- cards & grids ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-soft);
+}
+.card > h3:first-child, .card > h4:first-child { margin-top: 0; }
+.card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+.card-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+  margin: 0 0 8px;
+}
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.grid-2 > *, .grid-3 > * { min-width: 0; }
+
+.kv-list { margin: 0; display: grid; gap: 0; }
+.kv-list > div {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.kv-list > div:last-child { border-bottom: 0; }
+.kv-list dt {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding-top: 2px;
+}
+.kv-list dd { margin: 0; font-size: 0.95rem; }
+/* ---------- callouts ---------- */
+
+.callout {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  padding: 13px 16px;
+  margin: 14px 0;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .callout-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+  color: var(--accent);
+}
+.callout.warning { border-left-color: var(--warning); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); }
+.callout.warning .callout-label { color: var(--warning); }
+.callout.good { border-left-color: var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); }
+.callout.good .callout-label { color: var(--success); }
+.callout.danger { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+.callout.danger .callout-label { color: var(--danger); }
+.callout.note { border-left-color: var(--violet); background: color-mix(in srgb, var(--violet) 8%, var(--surface)); }
+.callout.note .callout-label { color: var(--violet); }
+
+/* ---------- badges ---------- */
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.badge.sev-critical { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.badge.sev-high { color: var(--high); border-color: color-mix(in srgb, var(--high) 55%, transparent); background: color-mix(in srgb, var(--high) 12%, transparent); }
+.badge.sev-medium { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.badge.sev-low { color: var(--low); border-color: color-mix(in srgb, var(--low) 55%, transparent); background: color-mix(in srgb, var(--low) 12%, transparent); }
+.badge.cat { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 50%, transparent); background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
+.badge.ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 50%, transparent); background: color-mix(in srgb, var(--success) 10%, transparent); }
+
+/* ---------- tables ---------- */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  margin: 14px 0;
+}
+.table-wrap table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.table-wrap.wide table { min-width: 780px; }
+.table-wrap th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: var(--surface-2);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table-wrap td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.table-wrap tbody tr:last-child td { border-bottom: 0; }
+.table-wrap tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+
+/* ---------- code blocks ---------- */
+
+.code-block {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--elevated);
+  border-bottom: 1px solid var(--border);
+}
+.code-lang {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.code-block pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  scrollbar-width: thin;
+}
+.code-block pre code { white-space: pre; }
+
+/* ---------- buttons & controls ---------- */
+
+.btn, .step-chip {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+.btn:hover, .step-chip:hover { background: var(--elevated); border-color: var(--accent); }
+.btn:active, .step-chip:active { transform: translateY(1px); }
+.btn:disabled, .step-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.copied { color: var(--success); border-color: var(--success); }
+.copy-btn { padding: 4px 12px; font-size: 0.8rem; }
+.select {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 10px;
+}
+
+/* ---------- timeline ---------- */
+
+.timeline {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0 0 0 24px;
+  border-left: 2px solid var(--border);
+}
+.timeline li { position: relative; margin: 0 0 18px; }
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: -31px;
+  top: 5px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.tl-when {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-2);
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+.tl-what { font-weight: 700; margin-bottom: 4px; }
+.timeline p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- triage flow ---------- */
+
+.flow {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  counter-reset: flow;
+}
+.flow li {
+  counter-increment: flow;
+  position: relative;
+  padding: 0 0 18px 52px;
+}
+.flow li::before {
+  content: counter(flow);
+  position: absolute;
+  left: 0; top: 0;
+  width: 34px; height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.flow li::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 38px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--border);
+}
+.flow li:last-child::after { display: none; }
+.flow .flow-step { font-weight: 700; display: block; margin-bottom: 3px; }
+.flow p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- checklists ---------- */
+
+.check { list-style: none; margin: 12px 0; padding: 0; }
+.check li {
+  position: relative;
+  padding: 6px 0 6px 34px;
+  border-bottom: 1px dashed var(--border);
+}
+.check li:last-child { border-bottom: 0; }
+.check li::before {
+  content: "";
+  position: absolute;
+  left: 4px; top: 11px;
+  width: 15px; height: 15px;
+  border-radius: 4px;
+  border: 2px solid var(--accent);
+  background: transparent;
+}
+
+/* ---------- attack chain strip ---------- */
+
+.chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.chain-step {
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+.chain-step.hot {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  font-weight: 700;
+}
+.chain-arrow { color: var(--muted); }
+
+/* ---------- misc helpers ---------- */
+
+.muted { color: var(--muted); }
+.small { font-size: 0.86rem; }
+.mt-0 { margin-top: 0; }
+.mono { font-family: var(--font-mono); }
+.stack > * + * { margin-top: 12px; }
+/* ---------- simulation ---------- */
+
+.sim-shell { padding: 0; overflow: hidden; }
+.sim-stage {
+  position: relative;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.sim-stage canvas { display: block; width: 100%; }
+.sim-tip {
+  position: absolute;
+  z-index: 5;
+  max-width: 240px;
+  background: var(--elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+  pointer-events: none;
+}
+.sim-tip strong { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--accent-2); margin-bottom: 2px; }
+.sim-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sim-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+.sim-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 12px 14px 2px;
+}
+.step-chip { font-size: 0.8rem; padding: 4px 11px; border-radius: 999px; }
+.step-chip.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 700;
+}
+.sim-caption {
+  padding: 12px 14px 16px;
+}
+.sim-cap-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+}
+.sim-cap-text { margin: 0 0 10px; }
+.sim-hint {
+  border-left: 3px solid var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+  border-radius: 0 10px 10px 0;
+  padding: 9px 13px;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+/* ---------- floating controls ---------- */
+
+.fab {
+  position: fixed;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s ease;
+}
+.fab:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.theme-fab { left: 18px; bottom: 18px; width: 46px; height: 46px; font-size: 1.05rem; }
+.back-top { right: 18px; bottom: 74px; padding: 0 16px; opacity: 0; pointer-events: none; transform: translateY(8px); }
+.back-top.show { opacity: 1; pointer-events: auto; transform: none; }
+.contents-fab { right: 18px; bottom: 18px; padding: 0 16px; display: none; }
+
+/* ---------- mobile contents overlay ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: rgba(4, 8, 18, 0.55);
+  border: 0;
+  padding: 0;
+}
+.toc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 24px;
+  overflow: auto;
+}
+.toc-overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.toc-overlay-head span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.toc-overlay .toc-list a { font-size: 1rem; padding: 10px 12px; }
+.toc-overlay .toc-list li.sub a { padding-left: 30px; font-size: 0.9rem; }
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1040px) {
+  .layout { display: block; padding-top: 28px; }
+  .sidebar { display: none; }
+  .contents-fab { display: inline-flex; }
+  .sec { margin-top: 48px; }
+  .sec-intro { margin-left: 0; }
+}
+
+@media (max-width: 900px) {
+  .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .hero-inner { padding: 30px 16px 26px; }
+  .layout { padding: 24px 16px 96px; }
+  .fact-grid { grid-template-columns: 1fr; gap: 10px; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .kv-list > div { grid-template-columns: 1fr; gap: 2px; }
+  .sec { margin-top: 40px; }
+  .sec-head { gap: 10px; }
+  .sec-num { min-width: 36px; height: 36px; font-size: 0.95rem; border-radius: 10px; }
+  .sec-intro { margin-bottom: 16px; }
+  .sim-speed { margin-left: 0; width: 100%; }
+  .sim-toolbar .btn { flex: 1 1 auto; }
+  .theme-fab { left: 12px; bottom: 12px; }
+  .back-top { right: 12px; bottom: 78px; }
+  .contents-fab { right: 12px; bottom: 12px; }
+  .page-title { font-size: clamp(1.55rem, 7.2vw, 2rem); }
+}
+
+@media (max-width: 400px) {
+  .hero-inner { padding: 24px 12px 20px; }
+  .layout { padding: 18px 12px 90px; }
+  .chip { font-size: 11px; padding: 3px 9px; }
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; }
+  #progressFill { transition: none; }
+}
+
+/* ---------- print ---------- */
+
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f6fa;
+    --elevated: #eef1f7;
+    --text: #111827;
+    --muted: #4b5563;
+    --border: #d1d5db;
+    --border-strong: #9ca3af;
+    --accent: #1d4ed8;
+    --accent-2: #0e7490;
+    --violet: #6d28d9;
+    --success: #047857;
+    --warning: #92400e;
+    --danger: #b91c1c;
+    --high: #9a3412;
+    --low: #166534;
+    --shadow-soft: none;
+  }
+  body { background: #fff; color: #111827; font-size: 11.5pt; }
+  .sidebar, .progress-bar, .fab, .back-top, .contents-fab, .theme-fab,
+  .sim-toolbar, .sim-steps, .copy-btn, .scrim, .toc-overlay, .skip-link {
+    display: none !important;
+  }
+  .hero { border-bottom: 1px solid #ccc; background: #fff; }
+  .layout { display: block; max-width: none; padding: 0; }
+  .sec { margin-top: 22pt; }
+  .sec-intro { margin-left: 0; }
+  a { color: #1d4ed8; text-decoration: underline; }
+  .code-block, .table-wrap, .card, .callout { box-shadow: none; break-inside: avoid; }
+  .code-block pre { white-space: pre-wrap; overflow: visible; }
+  .table-wrap { overflow: visible; }
+  .table-wrap table { min-width: 0; }
+  h2, h3 { break-after: avoid; }
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1490"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip-link" href="#mainContent">Skip to main content</a>
+<div class="progress-bar" aria-hidden="true"><div id="progressFill"></div></div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&amp;CK · Impact</p>
+    <h1 class="page-title" id="pageTitle"><span class="tech-id">T1490</span> Inhibit System Recovery</h1>
+    <p class="hero-intro">This guide explains how attackers block a system from being restored after an attack. It shows the attacker steps, the traces they leave, and the detections that catch them early.</p>
+    <div class="chip-row">
+      <span class="chip">Tactic: Impact</span>
+      <span class="chip">Platforms: Windows · macOS · Linux · ESXi · IaaS · Containers · Network Devices</span>
+      <span class="chip">Technique version 1.6 · created 02 April 2019</span>
+      <span class="chip">Detection strategy: DET0329</span>
+      <span class="chip">Guide v2.0</span>
+    </div>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <div class="fact-label">Attack stage</div>
+        <div class="fact-value">Late impact phase</div>
+        <div class="fact-sub">Often minutes before ransomware fires</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Attacker goal</div>
+        <div class="fact-value">No restore, no escape</div>
+        <div class="fact-sub">Push the victim toward paying</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Key evidence</div>
+        <div class="fact-value">Process and command logs</div>
+        <div class="fact-sub">vssadmin, wbadmin, bcdedit</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Detection effort</div>
+        <div class="fact-value">Low to medium</div>
+        <div class="fact-sub">A few rare commands cover most cases</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar" aria-label="Table of contents">
+    <nav class="toc-card" aria-label="Sections">
+      <div class="toc-title">Contents</div>
+      <ul class="toc-list" id="tocList"></ul>
+    </nav>
+  </aside>
+  <main class="content" id="mainContent">
+<section class="sec" id="sec-1-overview">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2>Overview</h2></div>
+  <p class="sec-intro">A short tour of the technique: what it is, why attackers use it, and what this guide teaches you.</p>
+
+  <p><strong>Inhibit System Recovery</strong> means an attacker destroys or disables the ways a computer can be restored. Windows keeps <em>shadow copies</em> (point-in-time snapshots of files), a <em>backup catalog</em> (an index of what backups exist), and a <em>recovery environment</em> (a small repair system that starts when Windows cannot). Attackers delete or turn off these safety nets. After that, a wiped or encrypted machine is much harder to bring back.</p>
+  <p>This technique matters because it changes the outcome of an incident. A company with working backups can lose a hundred machines and still be working the next morning. A company whose backups were destroyed first may face days of downtime or a real reason to pay a ransom. Attackers know this, so they often remove recovery options minutes before they start encrypting files. That short window is your best chance to catch them before the damage is done.</p>
+
+  <div class="card">
+    <h3 class="card-title">Where it sits in the attack chain</h3>
+    <p>Attackers reach this stage late. They must already control the machine with admin rights, because only admins can delete shadow copies and change boot settings. When you see this technique, the attacker is done hiding and is ready to cause harm.</p>
+    <p class="chain">
+      <span class="chain-step">Initial Access</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Execution</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Lateral Movement</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Privilege Escalation</span><span class="chain-arrow">→</span>
+      <span class="chain-step hot">Impact — T1490</span>
+    </p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What you will learn in this guide</h3>
+      <ul class="check">
+        <li>How attackers remove shadow copies, backup catalogs, and recovery boot options.</li>
+        <li>Which exact log events show up when they do it.</li>
+        <li>Five ready-to-use Sigma rules and matching Splunk queries.</li>
+        <li>How to prioritize this alert during a live incident.</li>
+        <li>How to protect backups so this attack fails.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Key facts at a glance</h3>
+      <dl class="kv-list">
+        <div><dt>ATT&amp;CK ID</dt><dd>T1490 — Inhibit System Recovery.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact (availability).</dd></div>
+        <div><dt>Platforms</dt><dd>All official platforms: Windows, macOS, Linux, ESXi (VMware), IaaS (cloud), Containers, Network Devices. Windows is the most targeted.</dd></div>
+        <div><dt>Typical actors</dt><dd>Ransomware groups such as Conti, BlackCat, LockBit, Akira; also state-linked wiper teams.</dd></div>
+        <div><dt>Main data sources</dt><dd>Process creation with command line, service events, file deletion events, cloud audit logs.</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">Note</div>
+    <p>ATT&amp;CK lists no sub-techniques under T1490. The technique also reaches far beyond Windows, and the official description makes this clear. On ESXi (VMware's virtualization platform), attackers delete or encrypt virtual machine snapshots, for example with <code>vim-cmd vmsvc/snapshot.removeall</code>. In the cloud, they turn off versioning and backup policies, then delete snapshots, database backups, machine images, and older object versions. On network devices, they delete backup firmware images and reload the device, which can leave it completely inoperable. Attackers also delete "online" backups: copies on network shares or in folders that sync to cloud services. This guide covers the Windows core in depth and points to those variants where they matter.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-2-simulation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2>Animated simulation</h2></div>
+  <p class="sec-intro">Watch the attack unfold step by step on a compromised file server. At the same time, see what the SOC (security operations center, the team that watches alerts) can observe. Hover over any box for details, or use the step buttons to jump around.</p>
+
+  <div class="sim-shell card">
+    <div class="sim-stage">
+      <canvas id="simCanvas" width="960" height="540" role="img" aria-label="Animated simulation of T1490: an attacker with stolen admin rights lists and deletes shadow copies, deletes the backup catalog, disables Windows recovery, and is caught by the SOC, which restores from an immutable backup."></canvas>
+      <div class="sim-tip" id="simTip" hidden></div>
+    </div>
+    <div class="sim-toolbar">
+      <button class="btn" id="simPlay" type="button">Play</button>
+      <button class="btn" id="simPause" type="button" disabled>Pause</button>
+      <button class="btn" id="simRestart" type="button">Restart</button>
+      <label class="sim-speed">Speed
+        <select id="simSpeed" class="select">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+    </div>
+    <div class="sim-steps" id="simSteps" aria-label="Simulation steps"></div>
+    <div class="sim-caption" aria-live="polite">
+      <div class="sim-cap-label" id="simCapLabel">Step 1 of 8</div>
+      <p class="sim-cap-text" id="simCaption">Press Play to start the simulation.</p>
+      <div class="sim-hint" id="simHint">Defender hints appear here during playback.</div>
+    </div>
+  </div>
+
+  <h3>Written version of the simulation</h3>
+  <p>The same story in text, for screen readers and for printing. Each step names the action, the evidence it leaves, and what the defender should notice.</p>
+
+  <div class="grid-2">
+    <div class="card"><h3 class="card-title">Step 1 — Get in with stolen admin rights</h3><p>The attacker signs in to FILE01, a Windows file server. The account is a stolen admin account, sold by infostealer malware (malware that saves passwords and sells them). Nothing looks broken yet. Evidence: a Security event 4624 logon from an unusual source address. The SOC should compare the logon source with known admin workstations.</p></div>
+    <div class="card"><h3 class="card-title">Step 2 — Confirm the power</h3><p>The attacker runs <code>whoami /priv</code> and checks for admin rights. Deleting shadow copies needs high privileges, so this check matters to them. Evidence: a Sysmon (free Windows logging tool) event 1 process creation with a rare parent chain. The SOC should flag admin tools started from an interactive session that is not a jump host (the hardened server admins must use to reach other servers).</p></div>
+    <div class="card"><h3 class="card-title">Step 3 — List the safety nets</h3><p>The attacker runs <code>vssadmin list shadows</code> to see the restore points that exist. This is recon for the next step. Evidence: the same command line appears in process logging. The SOC should treat shadow copy enumeration on a server as an early warning, not normal user behavior.</p></div>
+    <div class="card"><h3 class="card-title">Step 4 — Delete every shadow copy</h3><p>One command — <code>vssadmin delete shadows /all /quiet</code> — removes all restore points. The shadow copy store empties in seconds. Evidence: Sysmon event 1 and Security event 4688 with the full command line. The SOC should alert at high severity on any delete-shadows command outside approved maintenance.</p></div>
+    <div class="card"><h3 class="card-title">Step 5 — Erase the backup catalog</h3><p>The attacker runs <code>wbadmin delete catalog -quiet</code> to erase the index that tells Windows which backups exist. The backup files may still be on disk, but the system no longer knows about them. Evidence: process events for wbadmin.exe with a delete flag. The SOC should alert on any wbadmin delete action.</p></div>
+    <div class="card"><h3 class="card-title">Step 6 — Break the recovery boot options</h3><p>The attacker runs <code>bcdedit /set {default} recoveryenabled No</code>. The Windows repair environment will not start after the next reboot. Evidence: a process event for bcdedit.exe with recovery-enabled arguments. The SOC should alert on bcdedit changes to boot recovery settings.</p></div>
+    <div class="card"><h3 class="card-title">Step 7 — The SOC connects the dots</h3><p>The SIEM (the central log system) connects three events from one host and user within five minutes: shadow deletion, catalog deletion, recovery disabled. It raises one critical incident instead of three ignored alerts. Evidence: a correlated alert with the shared user and host fields. The SOC should build this correlation before the attack, not during it.</p></div>
+    <div class="card"><h3 class="card-title">Step 8 — Isolate and restore</h3><p>The SOC isolates FILE01 from the network, blocks the stolen account, and starts ransomware checks. The team restores data from the immutable backup copy (a copy nobody can change or delete) that the attacker could not reach. Evidence: incident ticket with timeline and scope. The lesson: one offline backup copy defeats this whole technique.</p></div>
+  </div>
+</section>
+<section class="sec" id="sec-3-red-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2>Red team / hacker perspective</h2></div>
+  <p class="sec-intro">Understanding the attacker's choices helps you predict the move and place your sensors. Everything here is described for defense and for labs you own.</p>
+
+  <h3>When and why attackers use it</h3>
+  <p>Timing is the whole point. Ransomware crews run this technique in the final minutes before encryption. They first stop or weaken backups, then start the encryptor, so the victim has nothing left to restore from. Pure sabotage teams do the same before wiping disks, as seen in wiper campaigns such as NotPetya, Olympic Destroyer, and Prestige. A third group uses it slowly: they delete cloud restore points and snapshot chains days ahead, so nobody notices a single missing snapshot.</p>
+  <p>The payoff is pressure on the victim. With recovery gone, the victim cannot simply roll back, and backup-based negotiation arguments disappear. ATT&amp;CK procedure records show almost every major ransomware family doing this, including Conti, BlackCat, LockBit, REvil, Babuk, Akira, and Qilin. When nearly every crew uses the same commands, the commands become excellent detection targets.</p>
+
+  <h3>How it is performed</h3>
+  <p>On Windows, the attacker needs local admin or SYSTEM rights, then runs a short set of built-in tools. The commands below are the classic sequence, shown for lab study only. Run them exclusively inside a disposable virtual machine that you own, and take a snapshot before you start.</p>
+
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">CMD · lab-only on a VM you own</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>:: 1. See what restore points exist
+vssadmin list shadows
+
+:: 2. Delete all shadow copies (silent)
+vssadmin delete shadows /all /quiet
+
+:: 3. Same goal through WMI
+wmic shadowcopy delete
+
+:: 4. Delete the Windows backup catalog
+wbadmin delete catalog -quiet
+
+:: 5. Stop the recovery environment from starting
+bcdedit /set {default} recoveryenabled No
+
+:: 6. Skip automatic repair on boot failures
+bcdedit /set {default} bootstatuspolicy ignoreallfailures</code></pre>
+  </figure>
+
+  <p>Step 2 is the one most ransomware families use, but good crews combine steps. Some delete the <code>C:\WindowsImageBackup</code> folder and the registry backup in <code>C:\Windows\System32\config\RegBack</code>. ATT&amp;CK records Ryuk resizing shadow storage with <code>vssadmin resize shadowstorage</code>, which forces out copies made by third-party backup tools. Others simply stop the Volume Shadow Copy (VSS) service, so new restore points can never be made.</p>
+
+  <p>The same idea appears on every platform in the official description. On ESXi hosts, crews delete snapshot chains with <code>vim-cmd vmsvc/snapshot.removeall</code>. In the cloud, they turn off versioning and backup policies, then delete snapshots, machine images, and prior versions. AWS calls such as <code>DeleteSnapshot</code> and Azure recovery point deletes are the same move, as reported for Storm-0501. They also delete "online" backups on network shares and in cloud-synced folders. On network devices, they delete backup firmware images, reformat the file system, and reload the device, which leaves it completely inoperable.</p>
+
+  <h3>Prerequisites and conditions</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What the attacker needs first</h3>
+      <ul class="check">
+        <li>Local admin or SYSTEM rights on the target host.</li>
+        <li>An interactive shell, an RDP (Remote Desktop Protocol) session, or a remote execution path such as a scheduled task.</li>
+        <li>For domain-wide damage: access to the backup server or its service account.</li>
+        <li>For cloud damage: standing IAM (identity and access management) permissions to delete snapshots or backups.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">What limits them</h3>
+      <ul class="check">
+        <li>Shadow copies are per-volume and per-host, so they must touch every machine.</li>
+        <li>Immutable or offline backups cannot be deleted with local admin rights.</li>
+        <li>Application control can block the utilities they rely on.</li>
+        <li>Loud commands leave process logs even when the attacker works fast.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Common variations and attacker mistakes</h3>
+  <p>Variations exist. Diavol called the Windows COM (Component Object Model) API directly, using the <code>IVssBackupComponents</code> interface to delete snapshots. Other malware uses PowerShell wrappers or native backup tools such as <code>diskshadow.exe</code> in script mode. Newer Windows builds phase out wmic, so attackers reach the same Windows Management Instrumentation (WMI) functions through PowerShell. Each variation still leaves a process trail unless the attacker brings a custom binary that talks to the same APIs in memory.</p>
+  <p>Attacker mistakes are useful to know. Running the delete command without admin rights fails silently and shows up as an odd failed command. Typing the tool name wrong leaves typosquatted process names that are trivially detectable. Forgetting domain controllers and backup servers is common, which is why some victims still recover. And the biggest mistake is assuming every backup is reachable: the organizations that survive ransomware are the ones with one copy the attacker never touched.</p>
+
+  <div class="callout danger">
+    <div class="callout-label">Danger · lab-only</div>
+    <p>Never run the commands above on a production or shared system. They permanently remove restore points and can make a machine unrepairable. Use an isolated virtual machine with a fresh snapshot, and treat every command as if it were being logged by a real SOC.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-4-blue-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2>Blue team / SOC perspective</h2></div>
+  <p class="sec-intro">This technique is one of the most reliable ransomware warnings you will ever get. Here is how to see it, what it leaves behind, and how to triage it fast.</p>
+
+  <h3>How defenders can see it</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">Process telemetry</h3>
+      <p>Sysmon event 1 or Security event 4688 with command-line auditing shows the exact tools and arguments. This is the primary and strongest source, because the commands are rare in normal operations.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Backup system logs</h3>
+      <p>Backup agents and applications log job failures, catalog changes, and service stops. A backup job that silently stops succeeding across many hosts is a strong secondary signal.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Cloud audit logs</h3>
+      <p>AWS CloudTrail (the AWS audit log) and Azure Activity Log record snapshot and restore point deletions with the exact identity that made the call. Unusual deletion of recovery resources is a strong signal in any cloud account. The same logs show versioning and backup policies being turned off before the deletions.</p>
+    </div>
+  </div>
+
+  <h3>Artifacts the technique leaves behind</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Artifact</th><th>Where you find it</th><th>What it tells you</th></tr></thead>
+      <tbody>
+        <tr><td>Process event for <code>vssadmin.exe</code> with <code>delete shadows</code>.</td><td>Sysmon 1, Security 4688.</td><td>Direct proof of the technique, with user, parent process, and time.</td></tr>
+        <tr><td>Process event for <code>wbadmin.exe</code> with <code>delete catalog</code>.</td><td>Sysmon 1, Security 4688.</td><td>Backup index was destroyed; restore tooling is partially blind.</td></tr>
+        <tr><td>Process event for <code>bcdedit.exe</code> with <code>recoveryenabled</code>.</td><td>Sysmon 1, Security 4688.</td><td>Recovery boot options were turned off; expect no easy repair.</td></tr>
+        <tr><td>File deletion events in <code>\WindowsImageBackup\</code> or <code>\RegBack\</code>.</td><td>Sysmon 23 / 26.</td><td>Backup files themselves were removed, not just their index.</td></tr>
+        <tr><td>Shadow copy store suddenly empty.</td><td>Backup reports, <code>vssadmin list shadows</code> during response.</td><td>Confirms deletion when process logs were missed or tampered with.</td></tr>
+        <tr><td>Snapshot or restore point delete API calls.</td><td>CloudTrail, Azure Activity Log.</td><td>Cloud recovery paths were cut, with the exact identity used.</td></tr>
+        <tr><td>Snapshot or virtual machine removal on the ESXi host.</td><td>vCenter events, ESXi shell history.</td><td>Virtualization restore points were removed; guest logs never show it.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Where to look, in priority order</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Log source</th><th>What to pull</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>Sysmon / process auditing on all servers.</td><td>Event 1 or 4688 for vssadmin, wbadmin, bcdedit, diskshadow, wmic.</td><td>Catches the technique at the moment of execution.</td></tr>
+        <tr><td>Backup application logs (for example Veeam).</td><td>Job removal, repository changes, credential use.</td><td>Shows preparation against the backup infrastructure itself.</td></tr>
+        <tr><td>Windows System event log.</td><td>Service stop events for VSS and backup services.</td><td>Reveals the quieter service-based variant of the technique.</td></tr>
+        <tr><td>ESXi and vCenter (the VMware management server) events.</td><td>Snapshot removal and virtual machine deletion, such as snapshot.removeall.</td><td>Covers the virtualization variant that guest logs never show.</td></tr>
+        <tr><td>Cloud audit trails.</td><td>DeleteSnapshot calls and restore point deletes.</td><td>Covers the cloud variant that on-premises logs never show.</td></tr>
+        <tr><td>SIEM correlation.</td><td>Multiple T1490 signals from one host or user.</td><td>Turns three weak signals into one strong incident.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Why it matters and how it fits the chain</h3>
+  <p>Treat any T1490 signal as a ransomware timer. Public incident reporting and ATT&amp;CK procedure records show the gap between recovery inhibition and encryption is often minutes to a few hours. If you act inside that window, you can stop the encryption event entirely. If you miss it, this technique is the difference between restoring from backup and negotiating with criminals. It also has forensic value. The user, parent process, and source host in the process event usually point straight at the attacker's entry path. That context helps you scope every other machine they touched.</p>
+
+  <h3>Short triage flow</h3>
+  <ol class="flow">
+    <li><span class="flow-step">Confirm the event is real</span><p>Open the raw log. Check the user, parent process, and command line. Rule out backup administration by comparing with your change calendar.</p></li>
+    <li><span class="flow-step">Check who and from where</span><p>Was this an admin on a jump host, or a service account from a workstation? Pull the logon events around the same minute for the same account.</p></li>
+    <li><span class="flow-step">Scope immediately</span><p>Search the last 24 hours for the same commands on all hosts. Multiple hosts mean an active campaign, not a mistake.</p></li>
+    <li><span class="flow-step">Protect backups now</span><p>Disconnect or lock backup repositories, pause retention jobs that could rotate copies away, and enable any immutable or air-gapped mode you have.</p></li>
+    <li><span class="flow-step">Contain and escalate</span><p>Isolate affected hosts, force-reset the involved account, and page the incident commander. Prepare restoration steps before encryption starts.</p></li>
+  </ol>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>Write the triage steps above into your incident runbook before you need them. During a live event, the team that follows a prepared checklist protects backups minutes faster than the team that improvises.</p>
+  </div>
+</section>
+<section class="sec" id="sec-5-detection">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2>Detection engineering deep dive</h2></div>
+  <p class="sec-intro">The practical core of this guide. It covers regulation mapping, threat intelligence, ranked threats, real log examples, and five Sigma rules with matching Splunk queries you can adapt today.</p>
+
+  <h3 id="sec-5-1-regulation">5.1 Regulation mapping</h3>
+  <p>This technique attacks your ability to recover data, so it maps directly to backup and continuity controls. Auditors ask for proof that backups exist, that they are protected, and that deletion is monitored. The table below shows what each framework expects and the evidence a detection program provides.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Framework and control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>GDPR</strong> — Article 32 (security of processing)</td>
+          <td>Requires the ability to restore availability of and access to personal data after an incident. Destroyed backups make restoration impossible, turning an attack into a reportable, prolonged breach.</td>
+          <td>Documented backup and restore procedures, tested restoration records, alerts on backup deletion, incident reports showing recovery time.</td>
+        </tr>
+        <tr>
+          <td><strong>HIPAA Security Rule</strong> — §164.308(a)(7) contingency plan</td>
+          <td>Covered entities must maintain a data backup plan, disaster recovery plan, and emergency mode operation plan for electronic protected health information.</td>
+          <td>Written contingency plan, backup success and failure reports, restore test results, evidence that backup tampering is monitored.</td>
+        </tr>
+        <tr>
+          <td><strong>ISO/IEC 27001:2022</strong> — A.8.13 (information backup), A.8.16 (monitoring activities)</td>
+          <td>Backup copies must be maintained and protected, and activities that could undermine them should be monitored. T1490 is the failure case for both controls.</td>
+          <td>Backup policy with immutable or offsite copies, monitoring rules for backup changes, alert tickets for recovery inhibition attempts.</td>
+        </tr>
+        <tr>
+          <td><strong>SOC 2</strong> — CC7.4 (incident response execution), A1.2 (availability recovery infrastructure)</td>
+          <td>Trust services criteria expect tested recovery and detection of attacks. Deleting recovery mechanisms defeats the availability commitment auditors check.</td>
+          <td>Runbooks, tabletop or live restore drills, detection rule documentation, evidence of alerts and response for backup tampering.</td>
+        </tr>
+        <tr>
+          <td><strong>PCI DSS</strong> — 12.10.x (incident response plan and testing)</td>
+          <td>Organizations handling cardholder data must prepare for scenarios that destroy or lock data, which is exactly what T1490 enables.</td>
+          <td>IR plan covering ransomware and wiper scenarios, quarterly tests, records of backup integrity checks and restore exercises.</td>
+        </tr>
+        <tr>
+          <td><strong>NIST SP 800-53 Rev.5</strong> — CP-9 (system backup), CP-10 (recovery)</td>
+          <td>Federal and industry-aligned controls that require protected backups and tested recovery, including protection of backup copies at rest.</td>
+          <td>Control implementation statements, backup protection configuration, monitoring coverage proof, restoration test logs.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="sec-5-2-threat-intel">5.2 Threat intelligence</h3>
+  <p>Intelligence makes your detection rules stronger and your priorities honest. For this technique, the intelligence picture is unusually clear, because nearly every destructive campaign since 2017 has used the same small set of commands. Collect from several source types, then record how confident you are in each finding before you change a rule or a runbook.</p>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">MITRE ATT&amp;CK</h3>
+      <p>Start with the technique page and its procedure examples. The list of malware and groups that use T1490 is long and current, which makes rule coverage easy to justify.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Vendor reporting</h3>
+      <p>Security vendor blogs publish exact commands, service names, and timelines for each crew. Turn their incident timelines into your detection logic and tuning notes.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">OSINT and ISACs</h3>
+      <p>Open-source intelligence (OSINT) sources share indicators and tactics early. Examples are advisories from the US Cybersecurity and Infrastructure Security Agency (CISA) and bulletins from sector ISACs (Information Sharing and Analysis Centers). Their sector-specific advice tells you which crews target organizations like yours.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Commercial feeds</h3>
+      <p>Paid feeds add actor tracking, infrastructure, and malware families. Use them for context and prioritization rather than as a replacement for your own telemetry.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Internal telemetry</h3>
+      <p>Your own logs are the most valuable source. Failed deletion attempts, unusual backup job behavior, and near misses show what attackers actually try in your environment.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Confidence levels</h3>
+      <p><strong>High</strong> means several independent reports plus your own sightings. <strong>Medium</strong> means one solid public report. <strong>Low</strong> means a hypothesis that still needs testing. Write the level next to every intelligence note.</p>
+    </div>
+  </div>
+
+  <p>Known actors and campaigns associated with this technique. Each row includes a confidence level.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Actor or malware</th><th>Observed behavior</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>NotPetya (2017 wiper)</td><td>Ran vssadmin, wbadmin, and bcdedit to remove restore options before wiping disks across whole networks.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Wizard Spider / Conti</td><td>Used WMIC and vssadmin manually to delete shadow copies, and used Conti ransomware to delete them automatically.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>BlackCat / ALPHV</td><td>Deleted shadow copies with vssadmin and wmic, and disabled recovery with bcdedit.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Prestige / Sandworm Team</td><td>Targeted transport and logistics sectors, deleting backup catalogs with wbadmin before impact.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Storm-0501</td><td>Deleted Azure snapshots, restore point collections, storage accounts, and backup vault resources using cloud APIs.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Akira</td><td>Deleted system volume shadow copies through PowerShell command lines.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>WannaCry (2017 worm)</td><td>Used vssadmin, wbadmin, bcdedit, and wmic to delete and disable operating system recovery features.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Qilin</td><td>Deleted shadow copies with vssadmin and disabled High Availability (HA) and Distributed Resource Scheduler (DRS) in vCenter clusters.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Scattered Spider</td><td>Stopped the Volume Shadow Copy service on compromised hosts, a quieter variant of the same goal.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">How to apply this</div>
+    <p>Use the actor list to justify rule coverage in reviews. Use it to write threat profiles for your team. Use it to decide which platforms to extend first, such as adding ESXi snapshot rules if you run large virtualization estates.</p>
+  </div>
+
+  <h3 id="sec-5-3-threat-ranking">5.3 Threats ranking and categorization</h3>
+  <p>Five realistic threats cover this technique well. The rank reflects how likely the threat is and how much damage it causes when it works. Each threat has a code from THR-01 to THR-05, and sections 5.4 and 5.5 reuse those codes. Preconditions describe what an attacker must already have. The justification explains the rank, so you can defend it in planning meetings.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Threat</th><th>Rank</th><th>Platform</th><th>Description and preconditions</th><th>Impact and justification</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>THR-01 — Shadow copy deletion with vssadmin or wmic</td>
+          <td><span class="badge sev-critical">Critical</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>One command removes all local restore points. Preconditions: local admin rights and process execution on the host.</td>
+          <td>Removes the fastest recovery path right before encryption; documented in nearly every major ransomware campaign. Highest likelihood plus severe impact.</td>
+        </tr>
+        <tr>
+          <td>THR-02 — Backup catalog deletion with wbadmin</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>Destroys the index that describes existing backups. Preconditions: local admin rights on a host holding backup metadata.</td>
+          <td>Restore tooling loses knowledge of valid backups, slowing recovery by hours or days. Less universal than shadow copy deletion, hence High.</td>
+        </tr>
+        <tr>
+          <td>THR-03 — Recovery environment disabled with bcdedit</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>Turns off the repair boot path so wiped or broken systems cannot self-repair. Preconditions: admin rights and boot configuration access.</td>
+          <td>Multiplies the damage of a wiper and complicates digital forensics and incident response (DFIR). Rarer than shadow copy deletion but still common across destructive families.</td>
+        </tr>
+        <tr>
+          <td>THR-04 — Deletion of backup files (WindowsImageBackup, RegBack)</td>
+          <td><span class="badge sev-medium">Medium</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>Removes the actual backup files of built-in Windows backup. Preconditions: admin rights plus file deletion on the host.</td>
+          <td>Matters only where Windows Server Backup is used; third-party backup products dominate large estates, which caps the likelihood.</td>
+        </tr>
+        <tr>
+          <td>THR-05 — Cloud snapshot and restore point deletion</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">IaaS</span></td>
+          <td>Deletes EBS snapshots and Azure restore point collections, or turns off versioning and backup policies first. Preconditions: an IAM identity with deletion permissions.</td>
+          <td>Recovery data may be gone in minutes across regions. Rising sharply with cloud-focused extortion crews such as Storm-0501.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="sec-5-4-logs-patterns">5.4 Logs and patterns</h3>
+  <p>Each threat below lists the log sources that see it, the fields that matter, and what normal and suspicious behavior look like. Each threat also shows its detection logic in plain words. A realistic event example follows each table so you can validate your pipeline against real shapes.</p>
+
+  <h4>Threat 1 (THR-01) — Shadow copy deletion with vssadmin or wmic</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Sysmon event 1 (process creation); Security event 4688 with command-line auditing; EDR (endpoint detection and response) tooling.</td></tr>
+        <tr><td>Key fields</td><td><code>Image</code>, <code>CommandLine</code>, <code>ParentImage</code>, <code>User</code>, <code>host</code>, <code>IntegrityLevel</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Backup or desktop teams may clean old shadow copies on workstations during approved maintenance. Storage management tools occasionally touch VSS on file servers.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Any <code>delete shadows</code> or <code>shadowcopy delete</code> on servers; any such command from cmd, PowerShell, scripts, or remote-execution parents; commands outside change windows.</td></tr>
+        <tr><td>Detection logic</td><td>Alert when the process image is vssadmin.exe or WMIC.exe and the command line contains delete plus shadows, regardless of host type, with a maintenance-window exception list.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Sysmon EID 1 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-c22a-43e0-bf4c-06f5698ffbd9}"/&gt;
+    &lt;EventID&gt;1&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-02-23T02:41:07.512Z"/&gt;
+    &lt;Computer&gt;FILE01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-02-23 02:41:07.512&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\System32\vssadmin.exe&lt;/Data&gt;
+    &lt;Data Name="CommandLine"&gt;"vssadmin.exe" delete shadows /all /quiet&lt;/Data&gt;
+    &lt;Data Name="ParentImage"&gt;C:\Windows\System32\cmd.exe&lt;/Data&gt;
+    &lt;Data Name="ParentCommandLine"&gt;cmd.exe /c vssadmin delete shadows /all /quiet&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\svc_print&lt;/Data&gt;
+    &lt;Data Name="IntegrityLevel"&gt;High&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 2 (THR-02) — Backup catalog deletion with wbadmin</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Sysmon event 1; Security event 4688 with command lines; EDR telemetry.</td></tr>
+        <tr><td>Key fields</td><td><code>Image</code> (wbadmin.exe), <code>CommandLine</code>, <code>User</code>, <code>host</code>, <code>ParentImage</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Backup administrators may delete a corrupt catalog during approved repair work; this is rare and should map to a change ticket.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Any <code>wbadmin delete catalog</code> outside a documented change; execution from scripts, WinRM, or unknown admin accounts; the quiet flag with no ticket.</td></tr>
+        <tr><td>Detection logic</td><td>Alert when the image is wbadmin.exe and the command line contains both delete and catalog. Treat every hit as high severity until a change record explains it.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Security EID 4688 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Security-Auditing"/&gt;
+    &lt;EventID&gt;4688&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-02-23T02:42:19.884Z"/&gt;
+    &lt;Computer&gt;FILE01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="SubjectUserName"&gt;svc_print&lt;/Data&gt;
+    &lt;Data Name="SubjectDomainName"&gt;CORP&lt;/Data&gt;
+    &lt;Data Name="NewProcessName"&gt;C:\Windows\System32\wbadmin.exe&lt;/Data&gt;
+    &lt;Data Name="CommandLine"&gt;wbadmin delete catalog -quiet&lt;/Data&gt;
+    &lt;Data Name="ParentProcessName"&gt;C:\Windows\System32\cmd.exe&lt;/Data&gt;
+    &lt;Data Name="TokenElevationType"&gt;%%1937&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 3 (THR-03) — Recovery environment disabled with bcdedit</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Sysmon event 1; Security event 4688 with command lines.</td></tr>
+        <tr><td>Key fields</td><td><code>Image</code> (bcdedit.exe), <code>CommandLine</code>, <code>User</code>, <code>host</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Some device build or hardening scripts configure boot settings during provisioning. Those scripts live in golden images (master copies used to build new machines) or in SCCM or Intune (Microsoft management tools) tasks.</td></tr>
+        <tr><td>Suspicious behavior</td><td><code>recoveryenabled No</code> or <code>bootstatuspolicy ignoreallfailures</code> run interactively or by scripts on servers; any such command outside provisioning.</td></tr>
+        <tr><td>Detection logic</td><td>Alert when bcdedit.exe runs with recoveryenabled set to no, or with an ignore-all-failures boot policy, excluding known provisioning hosts.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Sysmon EID 1 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon"/&gt;
+    &lt;EventID&gt;1&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-02-23T02:43:55.120Z"/&gt;
+    &lt;Computer&gt;FILE01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\System32\bcdedit.exe&lt;/Data&gt;
+    &lt;Data Name="CommandLine"&gt;bcdedit /set {default} recoveryenabled No&lt;/Data&gt;
+    &lt;Data Name="ParentImage"&gt;C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\svc_print&lt;/Data&gt;
+    &lt;Data Name="IntegrityLevel"&gt;High&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 4 (THR-04) — Deletion of backup files (WindowsImageBackup, RegBack)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Sysmon events 23 (file delete archived) and 26 (file delete logged). EDR file events also work.</td></tr>
+        <tr><td>Key fields</td><td><code>TargetFilename</code>, <code>Image</code> (deleting process), <code>User</code>, <code>host</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Hosts running Windows Server Backup rewrite their WindowsImageBackup folder on schedule; treat known backup-role hosts as an allow list.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Deletions inside <code>\WindowsImageBackup\</code> or <code>\System32\config\RegBack\</code> from cmd, PowerShell, or unknown binaries on hosts without a backup role.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on file-delete events whose target path contains those folders, excluding the listed backup agent binaries on backup-role hosts.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Sysmon EID 23 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon"/&gt;
+    &lt;EventID&gt;23&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-02-23T02:44:31.007Z"/&gt;
+    &lt;Computer&gt;FILE01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="TargetFilename"&gt;C:\WindowsImageBackup\FILE01\Backup 2026-02-22 030015\&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\System32\cmd.exe&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\svc_print&lt;/Data&gt;
+    &lt;Data Name="IsExecutable"&gt;false&lt;/Data&gt;
+    &lt;Data Name="Archived"&gt;true&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 5 (THR-05) — Cloud snapshot and restore point deletion</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>AWS CloudTrail management events (use us-east-1 for global services). Azure Activity Log. Google Cloud audit logs.</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>eventSource</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code>, <code>requestParameters</code>, <code>errorCode</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Lifecycle automation such as Data Lifecycle Manager or AWS Backup deletes snapshots on a schedule under fixed role identities.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Manual snapshot deletions by interactive or unfamiliar identities, large batches, calls from new source IPs or regions, or deletions of backup-vault resources.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on DeleteSnapshot or DeleteSnapshots when the caller is not on the approved automation list, and page when deletion volume spikes. Extend the same logic to versioning changes and machine-image deletes, as Storm-0501 showed with Azure recovery resource deletes.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · AWS CloudTrail (JSON)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.08",
+  "userIdentity": {
+    "type": "IAMUser",
+    "principalId": "AIDA4EXAMPLEJJ7VQ2WM",
+    "arn": "arn:aws:iam::111122223333/user/backup-operator",
+    "accountId": "111122223333",
+    "userName": "backup-operator"
+  },
+  "eventTime": "2026-02-23T02:46:12Z",
+  "eventSource": "ec2.amazonaws.com",
+  "eventName": "DeleteSnapshot",
+  "awsRegion": "eu-west-1",
+  "sourceIPAddress": "203.0.113.77",
+  "userAgent": "aws-cli/2.15.0",
+  "requestParameters": { "snapshotId": "snap-0a1b2c3d4e5f60001" },
+  "responseElements": { "return": true }
+}</code></pre>
+  </figure>
+
+  <h3 id="sec-5-5-sigma-spl">5.5 Sigma rules and Splunk SPL</h3>
+  <p>MITRE's official detection strategy for this technique is DET0329, "Behavioral Detection for T1490 - Inhibit System Recovery". Its first analytic watches for process chains that use native utilities such as vssadmin, wbadmin, diskshadow, and bcdedit. The five Sigma rules below put that strategy into practice, one per threat, each with a matching Splunk query. The rules target Windows Sysmon and AWS CloudTrail. If you collect Security 4688 instead of Sysmon, swap the logsource and keep the field logic. The Splunk queries assume the index and sourcetype conventions listed below; adjust the index names to your environment and document the change. An allow-list is a short list of approved users, hosts, or roles that a rule may ignore.</p>
+  <div class="callout note">
+    <div class="callout-label">Field assumptions for Splunk</div>
+    <p><code>index=sysmon</code> holds Sysmon XML events with fields like <code>Image</code>, <code>CommandLine</code>, <code>TargetFilename</code>. <code>index=aws</code> holds <code>aws:cloudtrail</code> data with JSON fields like <code>eventName</code> and <code>userIdentity.arn</code>. Field extraction must be enabled for XML inputs before these queries work.</p>
+  </div>
+
+  <h4>Rule 1 (THR-01) — Shadow copy deletion</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Shadow Copy Deletion via Vssadmin or WMI
+id: b8f1a2c3-4d5e-4f60-9a1b-2c3d4e5f6070
+status: stable
+description: Detects deletion of Volume Shadow Copies with vssadmin.exe or wmic.exe,
+  a classic ransomware precursor that removes local restore points before encryption.
+references:
+  - https://attack.mitre.org/techniques/T1490/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_vss:
+    EventID: 1
+    Image|endswith: '\vssadmin.exe'
+    CommandLine|contains|all:
+      - 'delete'
+      - 'shadows'
+  selection_wmic:
+    EventID: 1
+    Image|endswith: '\wbem\WMIC.exe'
+    CommandLine|contains|all:
+      - 'shadowcopy'
+      - 'delete'
+  condition: 1 of selection_*
+fields:
+  - CommandLine
+  - ParentImage
+  - User
+  - Hostname
+falsepositives:
+  - Storage or desktop administrators cleaning old shadow copies during approved maintenance
+level: high
+tags:
+  - attack.impact
+  - attack.t1490</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  (Image="*\\vssadmin.exe" CommandLine="*delete*" CommandLine="*shadows*")
+  OR (Image="*\\wbem\\WMIC.exe" CommandLine="*shadowcopy*" CommandLine="*delete*")
+| stats count min(_time) as first_seen max(_time) as last_seen values(CommandLine) as commands
+        by host, User, ParentImage
+| sort - first_seen</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> the Sigma <code>Image|endswith</code> becomes a wildcard match on the full path. The two <code>contains</code> terms become repeated <code>CommandLine</code> tokens joined by AND. <strong>False positives:</strong> approved shadow copy cleanup. <strong>Tuning:</strong> allow-list your change windows and known backup admin accounts. Consider raising severity when the parent process is cmd, PowerShell, or WinRM (Windows remote management).</p>
+
+  <h4>Rule 2 (THR-02) — Backup catalog deletion</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Backup Catalog Deletion via Wbadmin
+id: c9a2b3d4-5e6f-4a71-8b2c-3d4e5f6a7180
+status: stable
+description: Detects deletion of the Windows backup catalog with wbadmin.exe, which
+  blinds built-in restore tooling and often precedes destructive attacks.
+references:
+  - https://attack.mitre.org/techniques/T1490/
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 1
+    Image|endswith: '\wbadmin.exe'
+    CommandLine|contains|all:
+      - 'delete'
+      - 'catalog'
+  condition: selection
+fields:
+  - CommandLine
+  - ParentImage
+  - User
+  - Hostname
+falsepositives:
+  - Deliberate catalog maintenance by backup administrators after a failed backup job
+level: high
+tags:
+  - attack.impact
+  - attack.t1490</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  Image="*\\wbadmin.exe" CommandLine="*delete*" CommandLine="*catalog*"
+| table _time host User Image CommandLine ParentImage
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> the same one-to-one field mapping as rule 1. <strong>False positives:</strong> rare, documented catalog repairs. <strong>Tuning:</strong> require a matching change ticket before closing, and escalate immediately if the same host also matched rule 1.</p>
+
+  <h4>Rule 3 (THR-03) — Recovery disabled</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Windows Recovery Environment Disabled via Bcdedit
+id: d0b3c4e5-6f70-4b82-9c3d-4e5f6a7b8290
+status: stable
+description: Detects bcdedit commands that disable the Windows Recovery Environment
+  or set a boot status policy that ignores all failures, both used by destructive malware.
+references:
+  - https://attack.mitre.org/techniques/T1490/
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_recovery:
+    EventID: 1
+    Image|endswith: '\bcdedit.exe'
+    CommandLine|contains|all:
+      - 'recoveryenabled'
+      - ' no'
+  selection_bootpolicy:
+    EventID: 1
+    Image|endswith: '\bcdedit.exe'
+    CommandLine|contains|all:
+      - 'bootstatuspolicy'
+      - 'ignoreallfailures'
+  condition: 1 of selection_*
+fields:
+  - CommandLine
+  - ParentImage
+  - User
+  - Hostname
+falsepositives:
+  - Golden image build scripts or provisioning tools that intentionally configure boot settings
+level: high
+tags:
+  - attack.impact
+  - attack.t1490</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  Image="*\\bcdedit.exe"
+  (CommandLine="*recoveryenabled*no*" OR CommandLine="*bootstatuspolicy*ignoreallfailures*")
+| table _time host User Image CommandLine ParentImage
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> both Sigma selections collapse into one raw wildcard match in Splunk. Keep the terms in order, so the <code>recoveryenabled*no</code> pattern does not drift. <strong>False positives:</strong> provisioning hosts. <strong>Tuning:</strong> exclude imaging servers and MDT (Microsoft Deployment Toolkit) or Intune task sequences by host group. Watch for new bcdedit paths outside <code>System32</code>.</p>
+
+  <h4>Rule 4 (THR-04) — Backup file deletion</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Deletion of Windows Backup Files
+id: e1c4d5f6-7081-4c93-8d4e-5f6a7b8c93a0
+status: experimental
+description: Detects file deletion events targeting the WindowsImageBackup folder or
+  the registry backup folder, which attackers remove to stop manual restoration.
+references:
+  - https://attack.mitre.org/techniques/T1490/
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_imagebackup:
+    EventID: 23
+    TargetFilename|contains: '\WindowsImageBackup\'
+  selection_regback:
+    EventID: 23
+    TargetFilename|contains: '\System32\config\RegBack\'
+  condition: 1 of selection_*
+fields:
+  - TargetFilename
+  - Image
+  - User
+  - Hostname
+falsepositives:
+  - Scheduled rotation by Windows Server Backup on hosts with the backup role
+level: medium
+tags:
+  - attack.impact
+  - attack.t1490</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational"
+  (EventCode=23 OR EventCode=26)
+  (TargetFilename="*\\WindowsImageBackup\\*" OR TargetFilename="*\\config\\RegBack\\*")
+| stats count values(TargetFilename) as deleted_files by host, Image, User
+| sort - count</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> Sigma <code>contains</code> maps to wildcard path matching. Sysmon event 26 covers deletes on hosts without archive mode. <strong>False positives:</strong> legitimate backup rotation. <strong>Tuning:</strong> allow-list the wbengine service (the Windows Server Backup engine) and known backup binaries per host. Alert only on interactive shells and unknown images elsewhere.</p>
+
+  <h4>Rule 5 (THR-05) — Cloud snapshot deletion</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Deletion of EC2 Snapshots via CloudTrail
+id: f2d5e6a7-8192-4da4-9e5f-6a7b8c9da4b1
+status: stable
+description: Detects API calls that delete EBS snapshots or snapshot sets. Attackers
+  with stolen cloud credentials delete snapshots to block recovery, as reported for
+  cloud-focused extortion crews.
+references:
+  - https://attack.mitre.org/techniques/T1490/
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: 'ec2.amazonaws.com'
+    eventName:
+      - 'DeleteSnapshot'
+      - 'DeleteSnapshots'
+  condition: selection
+fields:
+  - eventName
+  - userIdentity.arn
+  - sourceIPAddress
+  - requestParameters.snapshotId
+  - awsRegion
+falsepositives:
+  - Lifecycle automation such as Data Lifecycle Manager or AWS Backup deleting expired snapshots
+level: high
+tags:
+  - attack.impact
+  - attack.t1490</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype="aws:cloudtrail" eventSource="ec2.amazonaws.com"
+  eventName IN ("DeleteSnapshot", "DeleteSnapshots")
+| table _time userIdentity.arn sourceIPAddress eventName requestParameters.snapshotId awsRegion
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> CloudTrail JSON fields map directly to Splunk index-time or search-time extractions. The Sigma list of event names becomes the <code>IN</code> clause. <strong>False positives:</strong> scheduled lifecycle deletions under fixed role ARNs (Amazon resource names). <strong>Tuning:</strong> allow-list those automation roles, then page on any interactive identity, new source IP, or deletion volume above your daily baseline. For Azure, build the same rule for <code>Microsoft.Compute/snapshots/delete</code> and <code>Microsoft.Compute/restorePointCollections/delete</code>, as reported for Storm-0501.</p>
+</section>
+<section class="sec" id="sec-6-case-study">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2>Real-world case study</h2></div>
+  <p class="sec-intro">NotPetya, June 2017: the best-documented example of this technique at global scale. It is the reason many SOCs treat shadow copy deletion as a critical, page-now alert.</p>
+
+  <div class="card">
+    <h3 class="card-title">Context</h3>
+    <p>This case study describes a real, documented incident. It is based on public reporting, not a training scenario. Sources include the MITRE ATT&amp;CK procedure records for NotPetya, ESET's and Kaspersky's outbreak analyses, Andy Greenberg's Wired reporting on the Maersk rebuild, and Maersk's annual report. NotPetya presented itself as ransomware but was built to destroy. It spread through a compromised Ukrainian accounting software update, then moved laterally with stolen credentials and the EternalBlue exploit (a Windows file-sharing flaw). A.P. Moller-Maersk, the global shipping giant, was among the hardest-hit companies. Terminals stalled, booking systems stopped working, and tens of thousands of machines needed rebuilding. In ATT&amp;CK terms, the attack moved through Initial Access, Lateral Movement, and Impact, with T1490 as the final preparation for the wipe. On every host it touched, the attack ran the exact T1490 sequence this guide describes, so no machine could simply be rolled back.</p>
+  </div>
+
+  <h3>Timeline</h3>
+  <ol class="timeline">
+    <li><div class="tl-when">27 June 2017 · ~10:30 local</div><div class="tl-what">Delivery through a trusted update</div><p>The M.E.Doc accounting package pulled a poisoned update and launched NotPetya on thousands of Ukrainian workstations, including systems connected to international companies.</p></li>
+    <li><div class="tl-when">Minutes after infection</div><div class="tl-what">Credential theft and lateral movement</div><p>The payload harvested credentials in memory and spread over SMB (the Windows file-sharing protocol) and admin shares. It crossed networks and partner links the same way.</p></li>
+    <li><div class="tl-when">On each host</div><div class="tl-what">Recovery inhibited (T1490)</div><p>On every machine it could reach, NotPetya ran vssadmin to delete shadow copies. It ran wbadmin to delete the backup catalog and bcdedit to disable recovery. Then it cleared event logs to slow investigation.</p></li>
+    <li><div class="tl-when">~1 hour after infection</div><div class="tl-what">Forced reboot and wipe</div><p>The malware forced a reboot and overwrote the boot structures. It then rendered the filesystem unusable and displayed a ransom note that was never meant to be honored.</p></li>
+    <li><div class="tl-when">27 June · afternoon</div><div class="tl-what">Global impact becomes visible</div><p>Maersk, Merck, FedEx TNT, and hundreds of other organizations lost machines at once. Shipping terminals and production lines stopped within hours.</p></li>
+    <li><div class="tl-when">Days to weeks</div><div class="tl-what">Manual rebuild at scale</div><p>Because shadow copies and catalogs were gone, teams rebuilt machines from images. Maersk restored its domain by recovering one domain controller in Ghana that had lost power during the attack and was therefore untouched.</p></li>
+  </ol>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Detection point</h3>
+      <p>The cleanest detection moment was the process event for <code>vssadmin delete shadows /all /quiet</code>, which fired on every host minutes before the wipe. Organizations with command-line logging saw the attack coming; those without it saw only mass reboot storms and dead machines. The lesson is clear: the T1490 signals are the ransomware early warning.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Containment</h3>
+      <p>Teams disconnected networks, blocked the SMB ports used for spread, took the compromised software vendor offline, and powered down unaffected systems to preserve them. Password resets stopped the credential-based spread once accounts were locked down.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Eradication</h3>
+      <p>Every affected machine needed a full rebuild, since the payload destroyed the operating system itself. Removable media and clean images replaced network-based deployment while the network was still untrusted, and the vulnerable update client had to be removed everywhere.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Recovery</h3>
+      <p>Restoration came from golden images, surviving offline systems, and the famous Ghana domain controller. Where shadow copies had survived on isolated machines, files were recovered; where backups shared the destroyed network, they were lost with everything else.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Impact and consequences</h3>
+    <p>Maersk reported costs between 250 and 300 million US dollars and rebuilt around four thousand servers and forty-five thousand PCs. Merck disclosed hundreds of millions in losses, and the total global damage is commonly estimated near ten billion dollars. Insurance disputes followed, because courts had to decide whether a state-linked destructive attack counted as an act of war. The attack reshaped how boards think about cyber risk.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Team response and communication</h3>
+    <p>Response teams worked from printed runbooks because email and chat systems were down, which proved the value of out-of-band communication channels. Daily executive briefings set one clear priority: protect what still works, then rebuild in business-critical order. External incident response partners, vendors, and even competitors shared indicators, showing that pre-built trust networks shorten outages.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Lessons learned</h3>
+    <ul class="check">
+      <li>Keep one backup copy immutable or offline; it is the single control that defeats this technique.</li>
+      <li>Monitor backup deletion and command lines on servers; the attack announced itself on every host.</li>
+      <li>Segment networks and restrict admin shares so one infection cannot rebuild itself everywhere.</li>
+      <li>Test domain recovery, not just file recovery; identity is the hardest thing to lose.</li>
+      <li>Maintain out-of-band communication and printed procedures for the worst day.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec" id="sec-7-mitigation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2>Mitigation and defense</h2></div>
+  <p class="sec-intro">You cannot stop every attacker from reaching one machine, but you can make recovery inhibition pointless. The controls below are ordered by how much risk they remove.</p>
+
+  <h3>Enterprise controls by domain</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Backup architecture</h3>
+      <p>Follow the 3-2-1-1-0 pattern: three copies, two media types, one offsite, one immutable or offline, and zero restore-test errors. The offline copy is the one an attacker with full admin rights still cannot delete, which is exactly what T1490 tries to do.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Identity and privileges</h3>
+      <p>Separate backup administration from server administration. Use dedicated accounts with multi-factor authentication (MFA) for backup consoles. Remove standing deletion rights from cloud identities. ATT&amp;CK mitigation M1018 (User Account Management) points here.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Endpoint hardening</h3>
+      <p>Use application control to block or gate the utilities this technique abuses, such as diskshadow, on servers where they have no business running. This is ATT&amp;CK mitigation M1038 (Execution Prevention). Enable tamper protection so security services cannot be stopped silently. M1028 (Operating System Configuration) adds technical controls as well. They stop the disabling of recovery services and the deletion of recovery files.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Logging and monitoring</h3>
+      <p>Ship Sysmon or 4688 with command lines from every server, plus backup application and cloud audit logs, into the SIEM. Deploy the five Sigma rules from section 5 and review their alerts weekly.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Cloud-specific protection</h3>
+      <p>Enable snapshot deletion protection. Use service control policies (SCPs) to restrict delete calls, as ATT&amp;CK mitigation M1018 suggests. Turn on versioning for object storage, so deleted objects can be rolled back within a window. In cloud terms this also matches M1053 (Data Backup), which says to copy backups to other accounts or regions.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Response readiness</h3>
+      <p>Write a recovery-inhibition runbook: who isolates, who protects the backup repository, who contacts the backup vendor, and who decides on restoration. Rehearse it twice a year with the real teams.</p>
+    </div>
+  </div>
+
+  <h3>Official ATT&amp;CK mitigations</h3>
+  <p>The official T1490 page lists four mitigations. The table below maps each mitigation to plain-language advice and to the cards in this guide.</p>
+  <div class="table-wrap wide"><table>
+    <thead><tr><th>Mitigation</th><th>What ATT&amp;CK recommends</th><th>Where this guide covers it</th></tr></thead>
+    <tbody>
+      <tr><td>M1053 — Data Backup</td><td>Store backups off the system and protect them from attackers who want to destroy them. Enable versioning in the cloud and copy backups to other accounts or regions. Take regular ESXi snapshots and disk images, stored off system.</td><td>Backup architecture card above, plus the prioritized actions table.</td></tr>
+      <tr><td>M1038 — Execution Prevention</td><td>Use application control to block utilities such as diskshadow.exe that a given system does not need.</td><td>Endpoint hardening card above.</td></tr>
+      <tr><td>M1028 — Operating System Configuration</td><td>Use technical controls that prevent the disabling of recovery services and the deletion of recovery files. Keep the Windows Recovery Environment (WinRE) enabled with <code>reagentc /enable</code>.</td><td>Endpoint hardening card above; verify WinRE state on your servers.</td></tr>
+      <tr><td>M1018 — User Account Management</td><td>Limit backup access to the accounts that need it. In AWS, use Service Control Policies to restrict API calls that delete backups, snapshots, and images.</td><td>Identity and privileges card above, plus the cloud-specific card.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Prioritized actions</h3>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Risk reduction</th><th>How to verify</th></tr></thead>
+      <tbody>
+        <tr><td>Create one immutable or offline backup copy for critical data.</td><td><span class="badge sev-medium">Medium</span></td><td>Backup team</td><td><span class="badge sev-critical">Critical</span></td><td>Restore a test dataset from the offline copy each quarter.</td></tr>
+        <tr><td>Enable command-line auditing (Sysmon or 4688) on all servers.</td><td><span class="badge sev-medium">Medium</span></td><td>Platform team</td><td><span class="badge sev-high">High</span></td><td>Run a test command and confirm it lands in the SIEM.</td></tr>
+        <tr><td>Deploy the five detection rules from section 5.</td><td><span class="badge sev-low">Low</span></td><td>Detection engineering</td><td><span class="badge sev-high">High</span></td><td>Atomic red team style test in a lab host triggers each rule.</td></tr>
+        <tr><td>Restrict snapshot deletion permissions and apply cloud SCPs.</td><td><span class="badge sev-medium">Medium</span></td><td>Cloud team</td><td><span class="badge sev-high">High</span></td><td>Attempt a test delete with a standard role and confirm denial.</td></tr>
+        <tr><td>Separate backup admin accounts with MFA from general admins.</td><td><span class="badge sev-medium">Medium</span></td><td>Identity team</td><td><span class="badge sev-high">High</span></td><td>Confirm a general admin cannot open the backup console.</td></tr>
+        <tr><td>Block diskshadow and gate vssadmin via application control.</td><td><span class="badge sev-low">Low</span></td><td>Endpoint team</td><td><span class="badge sev-medium">Medium</span></td><td>Run the blocked tool on a pilot host and confirm the block event.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Home and small office advice</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Protect your own recovery</h3>
+      <ul class="check">
+        <li>Turn on File History (Windows) or Time Machine (macOS) to an external drive.</li>
+        <li>Disconnect the backup drive when the copy finishes, so ransomware cannot reach it.</li>
+        <li>Keep one cloud copy with version history enabled, such as OneDrive or iCloud file versions.</li>
+        <li>Create the vendor recovery USB once per year and store it with the backups.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Small-office quick wins</h3>
+      <ul class="check">
+        <li>Never let the only backup account be the same account people use daily.</li>
+        <li>Turn on multi-factor authentication for the backup console and the cloud account.</li>
+        <li>Once a quarter, restore one important file from backup and time how long it takes.</li>
+        <li>Keep a printed page with the backup vendor support number and your license keys.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>The strongest message from every major incident: attackers cannot delete what they cannot reach. One backup copy on disconnected or immutable storage turns T1490 from a catastrophe into a small, recoverable incident.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-8-mistakes">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2>Common mistakes and best practices</h2></div>
+  <p class="sec-intro">Most teams do not miss this attack because the signals are weak. They miss it because of fixable process errors. Here are the twelve we see most, with the symptom, the root cause, the fix, and the prevention.</p>
+
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>Mistake 1 — Only alerting on encryption, never on precursors.</td><td>First alert is mass file rename events.</td><td>Detections built from the final payload only.</td><td>Deploy the section 5 rules for recovery inhibition.</td><td>Map every ransomware runbook step to a rule, not just the last one.</td></tr>
+        <tr><td>Mistake 2 — No command-line auditing on servers.</td><td>Only the tool name is logged, never the arguments.</td><td>4688 shipped without the command line setting.</td><td>Enable command-line auditing and Sysmon process events.</td><td>Include command lines in the server build baseline.</td></tr>
+        <tr><td>Mistake 3 — Disabling the shadow-copy rule after one false positive.</td><td>Real deletion passes silently months later.</td><td>Alert fatigue and no tuning process.</td><td>Re-enable with a maintenance-window exception list.</td><td>Run a formal tuning workflow instead of rule deletion.</td></tr>
+        <tr><td>Mistake 4 — Backup servers without log coverage.</td><td>Blind spot exactly where attackers go first.</td><td>Backup appliances treated as closed systems nobody monitors.</td><td>Ship their OS and application logs to the SIEM.</td><td>Add backup systems to the logging coverage matrix.</td></tr>
+        <tr><td>Mistake 5 — Backup console shares the domain admin account.</td><td>One stolen credential unlocks backups too.</td><td>Convenience-driven account reuse.</td><td>Dedicated accounts with MFA for backup administration.</td><td>Quarterly access review of backup roles.</td></tr>
+        <tr><td>Mistake 6 — Immutable backups that were never restore-tested.</td><td>Restore fails during the real incident.</td><td>Testing skipped due to time pressure.</td><td>Schedule quarterly restore drills with timing data.</td><td>Track restore success as a published metric.</td></tr>
+        <tr><td>Mistake 7 — Trusting cloud snapshots without deletion protection.</td><td>Attacker removes snapshots in minutes.</td><td>Default settings and shared admin roles.</td><td>Enable deletion protection and SCP restrictions.</td><td>Cloud posture checks for recovery resources.</td></tr>
+        <tr><td>Mistake 8 — No baseline of normal backup behavior.</td><td>Cannot tell maintenance from attack.</td><td>Rules deployed without context.</td><td>Document change windows and backup job schedules.</td><td>Feed change data into the SIEM as a lookup.</td></tr>
+        <tr><td>Mistake 9 — Attribution-first triage.</td><td>Analysts debate attacker identity while backups are destroyed.</td><td>Runbook starts with the wrong question.</td><td>Triage starts with scope and containment.</td><td>Rewrite runbooks to ask who, what scope, what now.</td></tr>
+        <tr><td>Mistake 10 — Ownership gap between backup team and SOC.</td><td>Alerts sit unowned in the queue.</td><td>Shared responsibility with no named owner.</td><td>Assign backup-integrity alerts to a named team.</td><td>RACI chart (responsible, accountable, consulted, informed) covering every T1490-related alert.</td></tr>
+        <tr><td>Mistake 11 — Tuning that excludes service accounts entirely.</td><td>Attacker using a stolen service account is exempt.</td><td>Over-broad exclusions added in a hurry.</td><td>Scope exclusions to specific parent-child chains.</td><td>Review exclusions monthly; every exclusion needs a reason.</td></tr>
+        <tr><td>Mistake 12 — Silent SIEM pipeline failures.</td><td>Rules exist but no data flows.</td><td>Broken forwarder or expired token.</td><td>Monitor log source health with daily checks.</td><td>Alert on missing heartbeat from critical log sources.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Healthy operating habits</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">Daily</h3>
+      <ul class="check">
+        <li>Confirm critical log sources are reporting, including backup servers.</li>
+        <li>Review every recovery-inhibition alert from the last 24 hours.</li>
+        <li>Check backup job success dashboards for silent failures.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Weekly</h3>
+      <ul class="check">
+        <li>Walk one T1490 alert end-to-end and time the triage.</li>
+        <li>Review new exclusions and tuning changes with a second reviewer.</li>
+        <li>Sync with the backup team about scheduled maintenance windows.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Monthly</h3>
+      <ul class="check">
+        <li>Test one rule against a lab host running the technique safely.</li>
+        <li>Review IAM permissions for backup and snapshot deletion.</li>
+        <li>Update actor notes from new public incident reports.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="sec-9-cheatsheet">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2>Cheat sheet and quick reference</h2></div>
+  <p class="sec-intro">Everything important on one screen, for the wall and for the incident channel.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Key facts</h3>
+      <dl class="kv-list">
+        <div><dt>Technique</dt><dd>T1490 — Inhibit System Recovery.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact.</dd></div>
+        <div><dt>Platforms</dt><dd>Windows (most targeted), macOS, Linux, ESXi, IaaS, Containers, Network Devices.</dd></div>
+        <div><dt>What it does</dt><dd>Deletes shadow copies, backup catalogs, and recovery boot options.</dd></div>
+        <div><dt>Typical timing</dt><dd>Minutes to hours before encryption or wipe.</dd></div>
+        <div><dt>Signature commands</dt><dd><code>vssadmin delete shadows /all /quiet</code>, <code>wbadmin delete catalog -quiet</code>, <code>bcdedit /set recoveryenabled no</code>.</dd></div>
+        <div><dt>Official mitigations</dt><dd>M1053 Data Backup, M1038 Execution Prevention, M1028 Operating System Configuration, M1018 User Account Management.</dd></div>
+        <div><dt>Best single defense</dt><dd>One immutable or offline backup copy.</dd></div>
+      </dl>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Top detections</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Signal</th><th>Source</th><th>First action</th></tr></thead>
+          <tbody>
+            <tr><td><code>vssadmin/wmic</code> delete shadows</td><td>Sysmon 1 / 4688.</td><td>Page as critical ransomware precursor.</td></tr>
+            <tr><td><code>wbadmin</code> delete catalog</td><td>Sysmon 1 / 4688.</td><td>Protect backup repository, scope the host.</td></tr>
+            <tr><td><code>bcdedit</code> recoveryenabled no</td><td>Sysmon 1 / 4688.</td><td>Correlate with other T1490 signals.</td></tr>
+            <tr><td>Deletes in WindowsImageBackup / RegBack</td><td>Sysmon 23 / 26.</td><td>Check backup role allow list, then scope.</td></tr>
+            <tr><td>Cloud DeleteSnapshot by unusual identity</td><td>CloudTrail.</td><td>Revoke session, check snapshot inventory.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Response checklist</h3>
+    <ul class="check">
+      <li>Confirm the raw event: user, parent process, command line, host.</li>
+      <li>Isolate the host from the network immediately.</li>
+      <li>Disable or reset the involved account and review its recent logons.</li>
+      <li>Search all hosts for the same commands in the last 24 hours.</li>
+      <li>Protect backup repositories: lock, snapshot, and disconnect where possible.</li>
+      <li>Check for encryption activity: canary files (planted decoy files that alert when touched), mass renames, high CPU from unknown processes.</li>
+      <li>Record the exact commands, user, and parent process in the incident ticket for later threat hunting.</li>
+      <li>Preserve forensic copies before rebuilding, because recovery attacks destroy evidence too.</li>
+      <li>Notify the incident commander and open the recovery-inhibition runbook.</li>
+      <li>After containment, verify one restore path works before declaring safety.</li>
+      <li>After the incident closes, confirm backup jobs succeed again and review how the attacker got admin rights.</li>
+    </ul>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Official and related references</h3>
+      <ul class="check">
+        <li><a href="https://attack.mitre.org/techniques/T1490/" target="_blank" rel="noopener">MITRE ATT&amp;CK — T1490 Inhibit System Recovery</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1485/" target="_blank" rel="noopener">Related — T1485 Data Destruction</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1486/" target="_blank" rel="noopener">Related — T1486 Data Encrypted for Impact</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1562/001/" target="_blank" rel="noopener">Related — T1562.001 Impair Defenses</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1070/001/" target="_blank" rel="noopener">Related — T1070.001 Clear Windows Event Logs</a>.</li>
+        <li><a href="https://www.cisa.gov/stopransomware" target="_blank" rel="noopener">CISA — StopRansomware guidance</a>.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">One-line summary</h3>
+      <p>If recovery is being inhibited, the attack is already in progress on your systems. Treat the alert as a ransomware emergency, protect the backups first, and act fast. The organization that responds in minutes keeps its data. The one that spends hours debating attacker identity loses it.</p>
+    </div>
+  </div>
+</section>
+  </main>
+</div>
+
+<button class="fab back-top" id="backTop" type="button" aria-label="Back to top">Top</button>
+<button class="fab contents-fab" id="contentsFab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="fab theme-fab" id="themeToggle" type="button" aria-label="Switch between dark and light theme">&#9680;</button>
+<div class="scrim" id="scrim" hidden></div>
+<div class="toc-overlay" id="tocOverlay" role="dialog" aria-modal="true" aria-label="Contents" hidden>
+  <div class="toc-overlay-head"><span>Contents</span><button class="btn" id="overlayClose" type="button">Close</button></div>
+  <ul class="toc-list" id="overlayList"></ul>
+</div>
+
+<script>
+window.SIM_STORY = function () {
+  var N = [
+    { id: "attacker", x: 40, y: 64, w: 168, h: 62, label: "Attacker host", desc: "The laptop the attacker controls, using stolen admin credentials." },
+    { id: "server", x: 292, y: 54, w: 198, h: 66, label: "FILE01 server", desc: "A Windows file server the attacker has signed in to." },
+    { id: "vss", x: 566, y: 26, w: 188, h: 56, label: "Shadow copies", desc: "Point-in-time restore copies kept by the Volume Shadow Copy service." },
+    { id: "bkp", x: 566, y: 102, w: 188, h: 56, label: "Backup catalog", desc: "The index of nightly backups that restore tools rely on." },
+    { id: "winre", x: 292, y: 168, w: 198, h: 56, label: "Windows recovery", desc: "The repair environment that starts when Windows cannot boot." },
+    { id: "siem", x: 352, y: 306, w: 240, h: 62, label: "SIEM", desc: "Collects Sysmon and Windows event logs from every host." },
+    { id: "soc", x: 678, y: 292, w: 212, h: 74, label: "SOC analyst", desc: "Watches correlated alerts and leads the response." }
+  ];
+
+  function byId(id) {
+    for (var i = 0; i < N.length; i++) { if (N[i].id === id) return N[i]; }
+    return null;
+  }
+
+  function drawNode(ctx, id, state, S, H, C) {
+    var n = byId(id);
+    var o = { label: n.label, state: state };
+    if (S.hover === id) { o.state = "active"; }
+    H.node(ctx, n.x, n.y, n.w, n.h, o);
+  }
+
+  function logLine(ctx, H, C, x1, y1, x2, y2) {
+    H.flow(ctx, x1, y1, x2, y2, C.border, { n: 0, speed: 0, dash: [3, 4] });
+  }
+
+  function base(ctx, w, h, S, H, C) {
+    drawNode(ctx, "attacker", "active", S, H, C);
+    drawNode(ctx, "server", S.i >= 1 ? "active" : "idle", S, H, C);
+    drawNode(ctx, "vss", S.i >= 3 ? "dead" : "idle", S, H, C);
+    drawNode(ctx, "bkp", S.i >= 4 ? "dead" : "idle", S, H, C);
+    drawNode(ctx, "winre", S.i >= 5 ? "dead" : "idle", S, H, C);
+    drawNode(ctx, "siem", S.i >= 6 ? "active" : "idle", S, H, C);
+    drawNode(ctx, "soc", S.i >= 7 ? "good" : (S.i >= 6 ? "alert" : "idle"), S, H, C);
+
+    logLine(ctx, H, C, 340, 120, 400, 306);
+    logLine(ctx, H, C, 660, 82, 500, 306);
+    logLine(ctx, H, C, 660, 158, 560, 306);
+    logLine(ctx, H, C, 450, 224, 470, 306);
+    H.text(ctx, "event logs", 505, 240, { size: 10, color: C.muted, mono: true, maxWidth: 90 });
+
+    H.text(ctx, "VSS service", 660, 250, { size: 10, color: C.muted, mono: true, align: "center", maxWidth: 120 });
+    if (S.i >= 3) {
+      H.text(ctx, "restore points: 0", 660, 266, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 130 });
+    }
+  }
+
+  function evidence(ctx, S, H, C) {
+    var x = 40;
+    if (S.i >= 3) { x += H.chip(ctx, "Sysmon EID 1", x, 416, C.warning) + 10; }
+    if (S.i >= 4) { x += H.chip(ctx, "EID 4688 wbadmin", x, 416, C.warning) + 10; }
+    if (S.i >= 5) { x += H.chip(ctx, "bcdedit changed", x, 416, C.warning) + 10; }
+    if (S.i >= 6) { x += H.chip(ctx, "CORRELATED: T1490", x, 416, C.danger) + 10; }
+    if (S.i >= 7) { x += H.chip(ctx, "Immutable backup OK", x, 416, C.success) + 10; }
+    var cmds = [
+      "RDP logon as CORP\\svc_print from 203.0.113.77",
+      "whoami /priv  (checking admin rights)",
+      "vssadmin list shadows",
+      "vssadmin delete shadows /all /quiet",
+      "wbadmin delete catalog -quiet",
+      "bcdedit /set {default} recoveryenabled No",
+      "correlation: 3 events - 1 host - 5 minutes",
+      "restore FILE01 from the immutable backup copy"
+    ];
+    H.text(ctx, "CMD>", 40, 458, { size: 12, color: C.muted, mono: true, weight: "700" });
+    H.text(ctx, cmds[S.i] || "", 86, 458, { size: 12, color: C.text, mono: true, maxWidth: 820 });
+    H.text(ctx, "EVIDENCE", 40, 396, { size: 10, color: C.muted, mono: true, weight: "700" });
+  }
+
+  var S = [
+    {
+      label: "Stolen admin logon", dur: 5,
+      caption: "The attacker signs in to FILE01 with an admin account stolen by an infostealer. Nothing looks broken yet, but they now control the backups.",
+      hint: "Compare RDP logon sources with your known admin jump hosts and alert on the rest.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 208, 95, 292, 87, C.danger, { t: S.t, n: 3 });
+        H.text(ctx, "stolen credentials", 250, 74, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 130 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Privilege check", dur: 5,
+      caption: "The attacker runs whoami /priv to confirm they hold admin rights. Deleting shadow copies and editing boot settings both require this level.",
+      hint: "Flag admin utilities started from interactive sessions that are not your jump hosts.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.pulse(ctx, 391, 87, 60, C.accent, { t: S.t });
+        H.text(ctx, "whoami /priv", 391, 40, { size: 11, color: C.accent, mono: true, align: "center", maxWidth: 160 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "List the safety nets", dur: 5,
+      caption: "The attacker lists every shadow copy on the server. This is reconnaissance: they are measuring how much recovery data they are about to destroy.",
+      hint: "Shadow copy enumeration on a server outside a backup job is an early warning worth an alert.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 490, 80, 566, 54, C.violet, { t: S.t, n: 2, speed: 0.4 });
+        H.text(ctx, "vssadmin list shadows", 528, 104, { size: 10, color: C.violet, mono: true, align: "center", maxWidth: 150 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Delete all shadow copies", dur: 5.5,
+      caption: "One silent command wipes every restore point on the host. The shadow copy store empties within seconds and local rollback is gone.",
+      hint: "Alert at high severity on any delete-shadows command, and page when a server matches.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 490, 76, 566, 48, C.danger, { t: S.t, n: 4, speed: 0.55 });
+        if (S.p > 0.25) { H.pulse(ctx, 660, 54, 54, C.danger, { t: S.t }); }
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Erase the backup catalog", dur: 5.5,
+      caption: "Next the attacker deletes the backup catalog. The backup files may survive on disk, but Windows no longer knows they exist, so restore tooling goes blind.",
+      hint: "Any wbadmin delete catalog event should map to a change ticket. No ticket means page the on-call analyst.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 490, 98, 566, 128, C.danger, { t: S.t, n: 4, speed: 0.55 });
+        if (S.p > 0.25) { H.pulse(ctx, 660, 130, 54, C.danger, { t: S.t, phase: 0.5 }); }
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Break recovery boot", dur: 5.5,
+      caption: "The attacker disables the Windows recovery environment with bcdedit. After the next reboot, the built-in repair options will not start at all.",
+      hint: "Watch for bcdedit recoveryenabled changes outside golden image provisioning hosts.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 391, 120, 391, 168, C.danger, { t: S.t, n: 3, speed: 0.5 });
+        if (S.p > 0.25) { H.pulse(ctx, 391, 196, 50, C.danger, { t: S.t, phase: 0.25 }); }
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "The SOC connects the dots", dur: 6,
+      caption: "The SIEM correlates three events from one host and one user in five minutes and raises a single critical incident for T1490. The attack is now impossible to ignore.",
+      hint: "Build this correlation rule before the attack happens, and include host and user in the alert context.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 400, 306, 410, 130, C["accent-2"], { t: S.t, n: 4, speed: 0.45 });
+        H.flow(ctx, 660, 160, 600, 306, C["accent-2"], { t: S.t + 0.3, n: 3, speed: 0.45 });
+        H.arrow(ctx, 592, 337, 678, 329, C["accent-2"], { width: 2 });
+        H.pulse(ctx, 784, 329, 66, C.danger, { t: S.t });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Isolate and restore", dur: 6,
+      caption: "The SOC isolates FILE01, blocks the stolen account, and restores data from the immutable backup copy the attacker could never reach. The attack fails here.",
+      hint: "Keep one backup copy offline or immutable, and prove every quarter that you can restore from it.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        drawNode(ctx, "server", "warn", S, H, C);
+        drawNode(ctx, "attacker", "warn", S, H, C);
+        H.text(ctx, "isolated", 391, 40, { size: 11, color: C.warning, mono: true, align: "center", maxWidth: 120 });
+        H.arrow(ctx, 678, 316, 610, 200, C.success, { dash: [4, 4] });
+        evidence(ctx, S, H, C);
+      }
+    }
+  ];
+
+  SimEngine.init({ nodes: N, steps: S });
+};
+</script>
+<script>
+/* ============================================================
+   Detection Engineering Guide — shared page behavior
+   Theme, progress bar, TOC (generated from real headings),
+   mobile overlay, back-to-top, copy buttons, reveal-on-scroll.
+   No external libraries. No alert/prompt/confirm.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  var doc = document;
+  var rootEl = doc.documentElement;
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  /* ---------- theme toggle ---------- */
+  var themeBtn = doc.getElementById("themeToggle");
+  function setTheme(t, save) {
+    rootEl.setAttribute("data-theme", t);
+    if (save) { try { localStorage.setItem("atk-theme", t); } catch (e) {} }
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      setTheme(next, true);
+    });
+  }
+
+  /* ---------- progress bar + back to top ---------- */
+  var fill = doc.getElementById("progressFill");
+  var backTop = doc.getElementById("backTop");
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      var st = window.scrollY || doc.documentElement.scrollTop || 0;
+      var dh = (doc.documentElement.scrollHeight - window.innerHeight) || 1;
+      if (fill) fill.style.width = Math.min(100, (st / dh) * 100) + "%";
+      if (backTop) backTop.classList.toggle("show", st > 520);
+      trackActive();
+      ticking = false;
+    });
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  if (backTop) {
+    backTop.addEventListener("click", function () {
+      var smooth = !reduced.matches;
+      window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+    });
+  }
+
+  /* ---------- table of contents (generated from real headings) ---------- */
+  var secEls = [].slice.call(doc.querySelectorAll("main.content > section.sec"));
+  var tocList = doc.getElementById("tocList");
+  var ovList = doc.getElementById("overlayList");
+  var targets = []; // { id, el, linkEls }
+
+  function makeLink(t) {
+    var a = doc.createElement("a");
+    a.href = "#" + t.id;
+    a.textContent = t.text;
+    a.addEventListener("click", function () { closeOverlay(); });
+    return a;
+  }
+
+  secEls.forEach(function (sec) {
+    var numEl = sec.querySelector(".sec-num");
+    var h2 = sec.querySelector("h2");
+    if (!h2 || !sec.id) return;
+    var num = numEl ? numEl.textContent.trim() : "";
+    var t = { id: sec.id, el: sec, text: (num ? num + ". " : "") + h2.textContent.trim(), linkEls: [] };
+    [tocList, ovList].forEach(function (list) {
+      if (!list) return;
+      var li = doc.createElement("li");
+      li.appendChild(makeLink(t));
+      list.appendChild(li);
+      t.linkEls.push(li.firstChild);
+    });
+    targets.push(t);
+    if (sec.id === "sec-5-detection") {
+      [].slice.call(sec.querySelectorAll("h3[id]")).forEach(function (h3) {
+        var st = { id: h3.id, el: h3, text: h3.textContent.trim(), linkEls: [] };
+        [tocList, ovList].forEach(function (list) {
+          if (!list) return;
+          var li = doc.createElement("li");
+          li.className = "sub";
+          li.appendChild(makeLink(st));
+          list.appendChild(li);
+          st.linkEls.push(li.firstChild);
+        });
+        targets.push(st);
+      });
+    }
+  });
+
+  var activeId = null;
+  function trackActive() {
+    if (!targets.length) return;
+    var probe = (window.scrollY || 0) + 140;
+    var cur = targets[0];
+    for (var i = 0; i < targets.length; i++) {
+      var el = targets[i].el;
+      var top = el.getBoundingClientRect().top + (window.scrollY || 0);
+      if (top <= probe) cur = targets[i];
+    }
+    if (cur.id !== activeId) {
+      activeId = cur.id;
+      targets.forEach(function (t) {
+        t.linkEls.forEach(function (a) { a.classList.toggle("active", t.id === activeId); });
+      });
+    }
+  }
+
+  /* ---------- mobile contents overlay ---------- */
+  var contentsFab = doc.getElementById("contentsFab");
+  var overlay = doc.getElementById("tocOverlay");
+  var scrim = doc.getElementById("scrim");
+  var overlayClose = doc.getElementById("overlayClose");
+
+  function openOverlay() {
+    if (!overlay) return;
+    overlay.hidden = false;
+    if (scrim) scrim.hidden = false;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "true");
+    doc.body.style.overflow = "hidden";
+    var first = overlay.querySelector("a, button");
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    if (scrim) scrim.hidden = true;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "false");
+    doc.body.style.overflow = "";
+    if (contentsFab) contentsFab.focus();
+  }
+  if (contentsFab) contentsFab.addEventListener("click", openOverlay);
+  if (overlayClose) overlayClose.addEventListener("click", closeOverlay);
+  if (scrim) scrim.addEventListener("click", closeOverlay);
+  doc.addEventListener("keydown", function (e) {
+    if (overlay && !overlay.hidden) {
+      if (e.key === "Escape") { closeOverlay(); return; }
+      if (e.key === "Tab") {
+        var f = [].slice.call(overlay.querySelectorAll("a[href], button:not([disabled])"));
+        if (!f.length) return;
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && doc.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && doc.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+  });
+
+  /* ---------- copy buttons ---------- */
+  function flash(btn) {
+    var old = btn.getAttribute("data-label") || btn.textContent;
+    btn.setAttribute("data-label", old);
+    btn.textContent = "Copied";
+    btn.classList.add("copied");
+    window.setTimeout(function () {
+      btn.textContent = old;
+      btn.classList.remove("copied");
+    }, 1600);
+  }
+  function copyText(txt, btn) {
+    function legacy() {
+      var ta = doc.createElement("textarea");
+      ta.value = txt;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      doc.body.appendChild(ta);
+      ta.select();
+      try { doc.execCommand("copy"); flash(btn); } catch (err) {}
+      doc.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(function () { flash(btn); }, legacy);
+    } else { legacy(); }
+  }
+  [].slice.call(doc.querySelectorAll(".code-block")).forEach(function (block) {
+    var btn = block.querySelector(".copy-btn");
+    var code = block.querySelector("pre code");
+    if (!btn || !code) return;
+    btn.addEventListener("click", function () { copyText(code.innerText || code.textContent, btn); });
+  });
+
+  /* ---------- reveal on scroll ---------- */
+  if (!reduced.matches && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          en.target.classList.add("in");
+          io.unobserve(en.target);
+        }
+      });
+    }, { rootMargin: "0px 0px -6% 0px" });
+    secEls.forEach(function (s) { s.classList.add("reveal"); io.observe(s); });
+  }
+
+  /* ---------- initial paint ---------- */
+  onScroll();
+  /* ============================================================
+     SimEngine — shared canvas simulation engine
+     Techniques provide: nodes (tooltip hit areas) + steps with
+     { label, caption, hint, dur, draw(ctx, w, h, S, H, C) }.
+     Handles play/pause/restart/speed, step chips, captions,
+     tooltips, scaling, theme refresh and reduced motion.
+     ============================================================ */
+  window.SimEngine = (function () {
+    var SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+    var MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+    var DW = 960, DH = 540;
+
+    function hexA(hex, a) {
+      hex = (hex || "").trim();
+      if (hex.charAt(0) === "#") {
+        if (hex.length === 4) hex = "#" + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2) + hex.charAt(3) + hex.charAt(3);
+        var n = parseInt(hex.slice(1), 16);
+        if (isNaN(n)) return hex;
+        return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+      }
+      return hex;
+    }
+    function resolveColors() {
+      var cs = window.getComputedStyle(rootEl);
+      var names = ["bg", "surface", "surface-2", "elevated", "text", "muted", "border", "border-strong",
+        "accent", "accent-2", "violet", "success", "warning", "danger", "high", "low"];
+      var c = {};
+      for (var i = 0; i < names.length; i++) {
+        var v = cs.getPropertyValue("--" + names[i]);
+        c[names[i]] = v ? v.trim() : "#888888";
+      }
+      return c;
+    }
+
+    var H = {
+      hexA: hexA,
+      _C: null,
+      rr: function (ctx, x, y, w, h, r) {
+        r = Math.min(r || 8, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      },
+      grid: function (ctx, w, h, C) {
+        ctx.save();
+        ctx.fillStyle = hexA(C.border, 0.42);
+        for (var x = 24; x < w; x += 48) {
+          for (var y = 24; y < h; y += 48) {
+            ctx.beginPath();
+            ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      },
+      node: function (ctx, x, y, w, h, o) {
+        o = o || {};
+        var C = this._C;
+        var state = o.state || "idle";
+        var fill = C["surface-2"];
+        var stroke = C["border-strong"];
+        if (state === "active") stroke = C.accent;
+        if (state === "alert") stroke = C.danger;
+        if (state === "good") stroke = C.success;
+        if (state === "warn") stroke = C.warning;
+        if (state === "dead") { stroke = C.danger; fill = hexA(C.danger, 0.10); }
+        ctx.save();
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.lineWidth = state === "idle" ? 1 : 1.7;
+        ctx.strokeStyle = stroke;
+        ctx.stroke();
+        if (state === "dead") {
+          ctx.strokeStyle = hexA(C.danger, 0.95);
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(x + 9, y + 9);
+          ctx.lineTo(x + w - 9, y + h - 9);
+          ctx.moveTo(x + w - 9, y + 9);
+          ctx.lineTo(x + 9, y + h - 9);
+          ctx.stroke();
+        }
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        var cx = x + w / 2;
+        if (o.sub) {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2 - 8, w - 14);
+          ctx.fillStyle = C.muted;
+          ctx.font = "400 10.5px " + MONO;
+          ctx.fillText(o.sub, cx, y + h / 2 + 10, w - 14);
+        } else {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2, w - 14);
+        }
+        ctx.restore();
+      },
+      arrow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var ang = Math.atan2(y2 - y1, x2 - x1);
+        var head = o.head || 9;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = o.width || 1.6;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2 - Math.cos(ang) * head, y2 - Math.sin(ang) * head);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - Math.cos(ang - 0.42) * head, y2 - Math.sin(ang - 0.42) * head);
+        ctx.lineTo(x2 - Math.cos(ang + 0.42) * head, y2 - Math.sin(ang + 0.42) * head);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      },
+      flow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var t = o.t || 0;
+        var n = o.n || 3;
+        var speed = o.speed == null ? 0.32 : o.speed;
+        var size = o.size || 3.2;
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.32);
+        ctx.lineWidth = 1.2;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        for (var i = 0; i < n; i++) {
+          var f = (t * speed + i / n) % 1;
+          var px = x1 + (x2 - x1) * f;
+          var py = y1 + (y2 - y1) * f;
+          ctx.beginPath();
+          ctx.arc(px, py, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      },
+      pulse: function (ctx, x, y, r, color, o) {
+        o = o || {};
+        var p = ((o.t || 0) * 0.8 + (o.phase || 0)) % 1;
+        var rr2 = r * (0.4 + p * 0.9);
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.55 * (1 - p));
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, rr2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      },
+      text: function (ctx, str, x, y, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.fillStyle = o.color || C.text;
+        ctx.font = (o.weight || "400") + " " + (o.size || 13) + "px " + (o.mono ? MONO : SANS);
+        ctx.textAlign = o.align || "left";
+        ctx.textBaseline = o.baseline || "middle";
+        ctx.fillText(str, x, y, o.maxWidth);
+        ctx.restore();
+      },
+      chip: function (ctx, str, x, y, color, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.font = "700 11px " + MONO;
+        var w = ctx.measureText(str).width + 18;
+        var h = 21;
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = hexA(color, o.bgA == null ? 0.13 : o.bgA);
+        ctx.fill();
+        ctx.strokeStyle = hexA(color, 0.55);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(str, x + 9, y + h / 2 + 0.5);
+        ctx.restore();
+        return w;
+      }
+    };
+
+    function init(cfg) {
+      var canvas = doc.getElementById(cfg.canvas || "simCanvas");
+      if (!canvas || !canvas.getContext) return null;
+      var stage = canvas.parentElement;
+      var ctx = canvas.getContext("2d");
+      var steps = cfg.steps || [];
+      var nodes = cfg.nodes || [];
+      var C = resolveColors();
+      H._C = C;
+      var st = { i: 0, p: 0, t: 0, playing: false, speed: 1, last: 0, hover: null, scale: 1 };
+      var rm = reduced.matches;
+
+      var playBtn = doc.getElementById("simPlay");
+      var pauseBtn = doc.getElementById("simPause");
+      var restartBtn = doc.getElementById("simRestart");
+      var speedSel = doc.getElementById("simSpeed");
+      var stepsBox = doc.getElementById("simSteps");
+      var capLabel = doc.getElementById("simCapLabel");
+      var capText = doc.getElementById("simCaption");
+      var capHint = doc.getElementById("simHint");
+      var tip = doc.getElementById("simTip");
+
+      var chips = [];
+      steps.forEach(function (s, idx) {
+        var b = doc.createElement("button");
+        b.type = "button";
+        b.className = "step-chip";
+        b.textContent = (idx + 1) + ". " + s.label;
+        b.addEventListener("click", function () { go(idx); });
+        if (stepsBox) stepsBox.appendChild(b);
+        chips.push(b);
+      });
+
+      function syncCaption() {
+        var s = steps[st.i];
+        if (!s) return;
+        if (capLabel) capLabel.textContent = "Step " + (st.i + 1) + " of " + steps.length + " — " + s.label;
+        if (capText) capText.textContent = s.caption;
+        if (capHint) capHint.textContent = "Defender hint: " + s.hint;
+        chips.forEach(function (c, i) {
+          c.classList.toggle("active", i === st.i);
+          if (i === st.i) c.setAttribute("aria-current", "step");
+          else c.removeAttribute("aria-current");
+        });
+      }
+      function syncButtons() {
+        if (playBtn) playBtn.disabled = st.playing;
+        if (pauseBtn) pauseBtn.disabled = !st.playing;
+      }
+      function go(i) {
+        st.i = Math.max(0, Math.min(steps.length - 1, i));
+        st.p = 0;
+        syncCaption();
+      }
+      function play() {
+        if (!steps.length) return;
+        if (st.i === steps.length - 1 && st.p >= 1) go(0);
+        st.playing = true;
+        syncButtons();
+      }
+      function pause() { st.playing = false; syncButtons(); }
+      function restart() { st.t = 0; go(0); }
+      if (playBtn) playBtn.addEventListener("click", play);
+      if (pauseBtn) pauseBtn.addEventListener("click", pause);
+      if (restartBtn) restartBtn.addEventListener("click", restart);
+      if (speedSel) speedSel.addEventListener("change", function () { st.speed = parseFloat(speedSel.value) || 1; });
+
+      function fit() {
+        var w = (stage && stage.clientWidth) || 960;
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var cssH = Math.round(w * DH / DW);
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(cssH * dpr);
+        canvas.style.height = cssH + "px";
+        st.scale = canvas.width / DW;
+      }
+      window.addEventListener("resize", function () { fit(); render(); });
+
+      function toDesign(e) {
+        var r = canvas.getBoundingClientRect();
+        return { x: (e.clientX - r.left) / r.width * DW, y: (e.clientY - r.top) / r.height * DH };
+      }
+      function hit(d) {
+        for (var i = nodes.length - 1; i >= 0; i--) {
+          var n = nodes[i];
+          if (d.x >= n.x && d.x <= n.x + n.w && d.y >= n.y && d.y <= n.y + n.h) return n;
+        }
+        return null;
+      }
+      canvas.addEventListener("pointermove", function (e) {
+        if (!nodes.length) return;
+        var n = hit(toDesign(e));
+        st.hover = n ? n.id : null;
+        canvas.style.cursor = n ? "pointer" : "default";
+        if (tip) {
+          if (n) {
+            tip.textContent = "";
+            var b1 = doc.createElement("strong");
+            b1.textContent = n.label;
+            var p1 = doc.createElement("span");
+            p1.textContent = n.desc || "";
+            tip.appendChild(b1);
+            tip.appendChild(p1);
+            var wrapR = stage.getBoundingClientRect();
+            var lx = e.clientX - wrapR.left + 14;
+            var ly = e.clientY - wrapR.top + 14;
+            lx = Math.max(4, Math.min(lx, wrapR.width - 250));
+            ly = Math.max(4, Math.min(ly, wrapR.height - 90));
+            tip.style.left = lx + "px";
+            tip.style.top = ly + "px";
+            tip.hidden = false;
+          } else { tip.hidden = true; }
+        }
+      });
+      canvas.addEventListener("pointerleave", function () {
+        st.hover = null;
+        if (tip) tip.hidden = true;
+      });
+
+      if (window.MutationObserver) {
+        var mo = new MutationObserver(function () {
+          C = resolveColors();
+          H._C = C;
+          render();
+        });
+        mo.observe(rootEl, { attributes: true, attributeFilter: ["data-theme"] });
+      }
+
+      function render() {
+        var s = st.scale || 1;
+        ctx.setTransform(s, 0, 0, s, 0, 0);
+        ctx.fillStyle = C.bg;
+        ctx.fillRect(0, 0, DW, DH);
+        H.grid(ctx, DW, DH, C);
+        var step = steps[st.i];
+        if (step && step.draw) {
+          step.draw(ctx, DW, DH, { i: st.i, p: st.p, t: st.t, hover: st.hover, playing: st.playing, reduced: rm }, H, C);
+        }
+      }
+
+      function frame(ts) {
+        var dt = st.last ? Math.min((ts - st.last) / 1000, 0.08) : 0;
+        st.last = ts;
+        st.t += dt;
+        if (st.playing && steps.length) {
+          var d = steps[st.i].dur || 4.5;
+          st.p += dt * st.speed / d;
+          if (st.p >= 1) {
+            if (st.i < steps.length - 1) { st.i++; st.p = 0; syncCaption(); }
+            else { st.p = 1; pause(); }
+          }
+        }
+        render();
+        window.requestAnimationFrame(frame);
+      }
+
+      fit();
+      syncCaption();
+      syncButtons();
+      if (rm) { st.p = 1; } // reduced motion: static first step, no autoplay
+      window.requestAnimationFrame(frame);
+      return { go: go, play: play, pause: pause, restart: restart, state: st };
+    }
+
+    return { init: init, h: H };
+  })();
+
+  /* ---------- boot the simulation if present ---------- */
+  if (typeof window.SIM_STORY === "function") {
+    try { window.SIM_STORY(); } catch (e) { /* keep the rest of the page working */ }
+  }
+})();
+
+</script>
+</body>
+</html>

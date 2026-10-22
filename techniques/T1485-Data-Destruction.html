@@ -1,0 +1,2947 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1485 - Data Destruction · Detection Engineering Guide</title>
+<meta name="description" content="Beginner-friendly detection guide for MITRE ATT&amp;CK T1485 (Data Destruction): attacker view, SOC view, Sigma rules, Splunk SPL, mitigations and a real case study.">
+<script>(function(){try{var t=null;try{t=localStorage.getItem("atk-theme")}catch(e){}if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})();</script>
+<style>
+/* ============================================================
+   Detection Engineering Guide — shared design system
+   Dark + light themes, layout, components. No external assets.
+   ============================================================ */
+
+:root {
+  --bg: #0b0f1a;
+  --surface: #121a2e;
+  --surface-2: #172138;
+  --elevated: #1a2542;
+  --text: #e7edf8;
+  --muted: #9aa8c0;
+  --border: #24314e;
+  --border-strong: #2f4066;
+  --accent: #4f8cff;
+  --accent-2: #22d3ee;
+  --violet: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --high: #fb923c;
+  --low: #4ade80;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --radius-card: 14px;
+  --radius-ctl: 9px;
+  --shadow-soft: 0 10px 30px rgba(2, 6, 18, 0.35);
+  --max-w: 1280px;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f3f6fc;
+  --surface: #ffffff;
+  --surface-2: #f5f8ff;
+  --elevated: #e9eefa;
+  --text: #182238;
+  --muted: #5a6a85;
+  --border: #d9e2f2;
+  --border-strong: #c2d0ea;
+  --accent: #2f6fe4;
+  --accent-2: #0891b2;
+  --violet: #7c5ce0;
+  --success: #0d9e6e;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --high: #c2410c;
+  --low: #15803d;
+  --shadow-soft: 0 10px 30px rgba(24, 34, 56, 0.10);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 96px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16.5px;
+  line-height: 1.65;
+  overflow-x: clip;
+}
+
+img, canvas { max-width: 100%; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+p, li, dd, dt { overflow-wrap: break-word; }
+p { max-width: 78ch; }
+
+h1, h2, h3, h4 {
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.5em;
+  font-weight: 750;
+  text-wrap: balance;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:where(p, li, td, th, dd, h3, h4) > code:not(pre code) {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.08em 0.4em;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+  overflow: hidden; white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px; top: -48px;
+  z-index: 200;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 0 0 10px 10px;
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 0; text-decoration: none; }
+
+/* ---------- progress bar ---------- */
+
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 90;
+  background: transparent;
+  pointer-events: none;
+}
+#progressFill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.08s linear;
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(900px 320px at 12% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    radial-gradient(700px 300px at 88% -20%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 70%),
+    linear-gradient(color-mix(in srgb, var(--surface) 55%, var(--bg)), var(--bg));
+}
+.hero-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 44px 24px 36px;
+}
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 14px;
+}
+.page-title {
+  font-size: clamp(1.8rem, 3.6vw, 2.65rem);
+  margin: 0 0 14px;
+  max-width: 22ch;
+}
+.tech-id {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62em;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 12px;
+  padding: 0.08em 0.5em;
+  margin-right: 0.45em;
+  vertical-align: 0.18em;
+  white-space: nowrap;
+}
+.hero-intro {
+  color: var(--muted);
+  font-size: 1.06rem;
+  max-width: 68ch;
+  margin: 0 0 20px;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 24px;
+}
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+.chip b, .chip strong { color: var(--text); font-weight: 600; }
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-soft);
+}
+.fact-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.fact-value { font-weight: 700; font-size: 1.02rem; line-height: 1.35; }
+.fact-sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+
+/* ---------- layout: sticky TOC + main ---------- */
+
+.layout {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 40px 24px 110px;
+  display: grid;
+  grid-template-columns: 262px minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.sidebar { position: relative; }
+.toc-card {
+  position: sticky;
+  top: 28px;
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px 12px;
+  scrollbar-width: thin;
+}
+.toc-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  padding: 0 10px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-list li { margin: 2px 0; }
+.toc-list a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  box-shadow: inset 3px 0 0 transparent;
+}
+.toc-list a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.toc-list a.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.toc-list li.sub a { padding-left: 22px; font-size: 0.84rem; }
+.content { min-width: 0; }
+
+/* ---------- sections ---------- */
+
+.sec { margin-top: 64px; }
+.content > .sec:first-child { margin-top: 0; }
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.sec-num {
+  flex: none;
+  min-width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.sec-head h2 {
+  font-size: clamp(1.45rem, 2.4vw, 1.85rem);
+  margin: 0;
+}
+.sec-intro {
+  color: var(--muted);
+  margin: 2px 0 22px 56px;
+  max-width: 74ch;
+}
+.sec h3 {
+  font-size: 1.16rem;
+  margin: 30px 0 12px;
+  scroll-margin-top: 92px;
+}
+.sec h4 { font-size: 1rem; margin: 20px 0 8px; }
+
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
+.reveal.in { opacity: 1; transform: none; }
+
+/* ---------- cards & grids ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-soft);
+}
+.card > h3:first-child, .card > h4:first-child { margin-top: 0; }
+.card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+.card-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+  margin: 0 0 8px;
+}
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.grid-2 > *, .grid-3 > * { min-width: 0; }
+
+.kv-list { margin: 0; display: grid; gap: 0; }
+.kv-list > div {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.kv-list > div:last-child { border-bottom: 0; }
+.kv-list dt {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding-top: 2px;
+}
+.kv-list dd { margin: 0; font-size: 0.95rem; }
+/* ---------- callouts ---------- */
+
+.callout {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  padding: 13px 16px;
+  margin: 14px 0;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .callout-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+  color: var(--accent);
+}
+.callout.warning { border-left-color: var(--warning); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); }
+.callout.warning .callout-label { color: var(--warning); }
+.callout.good { border-left-color: var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); }
+.callout.good .callout-label { color: var(--success); }
+.callout.danger { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+.callout.danger .callout-label { color: var(--danger); }
+.callout.note { border-left-color: var(--violet); background: color-mix(in srgb, var(--violet) 8%, var(--surface)); }
+.callout.note .callout-label { color: var(--violet); }
+
+/* ---------- badges ---------- */
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.badge.sev-critical { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.badge.sev-high { color: var(--high); border-color: color-mix(in srgb, var(--high) 55%, transparent); background: color-mix(in srgb, var(--high) 12%, transparent); }
+.badge.sev-medium { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.badge.sev-low { color: var(--low); border-color: color-mix(in srgb, var(--low) 55%, transparent); background: color-mix(in srgb, var(--low) 12%, transparent); }
+.badge.cat { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 50%, transparent); background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
+.badge.ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 50%, transparent); background: color-mix(in srgb, var(--success) 10%, transparent); }
+
+/* ---------- tables ---------- */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  margin: 14px 0;
+}
+.table-wrap table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.table-wrap.wide table { min-width: 780px; }
+.table-wrap th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: var(--surface-2);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table-wrap td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.table-wrap tbody tr:last-child td { border-bottom: 0; }
+.table-wrap tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+
+/* ---------- code blocks ---------- */
+
+.code-block {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--elevated);
+  border-bottom: 1px solid var(--border);
+}
+.code-lang {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.code-block pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  scrollbar-width: thin;
+}
+.code-block pre code { white-space: pre; }
+
+/* ---------- buttons & controls ---------- */
+
+.btn, .step-chip {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+.btn:hover, .step-chip:hover { background: var(--elevated); border-color: var(--accent); }
+.btn:active, .step-chip:active { transform: translateY(1px); }
+.btn:disabled, .step-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.copied { color: var(--success); border-color: var(--success); }
+.copy-btn { padding: 4px 12px; font-size: 0.8rem; }
+.select {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 10px;
+}
+
+/* ---------- timeline ---------- */
+
+.timeline {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0 0 0 24px;
+  border-left: 2px solid var(--border);
+}
+.timeline li { position: relative; margin: 0 0 18px; }
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: -31px;
+  top: 5px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.tl-when {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-2);
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+.tl-what { font-weight: 700; margin-bottom: 4px; }
+.timeline p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- triage flow ---------- */
+
+.flow {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  counter-reset: flow;
+}
+.flow li {
+  counter-increment: flow;
+  position: relative;
+  padding: 0 0 18px 52px;
+}
+.flow li::before {
+  content: counter(flow);
+  position: absolute;
+  left: 0; top: 0;
+  width: 34px; height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.flow li::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 38px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--border);
+}
+.flow li:last-child::after { display: none; }
+.flow .flow-step { font-weight: 700; display: block; margin-bottom: 3px; }
+.flow p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- checklists ---------- */
+
+.check { list-style: none; margin: 12px 0; padding: 0; }
+.check li {
+  position: relative;
+  padding: 6px 0 6px 34px;
+  border-bottom: 1px dashed var(--border);
+}
+.check li:last-child { border-bottom: 0; }
+.check li::before {
+  content: "";
+  position: absolute;
+  left: 4px; top: 11px;
+  width: 15px; height: 15px;
+  border-radius: 4px;
+  border: 2px solid var(--accent);
+  background: transparent;
+}
+
+/* ---------- attack chain strip ---------- */
+
+.chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.chain-step {
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+.chain-step.hot {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  font-weight: 700;
+}
+.chain-arrow { color: var(--muted); }
+
+/* ---------- misc helpers ---------- */
+
+.muted { color: var(--muted); }
+.small { font-size: 0.86rem; }
+.mt-0 { margin-top: 0; }
+.mono { font-family: var(--font-mono); }
+.stack > * + * { margin-top: 12px; }
+/* ---------- simulation ---------- */
+
+.sim-shell { padding: 0; overflow: hidden; }
+.sim-stage {
+  position: relative;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.sim-stage canvas { display: block; width: 100%; }
+.sim-tip {
+  position: absolute;
+  z-index: 5;
+  max-width: 240px;
+  background: var(--elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+  pointer-events: none;
+}
+.sim-tip strong { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--accent-2); margin-bottom: 2px; }
+.sim-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sim-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+.sim-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 12px 14px 2px;
+}
+.step-chip { font-size: 0.8rem; padding: 4px 11px; border-radius: 999px; }
+.step-chip.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 700;
+}
+.sim-caption {
+  padding: 12px 14px 16px;
+}
+.sim-cap-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+}
+.sim-cap-text { margin: 0 0 10px; }
+.sim-hint {
+  border-left: 3px solid var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+  border-radius: 0 10px 10px 0;
+  padding: 9px 13px;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+/* ---------- floating controls ---------- */
+
+.fab {
+  position: fixed;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s ease;
+}
+.fab:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.theme-fab { left: 18px; bottom: 18px; width: 46px; height: 46px; font-size: 1.05rem; }
+.back-top { right: 18px; bottom: 74px; padding: 0 16px; opacity: 0; pointer-events: none; transform: translateY(8px); }
+.back-top.show { opacity: 1; pointer-events: auto; transform: none; }
+.contents-fab { right: 18px; bottom: 18px; padding: 0 16px; display: none; }
+
+/* ---------- mobile contents overlay ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: rgba(4, 8, 18, 0.55);
+  border: 0;
+  padding: 0;
+}
+.toc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 24px;
+  overflow: auto;
+}
+.toc-overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.toc-overlay-head span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.toc-overlay .toc-list a { font-size: 1rem; padding: 10px 12px; }
+.toc-overlay .toc-list li.sub a { padding-left: 30px; font-size: 0.9rem; }
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1040px) {
+  .layout { display: block; padding-top: 28px; }
+  .sidebar { display: none; }
+  .contents-fab { display: inline-flex; }
+  .sec { margin-top: 48px; }
+  .sec-intro { margin-left: 0; }
+}
+
+@media (max-width: 900px) {
+  .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .hero-inner { padding: 30px 16px 26px; }
+  .layout { padding: 24px 16px 96px; }
+  .fact-grid { grid-template-columns: 1fr; gap: 10px; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .kv-list > div { grid-template-columns: 1fr; gap: 2px; }
+  .sec { margin-top: 40px; }
+  .sec-head { gap: 10px; }
+  .sec-num { min-width: 36px; height: 36px; font-size: 0.95rem; border-radius: 10px; }
+  .sec-intro { margin-bottom: 16px; }
+  .sim-speed { margin-left: 0; width: 100%; }
+  .sim-toolbar .btn { flex: 1 1 auto; }
+  .theme-fab { left: 12px; bottom: 12px; }
+  .back-top { right: 12px; bottom: 78px; }
+  .contents-fab { right: 12px; bottom: 12px; }
+  .page-title { font-size: clamp(1.55rem, 7.2vw, 2rem); }
+}
+
+@media (max-width: 400px) {
+  .hero-inner { padding: 24px 12px 20px; }
+  .layout { padding: 18px 12px 90px; }
+  .chip { font-size: 11px; padding: 3px 9px; }
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; }
+  #progressFill { transition: none; }
+}
+
+/* ---------- print ---------- */
+
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f6fa;
+    --elevated: #eef1f7;
+    --text: #111827;
+    --muted: #4b5563;
+    --border: #d1d5db;
+    --border-strong: #9ca3af;
+    --accent: #1d4ed8;
+    --accent-2: #0e7490;
+    --violet: #6d28d9;
+    --success: #047857;
+    --warning: #92400e;
+    --danger: #b91c1c;
+    --high: #9a3412;
+    --low: #166534;
+    --shadow-soft: none;
+  }
+  body { background: #fff; color: #111827; font-size: 11.5pt; }
+  .sidebar, .progress-bar, .fab, .back-top, .contents-fab, .theme-fab,
+  .sim-toolbar, .sim-steps, .copy-btn, .scrim, .toc-overlay, .skip-link {
+    display: none !important;
+  }
+  .hero { border-bottom: 1px solid #ccc; background: #fff; }
+  .layout { display: block; max-width: none; padding: 0; }
+  .sec { margin-top: 22pt; }
+  .sec-intro { margin-left: 0; }
+  a { color: #1d4ed8; text-decoration: underline; }
+  .code-block, .table-wrap, .card, .callout { box-shadow: none; break-inside: avoid; }
+  .code-block pre { white-space: pre-wrap; overflow: visible; }
+  .table-wrap { overflow: visible; }
+  .table-wrap table { min-width: 0; }
+  h2, h3 { break-after: avoid; }
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1485"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip-link" href="#mainContent">Skip to main content</a>
+<div class="progress-bar" aria-hidden="true"><div id="progressFill"></div></div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&amp;CK · Impact</p>
+    <h1 class="page-title" id="pageTitle"><span class="tech-id">T1485</span> Data Destruction</h1>
+    <p class="hero-intro">This guide explains how attackers destroy data with wipes, mass deletes, and wiper malware. It covers the tools, the traces they leave, and the detections that catch them in time.</p>
+    <div class="chip-row">
+      <span class="chip">Tactic: Impact</span>
+      <span class="chip">Platforms: Windows · macOS · Linux · ESXi · IaaS · Containers</span>
+      <span class="chip">Technique version 1.4 · created 14 March 2019</span>
+      <span class="chip">Sub-technique: T1485.001</span>
+      <span class="chip">Guide v2.0</span>
+    </div>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <div class="fact-label">Attack stage</div>
+        <div class="fact-value">Destructive endgame</div>
+        <div class="fact-sub">Wipers, or extortion without a decryptor</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Attacker goal</div>
+        <div class="fact-value">Make data unrecoverable</div>
+        <div class="fact-sub">Overwrite contents, not just delete</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Key evidence</div>
+        <div class="fact-value">Delete and overwrite storms</div>
+        <div class="fact-sub">Sysmon 23, Event 4663, auditd unlink</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Detection effort</div>
+        <div class="fact-value">Medium</div>
+        <div class="fact-sub">Rate and context matter most</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar" aria-label="Table of contents">
+    <nav class="toc-card" aria-label="Sections">
+      <div class="toc-title">Contents</div>
+      <ul class="toc-list" id="tocList"></ul>
+    </nav>
+  </aside>
+  <main class="content" id="mainContent">
+<section class="sec" id="sec-1-overview">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2>Overview</h2></div>
+  <p class="sec-intro">A short tour of the technique: what data destruction means, how wiping differs from plain deletion, and what this guide teaches you.</p>
+
+  <p><strong>Data Destruction</strong> means an attacker deletes or destroys data on purpose. The goal is to interrupt availability: files, folders, databases, virtual machines, or whole cloud storage areas stop working. This is an <em>Impact</em> technique in MITRE ATT&amp;CK. Impact techniques appear late in an attack, when the intruder already controls the system and no longer needs to stay quiet.</p>
+  <p>There is an important difference between deleting a file and destroying it. The <code>del</code> command on Windows and <code>rm</code> on Linux only remove the <em>pointer</em> to the file, not the data itself. The bytes stay on the disk until the system reuses that space, so a trained forensics team can often recover them. A <em>wiper</em> goes further: it overwrites file contents with random bytes, zeros, or even political images before or instead of deleting them. Overwritten data is gone for good, and no tool can bring it back.</p>
+  <p>Attackers destroy data for three main reasons. Sabotage teams want the damage itself, as the wiper attacks against Ukrainian organizations showed in 2022. Extortion crews destroy data and backups when a victim refuses to pay, or instead of encrypting at all, so there is no decryptor and no negotiation. Some intruders also run secure-delete tools on their own traces, so investigators cannot recover the evidence of what they did.</p>
+
+  <div class="card">
+    <h3 class="card-title">Where it sits in the attack chain</h3>
+    <p>Reaching this stage takes control. The attacker needs admin rights on a machine, or powerful permissions in a cloud account, because ordinary users cannot destroy much. Some destructive malware also spreads on its own. It steals passwords (<em>OS Credential Dumping</em>) and reuses valid accounts (<em>Valid Accounts</em>). Then it copies itself over admin shares on the network, like a worm. A few minutes of that can erase thousands of machines.</p>
+    <p class="chain">
+      <span class="chain-step">Initial Access</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Execution</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Lateral Movement</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Privilege Escalation</span><span class="chain-arrow">→</span>
+      <span class="chain-step hot">Impact — T1485</span>
+    </p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What you will learn in this guide</h3>
+      <ul class="check">
+        <li>How wiping differs from plain deletion, and why it matters for forensics.</li>
+        <li>Which exact log events show delete storms, secure-delete tools, and boot wipes.</li>
+        <li>Five ready-to-use Sigma rules and matching Splunk queries.</li>
+        <li>How to rank the five most damaging threats and tune rate-based alerts.</li>
+        <li>How backups, MFA delete, and account limits make this attack fail.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Key facts at a glance</h3>
+      <dl class="kv-list">
+        <div><dt>ATT&amp;CK ID</dt><dd>T1485 — Data Destruction.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact (availability).</dd></div>
+        <div><dt>Platforms</dt><dd>Windows, Linux, macOS, Containers, ESXi, IaaS.</dd></div>
+        <div><dt>ATT&amp;CK version</dt><dd>1.4 — created 14 March 2019.</dd></div>
+        <div><dt>Typical actors</dt><dd>State-linked wiper teams, extortion crews such as LAPSUS$ and Storm-0501, and worms such as Shai-Hulud.</dd></div>
+        <div><dt>Main data sources</dt><dd>File deletion events, process creation with command line, cloud and container audit logs.</dd></div>
+        <div><dt>Sub-technique</dt><dd>T1485.001 Lifecycle-Triggered Deletion (abusing cloud lifecycle rules).</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">Note</div>
+    <p>T1485 targets <em>files and data</em>. Two sibling techniques target the <em>disk</em> instead: Disk Structure Wipe (T1561.001) destroys partition tables and boot records, and Disk Content Wipe (T1561.002) overwrites the whole disk surface. In real incidents they overlap: a boot wipe touches both, and this guide covers it as threat 5 (THR-005). Attackers often pair data destruction with T1490 Inhibit System Recovery, which removes shadow copies and backups first, so nothing can be rolled back.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-2-simulation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2>Animated simulation</h2></div>
+  <p class="sec-intro">Watch the attack unfold step by step on a compromised file server, and see at the same time what the SOC can observe. Hover over any box for details, or use the step buttons to jump around.</p>
+
+  <div class="sim-shell card">
+    <div class="sim-stage">
+      <canvas id="simCanvas" width="960" height="540" role="img" aria-label="Animated simulation of T1485: an attacker with stolen admin rights empties a shared folder, overwrites the freed space with a wipe tool, destroys the boot structures, and is caught by the SOC, which isolates the host and restores from an immutable backup."></canvas>
+      <div class="sim-tip" id="simTip" hidden></div>
+    </div>
+    <div class="sim-toolbar">
+      <button class="btn" id="simPlay" type="button">Play</button>
+      <button class="btn" id="simPause" type="button" disabled>Pause</button>
+      <button class="btn" id="simRestart" type="button">Restart</button>
+      <label class="sim-speed">Speed
+        <select id="simSpeed" class="select">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+    </div>
+    <div class="sim-steps" id="simSteps" aria-label="Simulation steps"></div>
+    <div class="sim-caption" aria-live="polite">
+      <div class="sim-cap-label" id="simCapLabel">Step 1 of 8</div>
+      <p class="sim-cap-text" id="simCaption">Press Play to start the simulation.</p>
+      <div class="sim-hint" id="simHint">Defender hints appear here during playback.</div>
+    </div>
+  </div>
+
+  <h3>Written version of the simulation</h3>
+  <p>The same story in text, for screen readers and for printing. Each step names the action, the evidence it leaves, and what the defender should notice. Two log names come back often: Sysmon, a free Windows add-on that records process and file activity in detail, and auditd, the Linux audit service that records system calls.</p>
+
+  <div class="grid-2">
+    <div class="card"><h3 class="card-title">Step 1 — Sign in with stolen admin rights</h3><p>The attacker connects to FILE01, a Windows file server, using an admin account stolen by an infostealer. Nothing looks broken yet, but they now control the machine that stores shared company files. Evidence: a Security event 4624 logon from an unusual source address. The SOC should compare logon sources with known admin workstations.</p></div>
+    <div class="card"><h3 class="card-title">Step 2 — Map the shares and count files</h3><p>The attacker lists the shares and counts the files with <code>dir</code>. This is recon: they are learning where the valuable folders are and how much they can destroy. Evidence: process events plus a high-volume directory walk on the share. The SOC should treat share enumeration from an unexpected account as an early warning.</p></div>
+    <div class="card"><h3 class="card-title">Step 3 — Launch the deletion storm</h3><p>A bulk delete command such as <code>del /s /q</code> sweeps the share, and file tiles vanish in groups while the deleted counter climbs into the thousands. Evidence: Sysmon event 23 file deletes and a burst of Security event 4663 with DELETE access. The SOC should alert on deletion rate per process and host, not on single events.</p></div>
+    <div class="card"><h3 class="card-title">Step 4 — Overwrite the freed space</h3><p>The attacker runs <code>cipher /w</code>, which makes three overwrite passes over the free space on that volume. No forensics tool can recover the deleted files afterwards. The wipe bar fills pass after pass. Evidence: a process event for cipher.exe with the /w flag. The SOC should treat any secure-delete tool on a server as critical.</p></div>
+    <div class="card"><h3 class="card-title">Step 5 — Destroy the boot structures</h3><p>Now the attacker destroys the boot structures: <code>diskpart</code> with <code>clean</code> on Windows, or <code>dd if=/dev/zero of=/dev/sda</code> on Linux. The server goes dark and will not start again, because the boot records and partition table are gone. Evidence: a process event for diskpart.exe on Windows, or an auditd EXECVE record for dd writing to a whole-disk device on Linux. The SOC should page immediately on any of these.</p></div>
+    <div class="card"><h3 class="card-title">Step 6 — The SOC sees the storm</h3><p>The SIEM (the central log search system) counts thousands of delete events from one process on one host and raises a single critical incident. Evidence: correlated Sysmon 23, Security 4663, and PowerShell 4104 records. The SOC should build this rate correlation before an attack, with host and user in the alert context.</p></div>
+    <div class="card"><h3 class="card-title">Step 7 — Isolate and freeze the backups</h3><p>The SOC isolates FILE01 from the network and freezes the backup vault, so nothing left in the estate can be deleted. The attacker's path back is closed. Evidence: the EDR isolation action and the vault lock event. The SOC should keep an isolation and vault-lock runbook ready, and rehearse it twice a year.</p></div>
+    <div class="card"><h3 class="card-title">Step 8 — Restore and patch the entry path</h3><p>The team rebuilds the server from a golden image (a clean, tested system install). Then they restore data from the immutable backup copy the attacker could not change. Then they reset the stolen account and close the entry path. Evidence: the restore job and the follow-up ticket. The lesson: one immutable copy defeats data destruction.</p></div>
+  </div>
+</section>
+<section class="sec" id="sec-3-red-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2>Red team / hacker perspective</h2></div>
+  <p class="sec-intro">Understanding how attackers destroy data helps you predict the move and place your sensors. Everything here is described for defense and for labs you own.</p>
+
+  <h3>When and why attackers use it</h3>
+  <p>Sabotage teams use data destruction as the goal itself. In February 2022, wipers such as HermeticWiper, CaddyWiper, and WhisperGate hit Ukrainian organizations hours before the invasion. Older campaigns such as Shamoon (2012) and Olympic Destroyer (2018) followed the same idea: destroy as much as possible, as fast as possible. These teams usually remove backups and shadow copies first (that is T1490), so victims cannot simply roll back.</p>
+  <p>Extortion crews destroy data when pressure fails or instead of encryption. Storm-0501 destroyed data and backup files in the cloud after its extortion attempts. LAPSUS$ deleted systems and resources both on-premises and in the cloud, and ShinyHunters used the <code>DeleteBucket</code> API call to remove cloud storage outright. After this kind of destruction there is no decryptor and no key to buy, which is what makes it different from ransomware.</p>
+  <p>The third reason is quietest: hiding. SDelete is a legitimate Microsoft Sysinternals utility that overwrites files so they cannot be recovered, and intruders run it on their own tooling and on stolen data before they leave. Destruction can also spread by itself. Destructive malware has moved through networks using stolen credentials, dumped password hashes, and admin shares. The Shai-Hulud worm of 2025 did the same through the npm (JavaScript package manager) supply chain. It overwrote and deleted everything in the user's home directory.</p>
+
+  <h3>How it is performed</h3>
+  <p>The core moves are simple, which is why they are also easy to detect. The commands below are the classic sequence for each platform, shown for lab study only. Run them exclusively inside disposable virtual machines that you own, take a snapshot first, and treat every command as if a real SOC were watching.</p>
+
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">CMD · lab-only on a VM you own</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>:: 1. Bulk delete a whole folder tree, no questions asked
+del /s /q C:\lab\share\*.*
+
+:: 2. Overwrite free space three times (zeros, 0xFF, random)
+::    so deleted files cannot be recovered
+cipher /w:C:\lab\share
+
+:: 3. Secure-delete single files with SDelete, 3 passes
+sdelete64.exe -p 3 C:\lab\docs\plans.xlsx
+
+:: 4. Zero a spare disk so nothing on it is recoverable (destructive)
+diskpart
+list disk
+select disk 1
+clean all</code></pre>
+  </figure>
+
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Linux shell · lab-only on a VM you own</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code># 1. Bulk delete a folder tree
+rm -rf /lab/share/
+
+# 2. Secure-delete one file: 5 overwrite passes, then remove and rename
+shred -vu -n 5 /lab/docs/plans.xlsx
+
+# 3. Overwrite free space on a mounted filesystem
+dd if=/dev/zero of=/lab/mnt/zero.file bs=1M
+rm -f /lab/mnt/zero.file
+
+# 4. Destroy the boot area of a spare disk (destructive)
+dd if=/dev/zero of=/dev/sdb bs=1M count=100</code></pre>
+  </figure>
+
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">AWS CLI · lab-only on an account you own</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code># 1. Multi-object delete: up to 1000 keys in one call
+aws s3api delete-objects --bucket lab-archive \
+  --delete '{"Objects":[{"Key":"a.log"},{"Key":"b.log"}]}'
+
+# 2. Force-delete a bucket and everything inside it
+aws s3 rb s3://lab-archive --force
+
+# 3. Batch-terminate virtual machines
+aws ec2 terminate-instances --instance-ids i-0abc123 i-0def456</code></pre>
+  </figure>
+
+  <p>Each block leaves a different trace. <code>cipher /w</code> makes three overwrite passes over free space, so plain file recovery tools find nothing afterwards. <code>shred</code> does the same for single files on Linux. The <code>dd</code> command, pointed at a whole-disk device such as <code>/dev/sdb</code>, destroys the partition table and boot records. The machine then cannot start. In the cloud, <code>DeleteObjects</code> removes up to 1000 objects per call, and every call lands in CloudTrail with the exact identity that made it.</p>
+
+  <h3>Documented destructive malware and tools</h3>
+  <p>ATT&amp;CK procedure records name many destructive families. They repeat the same patterns: overwrite contents, spread with stolen credentials, and remove recovery options first. The table below summarizes the most useful ones for detection planning.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Malware or tool</th><th>Documented behavior</th></tr></thead>
+      <tbody>
+        <tr><td>HermeticWiper (2022)</td><td>Recursively wipes files in system and program folders using FSCTL_MOVE_FILE (a Windows defragmentation call). It also overwrites large files in My Documents and on the Desktop with random bytes.</td></tr>
+        <tr><td>CaddyWiper (2022)</td><td>Works alphabetically through drives on a compromised system, takes ownership of files, and overwrites all of them.</td></tr>
+        <tr><td>WhisperGate (2022)</td><td>Overwrites the first 1 MB of each file with 0xcc bytes and appends random extensions, corrupting files while keeping their names.</td></tr>
+        <tr><td>Apostle (2022)</td><td>Masquerades as ransomware but is really a wiper. It writes random data to files, resizes the originals to zero, changes their timestamps, and deletes them.</td></tr>
+        <tr><td>DynoWiper (2025)</td><td>Overwrites files with 16-byte sequences of random data made by the Mersenne Twister algorithm. It opens files with the Windows CreateFileW function and writes through SetFilePointerEx and WriteFile; some versions delete files with DeleteFileW.</td></tr>
+        <tr><td>Shamoon (2012, 2017)</td><td>Uses the RawDisk driver to overwrite operating system files and disk structures with an image, on whole networks at once.</td></tr>
+        <tr><td>Olympic Destroyer (2018)</td><td>Overwrites files locally and on remote shares; its 2018 run disrupted the Winter Olympics network.</td></tr>
+        <tr><td>SDelete (Sysinternals)</td><td>Legitimate secure-delete tool that overwrites data so it is unrecoverable. Intruders also run it on their own traces before they leave.</td></tr>
+        <tr><td>Shai-Hulud (2025)</td><td>Self-spreading npm worm that overwrote and deleted every writable file in users' home directories. It also used the shred command on Linux devices.</td></tr>
+        <tr><td>Mini Shai-Hulud (2025)</td><td>Wipes devices that resolve to specific geolocations, including Iran and Israel. It also has a dead-man's switch, a trigger that acts on its own. If the operator revokes a GitHub token the adversary created, it wipes the home directory.</td></tr>
+        <tr><td>Xbash (2018)</td><td>Targets Linux servers and destroys databases it finds, often after weak passwords gave it access.</td></tr>
+        <tr><td>KillDisk (2015+)</td><td>Deletes system files to make the operating system unbootable. It also targets and deletes files with 35 different file extensions.</td></tr>
+        <tr><td>Meteor (2020)</td><td>Fills files and directories with zero bytes in place of real content, then deletes them.</td></tr>
+        <tr><td>Sandworm JUNKMAIL</td><td>Overwrites files with null bytes as part of destructive attacks on Ukrainian networks.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Prerequisites and conditions</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What the attacker needs first</h3>
+      <ul class="check">
+        <li>Local admin or SYSTEM rights on the target machine, or root on Linux.</li>
+        <li>Write access to the share, volume, bucket, or database they want to destroy.</li>
+        <li>For network-wide damage: stolen credentials and reach into admin shares, or a spreading worm.</li>
+        <li>For cloud damage: an IAM identity (a cloud user or role) with delete permissions.</li>
+        <li>For containers: permission to exec into pods or to create privileged DaemonSets.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">What limits them</h3>
+      <ul class="check">
+        <li>Immutable or offline backup copies cannot be overwritten or deleted by a stolen admin account.</li>
+        <li>Overwriting large volumes takes time, which gives defenders a window to react.</li>
+        <li>Application control can block sdelete, shred, cipher, and dd on servers.</li>
+        <li>Cloud audit logs record every delete call, even when on-premises logs were wiped.</li>
+        <li>Mass deletion produces huge event volumes that no attacker can switch off.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Common variations and attacker mistakes</h3>
+  <p>Variations follow the platform. On Kubernetes, TeamPCP ran privileged DaemonSets (pods that start on every node) and deleted files on mounted volumes. In the cloud, T1485.001 shows the patient variant: an attacker edits a bucket lifecycle rule so data quietly expires without any loud delete call. Some wipers also spread like worms: HermeticWiper shipped with a companion tool, HermeticWizard, that copied it to other machines, including through Group Policy.</p>
+  <p>Attacker mistakes help defenders. Tools that run without admin rights fail and still appear in process logs. Typos in tool names leave odd process records that are trivially detectable. Fast campaigns forget machines: hosts that were offline, network segments they could not reach, or the one backup copy outside their control. And the biggest mistake of all is timing: a deletion storm is so loud that even a small SOC can catch it in minutes, if the rule exists before the attack.</p>
+
+  <div class="callout danger">
+    <div class="callout-label">Danger · lab-only</div>
+    <p>Never run the commands above on a production or shared system. Bulk deletes, overwrite passes, and boot wipes permanently destroy data. Use isolated virtual machines with fresh snapshots, separate lab cloud accounts, and treat every run as if it were being logged by a real SOC.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-4-blue-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2>Blue team / SOC perspective</h2></div>
+  <p class="sec-intro">Data destruction is loud if you count events, and silent if you do not. Here is how to see it, what it leaves behind, and how to triage it fast.</p>
+
+  <h3>How defenders can see it</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">Process telemetry</h3>
+      <p>Sysmon event 1 or Security event 4688 with command-line auditing shows the exact tool and flags: <code>sdelete -p 3</code>, <code>cipher /w</code>, <code>shred</code>, <code>dd</code>. These tools are rare on servers, so a single event can be worth a page.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">File deletion telemetry</h3>
+      <p>Sysmon events 23 and 26 record file deletes, and Security events 4663 (DELETE access) plus 4660 (object deleted) record each removal with the user and process behind it. One event means little; a storm means everything.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Rate analytics</h3>
+      <p>Count delete events per process and per host over rolling 5-minute windows and compare with a 30-day baseline. A wiper deletes hundreds of files per minute; normal activity deletes a handful per hour.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Script and shell logs</h3>
+      <p>PowerShell event 4104 shows script blocks such as <code>Clear-RecycleBin</code>, and Linux auditd shows <code>execve</code> of shred, dd, or rm with their arguments. Both reveal intent that plain file events hide.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Cloud audit logs</h3>
+      <p>AWS CloudTrail records <code>DeleteObjects</code>, <code>DeleteBucket</code>, <code>TerminateInstances</code>, and <code>DeleteDBInstance</code> with the exact identity and source address. Object-level data events must be enabled for S3, or multi-object deletes stay invisible.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Container audit logs</h3>
+      <p>Kubernetes API server audit logs show who created privileged DaemonSets or exec'd into pods. TeamPCP-style attacks leave their whole path here, because every destructive step went through the API.</p>
+    </div>
+  </div>
+
+  <h3>Artifacts the technique leaves behind</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Artifact</th><th>Where you find it</th><th>What it tells you</th></tr></thead>
+      <tbody>
+        <tr><td>Process event for <code>sdelete</code>, <code>cipher /w</code>, <code>shred</code>, or <code>dd</code>.</td><td>Sysmon 1, Security 4688, auditd EXECVE</td><td>Someone is actively making data unrecoverable; treat as critical on servers.</td></tr>
+        <tr><td>High-rate Sysmon 23 / 26 delete events from one process</td><td>Sysmon</td><td>A deletion storm is running; the Image and User fields point at the source.</td></tr>
+        <tr><td>Burst of 4663 with DELETE access followed by 4660</td><td>Security event log</td><td>Mass deletion on a share; the account and process name lead to the entry path.</td></tr>
+        <tr><td><code>Clear-RecycleBin</code> in a script block</td><td>PowerShell 4104</td><td>Recycle bin purge, a classic step when wiping user-visible data on Windows.</td></tr>
+        <tr><td>auditd <code>unlink</code>/<code>rmdir</code> storm or <code>dd</code> writing to <code>/dev/sd*</code></td><td>Linux audit logs</td><td>Bulk deletion or boot destruction on Linux, with the exact command arguments.</td></tr>
+        <tr><td><code>DeleteObjects</code> or <code>DeleteBucket</code> by an unusual identity</td><td>CloudTrail</td><td>Cloud storage destruction, with the identity, IP, and region of the caller.</td></tr>
+        <tr><td>Sudden disk space drop plus high write IOPS on a host</td><td>Performance monitoring</td><td>Secondary signal of an overwrite pass; confirms the storm when logs are thin.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Where to look, in priority order</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Log source</th><th>What to pull</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>Sysmon on all servers.</td><td>Event 1 for sdelete/cipher/shred/dd/diskpart; events 23 and 26 counted per process</td><td>Catches both the tool and the storm at the moment they happen.</td></tr>
+        <tr><td>Windows Security log</td><td>4663 with DELETE access and 4660 counts by account, plus 4688 command lines</td><td>Shows who deleted what on shares, even without Sysmon.</td></tr>
+        <tr><td>PowerShell operational log</td><td>Event 4104 script blocks containing Clear-RecycleBin or Remove-Item loops</td><td>Reveals scripted destruction that file events alone under-count.</td></tr>
+        <tr><td>Linux auditd rules</td><td>execve of shred, dd, rm -rf; unlink, unlinkat, and rmdir rates per host</td><td>Covers the Linux half of threats 1, 2, and 5 in this guide.</td></tr>
+        <tr><td>CloudTrail with S3 data events</td><td>DeleteObjects object counts, DeleteBucket, TerminateInstances batches, DeleteDBInstance</td><td>The only view of cloud storage destruction; enable data events first.</td></tr>
+        <tr><td>Kubernetes audit log</td><td>Privileged DaemonSet creation and exec calls into pods</td><td>Catches container-focused destruction such as TeamPCP.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Why it matters and how it fits the chain</h3>
+  <p>Deletion signals matter in two very different moments. Before an encryption event, wiping the backups is often the last step a ransomware crew takes, so a delete storm can be the final warning you get. During pure destruction, the storm <em>is</em> the attack, and every minute of delay costs data. Either way, the signal is rate: no legitimate process deletes thousands of files from user shares in minutes.</p>
+  <p>There is also a forensics angle. Once an attacker runs a real wipe, the overwritten files are gone, so evidence must be captured early. Preserve memory and disk images of affected machines before you reboot or clean them, and assume that anything the attacker touched with SDelete cannot be recovered. The accounts, hosts, and parent processes in the delete events then become your main path to scope the incident.</p>
+
+  <h3>Short triage flow</h3>
+  <ol class="flow">
+    <li><span class="flow-step">Confirm the burst is real</span><p>Count the delete events per process, host, and user in the last hour. Rule out known cleanup jobs, build agents, and scheduled rotations with your change calendar.</p></li>
+    <li><span class="flow-step">Identify the source</span><p>Read the process image, command line, parent process, and logon for the deleting account. A stolen admin account from a workstation is the classic pattern.</p></li>
+    <li><span class="flow-step">Scope across the estate</span><p>Search all hosts for the same command lines and for other delete storms in the last 24 hours. Multiple hosts mean an active campaign, not a mistake.</p></li>
+    <li><span class="flow-step">Protect what is left</span><p>Isolate affected hosts, freeze or lock the backup repository, and revoke the deletion permissions of the accounts involved. Speed here decides how much data survives.</p></li>
+    <li><span class="flow-step">Preserve and escalate</span><p>Capture memory and disk images before any reboot, page the incident commander, and start the restore plan from the immutable copy.</p></li>
+  </ol>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>Write the triage steps above into your incident runbook before you need them. During a live storm, the team that follows a prepared checklist freezes backups minutes faster than the team that improvises.</p>
+  </div>
+</section>
+<section class="sec" id="sec-5-detection">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2>Detection engineering deep dive</h2></div>
+  <p class="sec-intro">This is the practical core of the guide. It covers regulation mapping, threat intelligence, ranked threats, and real log examples. It ends with five Sigma rules and matching Splunk queries you can adapt today.</p>
+
+  <h3 id="sec-5-1-regulation">5.1 Regulation mapping</h3>
+  <p>Data destruction attacks the availability of information, and almost every security framework asks you to protect exactly that. Auditors want proof that data can be restored, that deletion is controlled, and that destruction attempts are monitored. The table below shows what each framework expects and the evidence a detection program provides.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Framework and control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>GDPR</strong> — Article 32 (security of processing)</td>
+          <td>Requires the ability to restore availability of and access to personal data after an incident. Destroyed data can become a prolonged, reportable breach.</td>
+          <td>Documented restore procedures, tested restoration records, alerts on mass deletion, incident reports showing recovery time.</td>
+        </tr>
+        <tr>
+          <td><strong>HIPAA Security Rule</strong> — §164.308(a)(7) contingency plan</td>
+          <td>Covered entities must keep a data backup plan and disaster recovery plan for electronic protected health information, which a wiper destroys in place.</td>
+          <td>Written contingency plan, backup success reports, restore test results, monitoring evidence for deletion attempts on health data stores.</td>
+        </tr>
+        <tr>
+          <td><strong>ISO/IEC 27001:2022</strong> — A.8.13 (information backup), A.8.15 (logging), A.8.16 (monitoring)</td>
+          <td>Backup copies must be protected and monitored, and destructive activity must be detected. T1485 is the direct failure case for all three controls.</td>
+          <td>Backup policy with immutable copies, deletion-monitoring rules, alert tickets for wipe attempts, logging coverage across file servers and cloud.</td>
+        </tr>
+        <tr>
+          <td><strong>SOC 2</strong> — A1.2 (recovery infrastructure), CC7.4 (incident response)</td>
+          <td>Availability commitments expect tested recovery, and incident criteria expect detection and response. Destruction of storage defeats both if unnoticed.</td>
+          <td>Runbooks, restore drills with timings, detection rule documentation, records of alerts and response for destructive activity.</td>
+        </tr>
+        <tr>
+          <td><strong>PCI DSS</strong> — 12.10.x (incident response plan and testing)</td>
+          <td>Organizations handling cardholder data must prepare for scenarios that destroy or lock data, which is exactly what a wiper or delete storm does.</td>
+          <td>IR plan covering wiper scenarios, response tests, records of delete-rate alerts and containment actions.</td>
+        </tr>
+        <tr>
+          <td><strong>NIST SP 800-53 Rev.5</strong> — CP-9 (system backup), CP-10 (recovery), AU-6 (audit review)</td>
+          <td>Federal-aligned controls require protected backups, tested recovery, and review of audit records for destructive events.</td>
+          <td>Control implementation statements, backup protection configuration, audit-review procedures tuned to deletion storms, test logs.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="sec-5-2-threat-intel">5.2 Threat intelligence</h3>
+  <p>Intelligence turns a generic rule into a justified priority. For data destruction the picture is unusually rich, because destructive campaigns are public and well documented. State-linked wiper teams publish nothing themselves. Vendors and CERTs (computer emergency response teams) document their tools in detail. Collect from several source types, and record how confident you are in each finding before you change a rule or a runbook.</p>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">MITRE ATT&amp;CK</h3>
+      <p>Start with the T1485 technique page and its long procedure list. It names the tools, the actors, and the platforms, which makes rule coverage easy to justify.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Vendor reporting</h3>
+      <p>ESET, Symantec, and CrowdStrike documented HermeticWiper in depth, and Microsoft tracked WhisperGate. Their reports contain exact behaviors you can turn into detections.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">OSINT sources</h3>
+      <p>Open-source intelligence (OSINT) is public information anyone can read: security blogs, researcher threads, and free government advisories such as CISA StopRansomware. Destructive campaigns draw heavy OSINT coverage, so this source is strong for T1485.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">ISACs and CERTs</h3>
+      <p>An Information Sharing and Analysis Center (ISAC) is a member group that shares attack data for one sector, such as energy or finance. CERTs are national response teams. Both share wiper indicators fast, often before public reports appear.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Commercial feeds</h3>
+      <p>Paid feeds add actor tracking and early warning about new wipers or supply-chain worms. Use them for context and prioritization, not as a replacement for your own logs.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Internal telemetry</h3>
+      <p>Your own history is the most valuable source. Past cleanup jobs, failed delete attempts, and near misses define the baselines that make rate alerts trustworthy.</p>
+    </div>
+  </div>
+
+  <p>Known actors, campaigns, and tools associated with data destruction. The confidence column shows how sure a typical enterprise SOC can be.</p>
+  <div class="callout note">
+    <div class="callout-label">Confidence levels</div>
+    <p><strong>High</strong> means several independent reports plus your own sightings. <strong>Medium</strong> means one solid public report. <strong>Low</strong> means a hypothesis that still needs testing. Write the level next to every note.</p>
+  </div>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Actor or campaign</th><th>Observed behavior</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>HermeticWiper campaign (Ukraine, Feb 2022)</td><td>Wiped files and boot structures with a legitimate signed driver, and stopped the Volume Shadow Copy service first. The HermeticWizard companion tool spread it to other machines.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>WhisperGate (Ukraine, Jan 2022)</td><td>Corrupted the first 1 MB of files with 0xcc bytes and random extensions, staged ahead of the invasion.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>CaddyWiper (Ukraine, Mar 2022)</td><td>Walked drives alphabetically, took ownership of files, and overwrote them.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Shamoon (oil and gas, 2012 and 2017)</td><td>Used the RawDisk driver to overwrite OS files and disk structures across thousands of machines.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Olympic Destroyer (PyeongChang, 2018)</td><td>Overwrote files locally and on remote shares while removing recovery options.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Storm-0501 (cloud extortion, 2024-2025)</td><td>Destroyed data and backup files in cloud storage after failed extortion.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>LAPSUS$ (2022)</td><td>Deleted systems and resources both on-premises and in the cloud during disruptive intrusions.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>ShinyHunters (2020+)</td><td>Used the DeleteBucket API call to remove cloud storage holding stolen or target data.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Shai-Hulud npm worm (2025)</td><td>Overwrote and deleted every writable file in users' home directories, used shred on Linux, and spread through compromised packages.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Apostle (Ukraine, 2022)</td><td>Masquerades as ransomware but is really a wiper. It writes random data to files, resizes them to zero, changes timestamps, and deletes the originals.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>DynoWiper (Poland, 2025)</td><td>Overwrote files with 16-byte sequences of random data using Windows file APIs. Some versions deleted files with the DeleteFileW API.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Mini Shai-Hulud (2025)</td><td>Wipes devices that resolve to specific geolocations, including Iran and Israel. It also runs a dead-man's switch: if the operator revokes a GitHub token the adversary created, it wipes the home directory.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>TeamPCP (Kubernetes, 2025)</td><td>Created privileged DaemonSets that deleted files on mounted volumes inside clusters.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>Xbash (2018)</td><td>Destroyed Linux databases on servers reached with weak credentials.</td><td><span class="badge ok">High</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">How to apply this</div>
+    <p>Use the actor list to justify rule coverage in reviews and to write threat profiles for your team. It also tells you which platforms to extend first. If you run large Kubernetes estates, the TeamPCP row is your argument for shipping API audit logs. If your data sits in object storage, the Storm-0501 and ShinyHunters rows argue for CloudTrail data events.</p>
+  </div>
+
+  <h3 id="sec-5-3-threat-ranking">5.3 Threats ranking and categorization</h3>
+  <p>Five realistic threats cover this technique well. The rank reflects how likely the threat is and how much damage it causes when it works. Preconditions describe what an attacker must already have; the justification explains the rank so you can defend it in planning meetings.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>ID</th><th>Threat</th><th>Rank</th><th>Platform</th><th>Description and preconditions</th><th>Impact and justification</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>THR-001</td>
+          <td>Wiper or secure-delete utility execution</td>
+          <td><span class="badge sev-critical">Critical</span></td>
+          <td><span class="badge cat">Windows</span> <span class="badge cat">Linux</span> <span class="badge cat">macOS</span></td>
+          <td>Someone runs sdelete, cipher /w, shred, or dd. Preconditions: local admin or root, or write access to the target data.</td>
+          <td>Makes recovery impossible, not just delayed. Rare on servers, so even one event is decisive. Highest severity because it removes every later option.</td>
+        </tr>
+        <tr>
+          <td>THR-002</td>
+          <td>Bulk file deletion storm</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Windows</span> <span class="badge cat">Linux</span> <span class="badge cat">Containers</span></td>
+          <td>One process deletes far more files than any baseline allows, with del /s /q, rm -rf, or scripted loops. Preconditions: write access to many files.</td>
+          <td>The most common destruction pattern across wipers and manual intrusions. Very detectable through rate, but plain deletion may still be recoverable, hence High.</td>
+        </tr>
+        <tr>
+          <td>THR-003</td>
+          <td>Mass deletion on file servers and shares, including recycle bin purge</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>Bursts of 4663 DELETE plus 4660 events on shares, often ending with Clear-RecycleBin. Preconditions: an account with share write access, often stolen admin.</td>
+          <td>Hits the data employees work with every day and is the visible half of a file-server wipe. Strong 4663/4660 signals make it catchable in minutes.</td>
+        </tr>
+        <tr>
+          <td>THR-004</td>
+          <td>Cloud storage destruction</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">IaaS</span></td>
+          <td>Multi-object DeleteObjects calls, DeleteBucket, batch TerminateInstances, or DeleteDBInstance. Preconditions: an IAM identity with delete permissions.</td>
+          <td>Destroys data across regions in minutes, as Storm-0501 and ShinyHunters showed. Fully loggable, but only if object-level data events are enabled.</td>
+        </tr>
+        <tr>
+          <td>THR-005</td>
+          <td>Boot-critical wipe</td>
+          <td><span class="badge sev-critical">Critical</span></td>
+          <td><span class="badge cat">Windows</span> <span class="badge cat">Linux</span></td>
+          <td>dd writing to a whole-disk device, diskpart clean, or direct MBR and partition destruction. Preconditions: root or admin with raw disk access.</td>
+          <td>Machines cannot start and file data on them is likely lost too. Almost never legitimate outside imaging hosts, so it alerts on any occurrence.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">Container variant</div>
+    <p>The same threats exist inside Kubernetes clusters. An attacker with cluster rights can exec into pods and delete files on mounted volumes, or create privileged DaemonSets that wipe data on every node. ATT&amp;CK documents this behavior for TeamPCP. Ship the API server audit log to your SIEM. Rule 2 in section 5.5 carries the matching Kubernetes queries.</p>
+  </div>
+
+  <h3 id="sec-5-4-logs-patterns">5.4 Logs and patterns</h3>
+  <p>Each threat below lists the log sources that see it and the fields that matter. It also describes normal behavior, suspicious behavior, and the detection logic in plain words. Threats 2, 3, and 4 are rate-based, so their logic is written as a precise threshold rule you can tune. A realistic event example follows each table so you can validate your pipeline against real shapes.</p>
+
+  <h4>Threat 1 — Wiper or secure-delete utility execution (THR-001)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Sysmon event 1 (process creation) and Security event 4688 with command lines. On Linux, auditd EXECVE records. EDR process telemetry adds coverage.</td></tr>
+        <tr><td>Key fields</td><td><code>Image</code>, <code>CommandLine</code>, <code>ParentImage</code>, <code>User</code>, <code>host</code>, <code>Hashes</code>, and on Linux <code>a0</code> to <code>a3</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Storage teams may run cipher /w on decommissioned disks, and imaging hosts may run dd. shred can appear in approved maintenance scripts. All of it should map to change tickets.</td></tr>
+        <tr><td>Suspicious behavior</td><td>sdelete with pass flags, cipher /w, or shred on file servers or user machines. The caller runs them from cmd, PowerShell, or SSH sessions, outside change windows. Script-driven rm -rf, dd, or srm from /tmp or /private/tmp (the Linux and macOS temp folders) is another sign.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on any process image containing sdelete, any cipher.exe command line containing /w, and any shred, srm, or dd execution. Keep a small allow list of imaging and maintenance hosts. No rate is needed: one hit is enough.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Sysmon EID 1 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-c22a-43e0-bf4c-06f5698ffbd9}"/&gt;
+    &lt;EventID&gt;1&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-03-04T03:08:17.512Z"/&gt;
+    &lt;Computer&gt;FILE01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-03-04 03:08:17.512&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Tools\sdelete64.exe&lt;/Data&gt;
+    &lt;Data Name="CommandLine"&gt;"sdelete64.exe" -p 3 -q C:\Finance\q4-close\*&lt;/Data&gt;
+    &lt;Data Name="ParentImage"&gt;C:\Windows\System32\cmd.exe&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\helpdesk_adm&lt;/Data&gt;
+    &lt;Data Name="IntegrityLevel"&gt;High&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=B2C19A6F4E8D3A71C05F9E2B8D74A6C1F3E9B0D2A5C8714E6F3B9D2C1A8E7405&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 2 — Bulk file deletion storm (THR-002)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Sysmon events 23 (file delete archived) and 26 (file delete detected). Security event 4660 (object deleted) counts each removal. On Linux, auditd unlink, unlinkat, and rmdir syscalls. EDR file events add coverage.</td></tr>
+        <tr><td>Key fields</td><td><code>TargetFilename</code>, <code>Image</code> (deleting process), <code>User</code>, <code>host</code>, <code>ProcessId</code>, and on Linux <code>exe</code>, <code>uid</code>, <code>syscall</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Build agents, log rotation, and temp cleanup delete many files, but steadily and from known binaries. A healthy host shows tens of deletes per hour, not thousands.</td></tr>
+        <tr><td>Suspicious behavior</td><td>One process or one account deletes hundreds of files per minute. The command line shows wildcards such as del /s /q or rm -rf. Deletes run from interactive sessions on servers, or the process shows its first-ever bulk delete.</td></tr>
+        <tr><td>Detection logic</td><td>Threshold rule: more than 200 file-delete events from one process on one host within a rolling 5-minute window. The rule also checks that this host-process pair sat below 20 deletes per hour over the last 30 days. Sum by host and Image, exclude allow-listed build agents and rotation jobs, and page when the count crosses 10 times baseline.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Sysmon EID 23 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-c22a-43e0-bf4c-06f5698ffbd9}"/&gt;
+    &lt;EventID&gt;23&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-03-04T03:12:41.220Z"/&gt;
+    &lt;Computer&gt;FILE01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="RuleName"&gt;-&lt;/Data&gt;
+    &lt;Data Name="UtcTime"&gt;2026-03-04 03:12:41.220&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{472ABA3D-8F21-65C2-0100}&lt;/Data&gt;
+    &lt;Data Name="ProcessId"&gt;4820&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\System32\cmd.exe&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\helpdesk_adm&lt;/Data&gt;
+    &lt;Data Name="TargetFilename"&gt;\\FILE01\docs\invoices\INV-2026-0142.xlsx&lt;/Data&gt;
+    &lt;Data Name="IsExecutable"&gt;false&lt;/Data&gt;
+    &lt;Data Name="Archived"&gt;true&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 3 — Mass deletion on shares and recycle bin purge (THR-003)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>This threat runs on Windows file servers. Security event 4663 (object access with DELETE) and 4660 (object deleted) carry the details. Sysmon 23 covers UNC paths. PowerShell event 4104 shows Clear-RecycleBin.</td></tr>
+        <tr><td>Key fields</td><td><code>ObjectName</code>, <code>AccessList</code> (contains %%4424 for Delete), <code>AccessMask</code> (0x10000), <code>SubjectUserName</code>, <code>ProcessName</code>, <code>host</code>, and <code>ScriptBlockText</code> for 4104.</td></tr>
+        <tr><td>Normal behavior</td><td>Users delete their own files and empty their recycle bins; scheduled cleanups touch temp folders. Per-server delete rates stay in the tens per hour and each user touches only their own folders.</td></tr>
+        <tr><td>Suspicious behavior</td><td>One account sends DELETE access across many folders it does not own. Recycle bin purges on servers and deletes at unusual hours also count. So does one interactive session that sweeps whole share trees.</td></tr>
+        <tr><td>Detection logic</td><td>Threshold rule: more than 100 events 4663 with DELETE access from one account on one file server within a rolling 5-minute window. A second trigger is more than 20 objects deleted per user folder by a single session. Alert on any Clear-RecycleBin on a server, and raise severity when the same account also matched threat 1 or 2.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Security EID 4663 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Security-Auditing"/&gt;
+    &lt;EventID&gt;4663&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-03-04T03:13:02.905Z"/&gt;
+    &lt;Computer&gt;FILE01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="SubjectUserSid"&gt;S-1-5-21-3623811015-3361044348-30300820-1013&lt;/Data&gt;
+    &lt;Data Name="SubjectUserName"&gt;helpdesk_adm&lt;/Data&gt;
+    &lt;Data Name="SubjectDomainName"&gt;CORP&lt;/Data&gt;
+    &lt;Data Name="ObjectServer"&gt;Security&lt;/Data&gt;
+    &lt;Data Name="ObjectType"&gt;File&lt;/Data&gt;
+    &lt;Data Name="ObjectName"&gt;\\FILE01\Docs\reports\board-pack-2026.pptx&lt;/Data&gt;
+    &lt;Data Name="HandleId"&gt;0x1a4c&lt;/Data&gt;
+    &lt;Data Name="AccessList"&gt;%%4424&lt;/Data&gt;
+    &lt;Data Name="AccessMask"&gt;0x10000&lt;/Data&gt;
+    &lt;Data Name="ProcessId"&gt;0x12d4&lt;/Data&gt;
+    &lt;Data Name="ProcessName"&gt;C:\Windows\System32\cmd.exe&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 4 — Cloud storage destruction (THR-004)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>AWS CloudTrail management events plus S3 object-level data events. Azure Activity Log and Google Cloud audit logs cover the other clouds. Data events must be enabled, or DeleteObjects stays invisible.</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>eventSource</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code>, <code>userAgent</code>, <code>requestParameters.bucketName</code>, <code>requestParameters.delete.objects</code>, <code>awsRegion</code>, <code>errorCode</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Lifecycle automation expires old versions under fixed role identities, and cloud teams decommission test buckets with tickets. Both come from known roles, user agents, and source ranges.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Manual delete calls by interactive or unfamiliar identities. One call removing hundreds of keys, batch termination of instances, or database deletion also counts. So do calls from new source IPs or user agents, and any delete against backup buckets.</td></tr>
+        <tr><td>Detection logic</td><td>Threshold rule: more than 10 destructive calls from one identity within 15 minutes, or a single DeleteObjects call carrying more than 100 keys. Alert on any DeleteBucket, DeleteDBInstance, or TerminateInstances batch of 3 or more instances outside approved changes. Page when the target is a backup bucket.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · AWS CloudTrail (JSON)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.09",
+  "userIdentity": {
+    "type": "IAMUser",
+    "principalId": "AIDA4EXAMPLEJJ7VQ2WM",
+    "arn": "arn:aws:iam::111122223333/user/storage-admin",
+    "accountId": "111122223333",
+    "userName": "storage-admin"
+  },
+  "eventTime": "2026-03-04T03:20:11Z",
+  "eventSource": "s3.amazonaws.com",
+  "eventName": "DeleteObjects",
+  "awsRegion": "eu-west-1",
+  "sourceIPAddress": "203.0.113.77",
+  "userAgent": "aws-cli/2.15.0",
+  "requestParameters": {
+    "bucketName": "corp-finance-archive",
+    "delete": {
+      "objects": [
+        { "key": "ledger/2025/annual-close.parquet" },
+        { "key": "ledger/2025/q4/statements.pdf" },
+        { "key": "ledger/2025/q4/audit-working-papers.zip" }
+      ]
+    }
+  },
+  "responseElements": { "x-amz-request-id": "D3E7A1F9C2B84D05" }
+}</code></pre>
+  </figure>
+
+  <h4>Threat 5 — Boot-critical wipe (THR-005)</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Linux auditd EXECVE and SYSCALL records for dd and shred. Sysmon event 1 covers diskpart.exe on Windows. Kernel and storage subsystem logs and EDR telemetry add depth.</td></tr>
+        <tr><td>Key fields</td><td>On Linux <code>a0</code> to <code>a3</code> (command arguments), <code>exe</code>, <code>uid</code>, <code>host</code>; on Windows <code>Image</code>, <code>CommandLine</code>, <code>User</code>, <code>host</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Almost none. Only imaging and provisioning hosts write to whole-disk devices, and diskpart belongs to OS deployment tasks. Everything else is a misconfiguration at best.</td></tr>
+        <tr><td>Suspicious behavior</td><td>dd with of= pointing at /dev/sda, /dev/nvme0n1, /dev/vda, or another whole disk instead of a partition. Shred on a device node is another sign. So is diskpart running with a script that contains clean, or any interactive session touching raw devices.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on any dd or shred command whose output target is a whole-disk device node, and on any diskpart clean. Compare the device name against your imaging-host allow list; exclude partition suffixes such as sda1 so only whole-disk writes stay. This needs no rate: a single event is critical by itself.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Linux auditd (plain text)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>type=SYSCALL msg=audit(1772679600.412:8842): arch=c000003e syscall=59 success=yes exit=0 a0=1f5a2b0 a1=1f5a4c0 a2=1f5a6e0 a3=8 items=2 ppid=2210 pid=2415 auid=1103 uid=0 gid=0 euid=0 suid=0 fsuid=0 egid=0 sgid=0 fsgid=0 tty=pts1 ses=44 comm="dd" exe="/usr/bin/dd" key=(null)
+type=EXECVE msg=audit(1772679600.412:8842): argc=4 a0="dd" a1="if=/dev/zero" a2="of=/dev/sda" a3="bs=1M"
+type=PATH msg=audit(1772679600.412:8842): item=0 name="/usr/bin/dd" inode=1179657 dev=08:02 mode=0100755 ouid=0 ogid=0 rdev=00:00</code></pre>
+  </figure>
+  <h3 id="sec-5-5-sigma-spl">5.5 Sigma rules and Splunk SPL</h3>
+  <p>Five complete Sigma rules follow, one per threat, each with a matching Splunk query. MITRE defines the official detection strategy for this technique as DET0146, Detection of Data Destruction Across Platforms via Mass Overwrite and Deletion Patterns. Its analytics cover command-line wipe tools, mass deletes on Linux, script-driven overwrites, cloud delete APIs, virtual disk destruction, and container file operations. The rules below implement the analytics your log sources can see. Sigma is a standard YAML format for log detections, so these rules convert to most SIEM products. The Splunk queries use the index and sourcetype conventions listed below; adjust the index names to your environment and document the change.</p>
+  <div class="callout note">
+    <div class="callout-label">Field assumptions for Splunk</div>
+    <p><code>index=sysmon</code> holds Sysmon XML events with fields like <code>Image</code>, <code>CommandLine</code>, and <code>TargetFilename</code>. <code>index=wineventlog</code> holds Security and PowerShell events. <code>index=linux</code> holds auditd records with <code>a0</code> to <code>a3</code> arguments. <code>index=aws</code> holds <code>aws:cloudtrail</code> data with JSON fields like <code>eventName</code>. <code>index=k8s</code> holds Kubernetes API server audit records with fields like <code>objectRef.resource</code> and <code>verb</code>. Field extraction must be enabled for XML inputs before these queries work.</p>
+  </div>
+
+  <h4>Rule 1 — Secure-delete or wipe utility execution (covers THR-001)</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Secure Delete or Wipe Utility Execution
+id: 3c7a1f62-9b4d-4e18-a52f-6d08e1b47c93
+status: stable
+description: Detects execution of SDelete or cipher with the overwrite flag, the two
+  most common secure-delete tools on Windows. Wipers and careful intruders use them
+  to make deleted data unrecoverable.
+references:
+  - https://attack.mitre.org/techniques/T1485/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection_sdelete:
+    EventID: 1
+    Image|contains: '\sdelete'
+  selection_cipher:
+    EventID: 1
+    Image|endswith: '\cipher.exe'
+    CommandLine|contains|all:
+      - '/w'
+      - ':'
+  condition: 1 of selection_*
+fields:
+  - CommandLine
+  - ParentImage
+  - User
+  - Hostname
+falsepositives:
+  - Approved disk disposal or wipe jobs by storage teams, mapped to change tickets
+level: critical
+tags:
+  - attack.impact
+  - attack.t1485</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  (Image="*\\sdelete*" OR (Image="*\\cipher.exe" CommandLine="* /w*"))
+| stats count min(_time) as first_seen max(_time) as last_seen values(CommandLine) as commands
+        by host, User, ParentImage
+| sort - first_seen</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> Sigma <code>Image|contains</code> becomes a wildcard path match. The two <code>contains|all</code> terms collapse into one <code>CommandLine="* /w*"</code> filter. <strong>False positives:</strong> approved wipe jobs on decommissioned disks. <strong>Tuning:</strong> allow-list your imaging and disposal hosts, and raise priority when the parent process is cmd, PowerShell, or an SSH shell on a file server. The Linux half of this threat (shred, dd) follows the same logic on the <code>linux</code> index and appears in rule 5.</p>
+
+  <h4>Rule 2 — Bulk file deletion storm (covers THR-002)</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Bulk File Deletion Storm by One Process
+id: 8f2d54c1-6e7b-4a93-b1c5-20a9f6d34e81
+status: experimental
+description: Detects one process deleting an unusually large number of files in a
+  short window. Wipers and destructive scripts remove files far faster than normal
+  user or maintenance activity.
+references:
+  - https://attack.mitre.org/techniques/T1485/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID:
+      - 23
+      - 26
+  condition: selection | count(TargetFilename) by host,Image &gt; 200
+  timeframe: 5m
+fields:
+  - TargetFilename
+  - Image
+  - User
+  - Hostname
+falsepositives:
+  - Build agents, log rotation, or cleanup jobs with a high but steady delete rate
+level: high
+tags:
+  - attack.impact
+  - attack.t1485</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" (EventCode=23 OR EventCode=26)
+| bucket _time span=5m
+| stats count as deletions values(User) as users by _time, host, Image
+| where deletions &gt; 200
+| sort - deletions
+
+index=linux sourcetype="linux:audit" (syscall=unlink OR syscall=unlinkat OR syscall=rmdir)
+| bucket _time span=5m
+| stats count as deletions values(exe) as binaries by _time, host, uid
+| where deletions &gt; 200
+| sort - deletions
+
+# Kubernetes: container variant from 5.3 (privileged DaemonSet and exec bursts)
+index=k8s sourcetype="kube:audit" objectRef.resource=daemonsets verb=create
+| table _time user.username objectRef.namespace objectRef.name
+
+index=k8s sourcetype="kube:audit" verb=exec objectRef.resource=pods
+| stats count as exec_calls dc(objectRef.name) as pods_touched by user.username
+| where pods_touched &gt; 5</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> the Sigma count condition expresses the threshold. The Splunk version makes the 5-minute bucket and the 200-event cut explicit for Windows, Linux, and Kubernetes in one block. <strong>False positives:</strong> build agents, rotation jobs, and approved container work. <strong>Tuning:</strong> keep a 30-day per host and process baseline and exclude allow-listed binaries. Raise severity when the deleting process is a shell or the host is a file server.</p>
+
+  <h4>Rule 3 — Share deletion burst and recycle bin purge (covers THR-003)</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Mass Deletion on File Server Shares and Recycle Bin Purge
+id: 51b9e7a2-3c48-4df6-9e2a-77c0b8d51f64
+status: stable
+description: Detects DELETE access to file objects on Windows shares and PowerShell
+  commands that clear recycle bins. A file-server wipe shows both patterns at the
+  same time.
+references:
+  - https://attack.mitre.org/techniques/T1485/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: security
+detection:
+  selection_delete:
+    EventID: 4663
+    AccessList|contains: '%%4424'
+  selection_purge:
+    EventID: 4104
+    ScriptBlockText|contains: 'Clear-RecycleBin'
+  condition: 1 of selection_*
+fields:
+  - ObjectName
+  - SubjectUserName
+  - ProcessName
+  - ScriptBlockText
+falsepositives:
+  - Documented cleanup jobs and user-driven bulk deletes on workstations
+level: high
+tags:
+  - attack.impact
+  - attack.t1485</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=wineventlog sourcetype="WinEventLog:Security" EventCode=4663 AccessList="*%%4424*" ObjectName="\\\\*"
+| bucket _time span=5m
+| stats count as delete_events dc(ObjectName) as objects values(ObjectName) as sample
+        by _time, host, SubjectUserName, ProcessName
+| where delete_events &gt; 100
+| sort - delete_events
+
+index=wineventlog sourcetype="WinEventLog:Microsoft-Windows-PowerShell/Operational" EventCode=4104
+  ScriptBlockText="*Clear-RecycleBin*"
+| table _time host User ScriptBlockText</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> the <code>%%4424</code> DELETE token carries over unchanged. The Splunk wildcard match uses it verbatim, and the threshold moves into the <code>stats</code> plus <code>where</code> pair. <strong>False positives:</strong> user-driven deletes on workstations and documented cleanup jobs. <strong>Tuning:</strong> restrict the share path filter to your file servers and keep a per-server baseline. Pair any hit with rule 1 or 2 matches on the same host before you close the case.</p>
+
+  <h4>Rule 4 — Cloud storage destruction (covers THR-004)</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Cloud Storage Destruction via Delete APIs
+id: b6d40f89-12a5-4c7e-8f3b-94e6a2c50d17
+status: stable
+description: Detects API calls that delete many storage objects at once, delete whole
+  buckets, terminate instances, or delete database instances. Extortion crews use
+  these calls to destroy cloud data and backups.
+references:
+  - https://attack.mitre.org/techniques/T1485/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection_s3:
+    eventSource: 's3.amazonaws.com'
+    eventName:
+      - 'DeleteObjects'
+      - 'DeleteBucket'
+  selection_ec2:
+    eventSource: 'ec2.amazonaws.com'
+    eventName: 'TerminateInstances'
+  selection_rds:
+    eventSource: 'rds.amazonaws.com'
+    eventName: 'DeleteDBInstance'
+  condition: 1 of selection_*
+fields:
+  - eventName
+  - userIdentity.arn
+  - sourceIPAddress
+  - requestParameters.bucketName
+  - awsRegion
+falsepositives:
+  - Lifecycle automation and approved decommission work by cloud teams
+level: high
+tags:
+  - attack.impact
+  - attack.t1485</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype="aws:cloudtrail"
+  eventName IN ("DeleteObjects", "DeleteBucket", "TerminateInstances", "DeleteDBInstance")
+| stats count as calls dc(eventName) as event_types values(eventName) as events
+        values(requestParameters) as targets by userIdentity.arn, sourceIPAddress, awsRegion
+| where calls &gt; 10 OR event_types &gt; 1
+| sort - calls</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> CloudTrail JSON fields map directly to Splunk extractions. The Sigma event-name lists become the SPL <code>IN</code> clause. <strong>False positives:</strong> scheduled lifecycle deletions under fixed automation roles. <strong>Tuning:</strong> allow-list those role ARNs, then page on any interactive identity, new source IP, or a target bucket that holds backups. DeleteBucket and DeleteDBInstance deserve an alert-on-any variant, because no normal workflow calls them in bulk.</p>
+
+  <h4>Rule 5 — Boot-critical disk wipe (covers THR-005)</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Boot-Critical Disk Wipe with dd
+id: a1e85c34-6f27-49bd-b8a9-3f5c0d72e6b4
+status: stable
+description: Detects dd writing directly to a whole-disk device, which destroys the
+  partition table and boot records, and shred against device nodes. A wiped boot
+  area makes the machine unbootable and defeats file recovery.
+references:
+  - https://attack.mitre.org/techniques/T1485/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection_dd:
+    type: EXECVE
+    a0: 'dd'
+    a2|startswith: 'of=/dev/'
+  selection_shred_disk:
+    type: EXECVE
+    a0: 'shred'
+    a1|startswith: '/dev/'
+  condition: selection_dd or selection_shred_disk
+fields:
+  - a0
+  - a1
+  - a2
+  - a3
+  - host
+falsepositives:
+  - Imaging or provisioning hosts that legitimately write whole-disk devices
+level: critical
+tags:
+  - attack.impact
+  - attack.t1485</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=linux sourcetype="linux:audit" type=EXECVE a0="dd"
+  (a1="of=/dev/*" OR a2="of=/dev/*" OR a3="of=/dev/*")
+| table _time host uid a0 a1 a2 a3
+| sort - _time
+
+index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  Image="*\\diskpart.exe" CommandLine="*clean*"
+| table _time host User CommandLine</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> the Sigma rule checks the third argument slot (<code>a2</code>). <code>dd if= of=</code> arguments usually arrive in that order, and the Splunk version covers all slots at once. The Windows boot-wipe variant (diskpart with clean) appears in the same SPL block. <strong>False positives:</strong> imaging and provisioning hosts. <strong>Tuning:</strong> allow-list those hosts by name and exclude partition suffixes such as <code>sda1</code>, so only whole-disk writes stay. Match diskpart script files through EDR or command-line content when the clean keyword sits inside the script instead of the command line.</p>
+</section>
+<section class="sec" id="sec-6-case-study">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2>Real-world case study</h2></div>
+  <p class="sec-intro">HermeticWiper, 23 February 2022: a destructive attack that hit Ukrainian organizations shortly before the invasion, documented in detail by ESET, Symantec, and CrowdStrike.</p>
+
+  <div class="callout note">
+    <div class="callout-label">Source label</div>
+    <p>This case study is based on public reporting (ESET, Symantec, CrowdStrike). Dates follow those reports, and clock times are approximate.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Context</h3>
+    <p>In the last hours before the invasion of Ukraine, several families of wiper malware activated against Ukrainian government, nonprofit, and technology organizations. HermeticWiper was one of them: pure destruction, no ransom note, no decryptor. It did not travel alone. A companion tool, HermeticWizard, moved the wiper to other machines, including through Group Policy (central Windows settings pushed to many computers at once). One intrusion could therefore turn into an estate-wide wipe. The attack is a textbook T1485 case: files overwritten with random bytes, boot structures corrupted, and recovery options removed first.</p>
+  </div>
+
+  <h3>Attack chain at a glance</h3>
+  <p class="chain">
+    <span class="chain-step">Initial Access</span><span class="chain-arrow">→</span>
+    <span class="chain-step">Lateral Movement (HermeticWizard)</span><span class="chain-arrow">→</span>
+    <span class="chain-step">Privilege Escalation (signed driver)</span><span class="chain-arrow">→</span>
+    <span class="chain-step">T1490 — stop VSS</span><span class="chain-arrow">→</span>
+    <span class="chain-step hot">Impact — T1485 wipe</span>
+  </p>
+
+  <h3>Timeline</h3>
+  <ol class="timeline">
+    <li><div class="tl-when">23 Feb 2022 · hours before the invasion</div><div class="tl-what">First machines execute the wiper</div><p>Security teams observed HermeticWiper running on machines of Ukrainian organizations that day. The timing, so close to the invasion, was chosen for maximum disruption.</p></li>
+    <li><div class="tl-when">Next hours</div><div class="tl-what">The companion tool spreads the payload</div><p>HermeticWizard copied the wiper to other machines over remote execution paths and Group Policy. The wipe therefore spread inside the network without new external deliveries.</p></li>
+    <li><div class="tl-when">On each host</div><div class="tl-what">A legitimate signed driver unlocks raw disk access</div><p>The malware loaded a legitimate, signed driver. That driver gave it direct access to the raw disk, an operation normal programs are never allowed to do.</p></li>
+    <li><div class="tl-when">Minutes before the wipe</div><div class="tl-what">Recovery options removed (T1490)</div><p>HermeticWiper stopped the Volume Shadow Copy service, so local restore points could not help afterwards. This pairing of T1490 and T1485 is the standard destructive sequence.</p></li>
+    <li><div class="tl-when">Impact moment</div><div class="tl-what">Boot structures corrupted, files overwritten</div><p>The wiper corrupted the MBR (the small boot program and partition list at the start of a disk) and other partition structures. It wiped files in system folders through recursive FSCTL_MOVE_FILE calls. It also overwrote large files in My Documents and on the Desktop with random bytes. Many machines became unbootable.</p></li>
+    <li><div class="tl-when">Days after</div><div class="tl-what">Rebuilds and partial recovery</div><p>Organizations rebuilt machines from golden images. Where files had been overwritten, they were gone for good; data survived only on copies the wiper never reached.</p></li>
+  </ol>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Detection point</h3>
+      <p>The best window opened between driver load and the first overwrite. Three signals appeared together: a driver load event for a legitimate signed driver in an unusual context, a process event for the wiper binary, and unusual disk I/O as raw write volume exploded. Stopping the Volume Shadow Copy service was a fourth signal. An organization with Sysmon and the rules in section 5 would have seen the attack minutes before damage, which is exactly the margin this technique leaves you.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Containment</h3>
+      <p>Teams isolated affected networks, blocked the wiper and companion tool by hash, and disabled the Group Policy path the spread used. Accounts used for the lateral movement were reset, and untouched machines were protected while responders hunted for the binary across the estate.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Eradication</h3>
+      <p>Because files were overwritten, cleaning was pointless: every affected machine needed a full rebuild from golden images. Responders removed the companion tool, the signed driver, and any remaining wiper binaries, and verified that the deployment channels used for the spread were closed.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Recovery</h3>
+      <p>Recovery came from backups and from machines that never received the payload. Overwritten data could not be restored, so the depth of loss depended on how recently the last protected copy had been taken. Organizations with offline or immutable copies returned to service fastest.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Impact and consequences</h3>
+    <p>Dozens of organizations lost machines minutes before a war began, and some lost data permanently because overwritten files are unrecoverable. The campaign showed that destruction can be the goal, not a failed extortion. It also shifted budgets: after February 2022, many organizations treated wipers, not only ransomware, as a planning scenario, and CISA published advisories that turned the campaign's indicators into public defensive guidance.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Team response and communication</h3>
+    <p>Response teams faced an unusual problem: the attack and the war started together, so communication channels were under stress while the incident ran. Teams that had out-of-band channels and printed procedures kept coordinating, and sector partners shared indicators within hours. Daily short briefings kept one priority: stop the spread first, then rebuild in business-critical order. The episode confirmed that destructive attacks need rehearsed coordination between IT, security, and leadership.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Lessons learned</h3>
+    <ul class="check">
+      <li>Overwritten data stays overwritten; only copies outside the attacker's reach survive.</li>
+      <li>Driver load plus raw disk I/O on normal servers is a critical signal, not noise.</li>
+      <li>Stopping the Volume Shadow Copy service is a destruction warning, tie it to your T1490 rules.</li>
+      <li>Spread through Group Policy means one stolen admin path can wipe an estate; segment and monitor it.</li>
+      <li>Rebuild plans from golden images halve recovery time; test them before you need them.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec" id="sec-7-mitigation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2>Mitigation and defense</h2></div>
+  <p class="sec-intro">You cannot stop every attacker from reaching one machine, but you can make destruction pointless. The controls below follow the three ATT&amp;CK mitigations for T1485 and add the practical layers around them.</p>
+
+  <h3>The three ATT&amp;CK mitigations</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">M1053 — Data Backup</h3>
+      <p>Keep protected copies on separate systems. The copy that matters is immutable (locked for a retention period) or offline, so an attacker with full admin rights still cannot overwrite it. This is the control that decides whether a wiper is a disaster or an inconvenience.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">M1032 — Multi-factor Authentication</h3>
+      <p>Require a second authentication step for destructive actions. In cloud storage, MFA delete means deleting an object version needs extra proof beyond the account, which blocks a stolen credential from emptying a bucket. Extend the same idea to backup consoles and cloud root accounts.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">M1018 — User Account Management</h3>
+      <p>Limit who can delete or change storage. In cloud environments, keep bucket lifecycle policy rights to the few accounts that need them, and use service control policies to restrict the <code>PutBucketLifecycle</code> API call. Separate backup administration from server administration, remove standing delete rights from everyday identities, and review cloud IAM permissions for destructive actions on a schedule.</p>
+    </div>
+  </div>
+
+  <h3>Enterprise controls by domain</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Backup architecture</h3>
+      <p>Follow the 3-2-1-1-0 pattern: three copies, two media types, one offsite, one immutable or offline, and zero restore-test errors. Keep at least one copy credential-separated, so the same stolen admin account cannot reach the data and its backups at once.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Cloud storage hardening</h3>
+      <p>Turn on S3 versioning with Object Lock, enable MFA delete on critical buckets, and deny destructive APIs with service control policies. Use deletion protection for databases and disable API termination on critical instances, so a single identity cannot destroy a region in minutes.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Endpoint hardening</h3>
+      <p>Use application control to block sdelete, shred, cipher, dd, and diskpart on servers where they have no business running. Remove local admin rights from everyday accounts, because every threat in this guide starts with too much privilege.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Logging coverage</h3>
+      <p>Enable Sysmon FileDelete events (23 and 26). Set object-audit SACLs (access lists that say which actions to log) on file shares so 4663 and 4660 appear. Deploy auditd rules for unlink and execve on Linux. Ship PowerShell 4104, and turn on S3 object-level CloudTrail data events.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Containers and virtualization</h3>
+      <p>Use admission control to block privileged DaemonSets and unrestricted exec, and ship the Kubernetes API audit log to your SIEM. On ESXi, protect snapshots and keep hosts patched. ATT&amp;CK documents attackers destroying virtual disks, images, and snapshots on ESXi with commands such as <code>vim-cmd</code>.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Response readiness</h3>
+      <p>Write a destruction runbook: who isolates, who freezes the backup vault, who revokes delete permissions, who decides on restoration. Rehearse it twice a year with the real teams, and keep out-of-band communication ready for the worst day.</p>
+    </div>
+  </div>
+
+  <h3>Prioritized actions</h3>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Risk reduction</th><th>How to verify</th></tr></thead>
+      <tbody>
+        <tr><td>Create one immutable or offline backup copy for critical data.</td><td><span class="badge sev-medium">Medium</span></td><td>Backup team</td><td><span class="badge sev-critical">Critical</span></td><td>Restore a test dataset from the immutable copy each quarter.</td></tr>
+        <tr><td>Enable Sysmon 23/26 and share SACLs for 4663/4660 on file servers</td><td><span class="badge sev-low">Low</span></td><td>Platform team</td><td><span class="badge sev-high">High</span></td><td>Delete a test file and confirm both events land in the SIEM.</td></tr>
+        <tr><td>Deploy the five detection rules from section 5</td><td><span class="badge sev-low">Low</span></td><td>Detection engineering</td><td><span class="badge sev-high">High</span></td><td>Run each rule against lab events and confirm alert output.</td></tr>
+        <tr><td>Enable MFA delete and deny destructive cloud APIs via policy</td><td><span class="badge sev-medium">Medium</span></td><td>Cloud team</td><td><span class="badge sev-high">High</span></td><td>Attempt a test delete with a standard role and confirm denial.</td></tr>
+        <tr><td>Block sdelete, cipher /w, shred, and dd on servers via application control</td><td><span class="badge sev-medium">Medium</span></td><td>Endpoint team</td><td><span class="badge sev-high">High</span></td><td>Run a blocked tool on a pilot host and confirm the block event.</td></tr>
+        <tr><td>Restrict privileged DaemonSets and exec with admission control</td><td><span class="badge sev-medium">Medium</span></td><td>Platform team</td><td><span class="badge sev-medium">Medium</span></td><td>Deploy a test privileged pod in a lab cluster and confirm rejection.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Home and small office advice</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Protect your own files</h3>
+      <ul class="check">
+        <li>Keep one backup copy on an external drive that stays disconnected.</li>
+        <li>Keep one cloud copy with file version history, so deleted files roll back.</li>
+        <li>Turn on two-step verification for the cloud account that holds your files.</li>
+        <li>Never store the only copy of important documents on the same disk as the originals.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Small-office quick wins</h3>
+      <ul class="check">
+        <li>Use a separate account for backup administration, with two-step verification.</li>
+        <li>Once a quarter, restore one important file and time how long it takes.</li>
+        <li>Limit who can delete shared folders on the file server or NAS.</li>
+        <li>Keep a printed page with the backup vendor support number and license keys.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>The strongest message from every destructive incident: attackers cannot destroy what they cannot reach. One immutable or offline copy, plus delete permissions kept tight, turns a wiper campaign from a catastrophe into a rebuild exercise.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-8-mistakes">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2>Common mistakes and best practices</h2></div>
+  <p class="sec-intro">Most teams do not miss this attack because the signals are weak. They miss it because of fixable process errors. Here are the twelve we see most, with the symptom, the root cause, the fix, and the prevention.</p>
+
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>Mistake 1 — Ignoring delete events because single deletes look normal.</td><td>The first alert arrives when users report missing files.</td><td>No rate analytics on top of raw file events.</td><td>Add per-process and per-host threshold rules like section 5.4.</td><td>Map every destructive pattern to a counting rule, not a single-event rule.</td></tr>
+        <tr><td>Mistake 2 — Sysmon FileDelete events not enabled.</td><td>No EID 23 or 26 anywhere in the SIEM.</td><td>Default Sysmon config ships without FileDelete.</td><td>Add FileDelete and FileDeleteArchived to the config.</td><td>Keep one hardened Sysmon config for the whole estate.</td></tr>
+        <tr><td>Mistake 3 — No object auditing on file shares.</td><td>4663 never appears for share paths.</td><td>SACLs never configured on shares.</td><td>Set SACLs for DELETE on file servers.</td><td>Include share auditing in the server build baseline.</td></tr>
+        <tr><td>Mistake 4 — Cloud object-level data events off.</td><td>DeleteObjects calls are invisible; only bucket events appear.</td><td>S3 data events cost money, so they were skipped.</td><td>Enable object-level data events for critical buckets.</td><td>Review CloudTrail coverage quarterly against the storage inventory.</td></tr>
+        <tr><td>Mistake 5 — Deleting the delete rule after one false positive.</td><td>A real storm passes silently months later.</td><td>Alert fatigue and no tuning process.</td><td>Re-enable with allow-listed cleanup jobs.</td><td>Run a formal tuning workflow instead of rule deletion.</td></tr>
+        <tr><td>Mistake 6 — No baseline of normal deletion rates.</td><td>Cannot tell cleanup jobs from an attack.</td><td>Rules deployed without context.</td><td>Track 30-day baselines per host and process.</td><td>Feed change calendars and job schedules into the SIEM.</td></tr>
+        <tr><td>Mistake 7 — Backups reachable with the same stolen admin account.</td><td>Wiper removes data and its backups in one pass.</td><td>Backup console shares domain credentials.</td><td>Credential-separate backup administration.</td><td>Quarterly access review of backup roles.</td></tr>
+        <tr><td>Mistake 8 — Immutable copy that was never restore-tested.</td><td>Restore fails during the real incident.</td><td>Testing skipped under time pressure.</td><td>Schedule quarterly restore drills with timings.</td><td>Track restore success as a published metric.</td></tr>
+        <tr><td>Mistake 9 — Ignoring PowerShell 4104.</td><td>Recycle bin purges never alert.</td><td>PowerShell operational log not shipped.</td><td>Ship event 4104 and add the Clear-RecycleBin rule.</td><td>Include script-block logging in hardening guides.</td></tr>
+        <tr><td>Mistake 10 — Container audit logs not shipped.</td><td>TeamPCP-style wipes leave no trace in the SIEM.</td><td>Kubernetes API audit treated as optional.</td><td>Ship kube-apiserver audit logs.</td><td>Add clusters to the logging coverage matrix.</td></tr>
+        <tr><td>Mistake 11 — Destroying your own evidence during response.</td><td>Investigators cannot say what the attacker ran.</td><td>Rebooting or reimaging before capture.</td><td>Capture memory and disk images before any reboot.</td><td>Write evidence preservation into the destruction runbook.</td></tr>
+        <tr><td>Mistake 12 — Attribution debates before containment.</td><td>Machines keep dying while the team discusses.</td><td>Runbook starts with the wrong question.</td><td>Scope and contain first, attribute later.</td><td>Rewrite runbooks to ask who, what scope, what now.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Healthy operating habits</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">Daily</h3>
+      <ul class="check">
+        <li>Confirm file-server and cloud log sources are reporting.</li>
+        <li>Review every delete-rate alert from the last 24 hours.</li>
+        <li>Check backup job dashboards for silent failures.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Weekly</h3>
+      <ul class="check">
+        <li>Walk one destruction alert end-to-end and time the triage.</li>
+        <li>Review new exclusions with a second reviewer.</li>
+        <li>Sync with the storage team about scheduled cleanup windows.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Monthly</h3>
+      <ul class="check">
+        <li>Test one rule against lab events for sdelete, dd, and DeleteObjects.</li>
+        <li>Review IAM delete permissions in the cloud accounts.</li>
+        <li>Update actor notes from new public incident reports.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="sec-9-cheatsheet">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2>Cheat sheet and quick reference</h2></div>
+  <p class="sec-intro">Everything important on one screen, for the wall and for the incident channel.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Key facts</h3>
+      <dl class="kv-list">
+        <div><dt>Technique</dt><dd>T1485 — Data Destruction.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact.</dd></div>
+        <div><dt>What it does</dt><dd>Deletes or overwrites data so it stops being available; wipers make it unrecoverable.</dd></div>
+        <div><dt>Typical timing</dt><dd>Endgame: after extortion pressure, or right before and during a destructive attack.</dd></div>
+        <div><dt>Signature commands</dt><dd><code>sdelete -p 3</code>, <code>cipher /w</code>, <code>shred -vu</code>, <code>dd of=/dev/sda</code>, <code>del /s /q</code>, <code>DeleteObjects</code>.</dd></div>
+        <div><dt>Sub-technique</dt><dd><a href="https://attack.mitre.org/techniques/T1485/001/" target="_blank" rel="noopener">T1485.001 Lifecycle-Triggered Deletion</a>.</dd></div>
+        <div><dt>Best single defense</dt><dd>One immutable or offline backup copy, plus tight delete permissions.</dd></div>
+      </dl>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Top detections</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Signal</th><th>Source</th><th>First action</th></tr></thead>
+          <tbody>
+            <tr><td>sdelete, cipher /w, shred, or dd process event.</td><td>Sysmon 1, auditd EXECVE.</td><td>Page as critical; isolate the host.</td></tr>
+            <tr><td>Delete storm above 200 events per process in 5 minutes.</td><td>Sysmon 23/26, auditd unlink.</td><td>Identify process and account, scope estate.</td></tr>
+            <tr><td>4663 DELETE burst plus 4660 on shares.</td><td>Security event log.</td><td>Freeze the share, check the account.</td></tr>
+            <tr><td>Clear-RecycleBin on a server.</td><td>PowerShell 4104.</td><td>Correlate with deletion bursts.</td></tr>
+            <tr><td>DeleteObjects, DeleteBucket, TerminateInstances batch.</td><td>CloudTrail.</td><td>Revoke session, check backup buckets.</td></tr>
+            <tr><td>dd writing to a whole-disk device.</td><td>auditd.</td><td>Page immediately; machine is dying.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Response checklist</h3>
+    <ul class="check">
+      <li>Confirm the burst: count delete events per process, host, and user.</li>
+      <li>Isolate affected hosts from the network immediately.</li>
+      <li>Revoke the delete permissions of the accounts involved and reset them.</li>
+      <li>Freeze or lock the backup repository before anything else touches it.</li>
+      <li>Search all hosts and cloud accounts for the same commands in the last 24 hours.</li>
+      <li>Capture memory and disk images before any reboot, for the forensic record.</li>
+      <li>Start the restore plan from the immutable copy and verify one restore works.</li>
+      <li>After containment, close the entry path that gave the attacker admin rights.</li>
+    </ul>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Official and related references</h3>
+      <ul class="check">
+        <li><a href="https://attack.mitre.org/techniques/T1485/" target="_blank" rel="noopener">MITRE ATT&amp;CK — T1485 Data Destruction.</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1485/001/" target="_blank" rel="noopener">Related — T1485.001 Lifecycle-Triggered Deletion.</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1561/" target="_blank" rel="noopener">Related — T1561 Disk Wipe.</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1486/" target="_blank" rel="noopener">Related — T1486 Data Encrypted for Impact.</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1490/" target="_blank" rel="noopener">Related — T1490 Inhibit System Recovery.</a></li>
+        <li><a href="https://www.cisa.gov/stopransomware" target="_blank" rel="noopener">CISA — StopRansomware guidance.</a></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">One-line summary</h3>
+      <p>Deletion is a countdown, not a mystery: count deletes per process and host, alert on the rate, and treat every secure-delete tool as critical. The attacker who cannot reach your last backup copy fails, and the organization that watches its delete rates catches the storm in minutes.</p>
+    </div>
+  </div>
+</section>
+  </main>
+</div>
+
+<button class="fab back-top" id="backTop" type="button" aria-label="Back to top">Top</button>
+<button class="fab contents-fab" id="contentsFab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="fab theme-fab" id="themeToggle" type="button" aria-label="Switch between dark and light theme">&#9680;</button>
+<div class="scrim" id="scrim" hidden></div>
+<div class="toc-overlay" id="tocOverlay" role="dialog" aria-modal="true" aria-label="Contents" hidden>
+  <div class="toc-overlay-head"><span>Contents</span><button class="btn" id="overlayClose" type="button">Close</button></div>
+  <ul class="toc-list" id="overlayList"></ul>
+</div>
+
+<script>
+window.SIM_STORY = function () {
+  var N = [
+    { id: "attacker", x: 40, y: 60, w: 170, h: 62, label: "Attacker host", desc: "The machine the attacker uses, with stolen admin credentials." },
+    { id: "server", x: 290, y: 50, w: 200, h: 64, label: "File server FILE01", desc: "A Windows file server that holds shared company files." },
+    { id: "share", x: 570, y: 50, w: 210, h: 64, label: "Share \\\\FILE01\\docs", desc: "The shared folder where thousands of work files live." },
+    { id: "backup", x: 820, y: 50, w: 120, h: 120, label: "Backup vault", sub: "immutable", desc: "An immutable backup copy the attacker cannot change or delete." },
+    { id: "disk", x: 290, y: 178, w: 200, h: 58, label: "Disk + boot area", desc: "The disk surface, boot records, and partition table of the server." },
+    { id: "siem", x: 340, y: 300, w: 240, h: 62, label: "SIEM", desc: "Collects Sysmon, Windows Security, PowerShell, and Linux audit logs." },
+    { id: "soc", x: 660, y: 300, w: 210, h: 74, label: "SOC analyst", desc: "Watches the alerts and leads containment and recovery." }
+  ];
+
+  var FILES = 24318;
+
+  function fmt(n) {
+    return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function byId(id) {
+    for (var i = 0; i < N.length; i++) { if (N[i].id === id) return N[i]; }
+    return null;
+  }
+
+  function drawNode(ctx, id, state, S, H, C) {
+    var n = byId(id);
+    var o = { label: n.label, state: state };
+    if (n.sub) { o.sub = n.sub; }
+    if (S.hover === id) { o.state = "active"; }
+    H.node(ctx, n.x, n.y, n.w, n.h, o);
+  }
+
+  function logLine(ctx, H, C, x1, y1, x2, y2) {
+    H.flow(ctx, x1, y1, x2, y2, C.border, { n: 0, speed: 0, dash: [3, 4] });
+  }
+
+  function tilesRemaining(S) {
+    if (S.i < 2) { return 24; }
+    if (S.i === 2) { return Math.max(4, Math.round(24 * (1 - S.p))); }
+    if (S.i === 3) { return Math.max(0, Math.round(4 * (1 - S.p))); }
+    if (S.i < 7) { return 0; }
+    return Math.round(24 * S.p);
+  }
+
+  function drawTiles(ctx, S, H, C) {
+    var remaining = tilesRemaining(S);
+    var x0 = 576, y0 = 128, tw = 20, th = 14, gap = 4;
+    var col = C.border;
+    if (S.i === 3) { col = C.danger; }
+    if (S.i === 7) { col = C.success; }
+    for (var idx = 0; idx < 24; idx++) {
+      if (idx >= remaining) { break; }
+      var cx = x0 + (idx % 8) * (tw + gap);
+      var cy = y0 + Math.floor(idx / 8) * (th + gap);
+      H.rr(ctx, cx, cy, tw, th, 3);
+      ctx.fillStyle = H.hexA(col, 0.5);
+      ctx.fill();
+      ctx.strokeStyle = H.hexA(col, 0.9);
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    var deleted = FILES - Math.round(FILES * remaining / 24);
+    var line = "files: " + fmt(FILES - deleted) + "   deleted: " + fmt(deleted);
+    H.text(ctx, line, 670, 198, { size: 10, color: deleted > 0 ? C.danger : C.muted, mono: true, align: "center", maxWidth: 210 });
+  }
+
+  function base(ctx, w, h, S, H, C) {
+    drawNode(ctx, "attacker", S.i >= 6 ? "dead" : "active", S, H, C);
+    drawNode(ctx, "server", S.i === 0 ? "idle" : (S.i <= 3 ? "active" : (S.i === 7 ? "good" : "dead")), S, H, C);
+    drawNode(ctx, "share", S.i < 1 ? "idle" : (S.i === 1 ? "active" : (S.i <= 3 ? "warn" : (S.i === 7 ? "good" : "dead"))), S, H, C);
+    drawNode(ctx, "backup", S.i >= 6 ? "good" : "idle", S, H, C);
+    drawNode(ctx, "disk", S.i < 3 ? "idle" : (S.i === 3 ? "warn" : (S.i === 7 ? "good" : "dead")), S, H, C);
+    drawNode(ctx, "siem", S.i >= 5 ? "active" : "idle", S, H, C);
+    drawNode(ctx, "soc", S.i === 7 ? "good" : (S.i === 6 ? "warn" : (S.i === 5 ? "alert" : "idle")), S, H, C);
+
+    logLine(ctx, H, C, 390, 114, 450, 300);
+    logLine(ctx, H, C, 700, 182, 560, 300);
+    logLine(ctx, H, C, 390, 236, 470, 300);
+    H.text(ctx, "event logs", 500, 246, { size: 10, color: C.muted, mono: true, maxWidth: 90 });
+
+    drawTiles(ctx, S, H, C);
+  }
+
+  function evidence(ctx, S, H, C) {
+    var x = 40;
+    if (S.i >= 0) { x += H.chip(ctx, "EID 4624 anomaly", x, 416, C.warning) + 10; }
+    if (S.i >= 2) { x += H.chip(ctx, "Sysmon EID 23", x, 416, C.warning) + 10; }
+    if (S.i >= 2) { x += H.chip(ctx, "EID 4663 burst", x, 416, C.danger) + 10; }
+    if (S.i >= 3) { x += H.chip(ctx, "cipher /w", x, 416, C.warning) + 10; }
+    if (S.i >= 6) { x += H.chip(ctx, "isolation", x, 416, C["accent-2"]) + 10; }
+    if (S.i >= 7) { x += H.chip(ctx, "immutable restore OK", x, 416, C.success) + 10; }
+    H.text(ctx, "EVIDENCE", 40, 396, { size: 10, color: C.muted, mono: true, weight: "700" });
+
+    var cmds = [
+      "net use \\\\FILE01\\docs /user:CORP\\helpdesk_adm  (stolen admin)",
+      "dir \\\\FILE01\\docs /s  (24,318 files counted)",
+      "del /s /q \\\\FILE01\\docs\\*.*  -> deletion storm",
+      "cipher /w:C:\\share  (3 overwrite passes)",
+      "diskpart: select disk 0, clean  (boot records gone)",
+      "SIEM: 4,120 EID 23 + 3,980 EID 4663 in 5 min -> CRITICAL",
+      "isolate FILE01, freeze backup vault",
+      "restore from immutable copy, patch entry path"
+    ];
+    H.text(ctx, "CMD>", 40, 458, { size: 12, color: C.muted, mono: true, weight: "700" });
+    H.text(ctx, cmds[S.i] || "", 86, 458, { size: 12, color: C.text, mono: true, maxWidth: 820 });
+  }
+
+  var S = [
+    {
+      label: "Stolen admin logon", dur: 5,
+      caption: "The attacker signs in to FILE01 with an admin account stolen by an infostealer. Nothing looks broken yet, but they now control the server that stores everyone's files.",
+      hint: "Compare logon sources with your known admin workstations and alert on the rest.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 210, 91, 290, 85, C.danger, { t: S.t, n: 3 });
+        H.text(ctx, "stolen admin logon", 250, 72, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 130 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Map the shares", dur: 4.5,
+      caption: "The attacker lists the shares and counts the files with dir. They are learning where the valuable folders are and how much they can destroy.",
+      hint: "Share enumeration from an unexpected account is an early warning worth an alert.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 490, 78, 570, 78, C.violet, { t: S.t, n: 2, speed: 0.4 });
+        H.text(ctx, "dir /s file count", 530, 62, { size: 10, color: C.violet, mono: true, align: "center", maxWidth: 140 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Launch deletion storm", dur: 5.5,
+      caption: "A bulk delete command sweeps the share and file tiles vanish in groups. The deleted counter climbs into the thousands within minutes.",
+      hint: "Alert on deletion rate per process and host, not on single delete events.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 490, 92, 640, 140, C.danger, { t: S.t, n: 4, speed: 0.55 });
+        if (S.p > 0.3) { H.pulse(ctx, 670, 152, 44, C.danger, { t: S.t }); }
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Overwrite with cipher /w", dur: 5,
+      caption: "The attacker runs cipher /w, which makes three overwrite passes over the freed space, so no forensics tool can recover the deleted files. The wipe bar fills pass after pass.",
+      hint: "Secure-delete tools on servers are rare. Treat any sdelete or cipher /w run as critical.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 390, 114, 390, 178, C.danger, { t: S.t, n: 3, speed: 0.5 });
+        var bw = 180, bx = 300, by = 246;
+        H.rr(ctx, bx, by, bw, 9, 4);
+        ctx.strokeStyle = H.hexA(C.border, 0.9);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        H.rr(ctx, bx, by, Math.max(6, bw * S.p), 9, 4);
+        ctx.fillStyle = H.hexA(C.danger, 0.65);
+        ctx.fill();
+        H.text(ctx, "overwrite pass " + (Math.min(3, Math.floor(S.p * 3) + 1)) + " of 3", 390, 266, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 220 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Destroy boot structures", dur: 5,
+      caption: "Now the attacker destroys the boot area of the disk. The server goes dark and will not start again, because the boot records and partition table are gone.",
+      hint: "Any write to a whole-disk device or a diskpart clean needs an immediate page.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 390, 114, 390, 178, C.danger, { t: S.t, n: 4, speed: 0.6 });
+        if (S.p > 0.25) { H.pulse(ctx, 390, 82, 62, C.danger, { t: S.t }); }
+        H.text(ctx, "boot records destroyed", 390, 36, { size: 11, color: C.danger, mono: true, align: "center", maxWidth: 220 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "SOC sees the storm", dur: 5.5,
+      caption: "The SIEM counts thousands of delete events from one process on one host and raises a single critical incident. The storm is too big to ignore.",
+      hint: "Correlate Sysmon 23, Security 4663, and PowerShell 4104 by host and user before the attack happens.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 390, 114, 450, 300, C["accent-2"], { t: S.t, n: 4, speed: 0.45 });
+        H.flow(ctx, 700, 182, 560, 300, C["accent-2"], { t: S.t + 0.3, n: 3, speed: 0.45 });
+        H.flow(ctx, 390, 236, 470, 300, C["accent-2"], { t: S.t + 0.6, n: 2, speed: 0.45 });
+        H.arrow(ctx, 580, 330, 660, 334, C["accent-2"], { width: 2 });
+        H.pulse(ctx, 460, 331, 56, C.danger, { t: S.t });
+        H.pulse(ctx, 765, 337, 60, C.danger, { t: S.t, phase: 0.5 });
+        H.text(ctx, "23: 4,120   4663: 3,980", 460, 378, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 220 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Isolate and freeze", dur: 5,
+      caption: "The SOC isolates FILE01 and freezes the backup vault so nothing left in the estate can be deleted. The attacker's path back into the network is closed.",
+      hint: "Keep an isolation and vault-lock runbook ready, and rehearse it twice a year.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.arrow(ctx, 760, 300, 878, 174, C["accent-2"], { dash: [4, 4], width: 1.8 });
+        H.text(ctx, "isolated", 390, 36, { size: 11, color: C.warning, mono: true, align: "center", maxWidth: 120 });
+        H.text(ctx, "vault frozen", 880, 188, { size: 10, color: C.success, mono: true, align: "center", maxWidth: 120 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Restore and patch", dur: 5.5,
+      caption: "The team rebuilds the server from a golden image and restores the files from the immutable backup copy. Then they reset the stolen account and close the entry path.",
+      hint: "One offline or immutable copy defeats data destruction. Test the restore every quarter.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 816, 150, 492, 102, C.success, { t: S.t, n: 4, speed: 0.4 });
+        if (S.p > 0.2) { H.pulse(ctx, 390, 82, 54, C.success, { t: S.t }); }
+        H.text(ctx, "restored from immutable copy", 390, 36, { size: 11, color: C.success, mono: true, align: "center", maxWidth: 240 });
+        drawNode(ctx, "attacker", "dead", S, H, C);
+        evidence(ctx, S, H, C);
+      }
+    }
+  ];
+
+  SimEngine.init({ nodes: N, steps: S });
+};
+</script>
+<script>
+/* ============================================================
+   Detection Engineering Guide — shared page behavior
+   Theme, progress bar, TOC (generated from real headings),
+   mobile overlay, back-to-top, copy buttons, reveal-on-scroll.
+   No external libraries. No alert/prompt/confirm.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  var doc = document;
+  var rootEl = doc.documentElement;
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  /* ---------- theme toggle ---------- */
+  var themeBtn = doc.getElementById("themeToggle");
+  function setTheme(t, save) {
+    rootEl.setAttribute("data-theme", t);
+    if (save) { try { localStorage.setItem("atk-theme", t); } catch (e) {} }
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      setTheme(next, true);
+    });
+  }
+
+  /* ---------- progress bar + back to top ---------- */
+  var fill = doc.getElementById("progressFill");
+  var backTop = doc.getElementById("backTop");
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      var st = window.scrollY || doc.documentElement.scrollTop || 0;
+      var dh = (doc.documentElement.scrollHeight - window.innerHeight) || 1;
+      if (fill) fill.style.width = Math.min(100, (st / dh) * 100) + "%";
+      if (backTop) backTop.classList.toggle("show", st > 520);
+      trackActive();
+      ticking = false;
+    });
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  if (backTop) {
+    backTop.addEventListener("click", function () {
+      var smooth = !reduced.matches;
+      window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+    });
+  }
+
+  /* ---------- table of contents (generated from real headings) ---------- */
+  var secEls = [].slice.call(doc.querySelectorAll("main.content > section.sec"));
+  var tocList = doc.getElementById("tocList");
+  var ovList = doc.getElementById("overlayList");
+  var targets = []; // { id, el, linkEls }
+
+  function makeLink(t) {
+    var a = doc.createElement("a");
+    a.href = "#" + t.id;
+    a.textContent = t.text;
+    a.addEventListener("click", function () { closeOverlay(); });
+    return a;
+  }
+
+  secEls.forEach(function (sec) {
+    var numEl = sec.querySelector(".sec-num");
+    var h2 = sec.querySelector("h2");
+    if (!h2 || !sec.id) return;
+    var num = numEl ? numEl.textContent.trim() : "";
+    var t = { id: sec.id, el: sec, text: (num ? num + ". " : "") + h2.textContent.trim(), linkEls: [] };
+    [tocList, ovList].forEach(function (list) {
+      if (!list) return;
+      var li = doc.createElement("li");
+      li.appendChild(makeLink(t));
+      list.appendChild(li);
+      t.linkEls.push(li.firstChild);
+    });
+    targets.push(t);
+    if (sec.id === "sec-5-detection") {
+      [].slice.call(sec.querySelectorAll("h3[id]")).forEach(function (h3) {
+        var st = { id: h3.id, el: h3, text: h3.textContent.trim(), linkEls: [] };
+        [tocList, ovList].forEach(function (list) {
+          if (!list) return;
+          var li = doc.createElement("li");
+          li.className = "sub";
+          li.appendChild(makeLink(st));
+          list.appendChild(li);
+          st.linkEls.push(li.firstChild);
+        });
+        targets.push(st);
+      });
+    }
+  });
+
+  var activeId = null;
+  function trackActive() {
+    if (!targets.length) return;
+    var probe = (window.scrollY || 0) + 140;
+    var cur = targets[0];
+    for (var i = 0; i < targets.length; i++) {
+      var el = targets[i].el;
+      var top = el.getBoundingClientRect().top + (window.scrollY || 0);
+      if (top <= probe) cur = targets[i];
+    }
+    if (cur.id !== activeId) {
+      activeId = cur.id;
+      targets.forEach(function (t) {
+        t.linkEls.forEach(function (a) { a.classList.toggle("active", t.id === activeId); });
+      });
+    }
+  }
+
+  /* ---------- mobile contents overlay ---------- */
+  var contentsFab = doc.getElementById("contentsFab");
+  var overlay = doc.getElementById("tocOverlay");
+  var scrim = doc.getElementById("scrim");
+  var overlayClose = doc.getElementById("overlayClose");
+
+  function openOverlay() {
+    if (!overlay) return;
+    overlay.hidden = false;
+    if (scrim) scrim.hidden = false;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "true");
+    doc.body.style.overflow = "hidden";
+    var first = overlay.querySelector("a, button");
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    if (scrim) scrim.hidden = true;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "false");
+    doc.body.style.overflow = "";
+    if (contentsFab) contentsFab.focus();
+  }
+  if (contentsFab) contentsFab.addEventListener("click", openOverlay);
+  if (overlayClose) overlayClose.addEventListener("click", closeOverlay);
+  if (scrim) scrim.addEventListener("click", closeOverlay);
+  doc.addEventListener("keydown", function (e) {
+    if (overlay && !overlay.hidden) {
+      if (e.key === "Escape") { closeOverlay(); return; }
+      if (e.key === "Tab") {
+        var f = [].slice.call(overlay.querySelectorAll("a[href], button:not([disabled])"));
+        if (!f.length) return;
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && doc.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && doc.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+  });
+
+  /* ---------- copy buttons ---------- */
+  function flash(btn) {
+    var old = btn.getAttribute("data-label") || btn.textContent;
+    btn.setAttribute("data-label", old);
+    btn.textContent = "Copied";
+    btn.classList.add("copied");
+    window.setTimeout(function () {
+      btn.textContent = old;
+      btn.classList.remove("copied");
+    }, 1600);
+  }
+  function copyText(txt, btn) {
+    function legacy() {
+      var ta = doc.createElement("textarea");
+      ta.value = txt;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      doc.body.appendChild(ta);
+      ta.select();
+      try { doc.execCommand("copy"); flash(btn); } catch (err) {}
+      doc.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(function () { flash(btn); }, legacy);
+    } else { legacy(); }
+  }
+  [].slice.call(doc.querySelectorAll(".code-block")).forEach(function (block) {
+    var btn = block.querySelector(".copy-btn");
+    var code = block.querySelector("pre code");
+    if (!btn || !code) return;
+    btn.addEventListener("click", function () { copyText(code.innerText || code.textContent, btn); });
+  });
+
+  /* ---------- reveal on scroll ---------- */
+  if (!reduced.matches && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          en.target.classList.add("in");
+          io.unobserve(en.target);
+        }
+      });
+    }, { rootMargin: "0px 0px -6% 0px" });
+    secEls.forEach(function (s) { s.classList.add("reveal"); io.observe(s); });
+  }
+
+  /* ---------- initial paint ---------- */
+  onScroll();
+  /* ============================================================
+     SimEngine — shared canvas simulation engine
+     Techniques provide: nodes (tooltip hit areas) + steps with
+     { label, caption, hint, dur, draw(ctx, w, h, S, H, C) }.
+     Handles play/pause/restart/speed, step chips, captions,
+     tooltips, scaling, theme refresh and reduced motion.
+     ============================================================ */
+  window.SimEngine = (function () {
+    var SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+    var MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+    var DW = 960, DH = 540;
+
+    function hexA(hex, a) {
+      hex = (hex || "").trim();
+      if (hex.charAt(0) === "#") {
+        if (hex.length === 4) hex = "#" + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2) + hex.charAt(3) + hex.charAt(3);
+        var n = parseInt(hex.slice(1), 16);
+        if (isNaN(n)) return hex;
+        return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+      }
+      return hex;
+    }
+    function resolveColors() {
+      var cs = window.getComputedStyle(rootEl);
+      var names = ["bg", "surface", "surface-2", "elevated", "text", "muted", "border", "border-strong",
+        "accent", "accent-2", "violet", "success", "warning", "danger", "high", "low"];
+      var c = {};
+      for (var i = 0; i < names.length; i++) {
+        var v = cs.getPropertyValue("--" + names[i]);
+        c[names[i]] = v ? v.trim() : "#888888";
+      }
+      return c;
+    }
+
+    var H = {
+      hexA: hexA,
+      _C: null,
+      rr: function (ctx, x, y, w, h, r) {
+        r = Math.min(r || 8, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      },
+      grid: function (ctx, w, h, C) {
+        ctx.save();
+        ctx.fillStyle = hexA(C.border, 0.42);
+        for (var x = 24; x < w; x += 48) {
+          for (var y = 24; y < h; y += 48) {
+            ctx.beginPath();
+            ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      },
+      node: function (ctx, x, y, w, h, o) {
+        o = o || {};
+        var C = this._C;
+        var state = o.state || "idle";
+        var fill = C["surface-2"];
+        var stroke = C["border-strong"];
+        if (state === "active") stroke = C.accent;
+        if (state === "alert") stroke = C.danger;
+        if (state === "good") stroke = C.success;
+        if (state === "warn") stroke = C.warning;
+        if (state === "dead") { stroke = C.danger; fill = hexA(C.danger, 0.10); }
+        ctx.save();
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.lineWidth = state === "idle" ? 1 : 1.7;
+        ctx.strokeStyle = stroke;
+        ctx.stroke();
+        if (state === "dead") {
+          ctx.strokeStyle = hexA(C.danger, 0.95);
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(x + 9, y + 9);
+          ctx.lineTo(x + w - 9, y + h - 9);
+          ctx.moveTo(x + w - 9, y + 9);
+          ctx.lineTo(x + 9, y + h - 9);
+          ctx.stroke();
+        }
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        var cx = x + w / 2;
+        if (o.sub) {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2 - 8, w - 14);
+          ctx.fillStyle = C.muted;
+          ctx.font = "400 10.5px " + MONO;
+          ctx.fillText(o.sub, cx, y + h / 2 + 10, w - 14);
+        } else {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2, w - 14);
+        }
+        ctx.restore();
+      },
+      arrow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var ang = Math.atan2(y2 - y1, x2 - x1);
+        var head = o.head || 9;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = o.width || 1.6;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2 - Math.cos(ang) * head, y2 - Math.sin(ang) * head);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - Math.cos(ang - 0.42) * head, y2 - Math.sin(ang - 0.42) * head);
+        ctx.lineTo(x2 - Math.cos(ang + 0.42) * head, y2 - Math.sin(ang + 0.42) * head);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      },
+      flow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var t = o.t || 0;
+        var n = o.n || 3;
+        var speed = o.speed == null ? 0.32 : o.speed;
+        var size = o.size || 3.2;
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.32);
+        ctx.lineWidth = 1.2;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        for (var i = 0; i < n; i++) {
+          var f = (t * speed + i / n) % 1;
+          var px = x1 + (x2 - x1) * f;
+          var py = y1 + (y2 - y1) * f;
+          ctx.beginPath();
+          ctx.arc(px, py, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      },
+      pulse: function (ctx, x, y, r, color, o) {
+        o = o || {};
+        var p = ((o.t || 0) * 0.8 + (o.phase || 0)) % 1;
+        var rr2 = r * (0.4 + p * 0.9);
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.55 * (1 - p));
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, rr2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      },
+      text: function (ctx, str, x, y, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.fillStyle = o.color || C.text;
+        ctx.font = (o.weight || "400") + " " + (o.size || 13) + "px " + (o.mono ? MONO : SANS);
+        ctx.textAlign = o.align || "left";
+        ctx.textBaseline = o.baseline || "middle";
+        ctx.fillText(str, x, y, o.maxWidth);
+        ctx.restore();
+      },
+      chip: function (ctx, str, x, y, color, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.font = "700 11px " + MONO;
+        var w = ctx.measureText(str).width + 18;
+        var h = 21;
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = hexA(color, o.bgA == null ? 0.13 : o.bgA);
+        ctx.fill();
+        ctx.strokeStyle = hexA(color, 0.55);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(str, x + 9, y + h / 2 + 0.5);
+        ctx.restore();
+        return w;
+      }
+    };
+
+    function init(cfg) {
+      var canvas = doc.getElementById(cfg.canvas || "simCanvas");
+      if (!canvas || !canvas.getContext) return null;
+      var stage = canvas.parentElement;
+      var ctx = canvas.getContext("2d");
+      var steps = cfg.steps || [];
+      var nodes = cfg.nodes || [];
+      var C = resolveColors();
+      H._C = C;
+      var st = { i: 0, p: 0, t: 0, playing: false, speed: 1, last: 0, hover: null, scale: 1 };
+      var rm = reduced.matches;
+
+      var playBtn = doc.getElementById("simPlay");
+      var pauseBtn = doc.getElementById("simPause");
+      var restartBtn = doc.getElementById("simRestart");
+      var speedSel = doc.getElementById("simSpeed");
+      var stepsBox = doc.getElementById("simSteps");
+      var capLabel = doc.getElementById("simCapLabel");
+      var capText = doc.getElementById("simCaption");
+      var capHint = doc.getElementById("simHint");
+      var tip = doc.getElementById("simTip");
+
+      var chips = [];
+      steps.forEach(function (s, idx) {
+        var b = doc.createElement("button");
+        b.type = "button";
+        b.className = "step-chip";
+        b.textContent = (idx + 1) + ". " + s.label;
+        b.addEventListener("click", function () { go(idx); });
+        if (stepsBox) stepsBox.appendChild(b);
+        chips.push(b);
+      });
+
+      function syncCaption() {
+        var s = steps[st.i];
+        if (!s) return;
+        if (capLabel) capLabel.textContent = "Step " + (st.i + 1) + " of " + steps.length + " — " + s.label;
+        if (capText) capText.textContent = s.caption;
+        if (capHint) capHint.textContent = "Defender hint: " + s.hint;
+        chips.forEach(function (c, i) {
+          c.classList.toggle("active", i === st.i);
+          if (i === st.i) c.setAttribute("aria-current", "step");
+          else c.removeAttribute("aria-current");
+        });
+      }
+      function syncButtons() {
+        if (playBtn) playBtn.disabled = st.playing;
+        if (pauseBtn) pauseBtn.disabled = !st.playing;
+      }
+      function go(i) {
+        st.i = Math.max(0, Math.min(steps.length - 1, i));
+        st.p = 0;
+        syncCaption();
+      }
+      function play() {
+        if (!steps.length) return;
+        if (st.i === steps.length - 1 && st.p >= 1) go(0);
+        st.playing = true;
+        syncButtons();
+      }
+      function pause() { st.playing = false; syncButtons(); }
+      function restart() { st.t = 0; go(0); }
+      if (playBtn) playBtn.addEventListener("click", play);
+      if (pauseBtn) pauseBtn.addEventListener("click", pause);
+      if (restartBtn) restartBtn.addEventListener("click", restart);
+      if (speedSel) speedSel.addEventListener("change", function () { st.speed = parseFloat(speedSel.value) || 1; });
+
+      function fit() {
+        var w = (stage && stage.clientWidth) || 960;
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var cssH = Math.round(w * DH / DW);
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(cssH * dpr);
+        canvas.style.height = cssH + "px";
+        st.scale = canvas.width / DW;
+      }
+      window.addEventListener("resize", function () { fit(); render(); });
+
+      function toDesign(e) {
+        var r = canvas.getBoundingClientRect();
+        return { x: (e.clientX - r.left) / r.width * DW, y: (e.clientY - r.top) / r.height * DH };
+      }
+      function hit(d) {
+        for (var i = nodes.length - 1; i >= 0; i--) {
+          var n = nodes[i];
+          if (d.x >= n.x && d.x <= n.x + n.w && d.y >= n.y && d.y <= n.y + n.h) return n;
+        }
+        return null;
+      }
+      canvas.addEventListener("pointermove", function (e) {
+        if (!nodes.length) return;
+        var n = hit(toDesign(e));
+        st.hover = n ? n.id : null;
+        canvas.style.cursor = n ? "pointer" : "default";
+        if (tip) {
+          if (n) {
+            tip.textContent = "";
+            var b1 = doc.createElement("strong");
+            b1.textContent = n.label;
+            var p1 = doc.createElement("span");
+            p1.textContent = n.desc || "";
+            tip.appendChild(b1);
+            tip.appendChild(p1);
+            var wrapR = stage.getBoundingClientRect();
+            var lx = e.clientX - wrapR.left + 14;
+            var ly = e.clientY - wrapR.top + 14;
+            lx = Math.max(4, Math.min(lx, wrapR.width - 250));
+            ly = Math.max(4, Math.min(ly, wrapR.height - 90));
+            tip.style.left = lx + "px";
+            tip.style.top = ly + "px";
+            tip.hidden = false;
+          } else { tip.hidden = true; }
+        }
+      });
+      canvas.addEventListener("pointerleave", function () {
+        st.hover = null;
+        if (tip) tip.hidden = true;
+      });
+
+      if (window.MutationObserver) {
+        var mo = new MutationObserver(function () {
+          C = resolveColors();
+          H._C = C;
+          render();
+        });
+        mo.observe(rootEl, { attributes: true, attributeFilter: ["data-theme"] });
+      }
+
+      function render() {
+        var s = st.scale || 1;
+        ctx.setTransform(s, 0, 0, s, 0, 0);
+        ctx.fillStyle = C.bg;
+        ctx.fillRect(0, 0, DW, DH);
+        H.grid(ctx, DW, DH, C);
+        var step = steps[st.i];
+        if (step && step.draw) {
+          step.draw(ctx, DW, DH, { i: st.i, p: st.p, t: st.t, hover: st.hover, playing: st.playing, reduced: rm }, H, C);
+        }
+      }
+
+      function frame(ts) {
+        var dt = st.last ? Math.min((ts - st.last) / 1000, 0.08) : 0;
+        st.last = ts;
+        st.t += dt;
+        if (st.playing && steps.length) {
+          var d = steps[st.i].dur || 4.5;
+          st.p += dt * st.speed / d;
+          if (st.p >= 1) {
+            if (st.i < steps.length - 1) { st.i++; st.p = 0; syncCaption(); }
+            else { st.p = 1; pause(); }
+          }
+        }
+        render();
+        window.requestAnimationFrame(frame);
+      }
+
+      fit();
+      syncCaption();
+      syncButtons();
+      if (rm) { st.p = 1; } // reduced motion: static first step, no autoplay
+      window.requestAnimationFrame(frame);
+      return { go: go, play: play, pause: pause, restart: restart, state: st };
+    }
+
+    return { init: init, h: H };
+  })();
+
+  /* ---------- boot the simulation if present ---------- */
+  if (typeof window.SIM_STORY === "function") {
+    try { window.SIM_STORY(); } catch (e) { /* keep the rest of the page working */ }
+  }
+})();
+
+</script>
+</body>
+</html>

@@ -1,0 +1,2551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Beginner-friendly detection guide for MITRE ATT&amp;CK sub-technique T1499.003, Application Exhaustion Flood. Lab-only examples, Sigma rules, Splunk queries, and SOC triage steps.">
+<meta name="robots" content="noindex">
+<title>T1499.003 Application Exhaustion Flood — Detection Guide</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%230b0f1a'/%3E%3Cpath%20d='M16%205l9%203.5v7.2c0%205.2-3.7%209.4-9%2011.3-5.3-1.9-9-6.1-9-11.3V8.5L16%205z'%20fill='%234f8cff'/%3E%3Crect%20x='11'%20y='14'%20width='10'%20height='2.6'%20rx='1.3'%20fill='%230b0f1a'/%3E%3Crect%20x='11'%20y='18.4'%20width='7'%20height='2.6'%20rx='1.3'%20fill='%230b0f1a'/%3E%3C/svg%3E">
+<script>
+(function () {
+  var theme = null;
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var fromUrl = (params.get("theme") || "").toLowerCase();
+    if (fromUrl === "light" || fromUrl === "dark") { theme = fromUrl; }
+    if (!theme) { theme = window.localStorage.getItem("atk-theme"); }
+  } catch (e) { theme = null; }
+  if (theme !== "light" && theme !== "dark") {
+    theme = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+  }
+  document.documentElement.setAttribute("data-theme", theme);
+  window.__setAtkPageTheme = function (mode) {
+    if (mode !== "light" && mode !== "dark") { return; }
+    document.documentElement.setAttribute("data-theme", mode);
+    try { window.localStorage.setItem("atk-theme", mode); } catch (e) { /* storage unavailable */ }
+  };
+})();
+</script>
+<style>
+:root{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --shadow:0 4px 16px rgba(2,6,18,.35);
+  --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --font-mono:ui-monospace,"Cascadia Mono",Consolas,"Courier New",monospace;
+  color-scheme:dark light;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 4px 16px rgba(24,34,56,.10);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{overflow-x:clip}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-sans); font-size:16.5px; line-height:1.65;
+  -webkit-text-size-adjust:100%;
+}
+h1,h2,h3,h4{line-height:1.22; margin:0 0 .5em; letter-spacing:-.01em}
+p{margin:0 0 1em; max-width:72ch}
+a{color:var(--accent)}
+a:hover{color:var(--accent-2)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+code,pre,kbd,.mono{font-family:var(--font-mono)}
+code{font-size:.92em; background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:.08em .35em; overflow-wrap:anywhere}
+pre code{background:none; border:none; padding:0}
+.container{max-width:1280px; margin-inline:auto; padding-inline:24px}
+.skip-link{
+  position:absolute; left:12px; top:-56px; z-index:100; background:var(--elevated);
+  color:var(--text); border:1px solid var(--border-strong); border-radius:8px;
+  padding:8px 14px; text-decoration:none; transition:top .15s ease;
+}
+.skip-link:focus{top:12px}
+.progress-bar{
+  position:fixed; top:0; left:0; height:3px; width:0; z-index:90;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+}
+.hero{padding:52px 0 10px}
+.kicker{
+  font-family:var(--font-mono); font-size:12px; font-weight:700; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--accent-2); margin:0 0 10px;
+}
+.hero-title{font-size:clamp(30px,4.4vw,44px); font-weight:800; margin:0 0 14px}
+.hero-title .accent-id{font-family:var(--font-mono); color:var(--accent); white-space:nowrap}
+.hero-intro{color:var(--muted); font-size:17.5px; max-width:74ch}
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 0; padding:0; list-style:none}
+.chip{
+  font-family:var(--font-mono); font-size:12px; color:var(--muted);
+  border:1px solid var(--border); border-radius:999px; padding:4px 12px;
+  background:var(--surface); white-space:nowrap;
+}
+.chip b{color:var(--text); font-weight:600}
+.keyfacts{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin:24px 0 0}
+.keyfact{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:14px 16px; box-shadow:var(--shadow);
+}
+.keyfact-label{
+  display:block; font-family:var(--font-mono); font-size:11px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--muted); margin-bottom:6px;
+}
+.keyfact strong{font-size:14.5px; font-weight:650; line-height:1.45; display:block}
+.layout{display:grid; grid-template-columns:256px minmax(0,1fr); gap:38px; align-items:start; padding:24px 0 64px}
+.sidebar{position:sticky; top:24px}
+.toc{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:14px; box-shadow:var(--shadow); max-height:calc(100vh - 130px); overflow:auto;
+}
+.toc-title{
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--muted); margin:2px 4px 10px; font-weight:700;
+}
+.toc a{
+  display:block; padding:6px 10px; border-radius:8px; text-decoration:none;
+  color:var(--muted); font-size:13.5px; line-height:1.4;
+}
+.toc a:hover{color:var(--text); background:var(--surface-2)}
+.toc a.active{color:var(--accent); background:var(--surface-2); font-weight:650}
+.toc a.toc-sub{padding-left:22px; font-size:12.5px}
+.section{margin:56px 0; scroll-margin-top:84px}
+.sec-head{display:flex; align-items:center; gap:14px; margin-bottom:10px}
+.sec-badge{
+  flex:none; width:34px; height:34px; border-radius:10px; display:flex; align-items:center;
+  justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:15px;
+  color:var(--bg); background:var(--accent);
+}
+.sec-title{font-size:clamp(23px,3vw,30px); font-weight:750; margin:0}
+.sec-intro{color:var(--muted); margin:-2px 0 22px; max-width:74ch}
+.section h3{font-size:20px; font-weight:700; margin:34px 0 10px; scroll-margin-top:84px}
+.section h4{font-size:16px; font-weight:700; margin:20px 0 8px}
+.cards{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); margin:16px 0}
+.grid-2{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(330px,1fr)); margin:16px 0}
+.grid-3{display:grid; gap:16px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); margin:16px 0}
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  padding:18px 20px; box-shadow:var(--shadow); min-width:0;
+}
+.card h4{margin-top:0}
+.card p{margin-bottom:.6em}
+.card p:last-child,.card ul:last-child,.card ol:last-child{margin-bottom:0}
+.card ul,.card ol{margin:0 0 .8em; padding-left:1.25em}
+.callout{
+  border:1px solid var(--border); border-left-width:4px; border-radius:10px;
+  background:var(--surface-2); padding:13px 16px; margin:16px 0;
+}
+.callout p{margin:0; max-width:none}
+.callout-label{
+  display:inline-block; font-size:11.5px; font-weight:800; letter-spacing:.09em;
+  text-transform:uppercase; margin-bottom:4px;
+}
+.callout-note{border-left-color:var(--accent)}   .callout-note .callout-label{color:var(--accent)}
+.callout-warn{border-left-color:var(--warning)}  .callout-warn .callout-label{color:var(--warning)}
+.callout-good{border-left-color:var(--success)}  .callout-good .callout-label{color:var(--success)}
+.callout-danger{border-left-color:var(--danger)} .callout-danger .callout-label{color:var(--danger)}
+.table-wrap{border:1px solid var(--border); border-radius:12px; overflow-x:auto; margin:16px 0; background:var(--surface)}
+.table-wrap table{width:100%; border-collapse:collapse; min-width:620px; font-size:14.5px}
+.table-wrap th{
+  text-align:left; padding:10px 14px; background:var(--surface-2);
+  font-size:12.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted);
+  border-bottom:1px solid var(--border-strong); white-space:nowrap;
+}
+.table-wrap td{padding:11px 14px; border-top:1px solid var(--border); vertical-align:top}
+.table-wrap tr:first-child td{border-top:none}
+.badge{
+  display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700;
+  border-radius:999px; padding:2.5px 10px; border:1px solid currentColor; white-space:nowrap;
+  color:var(--muted); background:color-mix(in srgb,currentColor 10%,transparent);
+}
+.sev-critical{color:var(--danger)}
+.sev-high{color:var(--high)}
+.sev-medium{color:var(--warning)}
+.sev-low{color:var(--low)}
+.badge.cat{color:var(--accent-2); font-weight:650; font-family:var(--font-mono); font-size:11.5px}
+.badge.ok{color:var(--success)}
+.badge.info{color:var(--accent)}
+.code-block{border:1px solid var(--border); border-radius:12px; overflow:hidden; margin:16px 0; background:var(--surface-2)}
+.code-head{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:7px 8px 7px 14px; background:var(--elevated); border-bottom:1px solid var(--border);
+}
+.code-lang{
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); font-weight:700;
+}
+.code-title{font-size:12.5px; color:var(--muted); font-family:var(--font-mono)}
+.copy-btn{
+  font-family:var(--font-sans); font-size:12.5px; font-weight:650; color:var(--text);
+  background:var(--surface-2); border:1px solid var(--border-strong); border-radius:8px;
+  padding:5px 12px; cursor:pointer; min-width:64px;
+}
+.copy-btn:hover{border-color:var(--accent); color:var(--accent)}
+.copy-btn.copied{color:var(--success); border-color:var(--success)}
+.code-block pre{margin:0; padding:14px 16px; overflow-x:auto; font-size:13px; line-height:1.55}
+.kv{border:1px solid var(--border); border-radius:12px; overflow:hidden; margin:16px 0}
+.kv-row{display:grid; grid-template-columns:230px 1fr; border-top:1px solid var(--border)}
+.kv-row:first-child{border-top:none}
+.kv-row dt{background:var(--surface-2); padding:10px 14px; font-weight:650; font-size:14px}
+.kv-row dd{margin:0; padding:10px 14px; font-size:14.5px}
+.timeline{position:relative; margin:18px 0 8px; padding-left:30px; list-style:none}
+.timeline::before{content:""; position:absolute; left:9px; top:6px; bottom:6px; width:2px; background:var(--border-strong); border-radius:2px}
+.timeline-item{position:relative; padding-bottom:18px}
+.timeline-item:last-child{padding-bottom:2px}
+.timeline-item::before{
+  content:""; position:absolute; left:-27px; top:7px; width:12px; height:12px;
+  border-radius:50%; background:var(--accent); border:2px solid var(--bg);
+}
+.timeline-when{font-family:var(--font-mono); font-size:12.5px; color:var(--accent-2); font-weight:700; display:block; margin-bottom:2px}
+.timeline-item p{margin:0}
+.sim-wrap{
+  position:relative; background:var(--surface); border:1px solid var(--border);
+  border-radius:14px; padding:16px; box-shadow:var(--shadow); margin:16px 0;
+}
+.sim-canvas{width:100%; display:block; border-radius:10px; border:1px solid var(--border); background:var(--surface-2); touch-action:pan-y}
+.sim-controls{display:flex; flex-wrap:wrap; gap:10px; margin-top:14px}
+.sim-controls button,.sim-controls select{
+  font-family:var(--font-sans); font-size:14px; font-weight:650; color:var(--text);
+  background:var(--surface-2); border:1px solid var(--border-strong); border-radius:9px;
+  padding:8px 16px; cursor:pointer; min-height:38px;
+}
+.sim-controls button:hover{border-color:var(--accent); color:var(--accent)}
+.sim-controls select{padding-right:30px}
+.sim-chips{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px}
+.sim-chip{
+  font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--muted);
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px;
+  padding:5px 12px; cursor:pointer;
+}
+.sim-chip:hover{color:var(--text); border-color:var(--border-strong)}
+.sim-chip.active{color:var(--bg); background:var(--accent); border-color:var(--accent); font-weight:700}
+.sim-caption{margin:14px 0 0; font-weight:650; font-size:15px}
+.sim-hint{margin:4px 0 0; color:var(--muted); font-size:14px}
+.sim-tooltip{
+  position:absolute; display:none; z-index:20; max-width:250px; pointer-events:none;
+  background:var(--elevated); border:1px solid var(--border-strong); border-radius:9px;
+  padding:8px 11px; font-size:12.5px; line-height:1.45; box-shadow:var(--shadow);
+}
+.sim-tooltip strong{display:block; font-size:12px; color:var(--accent-2); margin-bottom:2px}
+.mobile-toc-btn{
+  display:none; position:fixed; right:18px; bottom:76px; z-index:60;
+  font-family:var(--font-sans); font-size:14px; font-weight:700; color:var(--bg);
+  background:var(--accent); border:none; border-radius:999px; padding:12px 20px;
+  cursor:pointer; box-shadow:var(--shadow); align-items:center; gap:8px;
+}
+.toc-overlay{position:fixed; inset:0; z-index:70; background:rgba(4,8,18,.6); display:none}
+.toc-overlay.open{display:block}
+.toc-overlay-card{
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:min(330px,92vw); max-height:78vh; overflow:auto;
+  background:var(--surface); border:1px solid var(--border-strong); border-radius:16px;
+  padding:16px; box-shadow:var(--shadow);
+}
+.toc-overlay-card a{display:block; padding:8px 10px; border-radius:8px; text-decoration:none; color:var(--text); font-size:14.5px}
+.toc-overlay-card a:hover{background:var(--surface-2)}
+.toc-overlay-card a.toc-sub{padding-left:24px; color:var(--muted); font-size:13px}
+.toc-close{float:right; font-size:13px; font-weight:650; color:var(--muted); background:none; border:1px solid var(--border-strong); border-radius:8px; padding:4px 10px; cursor:pointer}
+.back-top{
+  position:fixed; right:18px; bottom:24px; z-index:60; width:42px; height:42px;
+  border-radius:50%; border:1px solid var(--border-strong); background:var(--surface);
+  color:var(--text); font-size:18px; cursor:pointer; box-shadow:var(--shadow);
+  opacity:0; visibility:hidden; transform:translateY(8px); transition:opacity .2s ease,transform .2s ease,visibility .2s;
+}
+.back-top.show{opacity:1; visibility:visible; transform:none}
+.checklist{list-style:none; margin:12px 0; padding:0}
+.checklist li{
+  position:relative; padding:9px 12px 9px 40px; border:1px solid var(--border);
+  border-radius:10px; margin-bottom:8px; background:var(--surface);
+}
+.checklist li::before{
+  content:""; position:absolute; left:12px; top:12px; width:15px; height:15px;
+  border:2px solid var(--accent); border-radius:4px;
+}
+.mistake-symptom,.mistake-fix{margin:6px 0 0; font-size:14px}
+.mistake-symptom b,.mistake-fix b{color:var(--muted); font-weight:700; font-family:var(--font-mono); font-size:11.5px; text-transform:uppercase; letter-spacing:.07em}
+.content > .section:last-of-type{margin-bottom:24px}
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr); gap:0}
+  .sidebar{display:none}
+  .mobile-toc-btn{display:flex}
+}
+@media (max-width:640px){
+  .container{padding-inline:16px}
+  .chip{white-space:normal}
+  .hero{padding-top:36px}
+  .cards,.grid-2,.grid-3{grid-template-columns:1fr}
+  .kv-row{grid-template-columns:1fr}
+  .kv-row dt{border-bottom:1px solid var(--border)}
+  .sim-controls button,.sim-controls select{flex:1 1 100%}
+  .sec-head{align-items:flex-start}
+  .mobile-toc-btn{bottom:70px; right:14px}
+  .back-top{right:14px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important; transition:none!important}
+  html{scroll-behavior:auto}
+}
+@media print{
+  .sidebar,.mobile-toc-btn,.toc-overlay,.back-top,.progress-bar,
+  .copy-btn,.sim-canvas,.sim-controls,.sim-chips,.sim-tooltip,.sim-hint,.skip-link{display:none!important}
+  body{background:#fff; color:#000; font-size:12pt}
+  .container{max-width:none; padding:0}
+  .card,.keyfact,.callout,.code-block,.table-wrap,.sim-wrap{box-shadow:none; break-inside:avoid; page-break-inside:avoid}
+  .section{break-inside:avoid-page}
+  a{text-decoration:none; color:#000}
+  .hero-title .accent-id{color:#000}
+  .code-block,.code-head{background:#f2f4f8; border-color:#c8cedb}
+  .sim-caption{font-size:12pt}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1499.003"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip-link" href="#main">Skip to main content</a>
+<div class="progress-bar" id="progress-bar" aria-hidden="true"></div>
+
+<div class="hero container">
+  <p class="kicker">MITRE ATT&amp;CK · Endpoint Denial of Service · Impact Tactic</p>
+  <h1 class="hero-title"><span class="accent-id">T1499.003</span> — Application Exhaustion Flood</h1>
+  <p class="hero-intro">Some web requests are cheap. Others force the server to work very hard.
+  In this attack, an attacker sends a small number of requests that are deliberately expensive
+  to process. Each request can cost the server as much as thousands of normal ones. This guide
+  explains the technique in simple words, shows a safe lab simulation, and gives defenders
+  ready-to-use detection ideas.</p>
+  <ul class="chips">
+    <li class="chip"><b>Guide:</b> v2.0</li>
+    <li class="chip"><b>Tactic:</b> Impact</li>
+    <li class="chip"><b>Parent:</b> T1499 Endpoint Denial of Service</li>
+    <li class="chip"><b>Platforms:</b> IaaS · Linux · Windows · macOS</li>
+    <li class="chip"><b>Primary target:</b> application/DB processing capacity</li>
+    <li class="chip"><b>Created:</b> 20 February 2020 · ATT&amp;CK v20 · Last modified: 24 October 2025</li>
+    <li class="chip"><b>Technique revision:</b> 1.3</li>
+  </ul>
+  <div class="keyfacts">
+    <div class="keyfact"><span class="keyfact-label">Attack cost</span><strong>Few requests, high damage per request</strong></div>
+    <div class="keyfact"><span class="keyfact-label">Key evidence</span><strong>Slow-query logs + 5xx waves + APM traces</strong></div>
+    <div class="keyfact"><span class="keyfact-label">Signature artifact</span><strong>High upstream_response_time from one client</strong></div>
+    <div class="keyfact"><span class="keyfact-label">Core control</span><strong>Query budgets + rate limits + caching</strong></div>
+  </div>
+</div>
+
+<div class="layout container">
+  <aside class="sidebar">
+    <nav class="toc" id="toc" aria-label="Table of contents">
+      <p class="toc-title">Contents</p>
+      <!-- Section links are generated by JavaScript -->
+    </nav>
+    <noscript>
+      <nav class="toc" aria-label="Table of contents (static list)">
+        <p class="toc-title">Contents</p>
+        <a href="#overview">1. Overview</a>
+        <a href="#simulation">2. Animated simulation</a>
+        <a href="#red-team">3. Red team view</a>
+        <a href="#blue-team">4. Blue team view</a>
+        <a href="#detection-deep-dive">5. Detection deep dive</a>
+        <a href="#regulation-mapping">5.1 Regulation mapping</a>
+        <a href="#threat-intelligence">5.2 Threat intelligence</a>
+        <a href="#threat-ranking">5.3 Threats ranking</a>
+        <a href="#logs-and-patterns">5.4 Logs and patterns</a>
+        <a href="#sigma-and-spl">5.5 Sigma and Splunk</a>
+        <a href="#case-study">6. Case study</a>
+        <a href="#mitigation">7. Mitigation</a>
+        <a href="#mistakes">8. Common mistakes</a>
+        <a href="#cheat-sheet">9. Cheat sheet</a>
+      </nav>
+    </noscript>
+  </aside>
+
+  <main id="main" class="content">
+
+  <section class="section" id="overview" aria-labelledby="overview-title">
+    <div class="sec-head"><span class="sec-badge" aria-hidden="true">1</span><h2 class="sec-title" id="overview-title">Overview</h2></div>
+    <p class="sec-intro">What "application exhaustion flood" means, and why one request can hurt more than a thousand.</p>
+
+    <p>A <strong>denial of service</strong> (DoS) attack tries to make a service unavailable to real users.
+    MITRE ATT&amp;CK tracks this as sub-technique <strong>T1499.003 — Application Exhaustion Flood</strong>.
+    The official description is short. Attackers target <em>resource intensive features of applications</em>.
+    They send repeated requests to those features. The requests exhaust system resources and deny access
+    to the application, or to the server itself. Source: attack.mitre.org/techniques/T1499/003/
+    (technique revision 1.3, last modified 24 October 2025).</p>
+
+    <p>Think of a library desk. A normal visitor asks a short question and the librarian answers fast.
+    An attacker asks questions that force the librarian to search <em>every shelf in the building</em> for each answer.
+    Only a few such questions fill the whole day. The attack does not break the door (the network).
+    It clogs the work itself.</p>
+
+    <div class="table-wrap"><table>
+      <caption class="mono" style="caption-side:top;text-align:left;padding:10px 14px 0;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">How this sub-technique differs from its neighbours</caption>
+      <thead><tr><th scope="col">Technique</th><th scope="col">Weapon</th><th scope="col">Traffic volume</th><th scope="col">Typical victim bottleneck</th></tr></thead>
+      <tbody>
+        <tr><td><b>T1498</b> Network Denial of Service</td><td>Raw bandwidth; the pipe is filled with junk traffic</td><td>Very high (gigabits per second)</td><td>Internet link, firewalls</td></tr>
+        <tr><td><b>T1499.002</b> Service Exhaustion Flood</td><td>Many <em>cheap</em> requests that hold open connections or workers</td><td>High</td><td>Connection tables, worker pools, memory</td></tr>
+        <tr><td><b>T1499.003</b> Application Exhaustion Flood <span class="badge info">this guide</span></td><td>Few <em>expensive</em> requests; the <b>cost of each request</b> is the weapon</td><td>Can be low</td><td>CPU of database and application code</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Ways to make one request expensive</h3>
+    <div class="cards">
+      <div class="card">
+        <h4>Crafted search and API parameters</h4>
+        <p>A search box that allows many wildcards can force a <strong>full table scan</strong>. A full table scan
+        means the database reads every row instead of using an index (a sorted lookup structure).
+        A query like <code>q=%25%25%25</code> with <code>LIKE</code> patterns can turn a fast lookup into minutes of disk work.</p>
+      </div>
+      <div class="card">
+        <h4>ReDoS — evil regular expressions</h4>
+        <p>A <strong>regular expression</strong> (regex) is a text pattern matcher. Some patterns, when they fail to match,
+        re-try the same text in many orders. This is called <strong>catastrophic backtracking</strong>. CPU time can explode
+        from milliseconds to hours. This abuse is called <strong>ReDoS</strong>: Regular expression Denial of Service.</p>
+      </div>
+      <div class="card">
+        <h4>XML entity expansion — "billion laughs"</h4>
+        <p><strong>XML</strong> is a data format with tags. It allows <strong>entities</strong>, which are named shortcuts.
+        An attacker defines entity A as ten copies of entity B, B as ten copies of C, and so on. A tiny file of a few
+        kilobytes then expands to billions of characters in memory while the parser works through it.</p>
+      </div>
+      <div class="card">
+        <h4>Hash-collision POST floods (hashDoS)</h4>
+        <p>Web frameworks store POST form fields in <strong>hash tables</strong> (fast key-value stores).
+        In 2011, Alexander Klink and Julian Wälde showed that an attacker can craft thousands of fields whose
+        keys collide, that is, land in the same bucket. The table then behaves like a slow list, and parsing one
+        small POST request takes hours. ASP.NET needed an emergency fix, tracked as <strong>CVE-2011-3414</strong>
+        (a CVE is the public identifier scheme for published vulnerabilities). Vendors responded with parameter
+        limits such as PHP's <code>max_input_vars</code>, which caps how many form fields one request may carry.</p>
+      </div>
+      <div class="card">
+        <h4>Login floods that force password hashing</h4>
+        <p>Good password storage uses slow hashing such as <strong>bcrypt</strong> or <strong>Argon2</strong>.
+        Slow by design is good for security, but it also means each login attempt costs real CPU.
+        A flood of fake logins makes the server burn CPU on passwords that will never match.</p>
+      </div>
+      <div class="card">
+        <h4>Oversized or complex API and GraphQL queries</h4>
+        <p><strong>GraphQL</strong> is an API style where the client shapes the query. Without limits, one query can ask
+        for thousands of linked records in one call. Deep nesting and huge page sizes make the backend do enormous
+        work per request. The same idea applies to REST APIs (standard HTTP-style application programming
+        interfaces) that allow huge page sizes or deep filters.</p>
+      </div>
+      <div class="card">
+        <h4>Compression bombs in uploads</h4>
+        <p>A <strong>compression bomb</strong> is a small compressed file that expands to a huge size.
+        If the application unzips uploads before checking the final size, a 10 MB upload can grow to
+        gigabytes of memory and CPU during decompression.</p>
+      </div>
+      <div class="card">
+        <h4>Why defenders should care</h4>
+        <p>MITRE's official detection strategy for this sub-technique is <strong>DET0415</strong>
+        ("Application Exhaustion Flood Detection Across Platforms"). Its analytics point to repeated calls of
+        high-resource endpoints or GUI components (a GUI is a graphical user interface) that cause CPU and
+        memory spikes. The logs show elevated request volumes and high 5xx error rates (HTTP status codes
+        500–599, which mean server errors). Cloud logs may show autoscaling alarms.
+        In plain words: <em>watch what each client makes your backend do, not only how many requests it sends.</em></p>
+      </div>
+    </div>
+
+    <div class="callout callout-note"><p><span class="callout-label">Note</span>
+    The MITRE page lists platforms IaaS, Linux, Windows, and macOS, and the impact type is Availability.
+    Its only listed mitigation is <b>M1037 Filter Network Traffic</b>. It means filtering upstream with
+    Content Delivery Networks (CDNs — global caching services) or DoS-filtering providers. The filter
+    blocks attack sources, ports, and protocols at the boundary. This guide adds the application-level
+    controls that real teams also need.</p></div>
+
+    <div class="callout callout-danger"><p><span class="callout-label">Danger — lab only</span>
+    Every technique on this page is shown for <b>education and defence only</b>. Run test traffic
+    only against isolated lab machines that you own. Sending such traffic to systems you do not
+    own is a crime in most countries and can cause real harm.</p></div>
+  </section>
+
+  <section class="section" id="simulation" aria-labelledby="simulation-title">
+    <div class="sec-head"><span class="sec-badge" aria-hidden="true">2</span><h2 class="sec-title" id="simulation-title">Animated simulation: "One Question, Ten Thousand Steps"</h2></div>
+    <p class="sec-intro">Watch one expensive search request quietly eat a database, and see what the SOC (security operations center) notices at the same time.</p>
+
+    <div class="sim-wrap" id="sim-wrap">
+      <canvas id="sim-canvas" class="sim-canvas" width="960" height="540" role="img"
+        aria-label="Animated diagram. An attacker sends crafted expensive search requests through a web application to a database. The database CPU gauge climbs to full, a queue of blocked workers grows, a legitimate user receives a 504 timeout, the SOC panel shows a slow-query spike and a wave of 5xx errors, then a web application firewall and a query timeout drop the attack traffic and the legitimate user is served again. Full text version in the step list below."></canvas>
+      <div class="sim-tooltip" id="sim-tooltip" role="status" aria-hidden="true"></div>
+      <div class="sim-controls" id="sim-controls">
+        <button type="button" id="sim-play" aria-label="Play simulation">Play</button>
+        <button type="button" id="sim-pause" aria-label="Pause simulation">Pause</button>
+        <button type="button" id="sim-restart" aria-label="Restart simulation">Restart</button>
+        <label for="sim-speed" class="mono" style="font-size:13px;color:var(--muted);align-self:center">Speed</label>
+        <select id="sim-speed" aria-label="Simulation speed">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+        </select>
+      </div>
+      <div class="sim-chips" id="sim-chips" role="group" aria-label="Jump to a step"></div>
+      <p class="sim-caption" id="sim-caption" aria-live="polite">Step 1 of 8 — Normal day: cheap requests, healthy database.</p>
+      <p class="sim-hint" id="sim-hint" aria-live="polite">Defender hint: baseline first. Know what normal CPU and normal latency look like.</p>
+    </div>
+
+    <h3>Written version of the animation (text alternative)</h3>
+    <div class="card">
+      <ol>
+        <li><b>Normal traffic.</b> A legitimate user sends small search requests. Tokens move from the user
+        through the application to the database and back. The database CPU gauge is green, around 20 percent.
+        The SOC panel is quiet.</li>
+        <li><b>The crafted request.</b> The attacker sends one search with wildcards everywhere
+        (<code>q=%%%a%%%</code>). A tooltip on the attacker node shows the payload. The application accepts it
+        because it looks like a normal search.</li>
+        <li><b>The expensive query walks in.</b> The query token moves to the database. The CPU gauge climbs.
+        One application worker now blocks and waits for the database instead of serving other users.</li>
+        <li><b>Replay from several accounts.</b> The attacker sends a burst of copies from a few different
+        accounts. More workers block. A queue of waiting requests grows in front of the workers.</li>
+        <li><b>Everything pegs red.</b> The database CPU gauge reaches 100 percent. The queue keeps growing.
+        The legitimate user's request times out and the application returns HTTP 504 Gateway Timeout.</li>
+        <li><b>The SOC panel lights up.</b> APM (Application Performance Monitoring) shows a slow-query spike.
+        The access log shows a wave of 5xx errors and one client with very high upstream_response_time
+        (the time the upstream application server needed to answer).</li>
+        <li><b>Mitigation kicks in.</b> The team enables a query timeout, parameter rules, and WAF
+        (Web Application Firewall) rate limiting. Attack tokens are dropped at the WAF and never reach the database.</li>
+        <li><b>Recovery.</b> The database cools down. The legitimate user's request is served and marked with a
+        green check. The SOC panel records the recovered state.</li>
+      </ol>
+      <p class="sim-hint">Tip: hover or tap any node in the diagram to read what it represents. The step chips above the caption jump straight to a step. If your system prefers reduced motion, the animation does not auto-play; use the step chips to move.</p>
+    </div>
+  </section>
+
+  <section class="section" id="red-team" aria-labelledby="red-team-title">
+    <div class="sec-head"><span class="sec-badge" aria-hidden="true">3</span><h2 class="sec-title" id="red-team-title">Red team / attacker perspective</h2></div>
+    <p class="sec-intro">Understanding how attackers think about request cost helps you find the same weak spots first. All examples here are lab only.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Why an attacker picks this technique</h4>
+        <ul>
+          <li><b>Low traffic, big effect.</b> A flood of cheap requests is loud and easy to block. A few
+          expensive requests look almost normal and can hurt more.</li>
+          <li><b>Hard to tell apart from real users.</b> The requests use valid features. Basic rate limits
+          may never trigger.</li>
+          <li><b>No special hardware needed.</b> A small virtual machine or even a laptop can generate the traffic.</li>
+          <li><b>Also useful as cover.</b> Noise and outages can distract defenders during a bigger operation.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Prerequisites the attacker needs</h4>
+        <ul>
+          <li>A public endpoint that does heavy server-side work: search, reports, exports, file conversion, login, GraphQL.</li>
+          <li>Parameters the attacker can control: query text, page size, filters, uploaded files.</li>
+          <li>No per-client limit on cost, only maybe a limit on request count.</li>
+          <li>Basic knowledge of the app: endpoint paths, parameter names, error behaviour.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>The conceptual attack flow</h3>
+    <ul class="timeline">
+      <li class="timeline-item"><span class="timeline-when">Step 1 — Recon</span><p>Browse the target application like a normal user. Note every endpoint that feels slow on large inputs: search, sorting, reports, exports, password login.</p></li>
+      <li class="timeline-item"><span class="timeline-when">Step 2 — Measure</span><p>Time one request with harmless but heavy parameters. If one request takes seconds while normal ones take milliseconds, the attacker has found an amplifier.</p></li>
+      <li class="timeline-item"><span class="timeline-when">Step 3 — Parameterize</span><p>Turn the heavy call into a template: change the query text, the page size, or the account name for each request so caching does not help.</p></li>
+      <li class="timeline-item"><span class="timeline-when">Step 4 — Replay at volume</span><p>Send the template in a loop, often from several accounts or addresses. Keep the rate low enough to look plausible.</p></li>
+      <li class="timeline-item"><span class="timeline-when">Step 5 — Impact</span><p>Workers block on slow queries, queues grow, timeouts (5xx) spread to real users, and the application becomes unavailable or unusably slow.</p></li>
+    </ul>
+
+    <div class="callout callout-danger"><p><span class="callout-label">Danger — lab only</span>
+    The commands below must run <b>only</b> against an isolated lab host that you own, such as
+    <code>10.0.0.10</code> or <code>lab.local</code> on a private network. Never point these tools at
+    systems you do not own. Tools named here (<code>wrk</code>, <code>ab</code>, <code>hey</code>) are
+    standard load-testing tools that developers use every day on their own services.</p></div>
+
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Bash · lab only</span><button type="button" class="copy-btn" aria-label="Copy command to clipboard">Copy</button></figcaption>
+      <pre><code># Load-test YOUR OWN lab app with a modest, fixed number of requests.
+# Tool: wrk — a modern HTTP benchmarking tool.
+wrk -t2 -c10 -d30s --latency "http://10.0.0.10:8080/search?q=%%%a%%%"
+
+# Tool: ab (ApacheBench) — simple classic benchmark tool.
+ab -n 200 -c 5 "http://lab.local/search?q=%25%25%25"
+
+# Tool: hey — small Go-based load generator.
+# Simulates one expensive paginated API call shape.
+hey -z 10s -c 5 "http://10.0.0.10:8080/api/orders?page=1&amp;size=100000"</code></pre>
+    </figure>
+
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Python · lab only</span><button type="button" class="copy-btn" aria-label="Copy command to clipboard">Copy</button></figcaption>
+      <pre><code># Local ReDoS demo: run this file on your own machine. It attacks no one.
+# It times a vulnerable regex pattern against a safe one on the same input.
+import re, time
+
+bad_pattern   = r"^(a+)+$"          # nested quantifiers: can backtrack badly
+good_pattern  = r"^a+$"             # linear work, no nested quantifiers
+sample        = "a" * 30 + "!"      # the '!' makes the pattern fail
+
+for name, pattern in [("vulnerable", bad_pattern), ("safe", good_pattern)]:
+    start = time.perf_counter()
+    re.match(pattern, sample)
+    print(f"{name}: {time.perf_counter() - start:.6f} seconds")</code></pre>
+    </figure>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Common variations</h4>
+        <ul>
+          <li><b>Slow variants:</b> many small expensive calls instead of a burst, spread over hours.</li>
+          <li><b>Distributed variants:</b> the same template replayed from many addresses or accounts.</li>
+          <li><b>Protocol variants:</b> the same idea over email (huge parsing work), DNS, or file upload pipelines.</li>
+          <li><b>Mixed variants:</b> combined with T1499.002 floods so defenders chase two symptoms at once.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Common attacker mistakes</h4>
+        <ul>
+          <li>Replaying with the <b>identical</b> parameters, so the cache answers and the effect fades.</li>
+          <li>Forgetting <b>timing spread</b>; one source IP at constant rate is easy to block.</li>
+          <li>Sending payloads that crash the parser, which turns a stealthy attack into an obvious error storm.</li>
+          <li>Testing on production-like endpoints of a system they do not own, which is illegal.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="blue-team" aria-labelledby="blue-team-title">
+    <div class="sec-head"><span class="sec-badge" aria-hidden="true">4</span><h2 class="sec-title" id="blue-team-title">Blue team / SOC perspective</h2></div>
+    <p class="sec-intro">What this attack looks like in your telemetry, and the first ten minutes of a good response.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Artifacts this attack leaves behind</h4>
+        <ul>
+          <li><b>5xx waves:</b> bursts of HTTP 500, 502, 503, and 504 answers, often tied to one feature.</li>
+          <li><b>Slow-query logs:</b> database entries with query times of many seconds and huge rows-scanned counts.</li>
+          <li><b>High upstream_response_time:</b> in nginx-style access logs, the upstream field shows how long the application needed. One client stands out.</li>
+          <li><b>APM traces:</b> spans stuck in database calls; queue depth rising; connection pool exhaustion.</li>
+          <li><b>Host symptoms:</b> CPU pegged on the DB or app tier, worker pools full, OOM (out of memory) events.</li>
+          <li><b>WAF logs:</b> blocks, rate-limit hits, or parser alarms tied to odd parameter values.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Where to look first</h4>
+        <ul>
+          <li>Reverse proxy and load balancer access logs (nginx, IIS — Microsoft's Internet Information Services, cloud load balancers).</li>
+          <li>Database slow-query log and performance schema (MySQL, PostgreSQL).</li>
+          <li>APM tools: distributed traces, service maps, error rates per endpoint.</li>
+          <li>Application logs: timeouts, pool exhaustion, regex or XML parser errors.</li>
+          <li>Cloud metrics: autoscaling triggers, 5xx rates, latency percentiles.</li>
+          <li>WAF and CDN logs: per-client request and block counts.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="callout callout-note"><p><span class="callout-label">Official ATT&amp;CK detection strategy</span>
+    ATT&amp;CK maps this sub-technique to detection strategy <b>DET0415 — "Application Exhaustion Flood
+    Detection Across Platforms"</b>. Its four analytics (AN1165–AN1168) describe exactly the telemetry above.
+    <b>AN1165:</b> repeated calls of high-resource application endpoints or GUI components (GUI means
+    graphical user interface). They cause CPU and memory spikes. Logs show elevated request volumes,
+    prolonged handle locks, or frequent crash recoveries. <b>AN1166:</b> automated scripts or repeated CLI/API requests
+    that make application backends consume high CPU or memory (for example Apache/PHP, MySQL, mail servers),
+    producing syslog errors and excessive process spawning. <b>AN1167:</b> repetitive GUI or backend workflows
+    logged in unified logs as spin reports or crash dumps. <b>AN1168:</b> automated abuse of cloud-hosted
+    applications (web apps, REST endpoints, internal APIs). It causes compute exhaustion, high 5xx error rates,
+    or frequent autoscaling triggers in app insights or CloudWatch logs. Every rule in section 5.5 implements
+    one of these analytics.</p></div>
+
+    <div class="callout callout-warn"><p><span class="callout-label">Warning</span>
+    A single slow query happens in every system. What matters is the <b>pattern</b>: the same endpoint,
+    the same parameter shape, the same small set of clients, again and again, together with rising errors.
+    Judge the pattern, not the single event.</p></div>
+
+    <h3>Why it matters and where it fits in the attack chain</h3>
+    <p>T1499.003 sits in the <b>Impact</b> tactic, so it is usually a goal, not a first step. It still appears
+    in real chains. It can apply extortion pressure ("pay or we keep you offline"). It can distract defenders
+    while another intrusion runs. It can sabotage a rival, or test how defenders react before a more serious
+    attack. Availability is also a security duty: many laws and standards (see section 5.1) treat
+    an outage as a reportable security failure.</p>
+
+    <h3>First-response triage flow</h3>
+    <ul class="timeline">
+      <li class="timeline-item"><span class="timeline-when">Minute 0 — Detect</span><p>Alert fires: 5xx rate above threshold, or slow-query count above baseline, or a client with extreme upstream_response_time.</p></li>
+      <li class="timeline-item"><span class="timeline-when">Minute 1 — Confirm scope</span><p>Which endpoint? Which parameters? One client or many? Is a legitimate campaign (sale, exam, launch) running at the same time?</p></li>
+      <li class="timeline-item"><span class="timeline-when">Minute 3 — Capture evidence</span><p>Save sample requests from access logs, slow-query entries, and WAF samples. Note client IPs, user agents, and accounts. Timestamps in UTC (coordinated universal time).</p></li>
+      <li class="timeline-item"><span class="timeline-when">Minute 5 — Contain</span><p>Apply per-client rate limits at the WAF or CDN; block abusive clients; enable or tighten the query timeout. Keep changes documented.</p></li>
+      <li class="timeline-item"><span class="timeline-when">Minute 10 — Communicate</span><p>Open an incident ticket, tell the on-call engineering owner and the service owner. If customer impact is likely, involve communications per your policy.</p></li>
+    </ul>
+  </section>
+
+  <section class="section" id="detection-deep-dive" aria-labelledby="ddd-title">
+    <div class="sec-head"><span class="sec-badge" aria-hidden="true">5</span><h2 class="sec-title" id="ddd-title">Detection engineering deep dive</h2></div>
+    <p class="sec-intro">The working part of this guide: rules, laws, actors, threats, log patterns, and queries you can adapt today.
+    The official anchor is detection strategy DET0415. Every pattern below implements one of its
+    analytics (AN1165–AN1168), summarized in section 4.</p>
+
+    <h3 id="regulation-mapping">5.1 Regulation mapping</h3>
+    <p>Availability is not only a technical goal. Several frameworks make it a legal or contractual duty.
+    Use this table when you must justify controls to an auditor or a manager. <b>Expected evidence</b>
+    means the documents and settings an auditor wants to see.</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Framework</th><th scope="col">Control / article</th><th scope="col">Why it applies</th><th scope="col">Expected evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>GDPR</b> (EU data protection)</td>
+          <td>Art. 32 (security of processing, including availability); Art. 33 (breach notification)</td>
+          <td>A DoS outage of a personal-data service is a failure of availability, which Art. 32 names as part of security. A pure outage that exposes no data is usually not a personal-data breach, so Art. 33 often does not apply. But a long outage may still be reportable under national rules, and any downtime combined with data compromise does trigger Art. 33.</td>
+          <td>Risk assessment mentioning DoS; capacity and resilience test records; incident records with timelines; regulator notification drafts where relevant.</td>
+        </tr>
+        <tr>
+          <td><b>HIPAA Security Rule</b> (US health data)</td>
+          <td>45 CFR 164.306(a)(1) (general standards: ensure the confidentiality, integrity, and availability of ePHI — electronic protected health information); 164.306(a)(3) (protection against threats to information security); 164.308(a)(7) (contingency plan)</td>
+          <td>Health services must protect ePHI against threats, stay available, and keep tested contingency procedures; an application exhaustion flood hits all three duties at once.</td>
+          <td>Contingency plan documents; periodic test results; emergency mode operation records; DoS scenarios in the risk analysis.</td>
+        </tr>
+        <tr>
+          <td><b>ISO 27001:2022</b></td>
+          <td>Annex A 5.29 (information security during disruption); 5.30 (ICT readiness for business continuity); 8.13 (information backup); 8.14 (redundancy of information processing facilities)</td>
+          <td>These controls cover continuity planning, backups, and redundant capacity — the same machinery that absorbs and recovers from an exhaustion flood.</td>
+          <td>Business continuity test reports; redundancy architecture diagrams; backup restoration test records; capacity planning documents.</td>
+        </tr>
+        <tr>
+          <td><b>SOC 2</b> (Trust Services Criteria)</td>
+          <td>Availability criteria A1.1–A1.3</td>
+          <td>A1.1 requires capacity planning and thresholds; A1.2 recovery infrastructure; A1.3 recovery plan testing. Exhaustion floods stress exactly these promises.</td>
+          <td>Capacity monitoring dashboards; documented thresholds and alerts; DR (disaster recovery) test evidence; incident postmortems.</td>
+        </tr>
+        <tr>
+          <td><b>PCI DSS 4.0</b> (card payments)</td>
+          <td>Requirement 12.10.x (incident response family: the plan, its testing, and prompt response to detection alerts); Requirements 1.x (network security controls)</td>
+          <td>Payment environments must detect and respond to attacks; network security controls such as firewalls and rate limiting are the first containment layer.</td>
+          <td>Incident response runbooks including DoS; firewall/WAF policy exports; per-client rate-limit configuration; response drill records.</td>
+        </tr>
+        <tr>
+          <td><b>NIST SP 800-53 Rev. 5</b></td>
+          <td>SC-5 (denial-of-service protection); CP-7 (alternate processing site); CP-10 (system recovery); IR-4 (incident handling)</td>
+          <td>SC-5 directly targets DoS resistance through resource limits and filtering; CP and IR controls cover recovery and response.</td>
+          <td>Control implementation statements; resource-limit configurations; recovery test logs; incident handling metrics.</td>
+        </tr>
+        <tr>
+          <td><b>CIS Controls v8</b></td>
+          <td>Control 12 (network infrastructure management); Control 13 (network monitoring and defense)</td>
+          <td>Control 12 keeps boundary devices able to shed attack traffic; Control 13 demands the monitoring that spots exhaustion patterns early.</td>
+          <td>Documented network device configurations; SIEM (security information and event management) alert rules; quarterly review records.</td>
+        </tr>
+        <tr>
+          <td><b>Legal backdrop</b> (computer misuse laws)</td>
+          <td>US CFAA (the Computer Fraud and Abuse Act); Council of Europe Cybercrime Convention Art. 4–5</td>
+          <td>Article 5 ("system interference") of the convention and similar national laws make deliberate DoS attacks crimes. CFAA prosecutions have covered flooding attacks. This row is why "lab only" is not negotiable.</td>
+          <td>Awareness training records; acceptable-use policies; lab isolation statements; law-enforcement report templates for real incidents.</td>
+        </tr>
+      </tbody>
+    </table></div>
+
+    <h3 id="threat-intelligence">5.2 Threat intelligence</h3>
+    <p>Threat intelligence is knowledge about who attacks, how, and why. For T1499.003, intelligence answers
+    a practical question: <em>who is likely to attack my expensive endpoints, and what will it look like?</em></p>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Sources worth following</h4>
+        <ul>
+          <li><b>MITRE ATT&amp;CK:</b> the parent T1499 page and its sub-techniques; group and software pages that reference them.</li>
+          <li><b>Government alerts:</b> CISA and FBI joint advisories on DDoS and extortion campaigns.</li>
+          <li><b>Vendor reports:</b> annual DDoS landscape reports from network and CDN providers; WAF telemetry summaries.</li>
+          <li><b>OSINT:</b> open-source intelligence such as conference talks, research blogs, and CVE databases. The 2011 hashDoS research (Klink and Wälde, 28C3) is a good example: public, detailed, and it changed how every web framework parses POST data.</li>
+          <li><b>ISACs:</b> sector sharing groups such as MS-ISAC (state and local government), FS-ISAC (finance), and H-ISAC (health).</li>
+          <li><b>Commercial feeds:</b> paid indicator lists; useful for client IP reputation, weaker for technique detail.</li>
+          <li><b>Internal telemetry:</b> your own logs and WAF data. The best source for "what does this look like on <em>our</em> stack".</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>A simple four-step workflow</h4>
+        <ol>
+          <li><b>Collect.</b> Pull reports from two or three sources on a fixed schedule. Note claims with dates and links.</li>
+          <li><b>Analyze.</b> Ask: does this apply to our stack? Which of our endpoints match the described pattern? How credible is the source?</li>
+          <li><b>Apply.</b> Turn findings into detections and tests: new Sigma rules, WAF rules, a load test in the lab, a story in the backlog.</li>
+          <li><b>Review.</b> After a quarter, check which intelligence actually changed a control. Drop sources that never do.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Actor / campaign</th><th scope="col">Relevance to T1499.003</th><th scope="col">Confidence and why</th><th scope="col">Source</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Security researchers</b> — Klink and Wälde, hashDoS disclosure (2011)</td>
+          <td>Documented the hash-collision POST flood technique that forced an industry-wide fix; the technique itself is reusable and still relevant where limits are missing.</td>
+          <td><span class="badge ok">High</span> Fully documented: 28C3 talk, CVE-2011-3414, vendor advisories.</td>
+          <td>28C3 conference record; NVD (National Vulnerability Database) entry for CVE-2011-3414; vendor advisories.</td>
+        </tr>
+        <tr>
+          <td><b>DDoS extortion crews</b> moving up to application-layer attacks</td>
+          <td>Extortion campaigns increasingly combine volumetric floods with application-layer pressure when a target survives the first wave.</td>
+          <td><span class="badge info">Medium</span> Consistently described in provider threat reports, but attribution is rarely confirmed.</td>
+          <td>Vendor DDoS landscape reports; CISA/FBI extortion advisories.</td>
+        </tr>
+        <tr>
+          <td><b>Hacktivist campaigns</b> using LOIC/HOIC-style flooding tools (public "cannon" flooding tools of that era)</td>
+          <td>Tools of the 2010–2015 era targeted application features of public websites; the tactic reappears around political events.</td>
+          <td><span class="badge info">Medium</span> Campaigns are well documented historically; current tooling overlap with this sub-technique varies.</td>
+          <td>Public court records; contemporaneous incident reports; MITRE ATT&amp;CK group pages referencing DoS tooling.</td>
+        </tr>
+        <tr>
+          <td><b>Opportunistic botnets</b> probing for expensive endpoints</td>
+          <td>Automated clients replay heavy parameter combinations against search and API routes of many hosts, hoping a few are unprotected.</td>
+          <td><span class="badge info">Medium</span> Widely observed in honeypot and WAF telemetry; individual campaigns are short-lived.</td>
+          <td>Honeypot datasets; WAF vendor telemetry summaries; your own WAF logs.</td>
+        </tr>
+      </tbody>
+    </table></div>
+
+    <div class="callout callout-note"><p><span class="callout-label">Note</span>
+    Confidence labels here describe <b>evidence quality</b>, not attack impact. A Medium-confidence
+    actor can still take your service down. Keep claims tied to sources so colleagues can verify them.</p></div>
+  
+
+    <h3 id="threat-ranking">5.3 Threats ranking and categorization</h3>
+    <p>Seven realistic ways this sub-technique lands in real environments. Severity assumes a typical
+    internet-facing service with default settings and no dedicated DoS controls. Categories show where
+    the threat lives: platform, cloud, network, or identity.</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">#</th><th scope="col">Threat</th><th scope="col">Severity</th><th scope="col">Categories</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Expensive search / parameter flood (database scan amplification)</td><td><span class="badge sev-critical">Critical</span></td><td><span class="badge cat">Network</span> <span class="badge cat">Cloud</span></td></tr>
+        <tr><td>2</td><td>ReDoS — catastrophic regex backtracking</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span></td></tr>
+        <tr><td>3</td><td>Hash-collision POST parameter flood (hashDoS)</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span> <span class="badge cat">Linux</span> <span class="badge cat">Windows</span></td></tr>
+        <tr><td>4</td><td>XML entity expansion (billion laughs)</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge cat">Network</span></td></tr>
+        <tr><td>5</td><td>Login flood with expensive password hashing</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge cat">Identity</span> <span class="badge cat">Network</span></td></tr>
+        <tr><td>6</td><td>Complex API / GraphQL query flood</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge cat">Cloud</span> <span class="badge cat">Network</span></td></tr>
+        <tr><td>7</td><td>Compression-bomb uploads (decompression exhaustion)</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge cat">Network</span> <span class="badge cat">Cloud</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="cards">
+      <div class="card">
+        <h4>1 · Expensive search / parameter flood <span class="badge sev-critical">Critical</span> <span class="badge cat">Network</span> <span class="badge cat">Cloud</span></h4>
+        <p><b>Description.</b> An attacker finds a search or filter endpoint that accepts wildcards or huge ranges,
+        then replays crafted values so every request forces a full table scan.</p>
+        <p><b>Preconditions.</b> Public search/filter API; no query cost budget; no per-client latency limit.</p>
+        <p><b>Impact.</b> Database CPU saturates; all queries slow down; 5xx timeouts spread to every feature.</p>
+        <p><b>Why this rating.</b> A handful of requests can take down the whole backend, and the traffic looks
+        like normal search usage, so it is rated Critical.</p>
+      </div>
+      <div class="card">
+        <h4>2 · ReDoS <span class="badge sev-high">High</span> <span class="badge cat">Network</span></h4>
+        <p><b>Description.</b> Attacker input reaches a vulnerable regex (for example nested quantifiers like
+        <code>(a+)+</code>), and one request pins a worker for minutes or hours through backtracking.</p>
+        <p><b>Preconditions.</b> A vulnerable pattern on a request path; no regex execution time limit; often an untested user-supplied field.</p>
+        <p><b>Impact.</b> Worker threads vanish into the pattern; the service stalls with normal request volume.</p>
+        <p><b>Why this rating.</b> Devastating per request, but it needs a specific vulnerable pattern, so
+        slightly less universal than threat 1 — rated High.</p>
+      </div>
+      <div class="card">
+        <h4>3 · Hash-collision POST flood <span class="badge sev-high">High</span> <span class="badge cat">Network</span> <span class="badge cat">Linux</span> <span class="badge cat">Windows</span></h4>
+        <p><b>Description.</b> Thousands of crafted form fields with colliding keys force the framework's hash
+        table into linear work, as demonstrated publicly in 2011 against many languages and platforms.</p>
+        <p><b>Preconditions.</b> Framework without a max-POST-parameter limit (rare today, but old or custom stacks still exist); POST endpoints reachable without authentication.</p>
+        <p><b>Impact.</b> CPU pegged during request parsing; one small POST costs hours of processing.</p>
+        <p><b>Why this rating.</b> Modern frameworks mostly fixed it after CVE-2011-3414, but legacy systems remain
+        exposed, so it stays High.</p>
+      </div>
+      <div class="card">
+        <h4>4 · XML entity expansion <span class="badge sev-medium">Medium</span> <span class="badge cat">Network</span></h4>
+        <p><b>Description.</b> A small XML upload uses nested entity definitions ("billion laughs") to expand into
+        billions of characters while the parser processes it.</p>
+        <p><b>Preconditions.</b> An XML parser with entity support enabled; an upload or API path that accepts attacker XML.</p>
+        <p><b>Impact.</b> Memory and CPU spike; parser threads hang; possible process crash.</p>
+        <p><b>Why this rating.</b> Many modern parsers disable entities by default, and the blast radius is usually
+        one process — rated Medium.</p>
+      </div>
+      <div class="card">
+        <h4>5 · Login flood with password hashing <span class="badge sev-medium">Medium</span> <span class="badge cat">Identity</span> <span class="badge cat">Network</span></h4>
+        <p><b>Description.</b> A stream of fake login attempts forces the server to run slow password hashing
+        (bcrypt, Argon2) for every attempt, which is expensive by design.</p>
+        <p><b>Preconditions.</b> Login endpoint without per-client or per-account throttling; hashing cost factor tuned high without a capacity check.</p>
+        <p><b>Impact.</b> CPU saturates on useless hashes; real logins slow down; lockout storms annoy users.</p>
+        <p><b>Why this rating.</b> The cost per request is bounded and captchas or throttling are common, so it is
+        rated Medium.</p>
+      </div>
+      <div class="card">
+        <h4>6 · Complex API / GraphQL query flood <span class="badge sev-medium">Medium</span> <span class="badge cat">Cloud</span> <span class="badge cat">Network</span></h4>
+        <p><b>Description.</b> Deeply nested or oversized queries (huge page sizes, deep relation chains) make each
+        API call do enormous backend work.</p>
+        <p><b>Preconditions.</b> API without depth limits, pagination caps, or a query cost budget; introspection open to anonymous users.</p>
+        <p><b>Impact.</b> Backend fan-out multiplies; database and downstream services saturate; cloud bills spike with autoscaling.</p>
+        <p><b>Why this rating.</b> Cost is high but spread across many small services, and standard limits are widely
+        available — rated Medium.</p>
+      </div>
+      <div class="card">
+        <h4>7 · Compression-bomb uploads <span class="badge sev-medium">Medium</span> <span class="badge cat">Network</span> <span class="badge cat">Cloud</span></h4>
+        <p><b>Description.</b> A tiny compressed archive is uploaded, then expands to gigabytes while the
+        application decompresses it, filling memory, CPU, and disk.</p>
+        <p><b>Preconditions.</b> An upload path that decompresses archives before checking the expanded size; no expansion-ratio or size cap.</p>
+        <p><b>Impact.</b> Disk or memory fills within seconds; the process crashes or stalls; the host may hit cloud storage limits.</p>
+        <p><b>Why this rating.</b> Devastating when it works, but modern upload guards and archive-size checks are common — rated Medium.</p>
+      </div>
+    </div>
+
+    <h3 id="logs-and-patterns">5.4 Logs and patterns for each threat</h3>
+    <p>For every threat from 5.3: where the evidence lives, which fields matter, what normal looks like,
+    what suspicious looks like, and the detection logic in words. The patterns implement the official
+    analytics AN1165–AN1168 from section 4. Example lines use RFC 1918 lab addresses (the private ranges
+    such as 10.0.0.x) and documentation addresses (203.0.113.x, 198.51.100.x) only.</p>
+
+    <h4>Threat 1 · Expensive search / parameter flood</h4>
+    <div class="grid-2">
+      <div class="card">
+        <p><b>Log sources.</b> Reverse proxy access log (nginx), database slow-query log (MySQL, PostgreSQL), APM traces.</p>
+        <p><b>Key fields.</b> <code>client_ip</code>, <code>request_uri</code> (with the crafted <code>q</code> parameter), <code>status</code>, <code>upstream_response_time</code> (seconds the app spent on the request), database <code>Query_time</code>, <code>Rows_examined</code> (rows the database read to answer).</p>
+        <p><b>Normal behavior.</b> Search requests return 200 in well under one second; <code>Rows_examined</code> stays in the hundreds or thousands; response times per client look alike.</p>
+        <p><b>Suspicious behavior.</b> One client repeatedly sends wildcard-heavy queries; the same endpoint shows multi-second times; <code>Rows_examined</code> jumps to millions while <code>Rows_sent</code> stays tiny.</p>
+      </div>
+      <div class="card">
+        <p><b>Detection logic.</b></p>
+        <ul>
+          <li>Group access-log events by <code>client_ip</code> over 5 minutes.</li>
+          <li>Flag clients with 20 or more responses of 500/504 <em>and</em> <code>upstream_response_time</code> of 5 seconds or more.</li>
+          <li>Independently flag slow-query-log entries with <code>Query_time</code> over 10 seconds and <code>Rows_examined</code> over 1,000,000.</li>
+          <li>Correlate: if the same time window shows both, raise severity to Critical.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">nginx access log</span><button type="button" class="copy-btn" aria-label="Copy log line to clipboard">Copy</button></figcaption>
+      <pre><code>203.0.113.77 - - [12/Mar/2025:10:15:31 +0000] "GET /search?q=%%%a%%%&amp;sort=relevance HTTP/1.1" 504 567 "https://shop.example.com/search" "Mozilla/5.0" rt=0.002 urt=15.001</code></pre>
+    </figure>
+    <p><b>Field notes.</b> <code>203.0.113.77</code> is the client address. The bracketed stamp is the local request time.
+    <code>504</code> is the HTTP status returned to the client (gateway timeout). <code>rt</code> is <code>$request_time</code>:
+    total seconds nginx spent on the request. <code>urt</code> is <code>$upstream_response_time</code>: how long the
+    application behind nginx took — here 15 seconds, which is the real story.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">MySQL slow query log</span><button type="button" class="copy-btn" aria-label="Copy log block to clipboard">Copy</button></figcaption>
+      <pre><code># Time: 2025-03-12T10:15:46.812345Z
+# User@Host: shop_app[shop_app] @  [10.0.0.20]  Id: 88041
+# Query_time: 15.284101  Lock_time: 0.000102  Rows_sent: 12  Rows_examined: 24118026
+SET timestamp=1741774546;
+SELECT id, name, price FROM products
+WHERE name LIKE '%%%a%%%' OR description LIKE '%%%a%%%'
+ORDER BY created_at DESC LIMIT 12;</code></pre>
+    </figure>
+    <p><b>Field notes.</b> <code>Query_time</code> is seconds the statement ran. <code>Rows_sent</code> is what the
+    client received; <code>Rows_examined</code> is what the engine had to read. Reading 24 million rows to send 12
+    is the definition of an amplifying query.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">PostgreSQL log</span><button type="button" class="copy-btn" aria-label="Copy log line to clipboard">Copy</button></figcaption>
+      <pre><code>2025-03-12 10:15:46.812 UTC [88041] shop_app@shopdb LOG:  duration: 15234.123 ms  statement: SELECT id, name FROM products WHERE name LIKE '%\%a\%%' ORDER BY created_at DESC LIMIT 12;</code></pre>
+    </figure>
+    <p><b>Field notes.</b> The prefix shows time, process id (88041), and user@database. <code>duration:</code> is
+    milliseconds. With <code>log_min_duration_statement = 10000</code>, every statement slower than 10 seconds lands here.</p>
+
+    <h4>Threat 2 · ReDoS</h4>
+    <div class="grid-2">
+      <div class="card">
+        <p><b>Log sources.</b> PHP-FPM (the PHP FastCGI Process Manager that spawns PHP workers) / application server logs, nginx access log, APM spans, syslog.</p>
+        <p><b>Key fields.</b> <code>message</code> (worker pool warnings), <code>pool</code> (worker pool name), <code>status</code> 499/504, <code>upstream_response_time</code>, APM span duration on the regex-using function.</p>
+        <p><b>Normal behavior.</b> Worker pools occasionally hit limits during deploys or traffic peaks and recover; few 499s (clients giving up).</p>
+        <p><b>Suspicious behavior.</b> Repeated <code>max_children</code> warnings without a traffic peak; requests to one endpoint stuck near the timeout limit; one client with many 499/504 pairs.</p>
+      </div>
+      <div class="card">
+        <p><b>Detection logic.</b></p>
+        <ul>
+          <li>Alert on 3 or more "server reached max_children" events per host in 15 minutes.</li>
+          <li>Join with access logs: were those minutes full of requests to a single endpoint from a small client set?</li>
+          <li>Flag any single request whose <code>upstream_response_time</code> sits within 2 percent of the proxy timeout — a fingerprint of a worker stuck in a regex loop.</li>
+          <li>Check deploys: if warnings coincide with a release, treat as a code bug, not an attack.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">php-fpm log</span><button type="button" class="copy-btn" aria-label="Copy log line to clipboard">Copy</button></figcaption>
+      <pre><code>[12-Mar-2025 10:16:02] WARNING: [pool www] server reached max_children setting (5), consider raising it</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">nginx access log</span><button type="button" class="copy-btn" aria-label="Copy log line to clipboard">Copy</button></figcaption>
+      <pre><code>203.0.113.77 - - [12/Mar/2025:10:16:02 +0000] "POST /api/validate-address HTTP/1.1" 499 0 "-" "python-requests/2.31" rt=60.003 urt=60.001</code></pre>
+    </figure>
+    <p><b>Field notes.</b> Status <code>499</code> is nginx's own code: the client closed the connection before the answer
+    arrived. <code>rt=60.003</code> means the worker spent a full timeout window — often a regex in trouble.
+    <code>max_children (5)</code> means all 5 PHP worker processes were busy; a small lab pool is realistic.</p>
+
+    <h4>Threat 3 · Hash-collision POST flood</h4>
+    <div class="grid-2">
+      <div class="card">
+        <p><b>Log sources.</b> IIS W3C logs, web framework logs (ASP.NET, PHP, Java), Windows event log, nginx access logs.</p>
+        <p><b>Key fields.</b> IIS <code>time-taken</code> (seconds the request occupied the server), <code>c-ip</code> (client), <code>cs-method</code> POST, <code>sc-status</code>, request body size, framework CPU counters.</p>
+        <p><b>Normal behavior.</b> POST requests to forms finish in well under a second even at busy hours; <code>time-taken</code> rarely exceeds 1–2 seconds.</p>
+        <p><b>Suspicious behavior.</b> POSTs with absurdly many parameters (thousands of fields) to one endpoint; <code>time-taken</code> in the hundreds of seconds; CPU pegged on the web tier with low request volume.</p>
+      </div>
+      <div class="card">
+        <p><b>Detection logic.</b></p>
+        <ul>
+          <li>Select POST requests with <code>time-taken</code> of 5 seconds or more.</li>
+          <li>Count per client over 5 minutes; alert when one client exceeds 30 such requests.</li>
+          <li>Flag requests whose parameter count (from framework or WAF logs) exceeds a sane limit such as 100 fields.</li>
+          <li>Correlate with CPU: web-tier CPU above 90 percent while requests per second are low means parsing cost, not load.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">IIS W3C log</span><button type="button" class="copy-btn" aria-label="Copy log lines to clipboard">Copy</button></figcaption>
+      <pre><code>#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port c-ip cs(User-Agent) sc-status sc-substatus sc-win32-status time-taken
+2025-03-12 10:16:02 10.0.0.10 POST /Checkout/Update - 80 203.0.113.77 python-requests/2.31 200 0 0 1452
+2025-03-12 10:16:04 10.0.0.10 POST /Checkout/Update - 80 203.0.113.77 python-requests/2.31 200 0 0 1501</code></pre>
+    </figure>
+    <p><b>Field notes.</b> The <code>#Fields:</code> line names every column — always read it first. Here each POST
+    occupied the server for 1452 and 1501 <b>seconds</b> (<code>time-taken</code>). Status 200 looks innocent; the time
+    column tells the truth. This is the classic hashDoS signature on IIS/ASP.NET.</p>
+
+    <h4>Threat 4 · XML entity expansion (billion laughs)</h4>
+    <div class="grid-2">
+      <div class="card">
+        <p><b>Log sources.</b> Application exception logs (Java, .NET), WAF/ModSecurity audit logs, system OOM (out-of-memory) events.</p>
+        <p><b>Key fields.</b> Exception class and message, <code>request_id</code>, <code>client_ip</code>, WAF <code>rule_id</code>, content length of the uploaded body.</p>
+        <p><b>Normal behavior.</b> Well-formed small XML documents parse in milliseconds; occasional validation errors from genuine integration mistakes.</p>
+        <p><b>Suspicious behavior.</b> Entity-expansion limit errors; tiny request bodies followed by parser hangs; the same client uploading XML repeatedly right before memory alarms.</p>
+      </div>
+      <div class="card">
+        <p><b>Detection logic.</b></p>
+        <ul>
+          <li>Alert when parser exceptions mention entity limits or "DOCTYPE disallowed" more than 3 times per hour.</li>
+          <li>Flag XML uploads larger than a few KB whose processing exceeds 5 seconds.</li>
+          <li>Correlate WAF rule hits for DOCTYPE/entity payloads with client reputation; one client repeating is an attack probe.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Java application log</span><button type="button" class="copy-btn" aria-label="Copy log line to clipboard">Copy</button></figcaption>
+      <pre><code>2025-03-12T10:16:05.312Z ERROR [http-nio-8080-exec-4] c.e.app.XmlImportService - SAXParseException: JAXP00010001: The parser has encountered more than "64,000" entity expansions in this document; this is the limit imposed by the JDK. request_id=7f3a2b client_ip=203.0.113.77 body_bytes=1187</code></pre>
+    </figure>
+    <p><b>Field notes.</b> The JDK caps entity expansions at 64,000 by default and logs this exact sentence when the
+    cap stops a document. <code>body_bytes=1187</code> versus a parser event is the billion-laugh fingerprint: a kilobyte
+    of XML causing megaseconds of work.</p>
+
+    <h4>Threat 5 · Login flood with expensive password hashing</h4>
+    <div class="grid-2">
+      <div class="card">
+        <p><b>Log sources.</b> nginx access log (login route), identity provider logs, database CPU metrics, WAF.</p>
+        <p><b>Key fields.</b> <code>client_ip</code>, <code>request_uri</code> (<code>/login</code>), <code>http_method</code> POST, <code>status</code> (401 vs 200), <code>upstream_response_time</code>, account names tried.</p>
+        <p><b>Normal behavior.</b> Login latency reflects hashing cost (for example 0.2–0.5 seconds); failures are a small share of attempts; clients are many and varied.</p>
+        <p><b>Suspicious behavior.</b> One client making 30+ POSTs per minute to <code>/login</code>; elevated average latency during the burst; most attempts return 401 (authentication failure).</p>
+      </div>
+      <div class="card">
+        <p><b>Detection logic.</b></p>
+        <ul>
+          <li>Count POSTs to the login route per client over 1 minute; alert above 30.</li>
+          <li>Require corroboration: average <code>upstream_response_time</code> for that client above 1 second (proof of hashing cost, not just scanning).</li>
+          <li>Watch lockout counters: many distinct accounts from one client means credential stuffing plus CPU pressure.</li>
+          <li>Compare with CAPTCHA (a bot-check challenge) or MFA (multi-factor authentication) events to separate bots from humans.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">nginx access log</span><button type="button" class="copy-btn" aria-label="Copy log lines to clipboard">Copy</button></figcaption>
+      <pre><code>203.0.113.77 - - [12/Mar/2025:10:16:10 +0000] "POST /login HTTP/1.1" 401 129 "-" "python-requests/2.31" rt=0.912 urt=0.910
+203.0.113.77 - - [12/Mar/2025:10:16:11 +0000] "POST /login HTTP/1.1" 401 129 "-" "python-requests/2.31" rt=0.908 urt=0.905</code></pre>
+    </figure>
+    <p><b>Field notes.</b> Two failed logins one second apart, each costing roughly 0.9 seconds of application time —
+    that is bcrypt doing its job against a flood. Multiply by hundreds of requests and the CPU bill becomes visible.</p>
+
+    <h4>Threat 6 · Complex API / GraphQL query flood</h4>
+    <div class="grid-2">
+      <div class="card">
+        <p><b>Log sources.</b> nginx or gateway access logs, GraphQL server logs, APM traces, cloud provider metrics.</p>
+        <p><b>Key fields.</b> <code>request_uri</code> (<code>/graphql</code>), <code>status</code>, <code>bytes</code> sent, <code>upstream_response_time</code>, query depth/complexity from the server, autoscaling events.</p>
+        <p><b>Normal behavior.</b> GraphQL responses return in hundreds of milliseconds; payload sizes match the requested fields; complexity metrics stable.</p>
+        <p><b>Suspicious behavior.</b> Requests with response sizes tens or hundreds of times the median; deep nesting flagged by the server; autoscaling firing repeatedly with no business reason.</p>
+      </div>
+      <div class="card">
+        <p><b>Detection logic.</b></p>
+        <ul>
+          <li>Flag 20 or more responses of 500/504 per client in 5 minutes with <code>upstream_response_time</code> of 5 seconds or more on API routes.</li>
+          <li>Compare each response's byte size to the endpoint median; alert when a client's ratio stays above 50x.</li>
+          <li>Alert on query depth above the configured maximum (for example deeper than 8 levels).</li>
+          <li>Track cloud autoscaling events per hour as a lagging but loud signal.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">nginx access log</span><button type="button" class="copy-btn" aria-label="Copy log line to clipboard">Copy</button></figcaption>
+      <pre><code>203.0.113.77 - - [12/Mar/2025:10:16:20 +0000] "POST /graphql HTTP/1.1" 504 318 "-" "strangler/1.0" rt=9.998 urt=9.990</code></pre>
+    </figure>
+    <p><b>Field notes.</b> A 504 on <code>/graphql</code> with a 10-second upstream time shows the resolver tree ran
+    out of patience, not the network. Pair this with the GraphQL server's own complexity log for the full picture.</p>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">APM trace span (OpenTelemetry JSON)</span><button type="button" class="copy-btn" aria-label="Copy log line to clipboard">Copy</button></figcaption>
+      <pre><code>{"trace_id":"4bf92f3577b34da6a3ce929d0e0e4736","span_id":"00f067aa0ba902b7","name":"POST /graphql","kind":"server","start_time":"2025-03-12T10:16:10.112Z","end_time":"2025-03-12T10:16:20.105Z","duration_ms":9993,"attributes":{"client.ip":"203.0.113.77","graphql.operation.name":"OrderHistory","graphql.depth":11,"http.status_code":504,"db.rows_read":18400000}}</code></pre>
+    </figure>
+    <p><b>Field notes.</b> A distributed trace records one request's journey as linked spans. This server span
+    lasted 9.993 seconds (<code>duration_ms</code>). The attributes show depth 11 (deep nesting), 18.4 million
+    rows read, and a 504 — the application-side fingerprint that pairs with the nginx record above.</p>
+
+    <h4>Threat 7 · Compression-bomb uploads</h4>
+    <div class="grid-2">
+      <div class="card">
+        <p><b>Log sources.</b> Upload-service application logs, WAF/ModSecurity audit logs, host disk and memory alarms, cloud storage metrics.</p>
+        <p><b>Key fields.</b> <code>message</code> (decompression guard line), <code>client_ip</code>, uploaded <code>body_bytes</code>, expanded size, expansion ratio, <code>action</code> (accepted or rejected).</p>
+        <p><b>Normal behavior.</b> Uploaded archives expand to sizes close to their compressed size; ratios stay near 10x or less; disk usage tracks business volume.</p>
+        <p><b>Suspicious behavior.</b> Expansion ratios in the hundreds; a tiny request body followed by multi-second decompression and a disk-write spike; repeated uploads of the same archive shape from one client.</p>
+      </div>
+      <div class="card">
+        <p><b>Detection logic.</b></p>
+        <ul>
+          <li>Alert when an upload's expanded size exceeds 100 MB, or its expansion ratio exceeds 100x.</li>
+          <li>Flag any client that triggers 5 or more decompression-guard events within 5 minutes.</li>
+          <li>Correlate guard events with disk-write spikes or OOM (out-of-memory) events in the following 10 minutes.</li>
+        </ul>
+      </div>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Upload service log</span><button type="button" class="copy-btn" aria-label="Copy log line to clipboard">Copy</button></figcaption>
+      <pre><code>2025-03-12T10:17:02Z WARN upload-service: decompression guard: archive 10.2 MB expanded to 4.1 GB (ratio 412x, limit 100 MB); client_ip=203.0.113.77 request_id=9f2c1d action=rejected</code></pre>
+    </figure>
+    <p><b>Field notes.</b> The guard compares compressed size with expanded size and stops the job at the limit.
+    A 10.2 MB upload that wanted 4.1 GB of disk is the bomb fingerprint. <code>action=rejected</code> proves
+    the control worked — but five rejections from one client means someone is probing the upload path.</p>
+
+    <h3 id="sigma-and-spl">5.5 Sigma rules and Splunk SPL</h3>
+    <p><b>Sigma</b> is an open format for writing detection rules once and using them in many SIEM products.
+    <b>SPL</b> (Search Processing Language) is Splunk's query language. Below, each of the seven threats
+    from 5.3 gets one Sigma rule and one matching SPL query. Field names assume a common setup; rename them for your
+    environment. Each SPL query opens with an <code>earliest=-</code> window that mirrors the Sigma
+    <code>timeframe</code>, so the two logic sets stay equal. All rules reference the ATT&amp;CK technique
+    and are safe: they only read logs.</p>
+
+    <h4>Rule 1 · PostgreSQL slow-query flood (threat 1)</h4>
+    <div class="grid-2">
+      <div class="card">
+        <p><b>Severity:</b> <span class="badge sev-high">High</span></p>
+        <p><b>Mapping.</b> Sigma <code>message</code> → SPL <code>_raw</code>; Sigma <code>host</code> → SPL <code>host</code>. The regex extracts <code>duration_ms</code> for numeric comparison.</p>
+        <p><b>False positives.</b> Legitimate analytics jobs, month-end reports, a missing index after a schema change.</p>
+        <p><b>Tuning.</b> Raise the duration threshold if batch reporting is normal for you; exclude known reporting service accounts; require correlation with 5xx waves for Critical severity.</p>
+      </div>
+      <div class="card">
+        <p><b>SPL assumption.</b> <code>index=db</code>, <code>sourcetype=postgresql:log</code>, <code>host</code> field present, 15-minute lookback (<code>earliest=-15m</code>) mirroring the Sigma timeframe — rename for your environment.</p>
+      </div>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Sigma YAML</span><button type="button" class="copy-btn" aria-label="Copy Sigma rule to clipboard">Copy</button></figcaption>
+      <pre><code>title: PostgreSQL Slow-Query Flood Possible Application Exhaustion
+id: d41179b8-f8f3-4325-99a1-e10d5cd04ae7
+status: stable
+description: Many PostgreSQL statements slower than 10 seconds within a short window,
+  consistent with an expensive-parameter application exhaustion flood (T1499.003).
+references:
+  - https://attack.mitre.org/techniques/T1499/003/
+author: Detection Engineering Team
+date: 2025-03-18
+logsource:
+  product: postgresql
+  service: postgresql
+detection:
+  selection_duration:
+    message|re: 'duration:\s*\d{5,}\.\d+ ms'
+  selection_statement:
+    message|contains: 'statement:'
+  timeframe: 15m
+  condition: "selection_duration and selection_statement | count() by host &gt; 20"
+fields:
+  - host
+  - message
+falsepositives:
+  - Legitimate heavy reporting or batch jobs
+  - Missing indexes after schema changes
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.003</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn" aria-label="Copy SPL query to clipboard">Copy</button></figcaption>
+      <pre><code>index=db sourcetype=postgresql:log earliest=-15m "statement:"
+| rex field=_raw "duration:\s*(?&lt;duration_ms&gt;\d+\.\d+)\sms"
+| where duration_ms &gt;= 10000
+| stats count AS slow_queries, avg(duration_ms) AS avg_ms, max(duration_ms) AS max_ms BY host
+| where slow_queries &gt; 20</code></pre>
+    </figure>
+
+    <h4>Rule 2 · PHP-FPM worker pool exhaustion (threat 2)</h4>
+    <div class="card">
+      <p><b>Severity:</b> <span class="badge sev-high">High</span> · <b>Mapping.</b> Sigma <code>message</code> → SPL <code>_raw</code>; Sigma <code>host</code> → SPL <code>host</code>. <b>False positives.</b> Traffic peaks, deploy warm-up, an undersized pool with no attack. <b>Tuning.</b> Pair with access-log context (same minutes dominated by one endpoint); size the pool deliberately so the warning is meaningful.</p>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Sigma YAML</span><button type="button" class="copy-btn" aria-label="Copy Sigma rule to clipboard">Copy</button></figcaption>
+      <pre><code>title: PHP-FPM Server Reached Max Children Repeatedly
+id: 02fb1f11-6748-4aaf-819f-62bf945034dd
+status: stable
+description: Repeated PHP-FPM worker pool exhaustion warnings. Can be caused by
+  catastrophic regex backtracking or other very slow requests (T1499.003).
+references:
+  - https://attack.mitre.org/techniques/T1499/003/
+author: Detection Engineering Team
+date: 2025-04-02
+logsource:
+  product: php
+  service: fpm
+detection:
+  selection:
+    message|contains: 'server reached max_children'
+  timeframe: 15m
+  condition: "selection | count() by host &gt; 2"
+fields:
+  - host
+  - message
+falsepositives:
+  - Genuine traffic peaks
+  - Pool sized too small without any attack
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.003</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn" aria-label="Copy SPL query to clipboard">Copy</button></figcaption>
+      <pre><code>index=app sourcetype=php:fpm earliest=-15m "server reached max_children"
+| stats count AS warnings, latest(_raw) AS last_event BY host
+| where warnings &gt; 2</code></pre>
+    </figure>
+
+    <h4>Rule 3 · IIS time-taken flood (threat 3)</h4>
+    <div class="card">
+      <p><b>Severity:</b> <span class="badge sev-high">High</span> · <b>Mapping.</b> Sigma <code>c_ip</code> → SPL <code>c_ip</code>; Sigma <code>cs_method</code>/<code>sc_status</code>/<code>time_taken</code> → the same names in Splunk's IIS sourcetype. <b>False positives.</b> Huge legitimate uploads or exports on POST routes. <b>Tuning.</b> Exclude known file-transfer endpoints; add a parameter-count check from WAF logs for stronger hashDoS evidence.</p>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Sigma YAML</span><button type="button" class="copy-btn" aria-label="Copy Sigma rule to clipboard">Copy</button></figcaption>
+      <pre><code>title: IIS POST Requests With Extreme Time-Taken Per Client
+id: 4039e550-7405-44f2-a019-d15dd191d6fa
+status: stable
+description: One client sending many POST requests that each occupy the server for
+  5 or more seconds. Classic signature of hash-collision parsing floods (T1499.003,
+  hashDoS family, CVE-2011-3414 era behaviour on unpatched stacks).
+references:
+  - https://attack.mitre.org/techniques/T1499/003/
+author: Detection Engineering Team
+date: 2025-05-14
+logsource:
+  product: windows
+  service: iis
+detection:
+  selection_post:
+    cs_method: 'POST'
+  selection_status:
+    sc_status: '200'
+  selection_slow:
+    time_taken|gte: 5
+  timeframe: 5m
+  condition: "selection_post and selection_status and selection_slow | count() by c_ip &gt; 30"
+fields:
+  - c_ip
+  - cs_uri_stem
+  - sc_status
+  - time_taken
+falsepositives:
+  - Large legitimate uploads or exports
+  - Backup agents posting big payloads
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.003</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn" aria-label="Copy SPL query to clipboard">Copy</button></figcaption>
+      <pre><code>index=web sourcetype=iis earliest=-5m cs_method=POST sc_status=200 time_taken&gt;=5
+| stats count AS slow_posts, avg(time_taken) AS avg_secs, max(time_taken) AS max_secs BY c_ip
+| where slow_posts &gt; 30</code></pre>
+    </figure>
+
+    <h4>Rule 4 · WAF block storm per source (threat 4)</h4>
+    <div class="card">
+      <p><b>Severity:</b> <span class="badge sev-medium">Medium</span> · <b>Mapping.</b> Sigma <code>message</code> → SPL <code>_raw</code>; Sigma <code>client_ip</code> → SPL <code>client_ip</code> extracted with <code>rex</code> from the ModSecurity line; Sigma <code>rule_id</code> → SPL <code>rule_id</code>. <b>False positives.</b> A real vulnerability being hammered by scanners (still an incident); one aggressive penetration test you approved. <b>Tuning.</b> Keep a small allow-list for corporate egress addresses; alert on the count of distinct rules hit, not only volume.</p>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Sigma YAML</span><button type="button" class="copy-btn" aria-label="Copy Sigma rule to clipboard">Copy</button></figcaption>
+      <pre><code>title: ModSecurity Denied Request Storm From One Source
+id: eb773b5c-f2bf-40f5-8ed0-2bfaa4a9a6e7
+status: stable
+description: A single source triggers 50 or more WAF denials in 5 minutes. Often
+  reconnaissance or an application exhaustion attempt that the WAF absorbs,
+  including XML entity expansion payloads (T1499.003).
+references:
+  - https://attack.mitre.org/techniques/T1499/003/
+author: Detection Engineering Team
+date: 2025-08-27
+logsource:
+  product: linux
+  service: modsecurity
+detection:
+  selection_denied:
+    message|contains: 'Access denied with code 403'
+  selection_rule:
+    message|contains: '[id "'
+  timeframe: 5m
+  condition: "selection_denied and selection_rule | count() by client_ip &gt; 50"
+fields:
+  - client_ip
+  - rule_id
+  - message
+falsepositives:
+  - Approved penetration tests
+  - Public vulnerability scanners sweeping a genuinely weak endpoint
+level: medium
+tags:
+  - attack.impact
+  - attack.t1499.003</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn" aria-label="Copy SPL query to clipboard">Copy</button></figcaption>
+      <pre><code>index=web sourcetype=modsecurity earliest=-5m "Access denied with code 403"
+| rex field=_raw "\[id \"(?&lt;rule_id&gt;\d+)\"\]"
+| rex field=_raw "client\s+(?&lt;client_ip&gt;\d+\.\d+\.\d+\.\d+)"
+| stats count AS blocks, dc(rule_id) AS distinct_rules BY client_ip
+| where blocks &gt; 50</code></pre>
+    </figure>
+
+    <h4>Rule 5 · Login endpoint POST burst (threat 5)</h4>
+    <div class="card">
+      <p><b>Severity:</b> <span class="badge sev-medium">Medium</span> · <b>Mapping.</b> Sigma <code>client_ip</code> → SPL <code>clientip</code>; Sigma <code>http_method</code> → SPL <code>method</code>; Sigma <code>request_uri</code> → SPL <code>uri</code>; Sigma <code>upstream_response_time</code> → SPL field of the same name (custom nginx log format). <b>False positives.</b> One user with a stuck password manager; a load test you forgot to tag. <b>Tuning.</b> Require the latency condition so plain scanning does not trigger; exempt the corporate VPN range; keep hash-cost logging enabled to corroborate.</p>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Sigma YAML</span><button type="button" class="copy-btn" aria-label="Copy Sigma rule to clipboard">Copy</button></figcaption>
+      <pre><code>title: Login Endpoint POST Burst With Elevated Latency
+id: 8d36dd17-9a1a-4b8d-bf82-7d57bdbc9b59
+status: stable
+description: More than 30 POST requests to /login from one client in one minute
+  with application time above one second, consistent with a login flood that
+  forces expensive password hashing (T1499.003).
+references:
+  - https://attack.mitre.org/techniques/T1499/003/
+author: Detection Engineering Team
+date: 2025-11-05
+logsource:
+  category: webserver
+  product: nginx
+  service: access
+detection:
+  selection_method:
+    http_method: 'POST'
+  selection_route:
+    request_uri|startswith: '/login'
+  selection_latency:
+    upstream_response_time|gte: 1
+  timeframe: 1m
+  condition: "selection_method and selection_route and selection_latency | count() by client_ip &gt; 30"
+fields:
+  - client_ip
+  - request_uri
+  - status
+  - upstream_response_time
+falsepositives:
+  - A misconfigured script retrying a valid login
+  - Internal load tests without a marker
+level: medium
+tags:
+  - attack.impact
+  - attack.t1499.003</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn" aria-label="Copy SPL query to clipboard">Copy</button></figcaption>
+      <pre><code>index=web sourcetype=nginx:access earliest=-1m method=POST uri="/login*" upstream_response_time&gt;=1
+| stats count AS attempts, avg(upstream_response_time) AS avg_urt, max(upstream_response_time) AS max_urt BY clientip
+| where attempts &gt; 30</code></pre>
+    </figure>
+
+    <h4>Rule 6 · nginx 5xx wave with slow upstream (threats 1 and 6)</h4>
+    <div class="card">
+      <p><b>Severity:</b> <span class="badge sev-critical">Critical</span> · <b>Mapping.</b> Sigma <code>client_ip</code> → SPL <code>clientip</code>; Sigma <code>status</code> → SPL <code>status</code>; Sigma <code>upstream_response_time</code> → same name; Sigma <code>request_uri</code> → SPL <code>uri</code>. <b>False positives.</b> A real bug released to production; a downstream service outage unrelated to any client. <b>Tuning.</b> The per-client grouping is the key: infrastructure faults hit all clients evenly, exhaustion floods concentrate on a few. Alert only when one client dominates.</p>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Sigma YAML</span><button type="button" class="copy-btn" aria-label="Copy Sigma rule to clipboard">Copy</button></figcaption>
+      <pre><code>title: Nginx 5xx Wave With Very Slow Upstream From One Client
+id: 184c5d25-b0ee-47d2-9d55-180208b70d18
+status: stable
+description: One client receives 20 or more HTTP 500 or 504 answers in five minutes
+  while the upstream application needed 5 or more seconds per request. Strong
+  signature of an application exhaustion flood (T1499.003).
+references:
+  - https://attack.mitre.org/techniques/T1499/003/
+author: Detection Engineering Team
+date: 2026-01-22
+logsource:
+  product: nginx
+  service: access
+detection:
+  selection_error:
+    status:
+      - '500'
+      - '504'
+  selection_slow:
+    upstream_response_time|gte: 5
+  timeframe: 5m
+  condition: "selection_error and selection_slow | count() by client_ip &gt; 20"
+fields:
+  - client_ip
+  - request_uri
+  - status
+  - upstream_response_time
+falsepositives:
+  - A broken release causing errors for everyone
+  - A downstream outage unrelated to client behaviour
+level: critical
+tags:
+  - attack.impact
+  - attack.t1499.003</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn" aria-label="Copy SPL query to clipboard">Copy</button></figcaption>
+      <pre><code>index=web sourcetype=nginx:access earliest=-5m status IN (500, 504) upstream_response_time&gt;=5
+| stats count AS events, max(upstream_response_time) AS max_urt, values(uri) AS sample_uris BY clientip
+| where events &gt; 20</code></pre>
+    </figure>
+
+    <h4>Rule 7 · Decompression-bomb upload attempts (threat 7)</h4>
+    <div class="grid-2">
+      <div class="card">
+        <p><b>Severity:</b> <span class="badge sev-medium">Medium</span></p>
+        <p><b>Mapping.</b> Sigma <code>message</code> → SPL <code>_raw</code>; Sigma <code>client_ip</code> → SPL <code>client_ip</code>, extracted with <code>rex</code> from the guard line; the expansion ratio is extracted the same way for tuning.</p>
+        <p><b>False positives.</b> A legitimate bulk-data export uploaded as an archive; an approved internal restore job.</p>
+        <p><b>Tuning.</b> Exclude internal backup addresses; adjust the ratio threshold to your data mix; single rejections prove the guard works — page only when one client repeats.</p>
+      </div>
+      <div class="card">
+        <p><b>SPL assumption.</b> <code>index=app</code>, <code>sourcetype=upload:service</code>, guard lines parsed with <code>rex</code>, 5-minute lookback (<code>earliest=-5m</code>) mirroring the Sigma timeframe.</p>
+      </div>
+    </div>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Sigma YAML</span><button type="button" class="copy-btn" aria-label="Copy Sigma rule to clipboard">Copy</button></figcaption>
+      <pre><code>title: Decompression Bomb Upload Attempts From One Client
+id: 3f143116-8738-42e8-bee6-c9379d9e7df2
+status: stable
+description: Repeated uploads whose expanded size blows past the decompression guard
+  limit. Signature of compression-bomb resource exhaustion (T1499.003).
+references:
+  - https://attack.mitre.org/techniques/T1499/003/
+author: Detection Engineering Team
+date: 2026-02-10
+logsource:
+  category: application
+  product: upload_service
+  service: uploads
+detection:
+  selection_guard:
+    message|contains: 'decompression guard'
+  selection_reject:
+    message|contains: 'action=rejected'
+  timeframe: 5m
+  condition: "selection_guard and selection_reject | count() by client_ip &gt; 5"
+fields:
+  - client_ip
+  - message
+falsepositives:
+  - A legitimate bulk-data export uploaded as an archive
+  - An approved internal restore job
+level: medium
+tags:
+  - attack.impact
+  - attack.t1499.003</code></pre>
+    </figure>
+    <figure class="code-block">
+      <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn" aria-label="Copy SPL query to clipboard">Copy</button></figcaption>
+      <pre><code>index=app sourcetype=upload:service earliest=-5m "decompression guard" "action=rejected"
+| rex field=_raw "client_ip=(?&lt;client_ip&gt;[0-9.]+)"
+| rex field=_raw "ratio (?&lt;ratio&gt;\d+)x"
+| stats count AS bombs, max(ratio) AS max_ratio BY client_ip
+| where bombs &gt; 5</code></pre>
+    </figure>
+
+    <div class="callout callout-good"><p><span class="callout-label">Good practice</span>
+    Test each rule on historical data before arming it. Record the alert volume it produced, then tune.
+    A rule nobody tunes is a rule the team will mute within a month.</p></div>
+  </section>
+
+  <section class="section" id="case-study" aria-labelledby="case-study-title">
+    <div class="sec-head"><span class="sec-badge" aria-hidden="true">6</span><h2 class="sec-title" id="case-study-title">Real-world case study</h2></div>
+    <p class="sec-intro">One documented historical event that shaped every web framework, plus one representative scenario that shows the full incident lifecycle.</p>
+
+    <h3>Documented anchor: the 2011 "hashDoS" disclosure</h3>
+    <p>In December 2011, security researchers <b>Alexander Klink and Julian Wälde</b> presented at the
+    <b>28C3</b> conference (Chaos Communication Congress, Berlin) how many web language runtimes built
+    their hash tables. An attacker could send a POST request with thousands of form fields whose keys
+    were crafted to collide, turning request parsing into hours of CPU work. The talk covered PHP, Java,
+    Python, Ruby, JavaScript, and ASP.NET. Microsoft shipped an emergency out-of-band fix for ASP.NET,
+    tracked as <b>CVE-2011-3414</b>, on <b>29 December 2011</b>. Vendors across the industry then added
+    limits on the number of POST parameters — a structural fix that most frameworks still carry today.</p>
+
+    <ul class="timeline">
+      <li class="timeline-item"><span class="timeline-when">2011-12-28</span><p>Klink and Wälde present the hash-collision research at 28C3. Coordinated vendor contact happened before the talk.</p></li>
+      <li class="timeline-item"><span class="timeline-when">2011-12-29</span><p>Microsoft releases the out-of-band security fix for ASP.NET (CVE-2011-3414) — one day after the public talk, an unusually fast vendor response.</p></li>
+      <li class="timeline-item"><span class="timeline-when">Early 2012</span><p>PHP, Python, Ruby, Java, and JavaScript runtime maintainers ship their own limits: max POST fields, bounded hash seeds, or both.</p></li>
+      <li class="timeline-item"><span class="timeline-when">Ongoing</span><p>The technique stays in attacker playbooks wherever old or custom stacks miss the limits — a permanent lesson in "parsing cost is attack surface".</p></li>
+    </ul>
+
+    <div class="callout callout-warn"><p><span class="callout-label">Warning — representative scenario</span>
+    The incident below is a <b>composite, representative scenario based on public incident reports</b>
+    (wildcard-query floods against SaaS search endpoints). Company names, counts, and timings are
+    illustrative and chosen to be realistic. The 2011 hashDoS section above, in contrast, is documented fact.</p></div>
+
+    <h3>Representative scenario: "SlowSearch" — a SaaS search endpoint flood</h3>
+    <p>A mid-size SaaS (software-as-a-service) company ("ShopFlow") offers product search to retail customers. The search endpoint
+    passes user text straight into database <code>LIKE</code> patterns, with no query cost budget and no per-client
+    latency limit. An attacker discovers that a single wildcard-heavy query keeps the database busy for 15 seconds.</p>
+
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Time (UTC)</th><th scope="col">Event</th><th scope="col">Signal</th></tr></thead>
+      <tbody>
+        <tr><td>09:58</td><td>Attacker sends 3 probe queries with wildcards; each returns in ~14 seconds.</td><td>Slow-query log shows the first multi-second entries.</td></tr>
+        <tr><td>10:15</td><td>Flood begins: 8 requests per minute, rotating accounts, randomized query text.</td><td>One client IP family dominates; upstream_response_time climbs.</td></tr>
+        <tr><td>10:31</td><td>Database CPU pegs at 100 percent; worker queue grows.</td><td>Cloud monitoring: CPU alarm; APM: queue depth rising.</td></tr>
+        <tr><td>10:34</td><td>Legitimate users hit timeouts; checkout stalls.</td><td>5xx wave: 38 errors per minute; support tickets start.</td></tr>
+        <tr><td>10:41</td><td><b>Detection point:</b> alert "20+ 5xx with upstream_response_time &gt;= 5s from one client" fires in the SOC.</td><td>Sigma-style rule on nginx access logs.</td></tr>
+        <tr><td>10:48</td><td>Containment: WAF rate limit per client on /search; abusive address family blocked.</td><td>WAF block counters rise; attack traffic rejected in milliseconds.</td></tr>
+        <tr><td>10:52</td><td>Statement timeout of 3 seconds enforced at the database (a setting that cancels any single query still running after the limit); slow queries now fail fast.</td><td>DB CPU falls below 40 percent within minutes.</td></tr>
+        <tr><td>11:30</td><td>Eradication: parameter sanitizer deployed — wildcard runs collapsed, query cost budget added.</td><td>Cost metrics show per-query budgets active.</td></tr>
+        <tr><td>14:00</td><td>Recovery confirmed: error rate at baseline, latency p95 (the 95th percentile) normal, monitoring watch stands down.</td><td>Dashboards green for 2 consecutive hours.</td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Impact and consequences</h4>
+        <ul>
+          <li>About 36 minutes of degraded checkout for real customers.</li>
+          <li>No data breach — the attack targeted availability only.</li>
+          <li>Support load spike; two enterprise customers asked for written incident summaries.</li>
+          <li>Engineering time: roughly two team-days for response plus follow-up work.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Team response and communication</h4>
+        <ul>
+          <li>SOC opened the ticket at 10:44 and paged the service owner at once.</li>
+          <li>One incident commander; a scribe kept the timeline — which later made the report easy.</li>
+          <li>Status page updated twice: "investigating" then "mitigated".</li>
+          <li>Post-incident review within 3 working days; no blame, only fixes.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>Lessons learned</h3>
+    <div class="cards">
+      <div class="card"><h4>Cost, not count</h4><p>Rate limiting alone missed the attack because request volume was modest. Query <b>cost</b> budgets caught what request <b>count</b> limits cannot.</p></div>
+      <div class="card"><h4>Timeouts are safety nets</h4><p>A 3-second statement timeout turned "15 seconds of deadlock" into "3 seconds of error", saving the whole backend.</p></div>
+      <div class="card"><h4>Per-client visibility</h4><p>The detection worked because logs carried <code>upstream_response_time</code> and client identity. Instrument first, detect second.</p></div>
+      <div class="card"><h4>Rehearse the chain</h4><p>The team recovered in under 4 hours because roles, status-page wording, and escalation paths had been drilled before.</p></div>
+    </div>
+  </section>
+
+  <section class="section" id="mitigation" aria-labelledby="mitigation-title">
+    <div class="sec-head"><span class="sec-badge" aria-hidden="true">7</span><h2 class="sec-title" id="mitigation-title">Mitigation and defense</h2></div>
+    <p class="sec-intro">Concrete, verifiable controls that make expensive requests cheap again — or make them fail fast.</p>
+
+    <div class="cards">
+      <div class="card"><h4>Policy</h4><p>Write a capacity and abuse policy: which endpoints may cost how much, who approves load tests, and how DoS incidents are escalated. Review it twice a year.</p></div>
+      <div class="card"><h4>Identity</h4><p>Throttle logins per client and per account; add exponential backoff; require MFA (multi-factor authentication) where possible so fake login floods lose their value.</p></div>
+      <div class="card"><h4>Endpoint</h4><p>On hosts: cap worker pools sensibly, enable process-level CPU and memory alarms, and keep hash-cost factors benchmarked against real capacity.</p></div>
+      <div class="card"><h4>Network</h4><p>Put a WAF or CDN in front; enforce per-client rate limits and body-size limits; block obviously malformed payloads at the edge so they never reach application code.</p></div>
+      <div class="card"><h4>Cloud</h4><p>Use provider DDoS protection tiers; set autoscaling ceilings so a flood cannot become a billing incident; isolate expensive features in their own service.</p></div>
+      <div class="card"><h4>Logging</h4><p>Enable slow-query logs, keep <code>upstream_response_time</code> in access logs, ship everything to the SIEM, and retain long enough to compare with history.</p></div>
+      <div class="card"><h4>Monitoring</h4><p>Alert on the patterns from section 5: 5xx waves per client, slow-query counts, worker exhaustion, parser limit hits. Page on correlation, not on single spikes.</p></div>
+      <div class="card"><h4>Backup and recovery</h4><p>Availability work still needs the boring basics: tested backups, a second region or site, and a documented recovery runbook.</p></div>
+      <div class="card"><h4>Response</h4><p>Pre-approve containment actions (rate-limit bumps, blocking address families) so the on-call engineer can act in minutes, not hours.</p></div>
+    </div>
+
+    <h3>Home and small-office advice</h3>
+    <div class="callout callout-good"><p><span class="callout-label">Good practice</span>
+    Running a small website or home server? Turn on your reverse proxy's basic rate limiting
+    (nginx <code>limit_req</code>, or your host panel's built-in throttling). Keep your CMS
+    (content management system, for example WordPress) and its plugins updated. Choose hosting that
+    includes DDoS protection, and keep nightly backups. You do not need an enterprise
+    SIEM to be a harder target than the average opportunistic bot expects.</p></div>
+
+    <h3>Prioritized actions</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">Action</th><th scope="col">Effort</th><th scope="col">Owner</th><th scope="col">Expected risk reduction</th></tr></thead>
+      <tbody>
+        <tr><td>Set a statement timeout on the database (for example 3–5 seconds)</td><td><span class="badge sev-low">Low</span></td><td>Database admin</td><td>Stops one expensive query from freezing the whole backend.</td></tr>
+        <tr><td>Enforce a query cost budget at the API layer (row limits, page-size caps, depth limits)</td><td><span class="badge sev-medium">Medium</span></td><td>Backend team</td><td>Bounds the cost of any single request, removing the amplifier.</td></tr>
+        <tr><td>WAF rate limiting per client on expensive routes</td><td><span class="badge sev-low">Low</span></td><td>Platform team</td><td>Blunts floods before they reach application code.</td></tr>
+        <tr><td>Add <code>upstream_response_time</code> to access logs and alert on per-client outliers</td><td><span class="badge sev-low">Low</span></td><td>SRE (site reliability engineering) / SOC</td><td>Provides the detection signal used by every rule in section 5.</td></tr>
+        <tr><td>Regex static analysis and ReDoS tests in CI (continuous integration)</td><td><span class="badge sev-medium">Medium</span></td><td>AppSec (application security)</td><td>Blocks vulnerable patterns before they ship.</td></tr>
+        <tr><td>Cache expensive results with short TTLs (time to live)</td><td><span class="badge sev-medium">Medium</span></td><td>Backend team</td><td>Makes repeated attack requests nearly free to answer.</td></tr>
+        <tr><td>Cap POST parameter count and XML entity expansion at the parser (for example PHP's <code>max_input_vars</code>, the JDK's entity-expansion cap, and archive size checks on uploads)</td><td><span class="badge sev-low">Low</span></td><td>Backend team</td><td>Removes the hashDoS and billion-laugh classes outright.</td></tr>
+        <tr><td>Run a lab DoS tabletop and load test each quarter</td><td><span class="badge sev-medium">Medium</span></td><td>SOC + SRE</td><td>Proves the controls work before a real attacker tests them.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="section" id="mistakes" aria-labelledby="mistakes-title">
+    <div class="sec-head"><span class="sec-badge" aria-hidden="true">8</span><h2 class="sec-title" id="mistakes-title">Common mistakes and best practices</h2></div>
+    <p class="sec-intro">Twelve blue-team mistakes seen again and again with this technique — and the fix for each.</p>
+
+    <div class="cards">
+      <div class="card"><h4>1 · Alerting on every slow query</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> dozens of slow-query alerts a day; nobody reads them.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> single events alerted instead of patterns.</p>
+        <p class="mistake-fix"><b>Fix:</b> alert on counts and repetition within a window, not on one entry.</p>
+        <p class="mistake-fix"><b>Prevention:</b> baseline first; tune thresholds against a week of history.</p>
+      </div>
+      <div class="card"><h4>2 · Counting requests, not cost</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> attack lands, request-rate dashboard stays calm.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> only volume metrics exist; cost per request is invisible.</p>
+        <p class="mistake-fix"><b>Fix:</b> add latency and rows-scanned metrics per endpoint and per client.</p>
+        <p class="mistake-fix"><b>Prevention:</b> make <code>upstream_response_time</code> a mandatory log field.</p>
+      </div>
+      <div class="card"><h4>3 · Missing logs</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> during the incident nobody can say which parameters were sent.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> query strings or body sizes never logged; retention too short.</p>
+        <p class="mistake-fix"><b>Fix:</b> log full request URIs, client IP, and status; keep at least 90 days searchable.</p>
+        <p class="mistake-fix"><b>Prevention:</b> log reviews as part of every new service's launch checklist.</p>
+      </div>
+      <div class="card"><h4>4 · Every 5xx wave treated as a bug</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> teams argue about deploys while an attack runs.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> no check separating code faults from abusive traffic.</p>
+        <p class="mistake-fix"><b>Fix:</b> triage question: do errors concentrate on a few clients? If yes, suspect abuse.</p>
+        <p class="mistake-fix"><b>Prevention:</b> a shared runbook page for "5xx wave" triage.</p>
+      </div>
+      <div class="card"><h4>5 · One catch-all alert (alert fatigue)</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> a single "web problems" alert fires for everything.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> rules written once, never split by meaning.</p>
+        <p class="mistake-fix"><b>Fix:</b> split into distinct, named alerts with their own runbook links.</p>
+        <p class="mistake-fix"><b>Prevention:</b> quarterly alert review; delete or fix rules nobody acts on.</p>
+      </div>
+      <div class="card"><h4>6 · No per-client grouping</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> dashboards show totals; the single abusive client hides inside them.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> aggregation without a group-by key.</p>
+        <p class="mistake-fix"><b>Fix:</b> group by client IP, account, and endpoint in every exhaustion rule.</p>
+        <p class="mistake-fix"><b>Prevention:</b> reuse the Sigma rules in 5.5 as templates.</p>
+      </div>
+      <div class="card"><h4>7 · Rules never tested on history</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> new rule fires 200 times in hour one, then gets disabled.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> no backtest against past data before arming.</p>
+        <p class="mistake-fix"><b>Fix:</b> replay 30 days of logs; adjust thresholds; record expected volume.</p>
+        <p class="mistake-fix"><b>Prevention:</b> a "test before arm" step in the detection review process.</p>
+      </div>
+      <div class="card"><h4>8 · Ownership gaps</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> alert pages a rotation that only knows how to restart a server.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> no named service owner for the expensive endpoint.</p>
+        <p class="mistake-fix"><b>Fix:</b> map every alert to a team and an escalation path; keep the map current.</p>
+        <p class="mistake-fix"><b>Prevention:</b> ownership listed in the alert metadata itself.</p>
+      </div>
+      <div class="card"><h4>9 · Rate limits tuned for averages</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> limit blocks real users during sales events, not the attacker.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> limits chosen from average traffic, not burst behaviour.</p>
+        <p class="mistake-fix"><b>Fix:</b> set limits from p95/p99 (the levels 95 and 99 percent of real traffic stays under); add separate authenticated tiers.</p>
+        <p class="mistake-fix"><b>Prevention:</b> revisit limits each quarter and after major features.</p>
+      </div>
+      <div class="card"><h4>10 · Never rehearsing</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> first real flood becomes improvised theatre at 3 a.m.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> no tabletop exercise for DoS scenarios.</p>
+        <p class="mistake-fix"><b>Fix:</b> run a 60-minute lab tabletop twice a year using the case study in section 6.</p>
+        <p class="mistake-fix"><b>Prevention:</b> schedule it like backups — repeating, boring, essential.</p>
+      </div>
+      <div class="card"><h4>11 · WAF logs ignored</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> the WAF blocked the attack, but the SOC only learns a week later.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> WAF logs not shipped to the SIEM or never alerted on.</p>
+        <p class="mistake-fix"><b>Fix:</b> ship WAF logs, alert on block storms (rule 4 in 5.5).</p>
+        <p class="mistake-fix"><b>Prevention:</b> treat the WAF as a sensor, not just a shield.</p>
+      </div>
+      <div class="card"><h4>12 · Weak tuning culture</h4>
+        <p class="mistake-symptom"><b>Symptom:</b> thresholds set at project start, never touched again.</p>
+        <p class="mistake-symptom"><b>Root cause:</b> tuning is nobody's backlog item.</p>
+        <p class="mistake-fix"><b>Fix:</b> time-boxed tuning sprints with before/after alert volumes documented.</p>
+        <p class="mistake-fix"><b>Prevention:</b> track false-positive rate as a team metric.</p>
+      </div>
+    </div>
+
+    <h3>Habits that keep the detections alive</h3>
+    <div class="grid-3">
+      <div class="card"><h4>Daily</h4><p>Scan the top-10 slowest requests and the 5xx rate per endpoint. Two minutes, same time each day.</p></div>
+      <div class="card"><h4>Weekly</h4><p>Review new alert sources and muted rules; check WAF block counts per client; confirm slow-query log still enabled after deploys.</p></div>
+      <div class="card"><h4>Monthly</h4><p>Backtest one Sigma rule on fresh history; re-benchmark one expensive endpoint; update the capacity notes and this guide's thresholds if needed.</p></div>
+    </div>
+  </section>
+
+  <section class="section" id="cheat-sheet" aria-labelledby="cheat-title">
+    <div class="sec-head"><span class="sec-badge" aria-hidden="true">9</span><h2 class="sec-title" id="cheat-title">Cheat sheet and quick reference</h2></div>
+    <p class="sec-intro">The whole guide compressed to one screen.</p>
+
+    <h3>Key facts</h3>
+    <dl class="kv">
+      <div class="kv-row"><dt>Technique</dt><dd>T1499.003 — Application Exhaustion Flood (child of T1499 Endpoint Denial of Service)</dd></div>
+      <div class="kv-row"><dt>Tactic</dt><dd>Impact (availability loss)</dd></div>
+      <div class="kv-row"><dt>Core idea</dt><dd>Few deliberately expensive requests beat thousands of cheap ones</dd></div>
+      <div class="kv-row"><dt>MITRE entry</dt><dd>Technique revision 1.3 · created 20 February 2020 · last modified 24 October 2025 · live platform ATT&amp;CK v20</dd></div>
+      <div class="kv-row"><dt>MITRE mitigation</dt><dd>M1037 Filter Network Traffic (CDN / DoS filtering upstream)</dd></div>
+      <div class="kv-row"><dt>Official detection</dt><dd>DET0415 — analytics AN1165–AN1168 (endpoint/GUI resource spikes; backend CPU and memory from repeated CLI/API requests; GUI workflow spin reports; cloud app abuse with 5xx and autoscaling)</dd></div>
+      <div class="kv-row"><dt>Best signals</dt><dd>Slow-query logs, 5xx waves per client, high upstream_response_time, worker exhaustion</dd></div>
+      <div class="kv-row"><dt>Best controls</dt><dd>Statement timeouts, query cost budgets, per-client WAF rate limits, caching</dd></div>
+      <div class="kv-row"><dt>Lab rule</dt><dd>Test only on machines you own; DoS attacks against others are crimes</dd></div>
+    </dl>
+
+    <h3>Top detections</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th scope="col">What to look for</th><th scope="col">Source</th><th scope="col">Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>20+ 500/504 answers to one client with upstream time of 5s or more</td><td>nginx / gateway access logs</td><td>Direct fingerprint of an exhaustion flood in progress.</td></tr>
+        <tr><td>Statements slower than 10s, millions of rows examined, few rows sent</td><td>Database slow-query logs</td><td>Shows the amplification: huge work for tiny answers.</td></tr>
+        <tr><td>Repeated <code>max_children</code> or pool-exhaustion warnings</td><td>php-fpm / app server logs</td><td>Workers pinned by slow requests — ReDoS and friends.</td></tr>
+        <tr><td>POST requests with <code>time-taken</code> in hundreds of seconds</td><td>IIS W3C logs</td><td>Hash-collision parsing cost on legacy stacks.</td></tr>
+        <tr><td>Entity-expansion limit errors and parser hangs</td><td>Application exception logs</td><td>Billion-laughs attempts stopped at the parser cap.</td></tr>
+        <tr><td>50+ WAF denials in 5 minutes from one source</td><td>ModSecurity / WAF logs</td><td>Probe or flood that your edge is absorbing — investigate the target.</td></tr>
+        <tr><td>30+ login POSTs per minute from one client with 1s+ latency</td><td>Access logs + identity logs</td><td>Login flood burning password-hashing CPU.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Response checklist</h3>
+    <ul class="checklist">
+      <li>Confirm the pattern: same endpoint, same parameter shape, few clients, rising errors.</li>
+      <li>Capture evidence: sample requests, slow-query entries, WAF samples, timestamps in UTC.</li>
+      <li>Apply per-client WAF rate limit or block abusive address families.</li>
+      <li>Enable or tighten the database statement timeout so queries fail fast.</li>
+      <li>Notify the service owner; update the status page if customers are affected.</li>
+      <li>Watch recovery: error rate and latency back to baseline for two hours.</li>
+      <li>Write the incident record; schedule the post-incident review within 3 working days.</li>
+      <li>Turn lessons into backlog items: cost budgets, caching, new detection rules.</li>
+    </ul>
+
+    <h3>Links</h3>
+    <div class="card">
+      <ul>
+        <li><a href="https://attack.mitre.org/techniques/T1499/003/">MITRE ATT&amp;CK — T1499.003 Application Exhaustion Flood</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1499/">MITRE ATT&amp;CK — T1499 Endpoint Denial of Service (parent technique)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1499/001/">T1499.001 OS Exhaustion Flood (sibling)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1499/002/">T1499.002 Service Exhaustion Flood (sibling)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1499/004/">T1499.004 Application or System Exploitation (sibling)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1498/">T1498 Network Denial of Service (bandwidth-level counterpart)</a></li>
+      </ul>
+    </div>
+  </section>
+
+  </main>
+</div>
+
+<button type="button" class="mobile-toc-btn" id="mobile-toc-btn" aria-haspopup="dialog" aria-controls="toc-overlay">Contents</button>
+<div class="toc-overlay" id="toc-overlay" role="dialog" aria-modal="true" aria-label="Contents" hidden>
+  <div class="toc-overlay-card">
+    <button type="button" class="toc-close" id="toc-close" aria-label="Close contents">Close</button>
+    <p class="toc-title" style="margin-top:2px">Contents</p>
+    <nav id="toc-overlay-nav" aria-label="Contents links"></nav>
+  </div>
+</div>
+<button type="button" class="back-top" id="back-top" aria-label="Back to top">&#8593;</button>
+
+<script>
+(function () {
+  "use strict";
+  var d = document;
+  function byId(id) { return d.getElementById(id) || null; }
+  function safe(fn) { try { fn(); } catch (e) { /* keep the page working */ } }
+  var reduceQuery = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  function prefersReduced() { return !!(reduceQuery && reduceQuery.matches); }
+
+  /* ---------- Palette from CSS custom properties ---------- */
+  var PAL = {};
+  function cssVar(name, fallback) {
+    var v = getComputedStyle(d.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+  function refreshPalette() {
+    PAL.bg = cssVar("--bg", "#0b0f1a");
+    PAL.surface = cssVar("--surface", "#121a2e");
+    PAL.surface2 = cssVar("--surface-2", "#172138");
+    PAL.elevated = cssVar("--elevated", "#1a2542");
+    PAL.text = cssVar("--text", "#e7edf8");
+    PAL.muted = cssVar("--muted", "#9aa8c0");
+    PAL.border = cssVar("--border", "#24314e");
+    PAL.borderStrong = cssVar("--border-strong", "#2f4066");
+    PAL.accent = cssVar("--accent", "#4f8cff");
+    PAL.accent2 = cssVar("--accent-2", "#22d3ee");
+    PAL.violet = cssVar("--violet", "#a78bfa");
+    PAL.success = cssVar("--success", "#34d399");
+    PAL.warning = cssVar("--warning", "#fbbf24");
+    PAL.danger = cssVar("--danger", "#f87171");
+    PAL.high = cssVar("--high", "#fb923c");
+    PAL.low = cssVar("--low", "#4ade80");
+  }
+
+  /* ---------- Reading progress bar, back-to-top, active TOC ---------- */
+  var progressBar = byId("progress-bar");
+  var backTop = byId("back-top");
+  var tocNav = byId("toc");
+  var tocList = null;
+  var tocOverlayNav = byId("toc-overlay-nav");
+  var overlayList = null;
+
+  var headings = [];
+  function collectHeadings() {
+    headings = [];
+    var main = byId("main");
+    if (!main) { return; }
+    var sections = main.querySelectorAll("section.section[id]");
+    for (var i = 0; i < sections.length; i++) {
+      var sec = sections[i];
+      var h2 = sec.querySelector("h2.sec-title[id]");
+      if (h2) { headings.push({ id: sec.id, text: h2.textContent.trim(), depth: 0 }); }
+      if (sec.id === "detection-deep-dive") {
+        var h3s = sec.querySelectorAll("h3[id]");
+        for (var j = 0; j < h3s.length; j++) {
+          headings.push({ id: h3s[j].id, text: h3s[j].textContent.trim(), depth: 1 });
+        }
+      }
+    }
+  }
+  function buildTocInto(list) {
+    if (!list) { return; }
+    while (list.firstChild && list.firstChild.tagName === "A") { list.removeChild(list.firstChild); }
+    for (var i = 0; i < headings.length; i++) {
+      var item = headings[i];
+      var a = d.createElement("a");
+      a.href = "#" + item.id;
+      a.textContent = item.text;
+      if (item.depth === 1) { a.className = "toc-sub"; }
+      list.appendChild(a);
+    }
+  }
+  function buildTocs() {
+    collectHeadings();
+    if (tocNav) {
+      tocList = tocNav;
+      buildTocInto(tocList);
+    }
+    if (tocOverlayNav) {
+      overlayList = tocOverlayNav;
+      buildTocInto(overlayList);
+    }
+  }
+  var tocLinks = [];
+  function refreshTocLinks() {
+    tocLinks = [];
+    if (tocList) { tocLinks = tocLinks.concat(Array.prototype.slice.call(tocList.querySelectorAll("a"))); }
+    if (overlayList) { tocLinks = tocLinks.concat(Array.prototype.slice.call(overlayList.querySelectorAll("a"))); }
+  }
+  function markActive() {
+    if (!headings.length) { return; }
+    var current = 0;
+    var scrollPos = (window.pageYOffset || d.documentElement.scrollTop || 0) + 120;
+    for (var i = 0; i < headings.length; i++) {
+      var el = byId(headings[i].id);
+      if (el && el.getBoundingClientRect().top + (window.pageYOffset || 0) <= scrollPos) { current = i; }
+    }
+    for (var k = 0; k < tocLinks.length; k++) {
+      var link = tocLinks[k];
+      var match = link.getAttribute("href") === "#" + headings[current].id;
+      if (match) { link.classList.add("active"); } else { link.classList.remove("active"); }
+    }
+  }
+
+  var ticking = false;
+  function onScroll() {
+    if (ticking) { return; }
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      ticking = false;
+      var doc = d.documentElement;
+      var max = (d.body.scrollHeight || doc.scrollHeight) - window.innerHeight;
+      var ratio = max > 0 ? Math.min(1, Math.max(0, (window.pageYOffset || 0) / max)) : 0;
+      if (progressBar) { progressBar.style.width = (ratio * 100).toFixed(2) + "%"; }
+      if (backTop) {
+        if ((window.pageYOffset || 0) > 600) { backTop.classList.add("show"); }
+        else { backTop.classList.remove("show"); }
+      }
+      markActive();
+    });
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  if (backTop) {
+    backTop.addEventListener("click", function () {
+      window.scrollTo({ top: 0, behavior: prefersReduced() ? "auto" : "smooth" });
+    });
+  }
+
+  /* ---------- Mobile contents overlay ---------- */
+  var mobileBtn = byId("mobile-toc-btn");
+  var overlay = byId("toc-overlay");
+  var closeBtn = byId("toc-close");
+  var lastFocus = null;
+  function openOverlay() {
+    if (!overlay) { return; }
+    lastFocus = d.activeElement;
+    overlay.hidden = false;
+    overlay.classList.add("open");
+    d.body.style.overflow = "hidden";
+    if (closeBtn) { closeBtn.focus(); }
+  }
+  function closeOverlay(restore) {
+    if (!overlay || overlay.hidden) { return; }
+    overlay.classList.remove("open");
+    overlay.hidden = true;
+    d.body.style.overflow = "";
+    if (restore && lastFocus && lastFocus.focus) { lastFocus.focus(); }
+  }
+  if (mobileBtn) { mobileBtn.addEventListener("click", openOverlay); }
+  if (closeBtn) { closeBtn.addEventListener("click", function () { closeOverlay(true); }); }
+  if (overlay) {
+    overlay.addEventListener("click", function (ev) { if (ev.target === overlay) { closeOverlay(true); } });
+    overlay.addEventListener("click", function (ev) {
+      var t = ev.target;
+      while (t && t !== overlay) { if (t.tagName === "A") { closeOverlay(false); return; } t = t.parentNode; }
+    });
+  }
+  d.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && overlay && !overlay.hidden) { closeOverlay(true); }
+  });
+
+  /* ---------- Copy buttons ---------- */
+  function copyViaExecCommand(text) {
+    var ta = d.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "readonly");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    d.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = d.execCommand("copy"); } catch (err) { ok = false; }
+    d.body.removeChild(ta);
+    return ok;
+  }
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(function () {
+        /* clipboard API can be blocked (file://, permissions). Use the fallback. */
+        if (copyViaExecCommand(text)) { return; }
+        throw new Error("copy failed");
+      });
+    }
+    return new Promise(function (resolve, reject) {
+      if (copyViaExecCommand(text)) { resolve(); } else { reject(new Error("copy failed")); }
+    });
+  }
+  var copyBtns = d.querySelectorAll(".copy-btn");
+  for (var cb = 0; cb < copyBtns.length; cb++) {
+    (function (btn) {
+      btn.addEventListener("click", function () {
+        var block = btn.closest ? btn.closest(".code-block") : null;
+        var code = block ? block.querySelector("pre code") : null;
+        if (!code) { return; }
+        var original = btn.textContent;
+        btn.disabled = true;
+        copyText(code.textContent).then(function () {
+          btn.textContent = "Copied";
+          btn.classList.add("copied");
+        }).catch(function () {
+          btn.textContent = "Copy failed";
+        }).then(function () {
+          btn.disabled = false;
+          window.setTimeout(function () {
+            btn.textContent = original;
+            btn.classList.remove("copied");
+          }, 1600);
+        });
+      });
+    })(copyBtns[cb]);
+  }
+
+  /* ============================================================
+     Simulation: "One Question, Ten Thousand Steps"
+     ============================================================ */
+  var SIM_STEPS = 8;
+  var STEP_DURATION = 7; /* seconds at 1x speed */
+  var W = 960, H = 540;
+
+  var CAPTIONS = [
+    "Step 1 of 8 — Normal day: cheap requests, healthy database.",
+    "Step 2 of 8 — The attacker sends one crafted, expensive search (q=%%%a%%%).",
+    "Step 3 of 8 — The expensive query walks to the database; CPU climbs; the worker blocks.",
+    "Step 4 of 8 — The attacker replays the request from several accounts; the queue grows.",
+    "Step 5 of 8 — Database pegged at 100 percent. The legitimate user gets a 504 timeout.",
+    "Step 6 of 8 — SOC view: APM shows a slow-query spike; access logs show a 5xx wave.",
+    "Step 7 of 8 — Mitigation: query timeout, parameter rules, and WAF rate limiting drop attack tokens.",
+    "Step 8 of 8 — The database cools down and the legitimate user is served again."
+  ];
+  var HINTS = [
+    "Defender hint: baseline first. Know what normal CPU and normal latency look like.",
+    "Defender hint: one request can force a full table scan — millions of rows read for one answer.",
+    "Defender hint: a blocked worker stops serving everyone else. Watch worker and pool metrics.",
+    "Defender hint: several accounts blur the pattern. Group alerts per client and per endpoint.",
+    "Defender hint: 5xx waves plus slow queries together mean exhaustion, not a random bug.",
+    "Defender hint: read the slow-query log and upstream_response_time per client to find the source.",
+    "Defender hint: cost budgets and edge rate limits keep the database out of the fight.",
+    "Defender hint: recovery is confirmed when error rate and latency return to baseline."
+  ];
+  var FEED = {
+    1: ["09:58 baseline p95 120ms", "DB CPU 20% - normal"],
+    2: ["10:15 q=%%%a%%% from 203.0.113.77"],
+    3: ["10:15 slow query 15.2s / 24M rows"],
+    4: ["10:16 burst: 3 accounts, same shape"],
+    5: ["10:17 5xx wave 38/min", "checkout user: 504"],
+    6: ["APM: slow-query spike", "top client urt=15.0s", "correlate: 1 source family"],
+    7: ["10:48 WAF rate-limit /search", "DB statement timeout 3s"],
+    8: ["10:52 recovery: errors at baseline"]
+  };
+  var TOOLTIP_INFO = [
+    { name: "Attacker", text: "The threat actor. Sends crafted requests designed to cost the server the most work per byte sent." },
+    { name: "WAF", text: "Web Application Firewall. Filters requests at the edge. In step 7 it rate-limits and drops attack traffic." },
+    { name: "App server", text: "Runs the application code. Three worker processes; every blocked worker stops serving real users." },
+    { name: "Database", text: "Stores the data. The CPU gauge shows how hard each query makes it work. Wildcard searches are the worst." },
+    { name: "Legit user", text: "A real customer trying to search and buy. Their experience is what we protect." },
+    { name: "SOC panel", text: "Security Operations Center view: APM traces, error rates, and per-client latency built from logs." }
+  ];
+
+  var simCanvas = byId("sim-canvas");
+  var simWrap = byId("sim-wrap");
+  var captionEl = byId("sim-caption");
+  var hintEl = byId("sim-hint");
+  var chipsEl = byId("sim-chips");
+  var tooltipEl = byId("sim-tooltip");
+  var playBtn = byId("sim-play");
+  var pauseBtn = byId("sim-pause");
+  var restartBtn = byId("sim-restart");
+  var speedSel = byId("sim-speed");
+  var ctx = simCanvas ? simCanvas.getContext("2d") : null;
+
+  var S = {
+    step: 1,
+    playing: false,
+    speed: 1,
+    stepElapsed: 0,
+    spawnAcc: 0,
+    tokens: [],
+    effects: [],
+    cpu: 20,
+    cpuTarget: 20,
+    workers: [false, false, false],
+    queue: 0,
+    feed: [],
+    feedAcc: 0,
+    bars: [6, 6, 7, 6, 8, 7, 6, 7, 6, 6],
+    barsTarget: [6, 6, 7, 6, 8, 7, 6, 7, 6, 6],
+    lastFrame: 0
+  };
+
+  var NODES = {
+    attacker: { x: 120, y: 140, r: 36 },
+    waf: { x: 248, y: 140, w: 66, h: 46 },
+    app: { x: 360, y: 84, w: 160, h: 156 },
+    db: { x: 660, y: 84, w: 180, h: 156 },
+    user: { x: 120, y: 420, r: 36 },
+    soc: { x: 360, y: 316, w: 540, h: 184 }
+  };
+  var HITBOXES = [];
+
+  function setCaption() {
+    if (captionEl) { captionEl.textContent = CAPTIONS[S.step - 1]; }
+    if (hintEl) { hintEl.textContent = HINTS[S.step - 1]; }
+    if (chipsEl) {
+      var chips = chipsEl.querySelectorAll(".sim-chip");
+      for (var i = 0; i < chips.length; i++) {
+        if (parseInt(chips[i].getAttribute("data-step"), 10) === S.step) { chips[i].classList.add("active"); }
+        else { chips[i].classList.remove("active"); }
+      }
+    }
+  }
+  function resetStepState() {
+    S.stepElapsed = 0;
+    S.spawnAcc = 0;
+    S.feedAcc = 0;
+    S.tokens = [];
+    S.effects = [];
+    if (S.step === 1) {
+      S.cpu = 20; S.cpuTarget = 20; S.workers = [false, false, false]; S.queue = 0; S.feed = [];
+      S.barsTarget = [6, 6, 7, 6, 8, 7, 6, 7, 6, 6];
+    } else {
+      if (S.step === 2) { S.cpuTarget = 50; }
+      if (S.step === 3) { S.cpuTarget = 70; S.workers[0] = true; }
+      if (S.step === 4) { S.cpuTarget = 85; S.workers[1] = true; }
+      if (S.step === 5) { S.cpuTarget = 100; S.workers[2] = true; }
+      if (S.step === 6) { S.cpuTarget = 100; }
+      if (S.step === 7) { S.cpuTarget = 45; }
+      if (S.step === 8) { S.cpuTarget = 15; S.workers = [false, false, false]; S.queue = 0; }
+      S.barsTarget = (S.step <= 2) ? [6, 6, 7, 6, 8, 7, 6, 7, 6, 6, 7, 6]
+        : (S.step <= 4) ? [6, 9, 12, 10, 14, 16, 13, 15, 12, 14]
+        : (S.step <= 6) ? [10, 16, 22, 26, 30, 34, 38, 36, 40, 34]
+        : (S.step === 7) ? [30, 26, 22, 18, 16, 14, 12, 10, 9, 8]
+        : [6, 6, 7, 6, 8, 7, 6, 7, 6, 6, 7, 6];
+    }
+    var feedForSteps = [];
+    for (var st = 1; st <= S.step; st++) {
+      if (FEED[st]) { feedForSteps = feedForSteps.concat(FEED[st]); }
+    }
+    if (prefersReduced()) { S.feed = feedForSteps; }
+    else { S.feed = (S.step === 1) ? [] : feedForSteps.slice(0, Math.max(0, feedForSteps.length - 2)); }
+  }
+  function setStep(n) {
+    if (n < 1 || n > SIM_STEPS) { return; }
+    S.step = n;
+    resetStepState();
+    setCaption();
+    if (prefersReduced()) { renderStatic(); }
+  }
+
+  /* Tokens travel between anchor points */
+  function anchor(nodeKey, dx, dy) {
+    var n = NODES[nodeKey];
+    if (n.r) { return { x: n.x + (dx || 0), y: n.y + (dy || 0) }; }
+    return { x: n.x + n.w / 2 + (dx || 0), y: n.y + n.h / 2 + (dy || 0) };
+  }
+  function spawnToken(kind) {
+    var t = null;
+    if (kind === "user-req") {
+      t = { kind: kind, from: anchor("user", 0, -36), to: anchor("app", -60, 60), t: 0, rate: 0.75, color: PAL.accent, label: "GET /search", size: 5 };
+    } else if (kind === "atk") {
+      t = { kind: kind, from: anchor("attacker", 34, 0), to: anchor("app", -60, 20), t: 0, rate: 0.65, color: PAL.danger, label: "q=%%%a%%%", size: 6 };
+    } else if (kind === "query") {
+      t = { kind: kind, from: anchor("app", 80, 0), to: anchor("db", -90, 0), t: 0, rate: 0.45, color: PAL.violet, label: "LIKE '%%%'", size: 6 };
+    } else if (kind === "db-res") {
+      t = { kind: kind, from: anchor("db", -60, 30), to: anchor("app", 80, 30), t: 0, rate: 0.8, color: PAL.low, label: "", size: 4 };
+    } else if (kind === "user-res-ok") {
+      t = { kind: kind, from: anchor("app", -60, 60), to: anchor("user", 0, -36), t: 0, rate: 0.75, color: PAL.success, label: "200", size: 5 };
+    } else if (kind === "user-res-fail") {
+      t = { kind: kind, from: anchor("app", -60, 60), to: anchor("user", 0, -36), t: 0, rate: 0.75, color: PAL.danger, label: "504", size: 6 };
+    }
+    if (t) { S.tokens.push(t); }
+  }
+  function addEffect(x, y, text, color) {
+    S.effects.push({ x: x, y: y, text: text, color: color, life: 1 });
+  }
+
+  function tokenArrived(tok) {
+    var i;
+    if (tok.kind === "user-req") {
+      if (S.step >= 5 && S.step <= 6) { spawnToken("user-res-fail"); }
+      else { spawnToken("user-res-ok"); }
+      if (S.step === 1 || S.step === 3 || S.step === 4) { spawnToken("query"); }
+    } else if (tok.kind === "atk") {
+      if (S.step >= 4 && S.step <= 6) { S.queue = Math.min(8, S.queue + 1); }
+      var blocked = false;
+      for (i = 0; i < S.workers.length; i++) { if (!S.workers[i]) { S.workers[i] = true; blocked = true; break; } }
+      if (S.step >= 2 && S.step <= 6) { spawnToken("query"); }
+    } else if (tok.kind === "query") {
+      if (S.step <= 6) { S.cpuTarget = Math.min(100, S.cpuTarget + 2); }
+      spawnToken("db-res");
+    } else if (tok.kind === "db-res") {
+      /* nothing: answers just fade back */
+    } else if (tok.kind === "user-res-fail") {
+      addEffect(NODES.user.x + 44, NODES.user.y - 40, "504", PAL.danger);
+    } else if (tok.kind === "user-res-ok") {
+      addEffect(NODES.user.x + 44, NODES.user.y - 40, "200 OK", PAL.success);
+    }
+  }
+
+  function stepSpawn(dt) {
+    var st = S.step;
+    var interval;
+    if (st === 1) { interval = 1.5; if (S.spawnAcc >= interval) { S.spawnAcc = 0; spawnToken("user-req"); } return; }
+    if (st === 2) { if (S.spawnAcc >= 0.4 && S.tokens.filter(function (t) { return t.kind === "atk"; }).length === 0) { S.spawnAcc = 0; spawnToken("atk"); } S.spawnUser(dt, 2.2); return; }
+    if (st === 3) { if (S.spawnAcc >= 2.6 && S.tokens.filter(function (t) { return t.kind === "query"; }).length === 0) { S.spawnAcc = 0; spawnToken("query"); } S.spawnUser(dt, 2.0); return; }
+    if (st === 4) { interval = 1.1; if (S.spawnAcc >= interval) { S.spawnAcc = 0; spawnToken("atk"); } S.spawnUser(dt, 2.0); return; }
+    if (st === 5 || st === 6) { interval = 1.6; if (S.spawnAcc >= interval) { S.spawnAcc = 0; spawnToken("atk"); } S.spawnUser(dt, 1.8); return; }
+    if (st === 7) { interval = 0.9; if (S.spawnAcc >= interval) { S.spawnAcc = 0; spawnToken("atk"); } S.spawnUser(dt, 1.8); return; }
+    if (st === 8) { interval = 1.4; if (S.spawnAcc >= interval) { S.spawnAcc = 0; spawnToken("user-req"); } return; }
+  }
+  var userAcc = 0;
+  S.spawnUser = function (dt, interval) {
+    userAcc += dt;
+    if (userAcc >= interval) { userAcc = 0; spawnToken("user-req"); }
+  };
+
+  function wafGuards(tok) {
+    if (S.step === 7 && tok.kind === "atk") {
+      var wafX = NODES.waf.x + NODES.waf.w;
+      if (tok.from.x + (tok.to.x - tok.from.x) * tok.t >= wafX) {
+        addEffect(wafX + 6, tok.from.y + (tok.to.y - tok.from.y) * tok.t - 14, "dropped", PAL.high);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function updateSim(dt) {
+    var i, j;
+    /* step timing and auto-advance */
+    S.stepElapsed += dt;
+    if (S.playing && S.stepElapsed >= STEP_DURATION) {
+      if (S.step < SIM_STEPS) { setStep(S.step + 1); }
+      else { S.playing = false; if (playBtn) { playBtn.textContent = "Play"; } }
+    }
+    /* spawn */
+    S.spawnAcc += dt;
+    stepSpawn(dt);
+    /* feed lines reveal */
+    S.feedAcc += dt;
+    var fullFeed = [];
+    for (var st = 1; st <= S.step; st++) { if (FEED[st]) { fullFeed = fullFeed.concat(FEED[st]); } }
+    if (S.feed.length < fullFeed.length && S.feedAcc > 1.1) { S.feedAcc = 0; S.feed.push(fullFeed[S.feed.length]); }
+    /* cpu easing */
+    S.cpu += (S.cpuTarget - S.cpu) * Math.min(1, dt * 1.6);
+    /* bars easing */
+    for (i = 0; i < S.bars.length; i++) { S.bars[i] += (S.barsTarget[i] - S.bars[i]) * Math.min(1, dt * 3); }
+    /* tokens */
+    for (i = S.tokens.length - 1; i >= 0; i--) {
+      var tok = S.tokens[i];
+      tok.t += dt * tok.rate;
+      if (wafGuards(tok)) { S.tokens.splice(i, 1); continue; }
+      if (tok.t >= 1) { S.tokens.splice(i, 1); tokenArrived(tok); }
+    }
+    /* effects decay */
+    for (j = S.effects.length - 1; j >= 0; j--) {
+      S.effects[j].life -= dt * 0.55;
+      if (S.effects[j].life <= 0) { S.effects.splice(j, 1); }
+    }
+    /* queue drain in recovery steps */
+    if (S.step >= 7 && S.queue > 0 && Math.floor(S.stepElapsed * 1.2) > Math.floor((S.stepElapsed - dt) * 1.2)) { S.queue--; }
+    /* workers free up during step 7-8 */
+    if (S.step === 7 && S.stepElapsed > 2.5) { S.workers[2] = false; }
+    if (S.step === 7 && S.stepElapsed > 4.5) { S.workers[1] = false; }
+    if (S.step === 8) { S.workers = [false, false, false]; }
+  }
+
+  /* ---------- Drawing ---------- */
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function line(a, b, color, dash) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    if (dash) { ctx.setLineDash(dash); } else { ctx.setLineDash([]); }
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    var ang = Math.atan2(b.y - a.y, b.x - a.x);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - 9 * Math.cos(ang - 0.4), b.y - 9 * Math.sin(ang - 0.4));
+    ctx.lineTo(b.x - 9 * Math.cos(ang + 0.4), b.y - 9 * Math.sin(ang + 0.4));
+    ctx.closePath();
+    ctx.fill();
+  }
+  function label(x, y, text, size, color, bold, align) {
+    ctx.fillStyle = color || PAL.text;
+    ctx.font = (bold ? "700 " : "400 ") + (size || 12) + "px " + "ui-monospace, Consolas, monospace";
+    ctx.textAlign = align || "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x, y);
+    ctx.textAlign = "left";
+  }
+  function cpuColor(v) {
+    if (v < 50) { return PAL.low; }
+    if (v < 80) { return PAL.warning; }
+    return PAL.danger;
+  }
+  function drawScene() {
+    if (!ctx) { return; }
+    ctx.clearRect(0, 0, W, H);
+    /* background panels */
+    ctx.fillStyle = PAL.surface2;
+    rr(0, 0, W, H, 10); ctx.fill();
+    /* links */
+    var attackerActive = S.step >= 2;
+    line(anchor("attacker", 36, 0), anchor("app", -84, 20), attackerActive ? PAL.danger : PAL.border);
+    line(anchor("user", 0, -36), anchor("app", -80, 76), PAL.accent);
+    line(anchor("app", 80, 10), anchor("db", -90, 10), PAL.borderStrong);
+    line(anchor("app", 60, 78), anchor("soc", -180, 0), PAL.border);
+    line(anchor("db", -40, 78), anchor("soc", 180, 0), PAL.border);
+
+    /* attacker node */
+    var at = NODES.attacker;
+    ctx.fillStyle = PAL.surface;
+    ctx.strokeStyle = attackerActive ? PAL.danger : PAL.borderStrong;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(at.x, at.y, at.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    label(at.x, at.y - 6, "ATTACKER", 11, attackerActive ? PAL.danger : PAL.muted, true);
+    label(at.x, at.y + 9, "threat actor", 9, PAL.muted);
+
+    /* WAF node */
+    var wf = NODES.waf;
+    ctx.setLineDash(S.step >= 7 ? [] : [4, 4]);
+    ctx.fillStyle = S.step >= 7 ? PAL.elevated : PAL.surface;
+    ctx.strokeStyle = S.step >= 7 ? PAL.accent2 : PAL.border;
+    ctx.lineWidth = 2;
+    rr(wf.x, wf.y - wf.h / 2, wf.w, wf.h, 8); ctx.fill(); ctx.stroke();
+    ctx.setLineDash([]);
+    label(wf.x + wf.w / 2, wf.y, "WAF", 11, S.step >= 7 ? PAL.accent2 : PAL.muted, true);
+
+    /* app node */
+    var ap = NODES.app;
+    ctx.fillStyle = PAL.surface;
+    ctx.strokeStyle = PAL.borderStrong; ctx.lineWidth = 2;
+    rr(ap.x, ap.y, ap.w, ap.h, 10); ctx.fill(); ctx.stroke();
+    label(ap.x + ap.w / 2, ap.y + 16, "APP SERVER", 11, PAL.text, true);
+    for (var wi = 0; wi < 3; wi++) {
+      var wy = ap.y + 40 + wi * 34;
+      ctx.fillStyle = S.workers[wi] ? PAL.warning : PAL.elevated;
+      ctx.strokeStyle = S.workers[wi] ? PAL.warning : PAL.border;
+      rr(ap.x + 22, wy, ap.w - 44, 22, 6); ctx.fill(); ctx.stroke();
+      label(ap.x + ap.w / 2, wy + 11, "worker " + (wi + 1) + (S.workers[wi] ? ": blocked" : ": free"), 9.5, S.workers[wi] ? PAL.surface : PAL.muted, false);
+    }
+    /* queue dots */
+    for (var q = 0; q < S.queue; q++) {
+      ctx.fillStyle = PAL.high;
+      ctx.beginPath();
+      ctx.arc(ap.x + ap.w + 14, ap.y + 30 + q * 16, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (S.queue > 0) { label(ap.x + ap.w + 14, ap.y + 12, "queue", 9, PAL.high, true); }
+
+    /* db node */
+    var dbn = NODES.db;
+    ctx.fillStyle = PAL.surface;
+    ctx.strokeStyle = S.cpu > 80 ? PAL.danger : PAL.borderStrong; ctx.lineWidth = 2;
+    rr(dbn.x, dbn.y, dbn.w, dbn.h, 10); ctx.fill(); ctx.stroke();
+    label(dbn.x + dbn.w / 2, dbn.y + 16, "DATABASE", 11, PAL.text, true);
+    var gx = dbn.x + 18, gy = dbn.y + 44, gw = dbn.w - 36, gh = 18;
+    ctx.fillStyle = PAL.elevated; rr(gx, gy, gw, gh, 6); ctx.fill();
+    ctx.fillStyle = cpuColor(S.cpu); rr(gx, gy, Math.max(4, gw * S.cpu / 100), gh, 6); ctx.fill();
+    label(dbn.x + dbn.w / 2, gy + gh / 2, "CPU " + Math.round(S.cpu) + "%", 10, S.cpu > 60 ? PAL.bg : PAL.text, true);
+    label(dbn.x + dbn.w / 2, gy + gh + 22, "wildcard search q=%%%a%%%", 9.5, PAL.muted);
+    label(dbn.x + dbn.w / 2, gy + gh + 40, "full table scan: 24,118,026 rows", 9.5, S.step >= 3 ? PAL.high : PAL.muted);
+    label(dbn.x + dbn.w / 2, dbn.y + dbn.h - 16, S.step === 7 ? "statement timeout: 3s" : "slow-query log: on", 9.5, S.step === 7 ? PAL.accent2 : PAL.muted);
+
+    /* user node */
+    var un = NODES.user;
+    ctx.fillStyle = PAL.surface;
+    ctx.strokeStyle = PAL.accent; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(un.x, un.y, un.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    label(un.x, un.y - 6, "LEGIT USER", 11, PAL.accent, true);
+    label(un.x, un.y + 9, "real customer", 9, PAL.muted);
+
+    /* SOC panel */
+    var sc = NODES.soc;
+    ctx.fillStyle = PAL.surface;
+    ctx.strokeStyle = S.step === 6 ? PAL.accent : PAL.borderStrong; ctx.lineWidth = S.step === 6 ? 2.5 : 2;
+    rr(sc.x, sc.y, sc.w, sc.h, 10); ctx.fill(); ctx.stroke();
+    label(sc.x + 14, sc.y + 16, "SOC PANEL", 11, S.step === 6 ? PAL.accent : PAL.text, true, "left");
+    /* mini bar chart: 5xx per minute */
+    var bx = sc.x + 18, by = sc.y + sc.h - 18, bw = 14, gap = 8;
+    label(bx, sc.y + 38, "5xx per minute", 9.5, PAL.muted, false, "left");
+    for (var bi = 0; bi < S.bars.length; bi++) {
+      var bh = Math.max(2, S.bars[bi] * 2.2);
+      ctx.fillStyle = S.bars[bi] > 20 ? PAL.danger : (S.bars[bi] > 12 ? PAL.warning : PAL.borderStrong);
+      rr(bx + bi * (bw + gap), by - bh, bw, bh, 3); ctx.fill();
+    }
+    /* feed */
+    var fx = sc.x + 260, fy = sc.y + 40;
+    label(fx, sc.y + 16 + 6, "", 9, PAL.muted);
+    label(sc.x + sc.w - 14, sc.y + 38, "live feed", 9.5, PAL.muted, false, "right");
+    var shown = S.feed.slice(-7);
+    for (var fi = 0; fi < shown.length; fi++) {
+      label(fx, fy + fi * 18, shown[fi], 10.5, PAL.accent2, false, "left");
+    }
+    if (S.step >= 7) { label(fx, fy + Math.min(shown.length, 7) * 18, "controls active: budget + rate limit", 10.5, PAL.success, false, "left"); }
+
+    /* tokens */
+    for (var ti = 0; ti < S.tokens.length; ti++) {
+      var tk = S.tokens[ti];
+      var px = tk.from.x + (tk.to.x - tk.from.x) * tk.t;
+      var py = tk.from.y + (tk.to.y - tk.from.y) * tk.t;
+      ctx.fillStyle = tk.color;
+      ctx.beginPath(); ctx.arc(px, py, tk.size, 0, Math.PI * 2); ctx.fill();
+      if (tk.label) { label(px, py - 12, tk.label, 9, tk.color, true); }
+    }
+    /* effects */
+    for (var ei = 0; ei < S.effects.length; ei++) {
+      var ef = S.effects[ei];
+      ctx.globalAlpha = Math.max(0, ef.life);
+      label(ef.x, ef.y, ef.text, 11, ef.color, true, "left");
+      ctx.globalAlpha = 1;
+    }
+    /* caption strip inside canvas top-right */
+    label(W - 14, 18, "step " + S.step + " / 8", 11, PAL.muted, true, "right");
+  }
+
+  var canvasScale = 1;
+  function fitCanvas() {
+    if (!simCanvas || !simWrap) { return; }
+    var cssWidth = simCanvas.clientWidth || simWrap.clientWidth || 960;
+    if (cssWidth < 60) { cssWidth = 960; }
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var cssHeight = cssWidth * (H / W);
+    simCanvas.style.height = cssHeight + "px";
+    simCanvas.width = Math.round(cssWidth * dpr);
+    simCanvas.height = Math.round(cssHeight * dpr);
+    canvasScale = (cssWidth * dpr) / W;
+    if (ctx) { ctx.setTransform(canvasScale, 0, 0, canvasScale, 0, 0); }
+  }
+
+  function renderStatic() {
+    /* Final-state render of the current step, used for reduced motion and stepping */
+    updateSim(0);
+    drawScene();
+  }
+
+  var rafId = null;
+  function loop(ts) {
+    if (!S.playing) { rafId = null; return; }
+    var dt = 0;
+    if (S.lastFrame) { dt = Math.min(0.05, (ts - S.lastFrame) / 1000); }
+    S.lastFrame = ts;
+    updateSim(dt * S.speed);
+    drawScene();
+    rafId = window.requestAnimationFrame(loop);
+  }
+  function startLoop() {
+    if (rafId) { return; }
+    S.lastFrame = 0;
+    rafId = window.requestAnimationFrame(loop);
+  }
+
+  function initSim() {
+    if (!simCanvas || !ctx) { return; }
+    fitCanvas();
+    if (window.ResizeObserver) {
+      var ro = new ResizeObserver(function () { fitCanvas(); drawScene(); });
+      ro.observe(simCanvas);
+    }
+    window.addEventListener("resize", function () { fitCanvas(); drawScene(); });
+    /* chips */
+    if (chipsEl) {
+      for (var i = 1; i <= SIM_STEPS; i++) {
+        (function (n) {
+          var chip = d.createElement("button");
+          chip.type = "button";
+          chip.className = "sim-chip";
+          chip.setAttribute("data-step", String(n));
+          chip.setAttribute("aria-label", "Jump to step " + n + " of 8");
+          chip.textContent = String(n);
+          chip.addEventListener("click", function () { setStep(n); });
+          chipsEl.appendChild(chip);
+        })(i);
+      }
+    }
+    /* controls */
+    if (playBtn) {
+      playBtn.addEventListener("click", function () {
+        if (prefersReduced()) { return; }
+        S.playing = true;
+        playBtn.textContent = "Playing";
+        startLoop();
+      });
+    }
+    if (pauseBtn) {
+      pauseBtn.addEventListener("click", function () {
+        S.playing = false;
+        if (playBtn) { playBtn.textContent = "Play"; }
+      });
+    }
+    if (restartBtn) {
+      restartBtn.addEventListener("click", function () {
+        S.playing = false;
+        if (playBtn) { playBtn.textContent = "Play"; }
+        setStep(1);
+        drawScene();
+      });
+    }
+    if (speedSel) {
+      S.speed = parseFloat(speedSel.value) || 1;
+      speedSel.addEventListener("change", function () { S.speed = parseFloat(speedSel.value) || 1; });
+    }
+    /* tooltips: hover + click/tap */
+    function buildHitboxes() {
+      HITBOXES = [
+        { idx: 0, type: "circle", n: NODES.attacker },
+        { idx: 1, type: "rect", n: NODES.waf },
+        { idx: 2, type: "rect", n: NODES.app },
+        { idx: 3, type: "rect", n: NODES.db },
+        { idx: 4, type: "circle", n: NODES.user },
+        { idx: 5, type: "rect", n: NODES.soc }
+      ];
+    }
+    buildHitboxes();
+    function eventToLogical(ev) {
+      var rect = simCanvas.getBoundingClientRect();
+      return {
+        x: (ev.clientX - rect.left) * (W / rect.width),
+        y: (ev.clientY - rect.top) * (H / rect.height)
+      };
+    }
+    function hitTest(p) {
+      for (var i = 0; i < HITBOXES.length; i++) {
+        var hb = HITBOXES[i], n = hb.n;
+        if (hb.type === "circle") {
+          if ((p.x - n.x) * (p.x - n.x) + (p.y - n.y) * (p.y - n.y) <= (n.r + 6) * (n.r + 6)) { return hb.idx; }
+        } else {
+          if (p.x >= n.x - 6 && p.x <= n.x + n.w + 6 && p.y >= n.y - 6 && p.y <= n.y + n.h + 6) { return hb.idx; }
+        }
+      }
+      return -1;
+    }
+    function showTooltip(idx, ev) {
+      if (!tooltipEl || idx < 0 || !TOOLTIP_INFO[idx]) { if (tooltipEl) { hideTooltip(); } return; }
+      var info = TOOLTIP_INFO[idx];
+      tooltipEl.textContent = "";
+      var strong = d.createElement("strong");
+      strong.textContent = info.name;
+      tooltipEl.appendChild(strong);
+      tooltipEl.appendChild(d.createTextNode(info.text));
+      tooltipEl.style.display = "block";
+      tooltipEl.setAttribute("aria-hidden", "false");
+      var wrapRect = simWrap.getBoundingClientRect();
+      var x = ev.clientX - wrapRect.left + 14;
+      var y = ev.clientY - wrapRect.top + 14;
+      if (x > wrapRect.width - 260) { x = Math.max(4, x - 280); }
+      if (y > wrapRect.height - 120) { y = Math.max(4, y - 130); }
+      tooltipEl.style.left = x + "px";
+      tooltipEl.style.top = y + "px";
+    }
+    function hideTooltip() {
+      if (!tooltipEl) { return; }
+      tooltipEl.style.display = "none";
+      tooltipEl.setAttribute("aria-hidden", "true");
+    }
+    simCanvas.addEventListener("pointermove", function (ev) {
+      var idx = hitTest(eventToLogical(ev));
+      if (idx >= 0) { showTooltip(idx, ev); } else { hideTooltip(); }
+    });
+    simCanvas.addEventListener("pointerleave", hideTooltip);
+    simCanvas.addEventListener("click", function (ev) {
+      var idx = hitTest(eventToLogical(ev));
+      if (idx >= 0) { showTooltip(idx, ev); } else { hideTooltip(); }
+    });
+    /* keyboard: canvas focusable to allow stepping with arrow keys */
+    simCanvas.setAttribute("tabindex", "0");
+    simCanvas.addEventListener("keydown", function (ev) {
+      if (ev.key === "ArrowRight" || ev.key === "ArrowDown") { ev.preventDefault(); setStep(Math.min(SIM_STEPS, S.step + 1)); }
+      if (ev.key === "ArrowLeft" || ev.key === "ArrowUp") { ev.preventDefault(); setStep(Math.max(1, S.step - 1)); }
+    });
+
+    setCaption();
+    resetStepState();
+    if (prefersReduced()) {
+      S.feed = [];
+      renderStatic();
+      if (playBtn) {
+        playBtn.disabled = true;
+        playBtn.title = "Autoplay is off because your system prefers reduced motion. Use the step buttons.";
+      }
+    } else {
+      drawScene();
+      S.playing = true;
+      startLoop();
+    }
+  }
+
+  /* ---------- Theme change observer: re-read palette, redraw ---------- */
+  safe(function () {
+    var mo = new MutationObserver(function () {
+      refreshPalette();
+      if (ctx) { drawScene(); }
+    });
+    mo.observe(d.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  });
+
+  /* ---------- Boot ---------- */
+  safe(function () {
+    refreshPalette();
+    buildTocs();
+    refreshTocLinks();
+    markActive();
+    onScroll();
+    initSim();
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,2300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ==== HEAD-META:BEGIN ==== -->
+<title>T1496.003 SMS Pumping — ATT&CK Sub-technique Guide</title>
+<meta name="description" content="Beginner-friendly detection engineering guide for MITRE ATT&CK T1496.003 SMS Pumping: how fraudsters abuse OTP and verification forms to send paid SMS to their own number ranges, what it looks like in Twilio, AWS SNS and Cognito logs, and how to detect and stop it.">
+<meta name="guide-version" content="2.0">
+<!-- ==== HEAD-META:END ==== -->
+<script>
+(function(){try{var t=localStorage.getItem('atk-theme');if(!t){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+</script>
+<style>
+/* ============================================================
+   Design system — shared by all ATT&CK technique guide pages
+   ============================================================ */
+:root{
+  --bg:#0b0f1a;
+  --surface:#121a2e;
+  --surface-2:#172138;
+  --elevated:#1a2542;
+  --text:#e7edf8;
+  --muted:#9aa8c0;
+  --border:#24314e;
+  --border-strong:#2f4066;
+  --accent:#4f8cff;
+  --accent-2:#22d3ee;
+  --violet:#a78bfa;
+  --success:#34d399;
+  --warning:#fbbf24;
+  --danger:#f87171;
+  --high:#fb923c;
+  --low:#4ade80;
+  --shadow:0 10px 30px rgba(3,10,24,.35);
+  --code-bg:#0d1526;
+  --r-card:14px;
+  --r-ctl:9px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+  --sidebar-w:264px;
+  --maxw:1280px;
+}
+[data-theme="light"]{
+  --bg:#f3f6fc;
+  --surface:#ffffff;
+  --surface-2:#f5f8ff;
+  --elevated:#e9eefa;
+  --text:#182238;
+  --muted:#5a6a85;
+  --border:#d9e2f2;
+  --border-strong:#c2d0ea;
+  --accent:#2f6fe4;
+  --accent-2:#0891b2;
+  --violet:#7c5ce0;
+  --success:#0d9e6e;
+  --warning:#b45309;
+  --danger:#dc2626;
+  --high:#c2410c;
+  --low:#15803d;
+  --shadow:0 10px 30px rgba(30,50,90,.10);
+  --code-bg:#f6f9ff;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-sans);
+  font-size:16.5px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{line-height:1.25;margin:0 0 .5em}
+h2{font-size:1.72rem;font-weight:750;letter-spacing:-.01em}
+h3{font-size:1.22rem;font-weight:700}
+h4{font-size:1.02rem;font-weight:700}
+p{margin:0 0 1em}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+ul,ol{margin:0 0 1em;padding-left:1.35em}
+li{margin:.3em 0}
+code,kbd,samp{font-family:var(--font-mono);font-size:.92em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:.08em .35em;overflow-wrap:anywhere}
+pre{margin:0}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent);color:#fff}
+.visually-hidden{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.skip-link{position:absolute;left:12px;top:-48px;z-index:200;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;font-weight:600;transition:top .15s ease}
+.skip-link:focus{top:12px}
+.mono{font-family:var(--font-mono)}
+
+/* ---- progress bar ---- */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:120;background:transparent;pointer-events:none}
+.progress-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+/* ---- hero ---- */
+.hero{
+  position:relative;
+  padding:64px 24px 34px;
+  background:
+    radial-gradient(900px 380px at 85% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+    radial-gradient(700px 320px at 8% 0%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 55%),
+    var(--bg);
+  border-bottom:1px solid var(--border);
+}
+.hero-inner{max-width:var(--maxw);margin:0 auto}
+.kicker{
+  font-family:var(--font-mono);
+  font-size:.74rem;
+  font-weight:600;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--accent-2);
+  margin:0 0 14px;
+}
+.page-title{
+  font-size:clamp(1.9rem,4.2vw,2.9rem);
+  font-weight:800;
+  letter-spacing:-.02em;
+  margin:0 0 14px;
+  max-width:22ch;
+}
+.tid{
+  font-family:var(--font-mono);
+  font-size:.82em;
+  font-weight:700;
+  color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius:10px;
+  padding:.08em .38em;
+  margin-right:.28em;
+  white-space:nowrap;
+}
+.hero-intro{max-width:72ch;color:var(--muted);font-size:1.06rem;margin:0 0 20px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:0 0 26px}
+.chips li{
+  font-family:var(--font-mono);font-size:.74rem;color:var(--muted);
+  background:var(--surface);border:1px solid var(--border);border-radius:999px;
+  padding:5px 11px;display:inline-flex;align-items:center;gap:7px;
+}
+.chips li b{color:var(--text);font-weight:600}
+.chips .dot{width:7px;height:7px;border-radius:50%;background:var(--accent-2);display:inline-block}
+.keyfacts{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;
+  max-width:1080px;
+}
+.kf{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:14px 16px;box-shadow:var(--shadow);
+}
+.kf-label{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.kf-value{font-weight:700;font-size:.95rem;margin:0 0 4px;line-height:1.4}
+.kf-sub{font-size:.8rem;color:var(--muted);margin:0;line-height:1.5}
+
+/* ---- two column layout ---- */
+.layout{
+  max-width:var(--maxw);
+  margin:0 auto;
+  padding:34px 24px 90px;
+  display:grid;
+  grid-template-columns:var(--sidebar-w) minmax(0,1fr);
+  gap:38px;
+  align-items:start;
+}
+main#main-content{min-width:0}
+
+/* ---- table of contents ---- */
+.toc{
+  position:sticky;top:22px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:16px 14px;box-shadow:var(--shadow);
+  max-height:calc(100vh - 44px);overflow:auto;
+}
+.toc-title{
+  font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 10px;padding:0 6px;display:flex;justify-content:space-between;align-items:center;gap:8px;
+}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc li{margin:1px 0}
+.toc a{
+  display:block;color:var(--muted);font-size:.86rem;line-height:1.4;
+  padding:6px 10px;border-radius:8px;border-left:2px solid transparent;
+}
+.toc a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc a.sub{padding-left:24px;font-size:.8rem}
+.toc a.active{color:var(--accent);background:color-mix(in srgb, var(--accent) 10%, transparent);border-left-color:var(--accent);font-weight:600}
+.toc-close{display:none}
+.theme-btn{
+  font:inherit;font-size:.74rem;font-weight:600;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;
+  padding:4px 10px;cursor:pointer;white-space:nowrap;
+}
+.theme-btn:hover{border-color:var(--accent)}
+
+/* ---- sections ---- */
+.sec{margin-top:54px;scroll-margin-top:22px}
+.sec:first-child{margin-top:0}
+.sec-head{display:flex;align-items:center;gap:13px;margin-bottom:10px}
+.sec-num{
+  flex:0 0 auto;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-weight:700;font-size:.95rem;color:var(--accent-2);
+  background:color-mix(in srgb, var(--accent-2) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
+  border-radius:11px;
+}
+.sec-head h2{margin:0}
+.sec-intro{color:var(--muted);max-width:76ch;margin-bottom:22px}
+.sub-head{display:flex;align-items:baseline;gap:10px;margin:34px 0 4px;scroll-margin-top:22px}
+.sub-num{
+  font-family:var(--font-mono);font-size:.8rem;font-weight:700;color:var(--violet);
+  background:color-mix(in srgb, var(--violet) 13%, transparent);
+  border:1px solid color-mix(in srgb, var(--violet) 40%, transparent);
+  border-radius:7px;padding:2px 8px;white-space:nowrap;
+}
+.sub-head h3{margin:0}
+.sub-intro{color:var(--muted);max-width:74ch;margin:0 0 16px}
+
+/* ---- cards & grids ---- */
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:20px 22px;box-shadow:var(--shadow);margin:0 0 16px;
+}
+.card>h3:first-child,.card>h4:first-child{margin-top:0}
+.card p:last-child,.card ul:last-child,.card ol:last-child{margin-bottom:0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.grid2 .card,.grid3 .card{margin:0}
+.stack>*+*{margin-top:12px}
+
+/* ---- callouts ---- */
+.callout{
+  border:1px solid var(--border);border-left:4px solid var(--accent);
+  background:var(--surface);border-radius:10px;padding:14px 18px;margin:0 0 16px;
+}
+.callout-label{font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin:0 0 6px}
+.callout p:last-child{margin-bottom:0}
+.callout.note{border-left-color:var(--accent)}
+.callout.note .callout-label{color:var(--accent)}
+.callout.warn{border-left-color:var(--warning)}
+.callout.warn .callout-label{color:var(--warning)}
+.callout.good{border-left-color:var(--success)}
+.callout.good .callout-label{color:var(--success)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .callout-label{color:var(--danger)}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:0 0 18px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:.9rem}
+th{
+  text-align:left;font-family:var(--font-mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);background:var(--surface-2);padding:10px 12px;border-bottom:1px solid var(--border-strong);
+  white-space:nowrap;
+}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:var(--surface-2)}
+td ul{margin:0;padding-left:1.1em}
+td code{white-space:normal}
+
+/* ---- badges ---- */
+.badge{
+  display:inline-block;font-family:var(--font-mono);font-size:.7rem;font-weight:700;
+  border-radius:999px;padding:2px 9px;border:1px solid;letter-spacing:.03em;white-space:nowrap;
+}
+.badge + .badge{margin-left:4px}
+.sev-critical{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 50%,transparent);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.sev-high{color:var(--high);border-color:color-mix(in srgb,var(--high) 50%,transparent);background:color-mix(in srgb,var(--high) 12%,transparent)}
+.sev-medium{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 50%,transparent);background:color-mix(in srgb,var(--warning) 12%,transparent)}
+.sev-low{color:var(--low);border-color:color-mix(in srgb,var(--low) 50%,transparent);background:color-mix(in srgb,var(--low) 12%,transparent)}
+.sev-info{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 50%,transparent);background:color-mix(in srgb,var(--accent-2) 12%,transparent)}
+.plat{color:var(--muted);border-color:var(--border-strong);background:var(--surface-2);font-weight:600}
+
+/* ---- key/value lists ---- */
+.kv{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:8px 18px}
+.kv dt{
+  font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding-top:2px;
+}
+.kv dd{margin:0;font-size:.93rem;overflow-wrap:anywhere}
+@media (max-width:640px){.kv{grid-template-columns:1fr}.kv dt{padding-top:0}.kv dd{margin:0 0 8px}}
+
+/* ---- code blocks ---- */
+.codeblock{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--code-bg)}
+.code-head{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  background:var(--surface-2);border-bottom:1px solid var(--border);
+  padding:7px 12px;
+}
+.code-lang{font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;overflow-wrap:anywhere}
+.copy-btn{
+  font:inherit;font-family:var(--font-mono);font-size:.72rem;font-weight:700;color:var(--text);
+  background:var(--elevated);border:1px solid var(--border-strong);border-radius:8px;
+  padding:4px 12px;cursor:pointer;flex:0 0 auto;
+}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.copy-btn.ok{color:var(--success);border-color:var(--success)}
+.codeblock pre{overflow-x:auto;padding:14px 16px;max-height:560px}
+.codeblock code{font-family:var(--font-mono);font-size:.82rem;line-height:1.55;background:none;border:none;padding:0;color:var(--text);white-space:pre;display:block;min-width:max-content}
+
+/* ---- timeline ---- */
+.timeline{list-style:none;margin:0 0 16px;padding:0 0 0 4px;position:relative}
+.timeline::before{content:"";position:absolute;left:12px;top:6px;bottom:6px;width:2px;background:var(--border-strong)}
+.timeline li{position:relative;padding:0 0 16px 34px;margin:0}
+.timeline li:last-child{padding-bottom:0}
+.tl-dot{
+  position:absolute;left:5px;top:5px;width:16px;height:16px;border-radius:50%;
+  background:var(--surface);border:3px solid var(--accent);z-index:1;
+}
+.timeline li.warn .tl-dot{border-color:var(--warning)}
+.timeline li.bad .tl-dot{border-color:var(--danger)}
+.timeline li.good .tl-dot{border-color:var(--success)}
+.tl-when{font-family:var(--font-mono);font-size:.76rem;font-weight:700;color:var(--accent-2);display:block;margin-bottom:2px}
+.timeline p{margin:0}
+
+/* ---- checklist ---- */
+.checklist{list-style:none;padding:0;margin:0}
+.checklist li{position:relative;padding:0 0 0 30px;margin:.45em 0}
+.checklist li::before{
+  content:"";position:absolute;left:0;top:.28em;width:15px;height:15px;
+  border:2px solid var(--accent);border-radius:4px;background:var(--surface-2);
+}
+
+/* ---- simulation ---- */
+.simwrap{padding:18px}
+.sim-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.sim-title{font-family:var(--font-mono);font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.sim-stage{position:relative;margin-bottom:12px}
+#simCanvas{width:100%;height:auto;display:block;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);touch-action:manipulation}
+.sim-tip{
+  position:absolute;display:none;max-width:270px;z-index:30;pointer-events:none;
+  background:var(--elevated);border:1px solid var(--border-strong);border-radius:9px;
+  box-shadow:var(--shadow);padding:9px 12px;font-size:.8rem;line-height:1.45;color:var(--text);
+}
+.sim-tip b{display:block;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2);margin-bottom:3px}
+.sim-caption{
+  border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  padding:12px 16px;margin-bottom:10px;
+}
+.sim-caption strong{display:block;font-family:var(--font-mono);font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.sim-caption p{margin:0;font-size:.95rem}
+.sim-hint{
+  border:1px solid color-mix(in srgb,var(--success) 35%,transparent);
+  border-left:4px solid var(--success);
+  background:color-mix(in srgb,var(--success) 8%,transparent);
+  border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:.88rem;
+}
+.sim-hint b{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--success)}
+.sim-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.btn{
+  font:inherit;font-size:.85rem;font-weight:600;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--r-ctl);
+  padding:7px 16px;cursor:pointer;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.1);color:#fff}
+.sim-controls label{font-size:.8rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.sim-controls select{
+  font:inherit;font-size:.82rem;color:var(--text);background:var(--surface-2);
+  border:1px solid var(--border-strong);border-radius:8px;padding:5px 8px;cursor:pointer;
+}
+.sim-chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip-step{
+  font-family:var(--font-mono);font-size:.72rem;font-weight:600;color:var(--muted);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:999px;
+  padding:4px 11px;cursor:pointer;
+}
+.chip-step:hover{color:var(--text);border-color:var(--border-strong)}
+.chip-step.active{color:#fff;background:var(--accent);border-color:var(--accent)}
+.sim-story{margin-top:18px}
+.sim-story ol{margin:0;padding-left:1.4em}
+.sim-story li{margin:.55em 0}
+.sim-story .st{font-family:var(--font-mono);font-weight:700;color:var(--accent-2)}
+.sim-print-note{display:none}
+
+/* ---- floating buttons, overlay ---- */
+.fab{
+  position:fixed;z-index:130;border:1px solid var(--border-strong);cursor:pointer;
+  background:var(--elevated);color:var(--text);box-shadow:var(--shadow);
+  border-radius:999px;font:inherit;font-weight:700;
+}
+.fab:hover{border-color:var(--accent);color:var(--accent)}
+.fab-toc{
+  display:none;left:16px;bottom:16px;font-size:.85rem;padding:11px 18px;
+}
+.fab-top{
+  right:16px;bottom:16px;width:46px;height:46px;font-size:1.15rem;line-height:1;
+  opacity:0;pointer-events:none;transition:opacity .2s ease;
+}
+.fab-top.show{opacity:1;pointer-events:auto}
+.backdrop{
+  position:fixed;inset:0;z-index:140;background:rgba(4,8,18,.55);
+  opacity:0;pointer-events:none;transition:opacity .2s ease;
+}
+body.toc-open .backdrop{opacity:1;pointer-events:auto}
+
+/* ---- links list ---- */
+.links-list{list-style:none;padding:0;margin:0}
+.links-list li{margin:.4em 0;font-size:.92rem}
+.links-list .lt{font-family:var(--font-mono);font-size:.72rem;color:var(--muted);display:block}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{
+    position:fixed;top:0;left:0;bottom:0;width:min(330px,88vw);max-height:none;z-index:150;
+    border-radius:0 var(--r-card) var(--r-card) 0;
+    transform:translateX(-104%);transition:transform .25s ease;
+  }
+  body.toc-open .toc{transform:translateX(0)}
+  .toc-close{
+    display:inline-block;font:inherit;font-size:.78rem;font-weight:700;color:var(--text);
+    background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;
+    padding:3px 11px;cursor:pointer;
+  }
+  .fab-toc{display:inline-flex;align-items:center;gap:7px}
+}
+@media (max-width:640px){
+  .hero{padding:44px 16px 26px}
+  .layout{padding:26px 16px 90px}
+  .grid2,.grid3{grid-template-columns:minmax(0,1fr)}
+  .card{padding:16px}
+  .sec{margin-top:44px}
+  .btn{flex:1 1 auto;text-align:center}
+  .sim-controls{gap:6px}
+  .sim-controls .btn{padding:8px 10px}
+  .page-title{max-width:none}
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+/* ============================================================
+   Print
+   ============================================================ */
+@media print{
+  .toc,.fab,.progress-bar,.backdrop,.copy-btn,.sim-controls,.sim-chips,.sim-top .btn,
+  .skip-link,.theme-btn,.toc-close{display:none!important}
+  body{background:#fff;color:#111}
+  .hero{background:#fff!important;border-bottom:2px solid #333;padding:10px 0}
+  .layout{display:block;padding:0;max-width:none}
+  .card,.callout,.tablewrap,.codeblock,.kf,.simwrap{box-shadow:none;break-inside:avoid}
+  .card,.callout{border:1px solid #bbb}
+  .tablewrap{overflow:visible}
+  table{min-width:0;font-size:.8rem}
+  .codeblock{border:1px solid #bbb;background:#f6f6f6}
+  .codeblock pre{max-height:none;overflow:visible}
+  .codeblock code{color:#111;white-space:pre-wrap;min-width:0}
+  #simCanvas{display:none}
+  .sim-stage::after{content:"(Interactive simulation is not printed. Read the written step-by-step story below.)";display:block;font-size:.85rem;color:#555}
+  .sim-caption,.sim-hint{border:1px solid #bbb;background:#fff}
+  a{color:#000;text-decoration:underline}
+  .sec{break-inside:auto}
+  h2,h3,h4{break-after:avoid}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.75em;word-break:break-all}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<!-- ==== PLATFORM:BEGIN ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1496.003"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== PLATFORM:END ==== -->
+
+<div class="progress-bar" aria-hidden="true"><span id="progressFill"></span></div>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
+<!-- ==== HERO:BEGIN ==== -->
+<div class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&CK · Impact Tactic · Sub-technique Guide</p>
+    <h1 class="page-title"><span class="tid">T1496.003</span> SMS Pumping</h1>
+    <p class="hero-intro">SMS pumping is telecom fraud that uses your own verification forms against you. A fraud ring leases a block of phone numbers, then floods your OTP (one-time password) and signup forms with automated requests. Your app pays for every SMS it sends, and a share of each delivery fee flows back to the fraudster. Vendors commonly report six-figure bills within days, while real users wait for codes that arrive late or never. This guide shows the whole flow, the logs it leaves, and how to detect and stop it.</p>
+    <ul class="chips">
+      <li><span class="dot"></span>Tactic: <b>Impact</b></li>
+      <li>Parent technique: <b>T1496 Resource Hijacking</b></li>
+      <li>Platform: <b>SaaS</b></li>
+      <li>ATT&CK <b>v20</b> · modified 15 Apr 2025</li>
+      <li>Detection strategy: <b>DET0156</b></li>
+      <li>Mitigation: <b>M1013 CAPTCHA</b></li>
+      <li>Guide version: <b>2.0</b></li>
+    </ul>
+    <div class="keyfacts">
+      <div class="kf"><p class="kf-label">What it is</p><p class="kf-value">Telecom fraud that turns your OTP forms into an SMS-sending machine</p><p class="kf-sub">No intrusion needed: the attacker abuses a feature that works as designed.</p></div>
+      <div class="kf"><p class="kf-label">Typical impact</p><p class="kf-value">Huge SMS bills, failed verifications</p><p class="kf-sub">Vendors report six-figure bills in days; Twilio documented $62.7M in avoided fraud costs and over 569 million blocked fraud attempts for its customers, June 2022 to October 2024.</p></div>
+      <div class="kf"><p class="kf-label">Prime targets</p><p class="kf-value">Apps that verify by SMS</p><p class="kf-sub">Fintech, wallets, crypto, marketplaces, and delivery apps with OTP in signup or login.</p></div>
+      <div class="kf"><p class="kf-label">Why it is hard to catch</p><p class="kf-value">Volume alone looks like a busy day</p><p class="kf-sub">The strongest signal is the ratio: thousands of codes sent, almost none verified.</p></div>
+    </div>
+  </div>
+</div>
+<!-- ==== HERO:END ==== -->
+
+<div class="layout">
+<!-- ==== TOC:BEGIN ==== -->
+<nav class="toc" id="toc" aria-label="Table of contents">
+  <p class="toc-title">Contents <button type="button" class="theme-btn" id="themeToggle" aria-label="Switch between dark and light theme">Light mode</button> <button type="button" class="toc-close" id="tocClose">Close</button></p>
+  <ol id="tocList">
+    <li><a href="#s1-overview">1. Overview</a></li>
+    <li><a href="#s2-simulation">2. Animated Simulation</a></li>
+    <li><a href="#s3-red-team">3. Red Team Perspective</a></li>
+    <li><a href="#s4-blue-team">4. Blue Team Perspective</a></li>
+    <li><a href="#s5-detection">5. Detection Engineering Deep Dive</a></li>
+    <li><a class="sub" href="#s51-regulation">5.1 Regulation Mapping</a></li>
+    <li><a class="sub" href="#s52-intel">5.2 Threat Intelligence</a></li>
+    <li><a class="sub" href="#s53-ranking">5.3 Threats Ranking</a></li>
+    <li><a class="sub" href="#s54-logs">5.4 Logs and Patterns</a></li>
+    <li><a class="sub" href="#s55-sigma">5.5 Sigma Rules and Splunk SPL</a></li>
+    <li><a href="#s6-case-study">6. Case Study: the Pumping Wave</a></li>
+    <li><a href="#s7-mitigation">7. Mitigation and Defense</a></li>
+    <li><a href="#s8-mistakes">8. Common Mistakes</a></li>
+    <li><a href="#s9-cheatsheet">9. Cheat Sheet</a></li>
+  </ol>
+</nav>
+<!-- ==== TOC:END ==== -->
+
+<main id="main-content">
+<!-- ==== MAIN-CONTENT:BEGIN ==== -->
+<!-- Guide v2.0: corrected & expanded edition. Audit trail: scripts/audit-v2/AUDIT-T1496.003.md -->
+
+<!-- ================= SECTION 1 ================= -->
+<section class="sec" id="s1-overview">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2>Overview</h2></div>
+  <p class="sec-intro">SMS Pumping is a fraud technique that turns your own verification forms into an SMS-sending machine for criminals. You pay for every message. The attacker collects a share of the delivery fees. This page explains the method, animates the whole flow, and gives you detections, a response plan, and a case study built from public reporting.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>What the sub-technique is</h3>
+      <p>SMS pumping is telecommunications fraud. The attacker first obtains a set of phone numbers from a telecom provider or an aggregator. These numbers sit in high-termination-cost destinations: countries or networks where receiving an SMS pays the number owner a termination fee. Then the attacker abuses a victim's messaging setup, usually a public OTP or account-verification form, to send huge amounts of SMS to exactly those numbers.</p>
+      <p>The victim's app does all the work. It calls its messaging provider, such as Twilio, AWS SNS, or Amazon Cognito, and pays for each message. The telecom pays revenue share to the number owner, who is the attacker. Nobody breaks into your network to do this. The attack abuses a feature that works exactly as designed, and in most cases the attacker steals no data at all: the damage is cost and availability.</p>
+    </div>
+    <div class="card">
+      <h3>Why it matters</h3>
+      <p>Money first. A pumping storm can add tens of thousands of dollars in SMS costs in a single day, because messages to some destinations cost far more than a normal local message. Twilio reports that its Verify Fraud Guard alone saved customers $62.7 million in fraudulent costs and blocked over 569 million fraud attempts between June 2022 and October 2024. That is the measured result at one provider alone.</p>
+      <p>Availability second. The message queue fills with fraud traffic, so real customers wait for passcodes or never get them. Signups can then fail during the busiest growth periods. In regulated sectors, a fraud problem can become an availability and reporting problem too.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where it fits in the attack chain</h3>
+    <p>SMS pumping sits in the <strong>Impact</strong> tactic of MITRE ATT&amp;CK, as sub-technique T1496.003 under Resource Hijacking (T1496). Unlike most ATT&amp;CK techniques, it often needs no intrusion at all. The attacker abuses a public form that exists precisely so strangers can trigger messages. When an intrusion is involved, it is usually small and direct: a leaked messaging API key from a code repository, or stolen provider credentials, which then let the attacker send SMS without touching your forms at all.</p>
+    <p>ATT&amp;CK lists detection strategy DET0156 for this sub-technique. Its analytic AN0443 watches for automated, repetitive triggering of SMS through OTP and verification fields on SaaS platforms, through services like Twilio, AWS SNS, and Amazon Cognito, toward attacker-controlled numbers. The listed mitigation is M1013, Application Developer Guidance, with one concrete piece of advice: consider CAPTCHA protection on forms that send messages via SMS. That is the only mitigation ATT&amp;CK lists for this sub-technique, and Section 7 builds the rest of the defense around it.</p>
+  </div>
+
+  <div class="card">
+    <h3>Key facts</h3>
+    <dl class="kv">
+      <dt>ATT&amp;CK ID</dt><dd>T1496.003 — SMS Pumping (tactic: Impact; parent T1496 Resource Hijacking)</dd>
+      <dt>Platform</dt><dd>SaaS</dd>
+      <dt>Created / modified</dt><dd>25 September 2024 / 15 April 2025 (ATT&amp;CK v20)</dd>
+      <dt>Detection</dt><dd>Strategy DET0156 — SaaS application logs; analytic AN0443 (repetitive OTP triggering toward attacker numbers)</dd>
+      <dt>Mitigation</dt><dd>M1013 Application Developer Guidance — CAPTCHA on forms that send SMS</dd>
+      <dt>Prime targets</dt><dd>Fintech, wallets, crypto exchanges, marketplaces, delivery apps — any product with SMS OTP</dd>
+      <dt>Main signals</dt><dd>OTP request velocity, sends clustered on a few prefixes, sent-versus-verified collapse, spend alerts</dd>
+      <dt>Official page</dt><dd><a href="https://attack.mitre.org/techniques/T1496/003/">attack.mitre.org/techniques/T1496/003/</a></dd>
+    </dl>
+  </div>
+
+  <h3 class="sub-head"><span class="sub-num">1.1</span>The parent technique and its sub-techniques</h3>
+  <p class="sub-intro">This page is one of four sub-technique guides under Resource Hijacking. Use these cards to reach the others on the official ATT&amp;CK site.</p>
+  <div class="grid2">
+    <div class="card"><h4><span class="mono">T1496</span> Resource Hijacking (parent)</h4><p>The family overview: abuse of compute, bandwidth, messaging, and cloud services for attacker profit. <a href="https://attack.mitre.org/techniques/T1496/">Open the ATT&amp;CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.001</span> Compute Hijacking</h4><p>Cryptocurrency mining on servers, endpoints, and containers. <a href="https://attack.mitre.org/techniques/T1496/001/">Open the ATT&amp;CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.002</span> Bandwidth Hijacking</h4><p>Reselling your bandwidth through proxyware, torrents, and scanning. <a href="https://attack.mitre.org/techniques/T1496/002/">Open the ATT&amp;CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.003</span> SMS Pumping — this page</h4><p>Abusing OTP and verification forms to generate paid SMS to attacker-owned number ranges. <a href="https://attack.mitre.org/techniques/T1496/003/">Open the ATT&amp;CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.004</span> Cloud Service Hijacking</h4><p>Mass spam and phishing from compromised SaaS accounts, plus hijacking of cloud AI services (LLMjacking). <a href="https://attack.mitre.org/techniques/T1496/004/">Open the ATT&amp;CK page</a>.</p></div>
+  </div>
+
+  <div class="callout good"><p class="callout-label">What you will learn</p><p>By the end of this guide you will be able to: explain SMS pumping to a manager in one minute, name the log sources that reveal it, write working Sigma rules and Splunk queries for the five core threats (SP-01 to SP-05), run a triage when a spend alert arrives, and build a defense plan that starts with the one mitigation ATT&amp;CK lists.</p></div>
+</section>
+
+<!-- ================= SECTION 2 ================= -->
+<section class="sec" id="s2-simulation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2>Animated Simulation</h2></div>
+  <p class="sec-intro">This simulation shows a complete SMS pumping attack on an app with an OTP form. Watch the fraudster on the left, the victim systems in the middle, and the money loop on the right. Every step lists what the defenders can see at that moment. Press Play, or jump to any step with the buttons.</p>
+
+  <div class="card simwrap">
+    <div class="sim-top">
+      <p class="sim-title" id="simTitle">Scenario: SMS pumping against an OTP app</p>
+      <span class="badge sev-info" id="simStepBadge">Step 1 of 8</span>
+    </div>
+    <div class="sim-stage" id="simStage">
+      <canvas id="simCanvas" role="img" aria-label="Animated diagram of SMS pumping: a fraud ring leases phone numbers, floods a public OTP form with automated requests, the app sends SMS through its messaging provider to the fraud range, costs explode while real users wait for codes, and the SOC responds with CAPTCHA, rate limits, and blocked prefixes. A full text description is in the written story below."></canvas>
+      <div class="sim-tip" id="simTip"></div>
+      <noscript><p style="padding:14px">JavaScript is disabled, so the animation cannot run. The written step-by-step story below describes the same attack.</p></noscript>
+    </div>
+    <div class="sim-caption">
+      <strong id="simStepTitle">Step 1 — Leasing a number range</strong>
+      <p id="simCaption">A fraud ring leases a block of phone numbers in countries with high SMS termination fees. Every delivered message pays them a share of the fee.</p>
+    </div>
+    <div class="sim-hint" id="simHint"><b>Defender view:</b> <span id="simHintText">Nothing yet. This step happens in the telecom market, outside the victim's logs.</span></div>
+    <div class="sim-controls">
+      <button type="button" class="btn primary" id="simPlay">Play</button>
+      <button type="button" class="btn" id="simPause">Pause</button>
+      <button type="button" class="btn" id="simRestart">Restart</button>
+      <label>Speed
+        <select id="simSpeed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+        </select>
+      </label>
+      <div class="sim-chips" id="simChips" role="group" aria-label="Jump to simulation step"></div>
+    </div>
+    <p class="sim-print-note">The animated simulation is replaced here by the written story below.</p>
+  </div>
+
+  <div class="card sim-story">
+    <h3>Written story of the simulation</h3>
+    <p>The list below covers the same eight steps as the animation. Screen readers and printouts get the full content here.</p>
+    <ol>
+      <li><span class="st">Step 1 — Leasing a number range.</span> A fraud ring leases a block of phone numbers in countries where SMS termination fees are high. Every message delivered to those numbers pays the ring a share of the fee. This step happens in the telecom market, so the victim sees nothing yet.</li>
+      <li><span class="st">Step 2 — Studying the signup flow.</span> The fraudster finds a public signup page and confirms that any phone number triggers a verification SMS. No account is needed. Web logs show a handful of OTP requests from one new ASN (Autonomous System Number — the network that owns the IP addresses), which looks like ordinary noise.</li>
+      <li><span class="st">Step 3 — OTP request storm.</span> Bots fire thousands of OTP requests with rotating IP addresses, devices, and identities. Every request carries a phone number from the fraud range. API logs now show request rates far above baseline from a few ASNs, with near-zero completions.</li>
+      <li><span class="st">Step 4 — SMS out through the OTP API.</span> Each request makes the app call its messaging provider. Thousands of SMS leave toward the fraud range and the victim's costs start to grow. Provider logs show the send spike and delivery receipts clustering on one prefix.</li>
+      <li><span class="st">Step 5 — Money flows back, costs explode.</span> The telco delivers the messages and pays termination revenue toward the range owner. The victim pays per SMS, and real users see delayed codes. Spend alerts jump while support tickets rise.</li>
+      <li><span class="st">Step 6 — Conversion collapse triggers the alert.</span> Analytics join sends with verifications: tens of thousands of codes sent, a handful verified. Fraud Guard and conversion alerts fire together. The sent-versus-verified ratio is the strongest single signal.</li>
+      <li><span class="st">Step 7 — Containment.</span> The team enables CAPTCHA on the form, applies per-ASN and per-prefix rate limits, and blocks the fraud range at the provider. The send curve flattens within the hour.</li>
+      <li><span class="st">Step 8 — Hardening and budgets.</span> The app adds destination allowlists, app attestation (a check that the request really comes from the genuine app), resend cooldowns, and hard spend budgets that alert the SOC. Fraud controls become permanent, and the entry point is closed, not just the bill.</li>
+    </ol>
+  </div>
+</section>
+<!-- ================= SECTION 3 ================= -->
+<section class="sec" id="s3-red-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2>Red Team / Hacker Perspective</h2></div>
+  <p class="sec-intro">SMS pumping is a business, not a break-in. Understanding the economics is the best way to predict where it will appear next. This section describes attacker thinking at a conceptual level. The only commands shown are a lab-only demo against your own sandbox, so you can see what the logs look like.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>When and why fraudsters use it</h3>
+      <p>The economics are simple and attractive to criminals. A phone number in a high-termination-cost destination earns its owner a share of every SMS that lands there. The fraudster does not need exploits, malware, or access to your systems. They need three things: a leased number range, a script that can fill in forms, and a way to rotate their source IPs so simple rate limits do not stop them.</p>
+      <p>Targets are chosen for one feature: an SMS that any stranger can trigger. Fintech apps, wallets, crypto exchanges, marketplaces, and delivery services verify users by SMS at scale, so their signup flow becomes a source of income for the attacker. Pumping pays best where verification is frequent, required, and instant.</p>
+    </div>
+    <div class="card">
+      <h3>How it is performed (concept)</h3>
+      <p>The pattern is almost always the same five moves. First, acquire number ranges in high-termination-cost destinations from providers or resellers. Second, find OTP endpoints and learn their parameters. Third, automate requests using residential proxy networks, emulator farms, or SIM banks so each request looks like a new device. Fourth, tune the storm: spread it over hours, randomize fingerprints, and stay just under obvious thresholds. Fifth, collect the revenue share as the telco chain pays out.</p>
+      <p>There is a second, intruder-flavored path: steal messaging credentials. Keys for Twilio, AWS SNS, or Cognito are regularly leaked into public code repositories. With a valid key the attacker skips your forms entirely and sends SMS directly from your account, which still generates the same bill and the same revenue share.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where it applies and what it needs</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Environment</th><th>How it is abused</th><th>What the fraudster needs</th></tr></thead>
+      <tbody>
+        <tr><td>Public web signup forms</td><td>OTP field triggered without an account, resend without limits</td><td>Number range, script, rotating source IPs</td></tr>
+        <tr><td>Mobile apps</td><td>Registration and login OTP, resend buttons, phone-change flows</td><td>Emulator or device farm to look like many handsets</td></tr>
+        <tr><td>Messaging APIs (Twilio, AWS SNS, Cognito)</td><td>Direct sends with stolen or leaked credentials</td><td>Valid API keys, often found in public repositories</td></tr>
+        <tr><td>Cognito user pools</td><td>Sign-up flows that send SMS multi-factor authentication (MFA) codes by default</td><td>Scripted account creation against the pool</td></tr>
+        <tr><td>Voice and PBX systems</td><td>Classic toll fraud sibling: dial-through into premium ranges</td><td>An exposed trunk or weak PBX (private branch exchange, a private phone system) configuration</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="callout danger">
+    <p class="callout-label">Ethics and legality</p>
+    <p>SMS pumping is criminal fraud in nearly every country, and running it "as a test" against a site you do not own can break computer misuse, telecom, and fraud laws at once. The economics above are explained so defenders can predict attacker behavior, not so anyone can copy it. Everything you execute yourself should stay inside a lab you own. Never point scripts at real endpoints, and never use real customer phone numbers.</p>
+  </div>
+
+  <div class="card">
+    <h3>Lab-only example: see the log shape, safely</h3>
+    <p>This demo does two OTP requests against your own sandbox app on localhost. It shows the exact log line you will later compare attacks against. The phone numbers use the reserved fictional range 555-0100 to 555-0199, which never reaches a real network. Two requests are harmless; a loop is how criminals operate, so there is no loop here.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">bash — lab only, against your own localhost sandbox</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code># Lab only: two manual OTP requests to YOUR OWN sandbox app.
+# No loop, no real numbers (202-555-0100/0101 use the reserved
+# 555-01XX fictional block), no traffic leaves your machine.
+
+curl -s -X POST http://127.0.0.1:8080/api/otp/send \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "+12025550100", "flow": "signup"}'
+
+curl -s -X POST http://127.0.0.1:8080/api/otp/send \
+  -H "Content-Type: application/json" \
+  -d '{"phone": "+12025550101", "flow": "signup"}'</code></pre>
+    </figure>
+    <p>With API gateway logging on, each request produces one line like this:</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example — gateway log line for one lab request (JSON)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{"ts":"2025-11-20T10:15:02Z","method":"POST","path":"/api/otp/send",
+ "status":200,"client_ip":"127.0.0.1","dest_prefix":"+1","latency_ms":184,
+ "otp_sent":true,"note":"lab baseline: two manual requests"}</code></pre>
+    </figure>
+    <p>Now imagine this line repeated 40,000 times an hour from one ASN, spread over 900 client IPs, with <code>dest_prefix</code> set to one high-cost destination on 98% of requests and almost no follow-up verification. In this guide, <code>+999</code> is the placeholder prefix for a high-termination-cost destination; 999 is not assigned to any country, so no real destination is singled out. That repeated shape is SP-01.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Common variations</h3>
+      <ul>
+        <li><strong>AIT (artificially inflated traffic) on marketing sends:</strong> the same fraud aimed at double opt-in forms, so every "confirm my subscription" text pays the ring.</li>
+        <li><strong>Cognito and SNS signup pumping:</strong> user pools with SMS MFA on by default get pumped through mass account creation.</li>
+        <li><strong>Toll fraud and PBX dial-through:</strong> the voice sibling with the same revenue model, older and still active.</li>
+        <li><strong>Storm as cover:</strong> pumping waves sometimes mask credential testing on the same OTP endpoint, because noise hides the takeover attempts.</li>
+        <li><strong>Free-trial farming:</strong> bulk signups on freemium apps whose welcome SMS bills the provider from day one.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Mistakes fraudsters make</h3>
+      <ul>
+        <li>Letting one ASN dominate the traffic profile — the easiest join for defenders.</li>
+        <li>Reusing the same JA3 fingerprint (a fingerprint of the client's encrypted-connection handshake) and user agent across a whole emulator farm.</li>
+        <li>Running traffic to one number range until the carrier's fraud desk flags it, instead of rotating ranges.</li>
+        <li>Hitting endpoints during local business hours, when delivery delays become visible to real users.</li>
+        <li>Ignoring conversion dashboards and continuing after defenses flip, which burns the range for no gain.</li>
+        <li>Forgetting that spend alerts page somebody: the finance team is a sensor too.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SECTION 4 ================= -->
+<section class="sec" id="s4-blue-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2>Blue Team / SOC Perspective</h2></div>
+  <p class="sec-intro">SMS pumping is very visible — if the right telemetry reaches the SOC. The problem is organizational, not technical: the best data sits in product dashboards and provider consoles that security often cannot see. This section shows what the attack looks like from inside and gives a triage flow for a busy shift.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>How defenders can see it</h3>
+      <p>Four telemetry families catch this technique. Application telemetry shows OTP request velocity per IP, ASN, and device fingerprint. Provider telemetry shows every SMS, its destination, its price, and its delivery status. Product analytics show the conversion ratio: codes sent versus codes verified. Finance telemetry shows spend against forecast. No single source is enough, because a pumping storm looks like a busy day in any one of them. The detections in Section 5 all join at least two.</p>
+    </div>
+    <div class="card">
+      <h3>Artifacts it leaves behind</h3>
+      <ul>
+        <li>OTP request rates per hour far above baseline, concentrated on few ASNs.</li>
+        <li>Delivery receipts clustered on one or two destination prefixes.</li>
+        <li>Sent-versus-verified ratio collapsing from a healthy baseline toward zero.</li>
+        <li>New or unknown device fingerprints, headless user agents, missing app attestation.</li>
+        <li>Provider usage triggers and budget alarms firing on the SMS line item.</li>
+        <li>Support tickets: "my code never arrived", arriving in clusters.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where to look, per platform</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Platform</th><th>Primary log sources</th><th>What to check first</th></tr></thead>
+      <tbody>
+        <tr><td>Web / API edge</td><td>WAF (web application firewall), CDN (content delivery network), API gateway, and load balancer logs for OTP and verify paths</td><td>Requests per hour per ASN and IP, challenge solve rate, repeated phone fields</td></tr>
+        <tr><td>Messaging provider</td><td>Twilio console and API logs, AWS SNS and End User Messaging delivery logs</td><td>Sends per prefix and country, price per message, delivery error codes</td></tr>
+        <tr><td>Identity</td><td>Amazon Cognito user pool events, IAM (Identity and Access Management) activity on messaging services</td><td>Signups per minute, changed MFA or SMS settings, new API keys</td></tr>
+        <tr><td>App analytics</td><td>Conversion funnels, product dashboards, A/B experiment data</td><td>Sent vs verified, signup completion, drops by country</td></tr>
+        <tr><td>Finance / FinOps</td><td>Budgets, usage triggers, invoices, cost anomaly reports</td><td>Daily SMS spend against forecast, per-country cost mix</td></tr>
+        <tr><td>Fraud tooling</td><td>Twilio Verify Fraud Guard, carrier and aggregator fraud feeds</td><td>AIT (artificially inflated traffic) flags, blocked route reports</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h3>Triage flow: a spend alert arrives</h3>
+    <ol>
+      <li><strong>Join three dashboards.</strong> Open security (OTP velocity), fraud (AIT flags), and finance (spend) side by side. One of them alone is often a false lead.</li>
+      <li><strong>Rule out the legitimate reason.</strong> Check the marketing and launch calendar. A campaign in one country can look like prefix clustering; conversion stays healthy there, which is the difference.</li>
+      <li><strong>Cluster the requests.</strong> Group OTP requests by ASN, destination prefix, and device fingerprint. Real users spread out; a storm concentrates.</li>
+      <li><strong>Measure conversion.</strong> Compute sent versus verified for the same window. Near-zero conversion plus high volume is the pumping signature.</li>
+      <li><strong>Preserve evidence.</strong> Export provider message logs and gateway logs before you block anything, so the case can be reconstructed and disputed if needed.</li>
+      <li><strong>Contain.</strong> Turn on CAPTCHA, apply per-ASN and per-MSISDN (full phone number) rate limits, and block the offending prefix at the provider. Watch the send curve flatten.</li>
+      <li><strong>Feed detection.</strong> Open the provider fraud desk case, add the ranges to your blocklist pipeline, and file the incident record with numbers.</li>
+    </ol>
+  </div>
+
+  <div class="callout note">
+    <p class="callout-label">Why this matters beyond money</p>
+    <p>OTP endpoints that accept pumped traffic also accept account-takeover testing. The same weak form that drains your budget is the one an attacker uses to harass users with codes or to abuse resend logic. Fixing pumping with CAPTCHA, rate limits, and attestation hardens every flow that depends on the phone number being real.</p>
+    <p>Attack-chain fit: this technique sits in the Impact tactic of MITRE ATT&amp;CK, so it usually ends an attack rather than starting one. When stolen credentials drive the sends, the chain runs through T1583 (Acquire Infrastructure) for the number ranges and T1078 (Valid Accounts) for the messaging account, with the pumping itself as the impact step.</p>
+  </div>
+</section>
+<!-- ================= SECTION 5 ================= -->
+<section class="sec" id="s5-detection">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2>Detection Engineering Deep Dive</h2></div>
+  <p class="sec-intro">This is the working section. It turns the theory into five building blocks: the rules you must satisfy, the intelligence that tells you what to expect, a ranked threat list, the logs each threat produces, and ready-to-adapt Sigma rules with matching Splunk queries. The five threats (SP-01 to SP-05) introduced in 5.3 are used consistently in 5.4 and 5.5.</p>
+
+  <h3 class="sub-head" id="s51-regulation"><span class="sub-num">5.1</span>Regulation mapping</h3>
+  <p class="sub-intro">SMS pumping is fraud, not a data breach, so most frameworks do not name it directly. They still apply, because OTP flows process personal data, because auditors test monitoring of abnormal activity, and because telecom rules forbid artificial traffic. If pumping locks customers out of a regulated service, availability obligations arrive too.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Framework &amp; control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+    <tbody>
+      <tr><td><strong>GDPR</strong> — Art. 32 (security of processing), Art. 5(1)(f) (integrity and confidentiality), Art. 33 (breach notification, if personal data is affected)</td><td>Phone numbers are personal data. An OTP flow that sends codes to attacker-chosen ranges shows weak safeguards over how personal data is used, and the incident record must show the controller noticed and responded. Note: pumping alone is not always a personal-data breach, so Art. 33 applies only when personal data is affected — document that assessment either way.</td><td>Processing record and risk assessment for the OTP flow; rate-limit and CAPTCHA configurations; incident record with timeline, Art. 33 assessment, and provider correspondence.</td></tr>
+      <tr><td><strong>SOC 2</strong> — CC7.2 (monitor for anomalies), CC6.1/CC6.6 (logical access and boundary protection)</td><td>Auditors explicitly test whether abnormal activity is monitored and whether entry points to systems are protected. A public OTP form without bot controls is a boundary weakness with a measurable cost.</td><td>Fraud-guard rule exports; anomaly alert samples with disposition notes; WAF rate-limit policies; access reviews for messaging accounts.</td></tr>
+      <tr><td><strong>PCI DSS 4.0</strong> — 6.2 (secure development), 6.4.3 (payment page script controls), 10.2.1 (audit logging of events)</td><td>OTP often protects cardholder accounts, so pumping that blocks verification touches payment-page availability, and bot mitigation on payment pages is an explicit 4.0 theme. OTP API activity must be logged well enough to reconstruct events.</td><td>Bot-mitigation evidence for signup and checkout paths; retained OTP API logs; validation that messaging events are captured in the audit trail.</td></tr>
+      <tr><td><strong>HIPAA</strong> — §164.308(a)(1) (risk analysis and management), §164.312(b) (audit controls)</td><td>Health services that verify patients by SMS must keep the verification flow available, because a pumping storm that blocks sign-in can block access to systems that handle ePHI (electronic protected health information). System activity, including OTP sends, must be recorded and reviewed.</td><td>Risk analysis that lists the SMS verification flow; retained and reviewed OTP/messaging logs; documented incident handling for spend and availability alerts.</td></tr>
+      <tr><td><strong>ISO/IEC 27001:2022</strong> — A.8.16 (monitoring activities), A.8.25 (secure development lifecycle), A.5.19/A.5.20 (supplier security)</td><td>Monitoring must cover abnormal application activity. Anti-automation controls such as CAPTCHA and rate limits belong in the secure development lifecycle, so requirements like M1013 land in A.8.25. The messaging provider is a supplier, so its fraud controls belong in the agreement.</td><td>Monitoring policy with conversion and spend baselines; alert records; secure-development requirements covering CAPTCHA and rate limits; supplier clauses covering AIT, fraud guard, and incident support.</td></tr>
+      <tr><td><strong>NIS2 Directive (EU)</strong> — Art. 21 (cyber risk management measures), Art. 23 (reporting of significant incidents)</td><td>Telecom operators and many fintechs are in scope. A pumping wave that disrupts verification for an essential entity can qualify as a significant incident, which starts the reporting clocks: an early warning within 24 hours and the fuller notification within 72 hours.</td><td>Documented detection capabilities; incident classification criteria that mention OTP outage; notification drill records; provider escalation contacts.</td></tr>
+      <tr><td><strong>CIS Controls v8</strong> — 8.9 (centralize audit logs), 8.11 (conduct alert field tuning), 13.1 (centralize security event alerting)</td><td>Pumping is caught by joining log sources, so audit logs must be centralized, alerts tuned to the OTP baselines, and fraud alerts routed into the main alerting pipeline instead of a product inbox.</td><td>Log-source inventory that names gateway, provider, analytics, and spend feeds; tuned alert configurations; routing records that show fraud alerts reaching the SOC.</td></tr>
+      <tr><td><strong>NIST Cybersecurity Framework (Detect function)</strong> — DE.AE (anomalies and events), DE.CM (continuous monitoring)</td><td>The sent-versus-verified gap and the spend spike are anomalies, so the framework's expectation of baseline analysis and continuous monitoring of applications applies directly.</td><td>Baseline documentation for OTP conversion and spend; monitoring coverage list; records of anomaly analysis during incidents.</td></tr>
+      <tr><td><strong>Carrier acceptable use policies</strong> (US carriers, aggregators)</td><td>Carrier AUPs forbid artificially inflated traffic and traffic fraud. Violations can suspend your sender IDs and short codes, which stops all customer messaging — a business continuity event, not just a policy footnote.</td><td>AUP compliance review; sender registration records; provider correspondence; remediation notes after any AIT flag.</td></tr>
+      <tr><td><strong>GSMA and M3AAWG best practices</strong></td><td>GSMA fraud and security guidance and M3AAWG messaging-abuse best practices describe AIT countermeasures the industry expects: filtering, rate control, and fraud monitoring. Aligning is the cheapest way to survive an audit or a carrier dispute.</td><td>Control mapping to the published best practices; participation notes; tuning history for filters and rate controls.</td></tr>
+      <tr><td><strong>FCC context (US)</strong> — robotext and TCPA rules (Telephone Consumer Protection Act)</td><td>US regulators actively pursue robotext operations, and registration and consent rules shape what lawful messaging looks like. Fraud traffic riding your sender harms your compliance posture with these programs.</td><td>Consent records for SMS programs; 10DLC (10-digit long code) or equivalent registration; records of how fraud traffic was blocked and reported.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout note"><p class="callout-label">Audit tip</p><p>The evidence auditors accept for this sub-technique is usually operational, not paperwork: a working conversion dashboard, a fraud-guard rule set, and a rate-limit policy on the OTP endpoint. Build those first, then write the policy around what you actually run.</p></div>
+
+  <h3 class="sub-head" id="s52-intel"><span class="sub-num">5.2</span>Threat intelligence</h3>
+  <p class="sub-intro">Here is the honest starting point: no ATT&amp;CK group is mapped to T1496.003. This is a fraud-crime ecosystem, not an intrusion set. Attribution lives with telecom fraud desks, not with public threat reports. Intelligence work here means tracking the fraud pattern, the tooling, and the numbers, and accepting that names rarely come.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Source types and how to use them</h3>
+      <ul>
+        <li><strong>MITRE ATT&amp;CK</strong> — the sub-technique page defines the pattern, platform, detection strategy DET0156, and mitigation M1013. Vendor-neutral and free; start here.</li>
+        <li><strong>Provider fraud reporting</strong> — Twilio documents artificially inflated traffic and publishes fraud-loss figures, including $62.7 million in avoided fraud costs and over 569 million blocked fraud attempts for Verify Fraud Guard customers between June 2022 and October 2024. AWS publishes SMS pumping guidance and ships pumping protections in End User Messaging.</li>
+        <li><strong>Industry bodies</strong> — M3AAWG publishes messaging-abuse best practice; GSMA coordinates carrier-side fraud work. Both describe countermeasures you can copy.</li>
+        <li><strong>Regulators</strong> — FCC actions against robotext operations show which behaviors draw enforcement, useful for policy conversations.</li>
+        <li><strong>OSINT, commercial feeds, and ISACs</strong> — OSINT (open-source intelligence) covers fraud research blogs and leaked tooling write-ups; commercial feeds sell curated high-risk prefix and ASN lists; ISACs (Information Sharing and Analysis Centers) and M3AAWG share member alerts about active pumping waves.</li>
+        <li><strong>Carrier fraud desks</strong> — your provider's fraud team is the closest thing to an intelligence partner here. Open the relationship before an incident happens.</li>
+        <li><strong>Internal telemetry</strong> — your own conversion metrics are the best intel for your apps. Every incident permanently improves your baseline.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Confidence levels, in plain words</h3>
+      <p><strong>High</strong> means the pattern is documented by multiple providers and your own telemetry confirms it. Use it for alerting and blocking. <strong>Medium</strong> means the report is credible but you have not seen it locally — use it for hunts. <strong>Low</strong> means a single claim without corroboration, such as a named ring — use it for awareness only.</p>
+      <p>Apply intel in three steps. Enrich: load known fraud prefixes and high-risk ASNs into lookup tables your SIEM (security information and event management system) can join. Hunt: search 90 days of OTP and provider logs against each new indicator set. Detect: turn confirmed hunts into the Sigma rules of 5.5, and retire rules when the ranges rotate.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Actors, tooling, and ecosystem (as documented by providers and industry bodies)</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Actor / element</th><th>Type</th><th>Known activity</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>Artificially inflated traffic (AIT) economy</td><td>Fraud ecosystem</td><td>The core pattern documented by Twilio and AWS: OTP storms aimed at number ranges that pay termination revenue share</td><td><span class="badge sev-high">High</span> the pattern, not a name</td></tr>
+        <tr><td>Unnamed SMS pumping rings</td><td>Fraud groups</td><td>Public reporting describes the behavior, not the operators; telecom fraud desks track identities privately</td><td><span class="badge sev-low">Low</span> attribution</td></tr>
+        <tr><td>SIM banks and emulator farms</td><td>Tooling</td><td>Bulk numbers and virtual devices that originate or receive OTP traffic at scale</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>Residential proxy networks</td><td>Enabler</td><td>Rotating consumer IPs that defeat per-IP rate limits on OTP endpoints</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>Twilio Verify Fraud Guard</td><td>Defense product</td><td>Documented $62.7M in fraudulent costs avoided for customers, June 2022 to October 2024</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>AWS End User Messaging protections</td><td>Defense product</td><td>Destination-country allowlists and spend limits against SMS pumping, with published builder guidance</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>FCC robotext enforcement (US)</td><td>Regulatory signal</td><td>Enforcement against robotext operations shows regulator attention to artificial messaging</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>M3AAWG and GSMA reporting</td><td>Industry bodies</td><td>Best practice documents and carrier coordination on AIT countermeasures</td><td><span class="badge sev-high">High</span></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <h3 class="sub-head" id="s53-ranking"><span class="sub-num">5.3</span>Threats ranking and categorization</h3>
+  <p class="sub-intro">These five threats cover the SMS pumping attack surface for a SaaS product with OTP. The IDs are used as keys in 5.4 and 5.5. The Platform column shows the ATT&CK platform, which is SaaS only for this sub-technique. Severity reflects realistic worst-case impact for a mid-sized consumer app, adjusted by how often the threat appears in provider reporting.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>ID / threat</th><th>Platform</th><th>Severity</th><th>Preconditions</th><th>Impact</th><th>Justification</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>SP-01</strong> OTP endpoint abuse velocity</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-critical">Critical</span></td>
+        <td>A public OTP or verification endpoint without bot controls, CAPTCHA, or per-number limits</td>
+        <td>Direct cost explosion; real users locked out; signups fail during growth moments</td>
+        <td>The entry behavior of every documented pumping wave; it converts a free public form into a paid attacker resource</td>
+      </tr>
+      <tr>
+        <td><strong>SP-02</strong> Sends concentrated to attacker-linked number ranges</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-high">High</span></td>
+        <td>SP-01 in progress; provider fraud guard absent or ignored; no destination allowlist</td>
+        <td>Per-SMS costs to high-fee destinations; termination revenue flows to the fraudster</td>
+        <td>This concentration is what makes the abuse pumping rather than generic OTP spam; provider logs see it first</td>
+      </tr>
+      <tr>
+        <td><strong>SP-03</strong> Conversion collapse (AIT pattern)</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-high">High</span></td>
+        <td>SP-01 or SP-02 ongoing; sent and verified counts are joinable</td>
+        <td>Budget burned with zero acquired users; business metrics and forecasts corrupted</td>
+        <td>The single most reliable confirmatory signal; low false-positive rate when baselined per flow and country</td>
+      </tr>
+      <tr>
+        <td><strong>SP-04</strong> Automated clients on signup and OTP paths</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-medium">Medium</span></td>
+        <td>Signup reachable without app attestation; WAF bot scoring absent or untuned</td>
+        <td>Enables SP-01 at scale; fingerprint noise; hides credential-testing inside the storm</td>
+        <td>The delivery mechanism; blocking it raises attacker cost even when ranges rotate</td>
+      </tr>
+      <tr>
+        <td><strong>SP-05</strong> Quota exhaustion and cost-spike events</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-medium">Medium</span></td>
+        <td>No hard budgets or usage triggers on messaging; spend alerts routed away from security</td>
+        <td>Provider suspension risk; finance escalation; detection arrives late, from the invoice</td>
+        <td>Catches what analytics miss and produces the fastest executive-visible tripwire; cheap to implement</td>
+      </tr>
+    </tbody>
+  </table></div>
+  <h3 class="sub-head" id="s54-logs"><span class="sub-num">5.4</span>Logs and patterns</h3>
+  <p class="sub-intro">For each threat: the log sources to collect, the fields that matter, what normal looks like, what suspicious looks like, the detection logic in one sentence, and a realistic example event. Field names follow common normalized formats; adjust them to your pipeline. Example events use the placeholder prefix <code>+999</code> for high-termination-cost destinations (999 is not assigned to any country, so no real destination is singled out) and reserved fictional 555-01XX phone numbers elsewhere.</p>
+
+  <div class="card">
+    <h4><span class="mono">SP-01</span> OTP endpoint abuse velocity — API gateway telemetry</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>API gateway and load balancer logs, WAF logs, app access logs for OTP and verify paths</td></tr>
+        <tr><td>Key fields</td><td><code>endpoint</code>, <code>client_ip</code>, <code>source_asn</code>, <code>requests_per_hour</code>, <code>uniq_source_ips</code>, <code>requested_dest_prefixes</code>, <code>verified_share</code></td></tr>
+        <tr><td>Normal</td><td>Hundreds of OTP requests per hour, spread over many ASNs and countries; verified share tracks the signup funnel; prefixes match where your users live</td></tr>
+        <tr><td>Suspicious</td><td>One ASN with tens of thousands of requests per hour; hundreds of rotating client IPs; one or two destination prefixes; verified share near zero; requests continue around the clock</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when one ASN's OTP request rate exceeds many times the baseline for that endpoint while its share of completed verifications stays near zero — velocity plus failure is the storm.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — API gateway hourly aggregate per ASN (JSON)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "ts": "2025-11-20T02:00:00Z",
+  "window_minutes": 60,
+  "endpoint": "/api/otp/send",
+  "source_asn": "AS65100",
+  "asn_name": "bulk-hosting-provider",
+  "requests": 41288,
+  "uniq_source_ips": 931,
+  "top_source_ips": ["198.51.100.24", "198.51.100.77", "198.51.100.132"],
+  "requested_dest_prefixes": ["+999"],
+  "otp_sent": 40911,
+  "otp_verified": 61,
+  "requests_per_hour_baseline": 2400
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">SP-02</span> Sends concentrated to attacker ranges — messaging provider logs</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Twilio message resource logs and Verify logs; AWS SNS and End User Messaging delivery logs; Cognito SMS delivery metrics</td></tr>
+        <tr><td>Key fields</td><td><code>direction</code>, <code>to</code> (MSISDN), <code>from</code>, <code>status</code>, <code>price</code>, <code>date_created</code>, <code>messaging_service_sid</code></td></tr>
+        <tr><td>Normal</td><td>Destinations spread over your user geography; per-message price stable; error codes rare and varied; daily send volume follows product traffic</td></tr>
+        <tr><td>Suspicious</td><td>Most sends in one hour share one or two prefixes; delivered share stays high while verified share collapses; per-message price jumps to high-cost destinations; error codes cluster (rejected or unreachable)</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when the top destination prefix takes an abnormal share of hourly sends, or when hourly messaging cost crosses its alert line, or both — concentration is the fingerprint of pumping.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — Twilio message resource log (abridged)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "sid": "SM4f8a2c9e7b1d3f605a8c2e4b6d8f0a1c",
+  "account_sid": "AC7c1e9f2a4b6d8e0c3a5f7b9d1e3c5a",
+  "date_created": "2025-11-20T02:07:41Z",
+  "direction": "outbound-api",
+  "from": "+12125550117",
+  "to": "+999555010042",
+  "body": "Your login code is 481920",
+  "status": "delivered",
+  "price": "-0.0825",
+  "price_unit": "USD",
+  "messaging_service_sid": "MG2c9e1f7a3b5d0c8e6f4a2b0d8c6e4f2a"
+}</code></pre>
+    </figure>
+    <p>In the same hour, this account sent 9,204 messages. 97% of them went to one high-cost destination prefix, 99% were delivered, 0.4% were verified, and the combined cost was $812.40.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">SP-03</span> Conversion collapse / AIT pattern — app analytics joined with provider logs</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Product analytics and conversion events; provider send and delivery counts; verification service metrics (Twilio Verify, Cognito)</td></tr>
+        <tr><td>Key fields</td><td><code>otp_sent</code>, <code>otp_delivered</code>, <code>otp_verified</code>, <code>otp_conversion_rate</code>, <code>flow</code>, <code>top_dest_prefixes</code>, <code>rolling_baseline</code></td></tr>
+        <tr><td>Normal</td><td>Conversion rates per flow stable within a band (a healthy OTP signup flow often verifies well above half of sends); drops explainable by campaigns or outages</td></tr>
+        <tr><td>Suspicious</td><td>Sent volume multiplies while verified count stays flat; conversion falls far below the rolling baseline; the drop maps onto specific prefixes and ASNs, not onto your campaigns</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when an hourly window sends far more OTPs than its rolling baseline allows while conversion falls below a small fraction of that baseline — the gap between sent and verified is the AIT signature.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — hourly conversion window (JSON)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "ts": "2025-11-20T03:00:00Z",
+  "window_minutes": 60,
+  "app": "wallet-web",
+  "flow": "signup",
+  "otp_sent": 23840,
+  "otp_delivered": 23112,
+  "otp_verified": 402,
+  "otp_conversion_rate": 0.0169,
+  "rolling_30d_conversion_rate": 0.613,
+  "top_dest_prefixes": ["+999"],
+  "provider": "twilio-verify"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">SP-04</span> Automated clients — WAF and fingerprint telemetry</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>WAF and bot-management events, CDN edge logs, mobile backend logs with attestation results (Play Integrity and DeviceCheck — Google's and Apple's app-integrity services)</td></tr>
+        <tr><td>Key fields</td><td><code>http_path</code>, <code>client_ip</code>, <code>source_asn</code>, <code>ja3_hash</code>, <code>user_agent</code>, <code>bot_score</code>, <code>attestation</code>, <code>captcha_token</code></td></tr>
+        <tr><td>Normal</td><td>Real browsers and app builds; attestation passes; fingerprints vary naturally; source ASNs are consumer networks; challenges solved at a healthy rate</td></tr>
+        <tr><td>Suspicious</td><td>Headless user agents; one JA3 hash shared by thousands of IPs; datacenter ASNs presenting consumer fingerprints; missing app attestation on mobile OTP calls; challenge solve rate near zero</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when signup or OTP paths receive a burst of clients with automation markers — shared fingerprints, headless agents, or failed attestation — especially from datacenter ASNs, because these clients carry out the storm.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — WAF bot-management event (JSON)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "ts": "2025-11-20T01:58:12Z",
+  "action": "challenge",
+  "http_path": "/api/otp/send",
+  "client_ip": "198.51.100.77",
+  "source_asn": "AS65100",
+  "ja3_hash": "a0e9f5b6c2d34e1f8a7b6c5d4e3f2a1b",
+  "user_agent": "HeadlessChrome/121.0.0.0",
+  "bot_score": 92,
+  "attestation": "none",
+  "device_id": null,
+  "captcha_token": null,
+  "rule_id": "BOT-OTP-001"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">SP-05</span> Quota exhaustion and cost spikes — billing and messaging quotas</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Twilio usage triggers; AWS Budgets notifications (often delivered via SNS); CloudWatch billing metrics; FinOps cost anomaly reports</td></tr>
+        <tr><td>Key fields</td><td><code>trigger_by</code>, <code>trigger_value</code>, <code>current_value</code>, <code>usage_category</code>, <code>metric_name</code>, <code>threshold_amount</code>, <code>actual_amount</code></td></tr>
+        <tr><td>Normal</td><td>Spend tracks forecast within a band; thresholds tuned to campaign season; alerts reviewed and closed with a known cause</td></tr>
+        <tr><td>Suspicious</td><td>SMS category crosses its daily or hourly trigger; spend rises with no matching campaign; cost per acquired user jumps; alerts fire repeatedly within one day</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert on any SMS spend or usage trigger crossing its threshold, and treat repeats within a day as a paging event — the billing meter is often the first witness of pumping.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — provider usage trigger notification (JSON)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "ts": "2025-11-20T04:02:00Z",
+  "source": "twilio-usage-trigger",
+  "trigger_sid": "UT2f8c4e9a7b6d5c3e1f0a2b4c",
+  "trigger_by": "price",
+  "recurring": "daily",
+  "usage_category": "sms",
+  "trigger_value": "8000",
+  "current_value": "8231.44",
+  "account_sid": "AC7c1e9f2a4b6d8e0c3a5f7b9d1e3c5a",
+  "message": "SMS spend crossed the daily threshold"
+}</code></pre>
+    </figure>
+    <p>The AWS-side equivalent is a Budgets alert on the messaging budget, delivered through SNS, or a CloudWatch <code>EstimatedCharges</code> alarm. The same JSON shape applies.</p>
+  </div>
+  <h3 class="sub-head" id="s55-sigma"><span class="sub-num">5.5</span>Sigma rules and Splunk SPL</h3>
+  <p class="sub-intro">Each threat gets one Sigma rule and one Splunk SPL (Search Processing Language) query that implement the same logic. Index and sourcetype names are stated with each query as assumptions; adjust them to your environment. All queries assume fields are extracted at ingest time. Because pumping is about rates, the Sigma rules read pre-aggregated hourly events (as in 5.4), while the SPL does live aggregation.</p>
+
+  <div class="card">
+    <h4><span class="mono">SP-01</span> OTP velocity storm — Sigma (application log) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements analytic AN0443 (repetitive OTP triggering) on the application side. The rule expects an hourly aggregate event per ASN, as produced by the metrics job shown in 5.4. <strong>Severity: critical.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — OTP request velocity from one ASN</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: OTP Request Velocity Spike from a Single ASN
+id: 7d65841b-3457-48e5-955c-0af9af13fbcb
+status: experimental
+description: Detects an hourly OTP aggregate in which one source ASN sends far more
+  requests than the endpoint baseline while almost none of the passcodes are verified.
+  This is the access pattern of SMS pumping (ATT&CK T1496.003) against public signup
+  and verification forms on SaaS platforms.
+references:
+  - https://attack.mitre.org/techniques/T1496/003/
+  - https://attack.mitre.org/techniques/T1496/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: application
+  product: api-gateway
+detection:
+  selection_otp_path:
+    endpoint|contains:
+      - '/otp'
+      - '/verify'
+      - '/send-code'
+  selection_volume:
+    requests|gt: 300
+  selection_low_verify:
+    otp_verified_share|lt: 0.10
+  condition: selection_otp_path and selection_volume and selection_low_verify
+fields:
+  - endpoint
+  - source_asn
+  - requests
+  - requests_per_hour_baseline
+  - uniq_source_ips
+  - requested_dest_prefixes
+  - otp_verified_share
+falsepositives:
+  - A viral signup campaign that drives many real users from one region (verified share stays normal)
+  - Load tests from known ranges (tag and exclude those ASNs)
+level: critical
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.003</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=web sourcetype=aws:elb_logs</code> for request velocity and <code>index=saas sourcetype=app:metrics</code> for the conversion feed; run both and compare windows):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — SP-01</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code># source_asn must be enriched at ingest (TA or ASN lookup on clientip).
+index=web sourcetype=aws:elb_logs uri_path IN ("/api/otp/send*","/api/verify*","/api/send-code*")
+| bin _time span=1h
+| stats count as otp_requests dc(clientip) as uniq_source_ips by _time source_asn
+| where otp_requests &gt; 300
+| sort - otp_requests
+# -- step 2, run separately: conversion for the same hours; the
+#    confirmed storm is ASN-heavy volume joined with near-zero conversion --
+index=saas sourcetype=app:metrics metric_name IN ("otp_sent","otp_verified")
+| bin _time span=1h
+| stats sum(eval(if(metric_name="otp_sent",value,0))) as otp_sent
+        sum(eval(if(metric_name="otp_verified",value,0))) as otp_verified by _time
+| eval conversion=round(otp_verified/otp_sent,4)
+| where otp_sent &gt; 2000 AND conversion &lt; 0.05</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> exclude load-test ASNs by lookup; keep the conversion condition, which removes most legitimate campaigns; re-baseline the 300-per-hour threshold per endpoint every quarter. <strong>Severity rationale:</strong> every hour of an undetected storm is direct spend, and real users are blocked from signing up.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">SP-02</span> Prefix concentration — Sigma (messaging provider) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements the provider-side view of AN0443: sends clustering on attacker-linked number ranges, as documented by Twilio and AWS. Expects an hourly aggregate per prefix with cost fields. <strong>Severity: high.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — sends clustered on a high-cost destination prefix</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: SMS Sends Clustered on One High-Cost Destination Prefix
+id: eb57ecdc-74a6-4ada-82bd-cdc8e9e1ba77
+status: stable
+description: Detects an hourly messaging aggregate where a large share of outbound
+  SMS goes to one phone number prefix while hourly cost crosses its alert line.
+  Twilio and AWS document this concentration as the core SMS pumping pattern
+  (artificially inflated traffic).
+references:
+  - https://attack.mitre.org/techniques/T1496/003/
+  - https://attack.mitre.org/techniques/T1496/
+  - https://www.m3aawg.org/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: application
+  product: twilio
+  service: messaging
+detection:
+  selection_send_volume:
+    direction: 'outbound-api'
+    messages_per_hour|gt: 500
+  selection_prefix_share:
+    top_prefix_share|gt: 0.35
+  selection_cost:
+    hourly_cost_usd|gt: 250
+  condition: selection_send_volume and (selection_prefix_share or selection_cost)
+fields:
+  - messages_per_hour
+  - top_prefix
+  - top_prefix_share
+  - hourly_cost_usd
+  - destination_countries
+falsepositives:
+  - A real market launch in one country (the share is legitimate there; check conversion)
+  - A scheduled bulk notification to a known subscriber list
+level: high
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.003</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=saas sourcetype=twilio:api</code> with message resource fields extracted at ingest):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — SP-02</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=saas sourcetype=twilio:api direction=outbound-api
+| eval prefix=substr(to,1,4)
+| bin _time span=1h
+| stats count as sends sum(price) as raw_cost by _time prefix
+| eventstats sum(sends) as total_sends by _time
+| eval prefix_share=round(sends/total_sends,3)
+| eval hourly_cost_usd=round(abs(raw_cost),2)
+| where sends &gt; 500 AND (prefix_share &gt; 0.35 OR hourly_cost_usd &gt; 250)
+| sort - sends
+# substr(to,1,4) takes "+999"-style prefixes; widen for 2-digit codes</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> maintain a per-country conversion baseline so a genuine launch does not page; exclude subscriber-list sender IDs; tune the 0.35 share and $250 cost lines to your traffic. <strong>Severity rationale:</strong> concentration is the direct cash-out path — every clustered send pays the fraudster.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">SP-03</span> Conversion collapse — Sigma (app analytics) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements the AIT confirmation view of AN0443: the sent-versus-verified gap. Expects an hourly conversion window event as in 5.4. <strong>Severity: high.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — OTP conversion collapse</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: OTP Conversion Collapse with High Send Volume
+id: ee3a8777-7891-4451-b790-5b4d17611f2c
+status: stable
+description: Detects a verification window in which thousands of one-time passcodes
+  were sent but almost none were confirmed. The sent-versus-verified gap is the most
+  reliable single indicator of artificially inflated traffic from SMS pumping
+  (ATT&CK T1496.003).
+references:
+  - https://attack.mitre.org/techniques/T1496/003/
+  - https://attack.mitre.org/techniques/T1496/
+  - https://www.gsma.com/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: application
+  product: app-analytics
+detection:
+  selection_volume:
+    otp_sent|gt: 2000
+  selection_collapse:
+    otp_conversion_rate|lt: 0.05
+  condition: selection_volume and selection_collapse
+fields:
+  - flow
+  - otp_sent
+  - otp_delivered
+  - otp_verified
+  - otp_conversion_rate
+  - rolling_30d_conversion_rate
+  - top_dest_prefixes
+falsepositives:
+  - A broken SMS template or rejected sender ID (check delivery error codes)
+  - A provider outage on the verification service
+level: high
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.003</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=saas sourcetype=app:metrics</code> emits <code>otp_sent</code> and <code>otp_verified</code> counters):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — SP-03</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=saas sourcetype=app:metrics metric_name IN ("otp_sent","otp_verified")
+| bin _time span=1h
+| stats sum(eval(if(metric_name="otp_sent",value,0))) as otp_sent
+        sum(eval(if(metric_name="otp_verified",value,0))) as otp_verified by _time flow
+| eval otp_conversion_rate=round(otp_verified/otp_sent,4)
+| where otp_sent &gt; 2000 AND otp_conversion_rate &lt; 0.05
+| sort - otp_sent
+# join provider delivery error codes before declaring fraud, per 5.4</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> join delivery error codes first — a carrier rejecting your sender ID looks identical in conversion; baseline per flow and per country; alert on the gap, not on absolute conversion. <strong>Severity rationale:</strong> this is the confirmatory signal that turns a spend anomaly into a fraud case.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">SP-04</span> Automated clients — Sigma (WAF) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements the delivery-mechanism view of AN0443: bot clients (emulators, headless browsers, SIM-farm devices) hitting signup and OTP paths. <strong>Severity: medium.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — bot fingerprints on signup and OTP endpoints</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: Bot Client Fingerprints on Signup and OTP Endpoints
+id: fe608545-41a4-4639-b437-434cb95c83e2
+status: experimental
+description: Detects WAF or bot-management events on signup, OTP, and verification
+  paths where the client shows automation markers such as a high bot score, headless
+  user agents, or a fingerprint shared across many source IPs. These clients are the
+  delivery mechanism of SMS pumping storms (ATT&CK T1496.003).
+references:
+  - https://attack.mitre.org/techniques/T1496/003/
+  - https://attack.mitre.org/techniques/T1583/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: network
+  product: waf
+detection:
+  selection_path:
+    http_path|contains:
+      - '/signup'
+      - '/otp'
+      - '/verify'
+  selection_bot_score:
+    bot_score|gte: 70
+  selection_headless:
+    user_agent|contains:
+      - 'HeadlessChrome'
+      - 'PhantomJS'
+      - 'python-requests'
+  filter_allowlisted:
+    user_agent|contains:
+      - 'uptime-check'
+      - 'synthetic-monitor'
+  condition: selection_path and (selection_bot_score or selection_headless) and not filter_allowlisted
+fields:
+  - http_path
+  - client_ip
+  - source_asn
+  - ja3_hash
+  - bot_score
+  - user_agent
+  - attestation
+falsepositives:
+  - Approved uptime checks and synthetic monitors (allowlist them by user agent)
+  - Security scanners running under change tickets
+level: medium
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.003
+  - attack.t1583</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=web sourcetype=aws:waf</code> with normalized bot fields extracted by your AWS WAF TA):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — SP-04</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=web sourcetype=aws:waf action IN ("BLOCK","CAPTCHA","CHALLENGE")
+| search http_path IN ("/signup*","/otp*","/verify*")
+| stats count as events dc(client_ip) as uniq_ips avg(bot_score) as avg_bot
+        values(ja3_hash) as fingerprints values(user_agent) as agents
+        by source_asn, http_path
+| where events &gt; 100 AND (avg_bot &gt;= 70 OR mvcount(fingerprints) &lt; 3)
+| sort - events
+# few distinct fingerprints behind many IPs = device farm shape</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> allowlist monitors by user agent and ASN; mobile OTP without attestation is expected for old app versions — build a version floor; pair this rule with SP-01 before paging, since bots alone are common. <strong>Severity rationale:</strong> the bots carry out the attack but do not choose the targets — medium, and blocking them raises attacker cost immediately.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">SP-05</span> Spend and quota events — Sigma (SNS budget alerts) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements the finance-tripwire view of AN0443. AWS Budgets alerts ride SNS, and Twilio usage triggers arrive by webhook; the rule covers the SNS path, the SPL adds both. <strong>Severity: medium.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — messaging budget alert fired via SNS</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: Messaging Spend Budget Alert Delivered via SNS
+id: f57fb099-4e9b-494c-83c0-d7516de11965
+status: stable
+description: Detects AWS Budgets or provider usage-trigger notifications about SMS
+  messaging spend crossing a threshold, delivered on an SNS topic. Such alerts are
+  often the first witness of SMS pumping (ATT&CK T1496.003) when analytics lag
+  behind the billing meter.
+references:
+  - https://attack.mitre.org/techniques/T1496/003/
+  - https://attack.mitre.org/techniques/T1496/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: cloud
+  product: aws
+  service: sns
+detection:
+  selection_budget:
+    subject|contains:
+      - 'Budget'
+      - 'Threshold'
+      - 'UsageTrigger'
+  selection_metric:
+    message|contains:
+      - 'SMS'
+      - 'Spend'
+      - 'EstimatedCharges'
+  condition: selection_budget and selection_metric
+fields:
+  - topic_arn
+  - subject
+  - message
+  - threshold_amount
+  - actual_amount
+falsepositives:
+  - Planned seasonal campaigns that intentionally raise the messaging budget
+level: medium
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.003</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=cloud sourcetype=aws:cloudwatch</code> for billing metrics and <code>index=cloud sourcetype=aws:cloudtrail</code> for the Cognito identity check; Twilio triggers land in <code>index=saas sourcetype=twilio:usage_trigger</code>):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — SP-05</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code># Billing dimension names vary; verify the exact ServiceName in your
+# billing feed. A plain *SMS* wildcard can also match unrelated services.
+index=cloud sourcetype=aws:cloudwatch metric_name=EstimatedCharges ServiceName=*SMS*
+| bin _time span=1h
+| stats max(Maximum) as spend_usd by _time ServiceName
+| where spend_usd &gt; 250
+| sort - spend_usd
+# -- Twilio alternative: usage trigger crossings --
+index=saas sourcetype=twilio:usage_trigger trigger_by=price usage_category=sms
+| where tonumber(current_value) &gt; tonumber(trigger_value)
+# -- adjacent identity check: Cognito signup storm feeding the sends --
+index=cloud sourcetype=aws:cloudtrail eventName=SignUp eventSource=cognito-idp.amazonaws.com
+| bin _time span=15m
+| stats count as signups dc(sourceIPAddress) as uniq_sources by _time userPoolId
+| where signups &gt; 50</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> mark planned campaign windows in a lookup so budget alerts during launches do not page; route every firing to both SOC and FinOps; escalate repeats within 24 hours to an incident. <strong>Severity rationale:</strong> medium as a detector, but it is the fastest executive-visible signal and often arrives first.</p>
+  </div>
+
+  <div class="callout good"><p class="callout-label">Validation habit</p><p>Test every rule monthly with a lab event (see the sandbox demo in Section 3). Fire two OTP requests from an unused ASN in a test window and confirm the SPL joins see them. A rule that has never matched synthetic data probably cannot match anything.</p></div>
+</section>
+<!-- ================= SECTION 6 ================= -->
+<section class="sec" id="s6-case-study">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2>Real-World Case Study: The SMS Pumping Wave Against OTP Apps</h2></div>
+  <p class="sec-intro">This case is a composite. It is built strictly from public reporting by Twilio and AWS about the SMS pumping waves of 2022 to 2025. No single victim is named in public sources, so this study describes the documented pattern rather than one company. Every quoted figure comes from those published sources.</p>
+
+  <div class="callout note"><p class="callout-label">How to read this case</p><p>Composite case built from public Twilio and AWS reporting — no single victim is named in public sources. The $62.7 million figure is documented, and it covers many Twilio Verify customers together. Individual victims commonly report six-figure SMS bills within days, a scale vendors describe without attaching names.</p></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Context</h3>
+      <p>Between 2022 and 2025, messaging providers documented a wave of SMS pumping against applications that verify users by SMS. The targets share one profile: a public signup or login flow that sends an SMS, and a user base that expects instant delivery. Fintech apps, wallets, crypto exchanges, marketplaces, and delivery services are typical targets, because they verify aggressively and grow fast.</p>
+      <p>On the attacker side this is an industry, not a hobby. Number ranges are leased in high-termination-cost destinations, bot traffic is rented, and residential proxy networks rotate source IPs past simple rate limits. Twilio calls the core pattern artificially inflated traffic (AIT) and built Verify Fraud Guard against it. AWS publishes SMS pumping guidance and added destination allowlists and spend limits to its End User Messaging service.</p>
+    </div>
+    <div class="card">
+      <h3>Attack chain, as documented by the providers</h3>
+      <ol>
+        <li><strong>Recon:</strong> identify apps whose signup, login, or resend endpoints trigger SMS through Twilio, AWS SNS, or Cognito.</li>
+        <li><strong>Scripting:</strong> automate OTP requests with rotating IPs, emulator farms, and SIM banks, spread across hours to stay under obvious thresholds.</li>
+        <li><strong>Concentration:</strong> direct the sends to the number ranges the ring controls in high-cost destinations.</li>
+        <li><strong>Cash-out:</strong> the telecom chain pays termination revenue share toward the range owner.</li>
+        <li><strong>Result:</strong> the victim pays per-SMS costs, and real users face delayed or failed verifications.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Timeline of the documented wave</h3>
+    <ul class="timeline">
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">2022</span><p>The wave grows into an industry-wide fraud problem. Twilio expands Verify Fraud Guard and starts measuring avoided fraud from June 2022.</p></li>
+      <li><span class="tl-dot good" aria-hidden="true"></span><span class="tl-when">June 2022 - October 2024</span><p>Twilio documents $62.7 million in fraudulent costs avoided by Verify Fraud Guard customers during this window, with more than 569 million fraud attempts blocked — the clearest published measure of how large the attacks were.</p></li>
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">June 2024</span><p>AWS publishes proactive threat detection guidance (Fletcher and de Vera) that explains SMS pumping; AWS End User Messaging offers destination-country allowlists and spend limits against it.</p></li>
+      <li><span class="tl-dot bad" aria-hidden="true"></span><span class="tl-when">2023 - 2024</span><p>Victim stories keep appearing in vendor reporting: OTP storms, conversion collapse, and SMS bills commonly described as six figures within days, while real users wait for codes.</p></li>
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">2025</span><p>AWS's builder blog sums up the phenomenon as a multi-billion dollar fraud. Defense becomes default practice: CAPTCHA, attestation, destination allowlists, and hard budgets.</p></li>
+    </ul>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Detection point</h3>
+      <p>In the documented pattern, the first alarms came from the provider side: Fraud Guard alerts and spend anomalies. The teams that caught it fastest joined three signals: OTP velocity from one ASN, delivery receipts clustered on one prefix, and conversion collapsing from a healthy baseline toward zero. Teams watching only send volume saw nothing wrong for days, because a busy signup day is normal; teams watching the ratio saw it in the first hour.</p>
+    </div>
+    <div class="card">
+      <h3>Containment</h3>
+      <p>Containment followed the same script in the reported cases. Turn on CAPTCHA for the affected forms. Apply rate limits per ASN, per IP, and per phone number. Block the offending destination prefixes at the provider, or disable the affected messaging route entirely, so failed verification is visible instead of fraud that keeps billing silently. Teams that exported provider message logs before blocking could later reconstruct the full range list and dispute charges.</p>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Eradication</h3>
+      <p>After the storm stopped, hardening removed the cause. Blocklists for the ranges and ASNs went into the provider configuration as permanent rules, not one-off filters. Where leaked API keys had been used, keys were rotated and secret scanning was added to the repositories. Fraud Guard rules and destination allowlists were turned on by default, so the next storm would hit a wall instead of a meter.</p>
+    </div>
+    <div class="card">
+      <h3>Recovery</h3>
+      <p>Recovery meant restoring trust in the funnel: verification conversion returned to baseline, budgets were rebalanced, and monitoring was tuned so a real campaign would not re-trigger the fraud alerts. In the documented pattern, teams added a weekly review of prefix mix and spend, because pumping rings return with fresh ranges once a defense pattern becomes known.</p>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Impact</h3>
+      <p>The documented numbers are large. Twilio states that Verify Fraud Guard saved customers $62.7 million in fraudulent costs between June 2022 and October 2024 and blocked more than 569 million fraud attempts — money and traffic that would otherwise have paid fraudster ranges. Individual victims commonly report six-figure SMS bills within days. The softer costs are real too: signups that failed during the storm never converted, and support queues filled with missing-code tickets.</p>
+    </div>
+    <div class="card">
+      <h3>Team response and communication</h3>
+      <p>The pattern that worked was a joint channel: security, fraud, product, and finance in one room with one number on the screen — current SMS spend. The provider fraud desk was engaged early, which sped up range blocking and charge disputes. Executives received short updates with figures: sends, verified ratio, spend per hour, and time to containment. Vague updates cost trust; the numbers kept everyone aligned.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Lessons learned</h3>
+    <ul class="checklist">
+      <li>OTP abuse is a revenue model, not vandalism — attackers return as long as the fraud stays profitable, so defenses must be permanent.</li>
+      <li>Fraud controls are security controls: route provider fraud alerts and conversion dashboards to the SOC, not just to product inboxes.</li>
+      <li>Conversion, not volume, is the most useful metric; the sent-versus-verified gap caught in hours what volume alerts missed for days.</li>
+      <li>Product teams and the SOC must share telemetry — the log sources in 5.4 span four teams, and pumping hides in the seams between them.</li>
+      <li>Destination allowlists and spend limits cap the worst-case cost; they cost little and close the cash-out path.</li>
+      <li>Preserve provider logs before blocking; the evidence supports charge disputes and improves the permanent blocklists.</li>
+      <li>Assume the ring returns with fresh ranges; keep the weekly prefix and spend review running after the incident closes.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= SECTION 7 ================= -->
+<section class="sec" id="s7-mitigation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2>Mitigation and Defense</h2></div>
+  <p class="sec-intro">ATT&amp;CK lists exactly one mitigation for T1496.003: M1013 Application Developer Guidance, with the advice to consider CAPTCHA protection on forms that send messages via SMS. That advice is the correct starting point, but it is not a complete defense. Everything below it comes from provider guidance and industry practice, arranged so the meter stays closed even when one control fails.</p>
+
+  <div class="grid3">
+    <div class="card">
+      <h4>Product &amp; app (the ATT&amp;CK mitigation)</h4>
+      <p>M1013 Application Developer Guidance is the only mitigation ATT&amp;CK lists for this sub-technique. Put its advice, and the measures that support it, in place first:</p>
+      <ul>
+        <li>CAPTCHA on every form that can send SMS — signup, login, resend, phone change (M1013).</li>
+        <li>Resend cooldowns and per-phone-number daily caps.</li>
+        <li>Verify the number before sending where possible: carrier lookup, line-type filter.</li>
+        <li>App attestation required for mobile OTP calls — Play Integrity and DeviceCheck, Google's and Apple's app-integrity services.</li>
+        <li>Email-first or authenticator-first flows for users who do not need SMS.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Messaging provider</h4>
+      <ul>
+        <li>Turn on fraud guard: Twilio Verify Fraud Guard or the AWS End User Messaging pumping protections.</li>
+        <li>Destination-country allowlists; block high-risk prefixes by default.</li>
+        <li>Spend limits and usage triggers with SOC-visible alerts.</li>
+        <li>Separate messaging services per flow, so one abused form cannot drain everything.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Identity &amp; cloud</h4>
+      <ul>
+        <li>Cognito: adaptive authentication, no SMS MFA for low-risk signups, email verification first.</li>
+        <li>Least-privilege IAM for messaging APIs; no static keys in code; short-lived credentials.</li>
+        <li>Secret scanning in CI (continuous integration), so leaked Twilio or AWS keys are found quickly.</li>
+        <li>CloudTrail and provider audit logs on, retained, and searchable.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Logging &amp; monitoring</h4>
+      <ul>
+        <li>Ship gateway, provider, analytics, and spend logs to one place (Section 5.4).</li>
+        <li>Deploy the five Sigma rules from 5.5 with their stated assumptions.</li>
+        <li>Conversion dashboard with a rolling baseline, alerted to the SOC.</li>
+        <li>Prefix mix reviewed weekly; new prefixes treated as change events.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Policy &amp; people</h4>
+      <ul>
+        <li>Named owner for messaging spend and fraud posture — one person, not a committee.</li>
+        <li>Carrier AUP alignment reviewed at contract time; GSMA and M3AAWG practices mapped.</li>
+        <li>Incident classification mentions OTP outage, so NIS2-style clocks start correctly.</li>
+        <li>Runbook: who calls the provider, who flips CAPTCHA, who blocks prefixes.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Response</h4>
+      <ul>
+        <li>Joint fraud-security channel that exists before the incident.</li>
+        <li>Provider fraud desk contact card tested quarterly.</li>
+        <li>Evidence-first containment: export logs, then block.</li>
+        <li>Post-incident: every storm adds one permanent detection and one tuning change.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Home and small-office users</h3>
+      <p>If you run a small app with SMS login, you are a target too. Five practical steps: (1) turn on your provider's fraud protection and set a hard spend cap today; (2) put a free CAPTCHA on the form that sends codes; (3) limit how often any one phone number can request a code; (4) watch the provider dashboard weekly — cost per signup is your health metric; (5) if you receive SMS codes you never asked for, report them as spam and change nothing else — your number may have been typed into someone's form by a bot.</p>
+    </div>
+    <div class="card">
+      <h3>Response-ready habits</h3>
+      <p>Keep an emergency runbook titled "SMS bill spike": who calls the provider fraud desk, who enables CAPTCHA, who applies the prefix block, and where the evidence exports go. Practice it once a quarter as a tabletop with finance in the room. The documented wave shows fraud costs accumulate around the clock; the team that acts in the first hour pays the least.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Prioritized actions</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Enable provider fraud guard and pumping protections with spend limits</td><td>Low</td><td>Messaging owner</td><td>Very high — one provider alone documented $62.7M saved for its customers</td></tr>
+        <tr><td>2</td><td>CAPTCHA on every SMS-sending form (the ATT&amp;CK M1013 advice)</td><td>Low-Medium</td><td>App team</td><td>High — stops the free public trigger that the whole attack needs</td></tr>
+        <tr><td>3</td><td>Conversion dashboard with rolling baseline, alerted to the SOC</td><td>Medium</td><td>Detection engineering</td><td>High — catches AIT even when volume looks ordinary</td></tr>
+        <tr><td>4</td><td>Destination-country allowlist plus prefix blocklist pipeline</td><td>Medium</td><td>Messaging owner</td><td>High — cuts the cash-out path before it starts</td></tr>
+        <tr><td>5</td><td>Rate limits per phone number, IP, and ASN on OTP endpoints</td><td>Medium</td><td>Platform team</td><td>Medium-High — slows storms and makes rotation expensive</td></tr>
+        <tr><td>6</td><td>Hard budgets with alerts at 50/80/100 percent, routed to SOC and FinOps</td><td>Low</td><td>FinOps</td><td>Medium-High — the fastest executive-visible tripwire</td></tr>
+        <tr><td>7</td><td>App attestation required for mobile OTP calls</td><td>Medium</td><td>Mobile team</td><td>Medium — removes the emulator farm's cheapest path</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+<!-- ================= SECTION 8 ================= -->
+<section class="sec" id="s8-mistakes">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2>Common Mistakes and Best Practices</h2></div>
+  <p class="sec-intro">These twelve mistakes come from post-incident reviews of pumping cases and from the public provider guidance. Each one lists the symptom you will notice, the root cause, the fix, and the habit that prevents it from returning.</p>
+
+  <div class="grid2">
+    <div class="card"><h4>1. Watching volume, not conversion</h4>
+      <ul><li><strong>Symptom:</strong> the bill explodes while every volume dashboard looks "like a busy day".</li>
+      <li><strong>Root cause:</strong> alerts threshold on send counts only; pumping hides inside ordinary-looking volume.</li>
+      <li><strong>Fix:</strong> add the sent-versus-verified ratio to every OTP alert, with a rolling baseline per flow (SP-03).</li>
+      <li><strong>Prevention:</strong> no OTP alert ships without a conversion condition.</li></ul></div>
+    <div class="card"><h4>2. Fraud alerts that never reach the SOC</h4>
+      <ul><li><strong>Symptom:</strong> the product inbox has Fraud Guard emails from last week; the SOC hears about it from finance.</li>
+      <li><strong>Root cause:</strong> provider alerts route to whoever configured the console, which is rarely security.</li>
+      <li><strong>Fix:</strong> forward provider fraud and usage alerts into the SIEM as normal alert events (SP-05).</li>
+      <li><strong>Prevention:</strong> the asset inventory lists every messaging account with a security contact.</li></ul></div>
+    <div class="card"><h4>3. IP-only rate limits</h4>
+      <ul><li><strong>Symptom:</strong> limits tuned to stop one IP do nothing; the storm keeps flowing.</li>
+      <li><strong>Root cause:</strong> residential proxies rotate IPs per request, so per-IP counters never fill.</li>
+      <li><strong>Fix:</strong> rate limit per ASN, per destination prefix, and per device fingerprint, not just per IP.</li>
+      <li><strong>Prevention:</strong> threat model the OTP endpoint against a rotating adversary, not a static one.</li></ul></div>
+    <div class="card"><h4>4. No destination allowlist</h4>
+      <ul><li><strong>Symptom:</strong> sends arrive for prefixes the product has never served.</li>
+      <li><strong>Root cause:</strong> the form will SMS any number on Earth, so the fraudster picks the destinations.</li>
+      <li><strong>Fix:</strong> default-allow only your user countries; require approval for new prefixes (SP-02).</li>
+      <li><strong>Prevention:</strong> review the prefix mix weekly; treat new prefixes as change events.</li></ul></div>
+    <div class="card"><h4>5. CAPTCHA on signup only</h4>
+      <ul><li><strong>Symptom:</strong> the storm moves to login resend or phone-change the day after signup is protected.</li>
+      <li><strong>Root cause:</strong> one form was hardened; the attacker, who only needs one, found the other.</li>
+      <li><strong>Fix:</strong> inventory every SMS-sending path and apply CAPTCHA plus limits to all of them (M1013).</li>
+      <li><strong>Prevention:</strong> a CI check that fails builds adding new SMS-sending endpoints without controls.</li></ul></div>
+    <div class="card"><h4>6. Thresholds set once, never re-based</h4>
+      <ul><li><strong>Symptom:</strong> a real campaign fires the fraud alerts, or growth quietly buries them below the line.</li>
+      <li><strong>Root cause:</strong> static thresholds written in the first week and never revisited.</li>
+      <li><strong>Fix:</strong> rolling baselines per flow and per country; alert on deviation, not on absolute numbers.</li>
+      <li><strong>Prevention:</strong> quarterly threshold review tied to the product roadmap.</li></ul></div>
+    <div class="card"><h4>7. Leaked sandbox and test keys</h4>
+      <ul><li><strong>Symptom:</strong> sends in provider logs from a service nobody deployed, billed to your account.</li>
+      <li><strong>Root cause:</strong> sandbox credentials committed to public repositories and never rotated.</li>
+      <li><strong>Fix:</strong> rotate now, then add secret scanning to CI and pre-commit hooks.</li>
+      <li><strong>Prevention:</strong> keys live in a secret manager with short lifetimes; the repo never sees them.</li></ul></div>
+    <div class="card"><h4>8. Fraud Guard alerts auto-closed</h4>
+      <ul><li><strong>Symptom:</strong> the same AIT alert fires weekly and is closed weekly, until the monthly invoice makes it real.</li>
+      <li><strong>Root cause:</strong> no runbook for the alert and no join with internal telemetry, so it looks like noise.</li>
+      <li><strong>Fix:</strong> every fraud alert runs the Section 4 triage flow; closure requires a disposition note.</li>
+      <li><strong>Prevention:</strong> auto-close rules are forbidden on fraud classes without a documented exception.</li></ul></div>
+    <div class="card"><h4>9. Nobody owns the provider console</h4>
+      <ul><li><strong>Symptom:</strong> pumping protections sit off; MFA on the messaging account is missing; nobody can say why.</li>
+      <li><strong>Root cause:</strong> the account was created by a developer who has since moved teams.</li>
+      <li><strong>Fix:</strong> assign a named owner, enforce MFA, and audit console settings quarterly.</li>
+      <li><strong>Prevention:</strong> access reviews include SaaS and messaging accounts, not only cloud IAM.</li></ul></div>
+    <div class="card"><h4>10. Rules never tested with synthetic events</h4>
+      <ul><li><strong>Symptom:</strong> the SP rules have fired zero times in a year — because they cannot fire at all.</li>
+      <li><strong>Root cause:</strong> field names drifted after a parser change; nobody replayed a test event.</li>
+      <li><strong>Fix:</strong> replay the Section 3 sandbox shape monthly; alert on rules with no matches in 180 days.</li>
+      <li><strong>Prevention:</strong> detection CI runs a synthetic event against every rule change.</li></ul></div>
+    <div class="card"><h4>11. Blaming the provider, skipping the join</h4>
+      <ul><li><strong>Symptom:</strong> weeks of argument about whose fraud it is while the meter keeps running.</li>
+      <li><strong>Root cause:</strong> provider data and app data live in separate silos, so nobody proves the pattern.</li>
+      <li><strong>Fix:</strong> join gateway, provider, analytics, and spend logs in one investigation (Section 4 triage).</li>
+      <li><strong>Prevention:</strong> the joint fraud-security channel meets monthly with the three dashboards on screen.</li></ul></div>
+    <div class="card"><h4>12. No retention on provider webhooks</h4>
+      <ul><li><strong>Symptom:</strong> after blocking, the evidence needed to dispute charges or map ranges is gone.</li>
+      <li><strong>Root cause:</strong> delivery receipts and fraud alerts were consumed and never stored.</li>
+      <li><strong>Fix:</strong> store provider webhooks and message logs for at least 90 days in searchable storage.</li>
+      <li><strong>Prevention:</strong> the logging standard lists provider sources with the same retention as app logs.</li></ul></div>
+  </div>
+
+  <div class="card">
+    <h3>Operating rhythm</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Daily</th><th>Weekly</th><th>Monthly</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Check SMS spend against forecast; review fraud-class alerts with the conversion condition; confirm provider webhooks are still flowing into the SIEM.</td>
+          <td>Review the prefix mix and new destination countries; walk SP-01 and SP-04 hits; scan for new SMS-sending endpoints without controls.</td>
+          <td>Replay synthetic OTP events against all five rules; re-baseline conversion and velocity thresholds; refresh fraud prefix and ASN lookups from provider feeds; re-score the 5.2 intel table.</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= SECTION 9 ================= -->
+<section class="sec" id="s9-cheatsheet">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2>Cheat Sheet and Quick Reference</h2></div>
+  <p class="sec-intro">The one-screen version for busy shifts. Print it or keep it open beside your SIEM.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Key facts</h3>
+      <dl class="kv">
+        <dt>Technique</dt><dd>T1496.003 — SMS Pumping (Impact; parent T1496 Resource Hijacking)</dd>
+        <dt>Platform</dt><dd>SaaS</dd>
+        <dt>Detection</dt><dd>DET0156 / analytic AN0443 — repetitive OTP triggering via SaaS application logs</dd>
+        <dt>Mitigation</dt><dd>M1013 — CAPTCHA on forms that send SMS (the only ATT&amp;CK-listed mitigation)</dd>
+        <dt>Fastest signals</dt><dd>OTP velocity from one ASN · sends on one prefix · conversion collapse · spend trigger</dd>
+        <dt>Main rule</dt><dd>Judge OTP traffic by conversion, not volume; preserve evidence before blocking</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h3>Top detections</h3>
+      <ol>
+        <li><strong>SP-01:</strong> OTP velocity storm from one ASN with near-zero completion (Sigma 5.5.1)</li>
+        <li><strong>SP-02:</strong> sends clustered on one high-cost destination prefix (Sigma 5.5.2)</li>
+        <li><strong>SP-03:</strong> sent-versus-verified conversion collapse (Sigma 5.5.3)</li>
+        <li><strong>SP-04:</strong> bot fingerprints and failed attestation on OTP paths (Sigma 5.5.4)</li>
+        <li><strong>SP-05:</strong> spend and budget alerts via SNS or usage triggers (Sigma 5.5.5)</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Response checklist</h3>
+    <ul class="checklist">
+      <li>Scope: which apps, providers, sender IDs, and flows show the storm?</li>
+      <li>Join: OTP velocity + prefix concentration + conversion + spend before declaring an incident.</li>
+      <li>Rule out: the marketing calendar — a real campaign keeps conversion healthy.</li>
+      <li>Preserve: export provider message logs and gateway logs before blocking anything.</li>
+      <li>Contain: CAPTCHA on, per-ASN and per-number rate limits, prefix block at the provider.</li>
+      <li>Notify: open the provider fraud desk case; share ranges, prefixes, and timestamps.</li>
+      <li>Eradicate: rotate any leaked keys, close the abused path, make the blocklists permanent.</li>
+      <li>Recover: restore budgets, confirm conversion returns to baseline, tune thresholds.</li>
+      <li>Improve: deploy or update the SP rules from 5.5 and add any missed log source.</li>
+      <li>Communicate: brief finance and product with numbers — sends, verified share, spend per hour.</li>
+    </ul>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Official links</h3>
+      <ul class="links-list">
+        <li><span class="lt">THIS SUB-TECHNIQUE</span><a href="https://attack.mitre.org/techniques/T1496/003/">T1496.003 — SMS Pumping</a></li>
+        <li><span class="lt">PARENT</span><a href="https://attack.mitre.org/techniques/T1496/">T1496 — Resource Hijacking</a></li>
+        <li><span class="lt">SIBLING</span><a href="https://attack.mitre.org/techniques/T1496/001/">T1496.001 — Compute Hijacking</a></li>
+        <li><span class="lt">SIBLING</span><a href="https://attack.mitre.org/techniques/T1496/002/">T1496.002 — Bandwidth Hijacking</a></li>
+        <li><span class="lt">SIBLING</span><a href="https://attack.mitre.org/techniques/T1496/004/">T1496.004 — Cloud Service Hijacking</a></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Related techniques in the chain</h3>
+      <ul class="links-list">
+        <li><span class="lt">ENTRY</span><a href="https://attack.mitre.org/techniques/T1190/">T1190 — Exploit Public-Facing Application</a></li>
+        <li><span class="lt">ACCESS</span><a href="https://attack.mitre.org/techniques/T1078/">T1078 — Valid Accounts</a></li>
+        <li><span class="lt">INFRA</span><a href="https://attack.mitre.org/techniques/T1583/">T1583 — Acquire Infrastructure</a></li>
+        <li><span class="lt">ABUSE</span><a href="https://attack.mitre.org/techniques/T1621/">T1621 — Multi-Factor Authentication Request Generation</a></li>
+      </ul>
+    </div>
+  </div>
+</section>
+<!-- ==== MAIN-CONTENT:END ==== -->
+</main>
+</div>
+
+<button type="button" class="fab fab-toc" id="mobileTocBtn" aria-expanded="false" aria-controls="toc">Contents</button>
+<button type="button" class="fab fab-top" id="backToTop" aria-label="Back to top">&#8593;</button>
+<div class="backdrop" id="backdrop"></div>
+
+<script>
+(function () {
+  'use strict';
+  var d = document;
+  var root = d.documentElement;
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ---------- theme toggle (single control; honors pre-paint choice) ---------- */
+  var themeBtn = d.getElementById('themeToggle');
+  function applyTheme(t) {
+    root.setAttribute('data-theme', t);
+    try { localStorage.setItem('atk-theme', t); } catch (e) {}
+    if (themeBtn) themeBtn.textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+    d.dispatchEvent(new CustomEvent('themechange'));
+  }
+  if (themeBtn) {
+    themeBtn.textContent = root.getAttribute('data-theme') === 'dark' ? 'Light mode' : 'Dark mode';
+    themeBtn.addEventListener('click', function () {
+      applyTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  /* ---------- TOC built from real headings (cannot drift) ---------- */
+  var tocList = d.getElementById('tocList');
+  function buildTOC() {
+    if (!tocList) return;
+    var secs = d.querySelectorAll('main#main-content > section.sec');
+    var frag = d.createDocumentFragment();
+    secs.forEach(function (sec) {
+      var h2 = sec.querySelector('.sec-head h2');
+      if (!h2) return;
+      var li = d.createElement('li');
+      var a = d.createElement('a');
+      a.href = '#' + sec.id;
+      a.textContent = (sec.querySelector('.sec-num') ? sec.querySelector('.sec-num').textContent + '. ' : '') + h2.textContent;
+      li.appendChild(a);
+      frag.appendChild(li);
+      sec.querySelectorAll('h3.sub-head[id]').forEach(function (h3) {
+        var sub = d.createElement('li');
+        var sa = d.createElement('a');
+        sa.href = '#' + h3.id;
+        sa.className = 'sub';
+        var num = h3.querySelector('.sub-num');
+        sa.textContent = (num ? num.textContent + ' ' : '') + h3.textContent.replace(num ? num.textContent : '', '').trim();
+        sub.appendChild(sa);
+        frag.appendChild(sub);
+      });
+    });
+    tocList.innerHTML = '';
+    tocList.appendChild(frag);
+  }
+  buildTOC();
+
+  /* ---------- scrollspy ---------- */
+  var links = {};
+  function cacheLinks() {
+    links = {};
+    tocList.querySelectorAll('a').forEach(function (a) {
+      links[a.getAttribute('href').slice(1)] = a;
+    });
+  }
+  cacheLinks();
+  var setActive = function (id) {
+    Object.keys(links).forEach(function (k) { links[k].classList.toggle('active', k === id); });
+  };
+  function watchSpy() {
+    var targets = [];
+    d.querySelectorAll('main#main-content > section.sec').forEach(function (s) { targets.push(s); });
+    d.querySelectorAll('main#main-content h3.sub-head[id]').forEach(function (h) { targets.push(h); });
+    if (!('IntersectionObserver' in window)) return;
+    var current = null;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) current = en.target.id;
+      });
+      if (current) setActive(current);
+    }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+    targets.forEach(function (t) { io.observe(t); });
+  }
+  watchSpy();
+
+  /* ---------- reading progress ---------- */
+  var fill = d.getElementById('progressFill');
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      var h = root.scrollHeight - window.innerHeight;
+      var p = h > 0 ? Math.min(1, window.scrollY / h) : 0;
+      if (fill) fill.style.width = (p * 100).toFixed(2) + '%';
+      var top = d.getElementById('backToTop');
+      if (top) top.classList.toggle('show', window.scrollY > 600);
+      ticking = false;
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  /* ---------- back to top ---------- */
+  var btt = d.getElementById('backToTop');
+  if (btt) btt.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: reduced.matches ? 'auto' : 'smooth' });
+  });
+
+  /* ---------- mobile contents overlay (same sidebar, off-canvas) ---------- */
+  var toc = d.getElementById('toc');
+  var openBtn = d.getElementById('mobileTocBtn');
+  var backdrop = d.getElementById('backdrop');
+  var closeBtn = d.getElementById('tocClose');
+  function setToc(open) {
+    d.body.classList.toggle('toc-open', open);
+    if (openBtn) openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && closeBtn) closeBtn.focus();
+  }
+  if (openBtn) openBtn.addEventListener('click', function () { setToc(!d.body.classList.contains('toc-open')); });
+  if (backdrop) backdrop.addEventListener('click', function () { setToc(false); });
+  if (closeBtn) closeBtn.addEventListener('click', function () { setToc(false); focusMain(); });
+  function focusMain() {
+    var m = d.getElementById('main-content');
+    if (m) m.focus({ preventScroll: false });
+  }
+  d.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && d.body.classList.contains('toc-open')) { setToc(false); if (openBtn) openBtn.focus(); }
+  });
+  tocList.addEventListener('click', function (e) {
+    if (e.target.closest('a') && d.body.classList.contains('toc-open')) setToc(false);
+  });
+
+  /* ---------- copy buttons ---------- */
+  d.addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    var pre = btn.closest('.codeblock').querySelector('pre');
+    var text = pre ? pre.innerText : '';
+    function done() {
+      btn.textContent = 'Copied';
+      btn.classList.add('ok');
+      setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () { fallback(); });
+    } else { fallback(); }
+    function fallback() {
+      var ta = d.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      d.body.appendChild(ta);
+      ta.select();
+      try { d.execCommand('copy'); done(); } catch (err) {}
+      d.body.removeChild(ta);
+    }
+  });
+
+  /* ============================================================
+     Simulation engine (shared by all technique guide pages)
+     ============================================================ */
+  var SIM_CONFIG = {
+  // ==== SIM-CONFIG:BEGIN ====
+  meta: { title: "Scenario: SMS pumping against an OTP app" },
+  nodes: [
+    { id: "fraud", label: "Fraudster", sub: "fraud ring", type: "attacker", x: 0.15, y: 0.24,
+      tip: "A telecom fraud ring. They lease a block of phone numbers in high-cost destinations and earn a share of every SMS delivered to those numbers." },
+    { id: "signup", label: "Signup Form", sub: "public OTP endpoint", type: "server", x: 0.36, y: 0.15,
+      tip: "The public signup and verification form of the victim app. Each submit asks the backend to send an SMS passcode. The form works as designed, which is exactly the problem." },
+    { id: "otpapi", label: "OTP API", sub: "Twilio / SNS", type: "cloud", x: 0.36, y: 0.60,
+      tip: "The backend call that sends SMS through a messaging provider such as Twilio or AWS SNS. The victim pays per message, so every fake request burns real money." },
+    { id: "telco", label: "Telco", sub: "carrier network", type: "telco", x: 0.63, y: 0.15,
+      tip: "The carrier network that delivers messages and pays termination fees. When the destination range belongs to the fraud ring, part of that money flows back to them." },
+    { id: "range", label: "Premium Range", sub: "attacker numbers", type: "money", x: 0.80, y: 0.26,
+      tip: "A leased block of phone numbers in countries with high SMS termination fees. Every message that lands here pays the ring a share of the fee." },
+    { id: "users", label: "Real Users", sub: "customers", type: "user", x: 0.62, y: 0.60,
+      tip: "Real customers waiting for passcodes. When the queue fills with fraud traffic, their codes arrive late or never, and signups fail." },
+    { id: "soc", label: "SOC", sub: "fraud + finance", type: "defender", x: 0.22, y: 0.72,
+      tip: "The security, fraud, and finance teams together. SMS pumping is found at the meeting point of OTP velocity, conversion, and spend." }
+  ],
+  flowsBase: [ ["signup", "otpapi"], ["otpapi", "telco"], ["telco", "range"], ["otpapi", "soc"], ["users", "signup"] ],
+  steps: [
+    {
+      title: "1. Leasing a number range", ms: 7000,
+      caption: "A fraud ring leases a block of phone numbers in countries with high SMS termination fees. Every delivered message pays them a share of the fee.",
+      hint: "Nothing yet. This step happens in the telecom market, outside the victim's logs.",
+      flows: [ { from: "fraud", to: "range", color: "violet", label: "lease numbers", n: 3 } ],
+      states: { fraud: "active" }, evid: [], focus: null
+    },
+    {
+      title: "2. Studying the signup flow", ms: 7000,
+      caption: "The fraudster finds the public signup page and confirms that any phone number triggers a verification SMS. No account is needed to fire it.",
+      hint: "Web logs show a handful of OTP requests from one new ASN. Alone, this is ordinary noise.",
+      flows: [ { from: "fraud", to: "signup", color: "danger", label: "recon", n: 3 } ],
+      states: { signup: "active" },
+      evid: [ { node: "soc", text: "WAF: new ASN on /otp" } ], focus: null
+    },
+    {
+      title: "3. OTP request storm", ms: 8000,
+      caption: "Bots fire thousands of OTP requests with rotating IP addresses, devices, and identities. Every request carries a phone number from the fraud range.",
+      hint: "API logs show OTP requests per hour far above baseline, from a few ASNs, with near-zero completions.",
+      flows: [ { from: "fraud", to: "signup", color: "danger", label: "OTP request storm", n: 6 } ],
+      states: { signup: "compromised" },
+      evid: [ { node: "soc", text: "API: 41k OTP/hr, 1 ASN" } ], focus: ["fraud", "signup"]
+    },
+    {
+      title: "4. SMS out through the OTP API", ms: 8000,
+      caption: "Each request makes the app call its messaging provider. Thousands of SMS leave toward the fraud range, and the victim's costs start to grow.",
+      hint: "Provider message logs show the send spike, and delivery receipts start to cluster on one prefix.",
+      flows: [ { from: "signup", to: "otpapi", color: "accent", label: "trigger sends", n: 4 }, { from: "otpapi", to: "telco", color: "accent", label: "SMS to fraud range", n: 5 } ],
+      states: { otpapi: "active", telco: "active" },
+      evid: [ { node: "soc", text: "9k sends, one prefix" } ], focus: ["signup", "otpapi", "telco"]
+    },
+    {
+      title: "5. Money flows back, costs explode", ms: 8000,
+      caption: "The telco delivers the messages and pays termination revenue toward the range owner. The victim pays per SMS, and real users see delays.",
+      hint: "Spend alerts jump and support tickets for missing codes rise. Sends succeed while verifications stay near zero.",
+      flows: [ { from: "telco", to: "range", color: "violet", label: "revenue share", n: 4 }, { from: "range", to: "fraud", color: "violet", label: "payout", n: 2 }, { from: "telco", to: "users", color: "warning", label: "codes delayed", n: 3 } ],
+      states: { range: "active", users: "flagged" },
+      evid: [ { node: "soc", text: "Spend alert: $8.2k SMS" } ], focus: ["telco", "range", "fraud"]
+    },
+    {
+      title: "6. Conversion collapse triggers the alert", ms: 8000,
+      caption: "Analytics join sends with verifications: tens of thousands of codes sent, a handful verified. Fraud Guard and conversion alerts fire together.",
+      hint: "The sent-versus-verified ratio is the strongest signal. Join it with ASN and prefix clustering before you declare an incident.",
+      flows: [ { from: "otpapi", to: "soc", color: "accent2", label: "fraud alert", n: 3 } ],
+      states: { soc: "flagged" },
+      evid: [ { node: "soc", text: "conversion 1.7% vs 61%" } ], focus: ["soc", "otpapi"]
+    },
+    {
+      title: "7. Containment", ms: 8000,
+      caption: "The team enables CAPTCHA on the form, applies per-ASN and per-prefix rate limits, and blocks the fraud range at the provider.",
+      hint: "The provider console shows blocked routes and the send curve flattens within the hour. Export evidence before blocking.",
+      flows: [ { from: "soc", to: "signup", color: "success", label: "CAPTCHA on", n: 2 }, { from: "soc", to: "otpapi", color: "success", label: "rate limit + block", n: 3 } ],
+      states: { signup: "flagged", otpapi: "flagged", range: "ok" },
+      evid: [ { node: "soc", text: "prefix block + CAPTCHA" } ], focus: ["soc", "signup", "otpapi"]
+    },
+    {
+      title: "8. Hardening and budgets", ms: 7000,
+      caption: "The app adds destination allowlists, app attestation, resend cooldowns, and hard spend budgets with alerts that reach the SOC.",
+      hint: "Fraud controls become permanent. Conversion dashboards, weekly prefix review, and provider fraud-guard rules stay on by default.",
+      flows: [ { from: "soc", to: "otpapi", color: "success", label: "budgets + allowlist", n: 2 } ],
+      states: { signup: "secure", otpapi: "secure", telco: "ok", users: "ok", soc: "ok", fraud: "ok" },
+      evid: [ { node: "soc", text: "allowlists + caps set" } ], focus: null
+    }
+  ]
+  // ==== SIM-CONFIG:END ====
+  };
+
+  var sim = (function () {
+    var cfg = typeof SIM_CONFIG !== 'undefined' ? SIM_CONFIG : { nodes: [], flowsBase: [], steps: [] };
+    var canvas = d.getElementById('simCanvas');
+    var stage = d.getElementById('simStage');
+    if (!canvas || !cfg.nodes.length) return null;
+    var ctx = canvas.getContext('2d');
+    var W = 0, H = 0, dpr = 1;
+    var step = 0, playing = false, tIn = 0, last = 0, speed = 1;
+    var states = {}, evids = [];
+    var tip = d.getElementById('simTip');
+    var capEl = d.getElementById('simCaption');
+    var capT = d.getElementById('simStepTitle');
+    var hintEl = d.getElementById('simHintText');
+    var badge = d.getElementById('simStepBadge');
+    var chips = d.getElementById('simChips');
+    var playBtn = d.getElementById('simPlay');
+    var pauseBtn = d.getElementById('simPause');
+    var restartBtn = d.getElementById('simRestart');
+    var speedSel = d.getElementById('simSpeed');
+    var colors = {};
+
+    function readColors() {
+      var cs = getComputedStyle(root);
+      ['bg','surface','surface-2','elevated','text','muted','border','border-strong',
+       'accent','accent-2','violet','success','warning','danger','high','low'].forEach(function (k) {
+        colors[k] = cs.getPropertyValue('--' + k).trim() || '#888';
+      });
+    }
+    readColors();
+    d.addEventListener('themechange', readColors);
+
+    function resize() {
+      var w = stage.clientWidth;
+      var h = Math.max(300, Math.min(460, w * 0.55));
+      dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.height = h + 'px';
+      W = w; H = h;
+      draw();
+    }
+    if ('ResizeObserver' in window) { new ResizeObserver(resize).observe(stage); }
+    window.addEventListener('resize', resize);
+
+    function nodeById(id) {
+      for (var i = 0; i < cfg.nodes.length; i++) if (cfg.nodes[i].id === id) return cfg.nodes[i];
+      return null;
+    }
+    function applyStep(i, reset) {
+      var st = cfg.steps[i];
+      if (!st) return;
+      if (reset) { states = {}; evids = []; }
+      Object.keys(st.states || {}).forEach(function (k) { states[k] = st.states[k]; });
+      (st.evid || []).forEach(function (ev) {
+        var dup = evids.some(function (e) { return e.node === ev.node && e.text === ev.text; });
+        if (!dup) evids.push(ev);
+      });
+      if (capT) capT.textContent = 'Step ' + (i + 1) + ' — ' + st.title.replace(/^\d+\.\s*/, '');
+      if (capEl) capEl.textContent = st.caption;
+      if (hintEl) hintEl.textContent = st.hint;
+      if (badge) badge.textContent = 'Step ' + (i + 1) + ' of ' + cfg.steps.length;
+      if (chips) {
+        chips.querySelectorAll('.chip-step').forEach(function (c, j) {
+          c.classList.toggle('active', j === i);
+          c.setAttribute('aria-pressed', j === i ? 'true' : 'false');
+        });
+      }
+    }
+    function gotoStep(i) {
+      if (i < 0 || i >= cfg.steps.length) return;
+      var wasPlaying = playing;
+      step = i; tIn = 0;
+      applyStep(i, true);
+      playing = wasPlaying && i < cfg.steps.length - 1;
+      draw();
+    }
+    function buildChips() {
+      if (!chips) return;
+      cfg.steps.forEach(function (st, i) {
+        var b = d.createElement('button');
+        b.type = 'button';
+        b.className = 'chip-step';
+        b.textContent = (i + 1);
+        b.title = st.title;
+        b.setAttribute('aria-label', 'Jump to step ' + (i + 1) + ': ' + st.title);
+        b.addEventListener('click', function () { gotoStep(i); });
+        chips.appendChild(b);
+      });
+    }
+    buildChips();
+    applyStep(0, true);
+
+    if (playBtn) playBtn.addEventListener('click', function () {
+      if (step >= cfg.steps.length - 1 && !playing) { step = 0; tIn = 0; applyStep(0, true); }
+      playing = true; last = performance.now(); requestAnimationFrame(loop);
+    });
+    if (pauseBtn) pauseBtn.addEventListener('click', function () { playing = false; });
+    if (restartBtn) restartBtn.addEventListener('click', function () { gotoStep(0); });
+    if (speedSel) speedSel.addEventListener('change', function () { speed = parseFloat(speedSel.value) || 1; });
+
+    function loop(now) {
+      if (!playing) return;
+      var dt = Math.min(120, now - last); last = now;
+      tIn += dt * speed;
+      var dur = (cfg.steps[step].ms || 7000) * (reduced.matches ? 0.55 : 1);
+      if (tIn >= dur) {
+        if (step < cfg.steps.length - 1) {
+          step++; tIn = 0; applyStep(step, false);
+        } else {
+          playing = false; draw(); return;
+        }
+      }
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function rr(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    function pos(n) { return { x: n.x * W, y: n.y * H }; }
+    function stateColor(s) {
+      return s === 'compromised' ? colors.danger : s === 'flagged' ? colors.warning :
+             s === 'secure' ? colors.success : s === 'active' ? colors.accent : colors['border-strong'];
+    }
+    function drawGlyph(type, x, y, c, a) {
+      ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 1.6 * a; ctx.globalAlpha = a;
+      var s = 9;
+      if (type === 'attacker') {
+        ctx.beginPath(); ctx.moveTo(x - s, y + s * 0.7); ctx.lineTo(x - s * 0.6, y - s * 0.8);
+        ctx.lineTo(x + s * 0.6, y - s * 0.8); ctx.lineTo(x + s, y + s * 0.7); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - s * 1.4, y + s * 1.1); ctx.lineTo(x + s * 1.4, y + s * 1.1); ctx.stroke();
+      } else if (type === 'server') {
+        for (var i = 0; i < 3; i++) { ctx.strokeRect(x - s, y - s + i * (s * 0.75), s * 2, s * 0.55);
+          ctx.fillRect(x + s * 0.45, y - s + i * (s * 0.75) + s * 0.16, s * 0.35, s * 0.22); }
+      } else if (type === 'cloud') {
+        ctx.beginPath();
+        ctx.arc(x - s * 0.5, y + s * 0.2, s * 0.55, Math.PI * 0.5, Math.PI * 1.5);
+        ctx.arc(x, y - s * 0.25, s * 0.62, Math.PI, Math.PI * 1.9);
+        ctx.arc(x + s * 0.6, y + s * 0.15, s * 0.5, Math.PI * 1.4, Math.PI * 0.6);
+        ctx.closePath(); ctx.stroke();
+      } else if (type === 'defender') {
+        ctx.beginPath();
+        ctx.moveTo(x, y - s);
+        ctx.quadraticCurveTo(x + s * 0.95, y - s * 0.55, x + s * 0.95, y + s * 0.05);
+        ctx.quadraticCurveTo(x + s * 0.95, y + s * 0.75, x, y + s);
+        ctx.quadraticCurveTo(x - s * 0.95, y + s * 0.75, x - s * 0.95, y + s * 0.05);
+        ctx.quadraticCurveTo(x - s * 0.95, y - s * 0.55, x, y - s);
+        ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - s * 0.35, y); ctx.lineTo(x - s * 0.05, y + s * 0.35);
+        ctx.lineTo(x + s * 0.45, y - s * 0.35); ctx.stroke();
+      } else if (type === 'phone') {
+        rr(x - s * 0.55, y - s, s * 1.1, s * 2, 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - s * 0.2, y + s * 0.65); ctx.lineTo(x + s * 0.2, y + s * 0.65); ctx.stroke();
+      } else if (type === 'money') {
+        ctx.beginPath(); ctx.arc(x, y, s * 0.85, 0, Math.PI * 2); ctx.stroke();
+        ctx.font = 'bold ' + (s * 1.1) + 'px ' + 'sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('$', x, y + 1);
+      } else if (type === 'net') {
+        ctx.beginPath(); ctx.arc(x, y, s * 0.9, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(x, y, s * 0.9, s * 0.38, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, y - s * 0.9); ctx.lineTo(x, y + s * 0.9); ctx.stroke();
+      } else if (type === 'telco') {
+        ctx.beginPath(); ctx.moveTo(x - s * 0.6, y + s); ctx.lineTo(x, y - s); ctx.lineTo(x + s * 0.6, y + s); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y - s * 1.25, s * 0.45, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      } else { /* container / ci / ai / user / database fallback: box + dot */
+        rr(x - s * 0.8, y - s * 0.8, s * 1.6, s * 1.6, 3); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, s * 0.3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    function drawNode(n, dim) {
+      var p = pos(n);
+      var a = dim ? 0.3 : 1;
+      var st = states[n.id] || 'ok';
+      var bw = Math.max(76, ctx.measureText(n.label).width + 40);
+      var bh = 46;
+      var x = p.x - bw / 2, y = p.y - bh / 2;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = colors.surface;
+      ctx.strokeStyle = stateColor(st);
+      ctx.lineWidth = (st !== 'ok' ? 2.2 : 1.2);
+      rr(x, y, bw, bh, 10); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = colors.text;
+      ctx.font = '600 12px ' + getComputedStyle(root).fontFamily;
+      ctx.fillText(n.label, x + 34, y + 18);
+      ctx.fillStyle = colors.muted;
+      ctx.font = '10px ' + getComputedStyle(root).fontFamily;
+      ctx.fillText(n.sub, x + 34, y + 31);
+      drawGlyph(n.type, x + 17, y + bh / 2, stateColor(st) === colors['border-strong'] ? colors.accent : stateColor(st), a);
+      if (states[n.id] && states[n.id] !== 'ok') {
+        ctx.fillStyle = stateColor(st);
+        ctx.beginPath(); ctx.arc(x + bw - 6, y + 6, 3.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      n._box = { x: x, y: y, w: bw, h: bh };
+    }
+    function drawFlow(f, focus, timeMs) {
+      var a = nodeById(f.from), b = nodeById(f.to);
+      if (!a || !b) return;
+      var p1 = pos(a), p2 = pos(b);
+      var col = colors[f.color] || colors.accent;
+      var dim = focus && focus.indexOf(f.from) < 0 && focus.indexOf(f.to) < 0;
+      ctx.globalAlpha = dim ? 0.15 : 0.85;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      ctx.setLineDash([]);
+      var dx = p2.x - p1.x, dy = p2.y - p1.y, L = Math.hypot(dx, dy) || 1;
+      var ux = dx / L, uy = dy / L;
+      var nx = -uy, ny = ux;
+      var ah = 8;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(p2.x, p2.y);
+      ctx.lineTo(p2.x - ux * ah + nx * ah * 0.5, p2.y - uy * ah + ny * ah * 0.5);
+      ctx.lineTo(p2.x - ux * ah - nx * ah * 0.5, p2.y - uy * ah - ny * ah * 0.5);
+      ctx.closePath(); ctx.fill();
+      if (f.label) {
+        ctx.font = '600 10px ' + getComputedStyle(root).fontFamily;
+        ctx.fillStyle = colors.muted;
+        ctx.globalAlpha = dim ? 0.15 : 0.95;
+        var mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(f.label, mx, my - 4);
+      }
+      var count = f.n || 3;
+      for (var i = 0; i < count; i++) {
+        var t;
+        if (reduced.matches) { t = (i + 0.5) / count; }
+        else {
+          var ph = ((timeMs / 900) * speed + i / count) % 1;
+          t = ph;
+        }
+        var px = p1.x + dx * t, py = p1.y + dy * t;
+        ctx.globalAlpha = dim ? 0.12 : 0.9;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(px, py, 2.6, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    function drawBaseLink(pair, focus) {
+      var a = nodeById(pair[0]), b = nodeById(pair[1]);
+      if (!a || !b) return;
+      var p1 = pos(a), p2 = pos(b);
+      var dim = focus && focus.indexOf(pair[0]) < 0 && focus.indexOf(pair[1]) < 0;
+      ctx.globalAlpha = dim ? 0.08 : 0.35;
+      ctx.strokeStyle = colors['border-strong'];
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    function draw() {
+      var st = cfg.steps[step] || { flows: [], focus: null };
+      var focus = st.focus || null;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = colors['surface-2'];
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = colors.border;
+      ctx.lineWidth = 1;
+      for (var gx = 20; gx < W; gx += 40) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+      for (var gy = 20; gy < H; gy += 40) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      (cfg.flowsBase || []).forEach(function (pair) { drawBaseLink(pair, focus); });
+      var time = performance.now();
+      (st.flows || []).forEach(function (f) { drawFlow(f, focus, time); });
+      cfg.nodes.forEach(function (n) { drawNode(n, focus && focus.indexOf(n.id) < 0); });
+      var socEv = evids.filter(function (e) { return e.node === 'soc'; });
+      var socN = nodeById('soc');
+      if (socN && socEv.length) {
+        var p = pos(socN);
+        ctx.font = '10px ' + getComputedStyle(root).fontFamily;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        var lines = socEv.slice(-3);
+        lines.forEach(function (e, i) {
+          var tw = ctx.measureText(e.text).width + 14;
+          var ty = p.y + 30 + i * 16;
+          ctx.globalAlpha = 0.95;
+          ctx.fillStyle = colors.success;
+          rr(p.x - tw / 2, ty, tw, 13, 6);
+          ctx.globalAlpha = 0.13; ctx.fill();
+          ctx.globalAlpha = 0.95;
+          ctx.strokeStyle = colors.success; ctx.lineWidth = 0.8; ctx.stroke();
+          ctx.fillStyle = colors.success;
+          ctx.fillText(e.text, p.x, ty + 2);
+          ctx.globalAlpha = 1;
+        });
+      }
+      ctx.fillStyle = colors.muted;
+      ctx.font = '10px ' + getComputedStyle(root).fontFamily;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText('attacker space', 10, 8);
+      ctx.textAlign = 'right';
+      ctx.fillText('defender view', W - 10, 8);
+      ctx.textAlign = 'left';
+    }
+
+    /* tooltips: hover + click/tap */
+    function hitTest(mx, my) {
+      for (var i = 0; i < cfg.nodes.length; i++) {
+        var b = cfg.nodes[i]._box;
+        if (b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) return cfg.nodes[i];
+      }
+      return null;
+    }
+    function showTip(n, mx, my) {
+      if (!tip || !n) { if (tip) tip.style.display = 'none'; return; }
+      tip.innerHTML = '<b></b>';
+      tip.firstChild.textContent = n.label;
+      tip.appendChild(d.createTextNode(n.tip));
+      tip.style.display = 'block';
+      var rect = stage.getBoundingClientRect();
+      var tx = Math.min(Math.max(6, mx - rect.left + 12), rect.width - 280);
+      var ty = Math.max(6, my - rect.top - 10);
+      tip.style.left = tx + 'px';
+      tip.style.top = ty + 'px';
+    }
+    canvas.addEventListener('mousemove', function (e) {
+      var r = canvas.getBoundingClientRect();
+      var n = hitTest(e.clientX - r.left, e.clientY - r.top);
+      showTip(n, e.clientX, e.clientY);
+    });
+    canvas.addEventListener('mouseleave', function () { showTip(null, 0, 0); });
+    canvas.addEventListener('click', function (e) {
+      var r = canvas.getBoundingClientRect();
+      var n = hitTest(e.clientX - r.left, e.clientY - r.top);
+      showTip(n, e.clientX, e.clientY);
+    });
+
+    resize();
+    if (!reduced.matches) { playing = true; last = performance.now(); requestAnimationFrame(loop); }
+    return { gotoStep: gotoStep, isPlaying: function () { return playing; } };
+  })();
+})();
+</script>
+</body>
+</html>

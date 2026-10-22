@@ -1,0 +1,2923 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1485.001 - Lifecycle-Triggered Deletion · Detection Engineering Guide</title>
+<meta name="description" content="Beginner-friendly detection guide for MITRE ATT&amp;CK T1485.001 (Lifecycle-Triggered Deletion): cloud storage lifecycle abuse, Sigma rules, Splunk SPL, mitigations and a case study.">
+<script>(function(){try{var t=null;try{t=localStorage.getItem("atk-theme")}catch(e){}if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})();</script>
+<style>
+/* ============================================================
+   Detection Engineering Guide — shared design system
+   Dark + light themes, layout, components. No external assets.
+   ============================================================ */
+
+:root {
+  --bg: #0b0f1a;
+  --surface: #121a2e;
+  --surface-2: #172138;
+  --elevated: #1a2542;
+  --text: #e7edf8;
+  --muted: #9aa8c0;
+  --border: #24314e;
+  --border-strong: #2f4066;
+  --accent: #4f8cff;
+  --accent-2: #22d3ee;
+  --violet: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --high: #fb923c;
+  --low: #4ade80;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --radius-card: 14px;
+  --radius-ctl: 9px;
+  --shadow-soft: 0 10px 30px rgba(2, 6, 18, 0.35);
+  --max-w: 1280px;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f3f6fc;
+  --surface: #ffffff;
+  --surface-2: #f5f8ff;
+  --elevated: #e9eefa;
+  --text: #182238;
+  --muted: #5a6a85;
+  --border: #d9e2f2;
+  --border-strong: #c2d0ea;
+  --accent: #2f6fe4;
+  --accent-2: #0891b2;
+  --violet: #7c5ce0;
+  --success: #0d9e6e;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --high: #c2410c;
+  --low: #15803d;
+  --shadow-soft: 0 10px 30px rgba(24, 34, 56, 0.10);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 96px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16.5px;
+  line-height: 1.65;
+  overflow-x: clip;
+}
+
+img, canvas { max-width: 100%; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+p, li, dd, dt { overflow-wrap: break-word; }
+p { max-width: 78ch; }
+
+h1, h2, h3, h4 {
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.5em;
+  font-weight: 750;
+  text-wrap: balance;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:where(p, li, td, th, dd, h3, h4) > code:not(pre code) {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.08em 0.4em;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+  overflow: hidden; white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px; top: -48px;
+  z-index: 200;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 0 0 10px 10px;
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 0; text-decoration: none; }
+
+/* ---------- progress bar ---------- */
+
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 90;
+  background: transparent;
+  pointer-events: none;
+}
+#progressFill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.08s linear;
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(900px 320px at 12% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    radial-gradient(700px 300px at 88% -20%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 70%),
+    linear-gradient(color-mix(in srgb, var(--surface) 55%, var(--bg)), var(--bg));
+}
+.hero-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 44px 24px 36px;
+}
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 14px;
+}
+.page-title {
+  font-size: clamp(1.8rem, 3.6vw, 2.65rem);
+  margin: 0 0 14px;
+  max-width: 22ch;
+}
+.tech-id {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62em;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 12px;
+  padding: 0.08em 0.5em;
+  margin-right: 0.45em;
+  vertical-align: 0.18em;
+  white-space: nowrap;
+}
+.hero-intro {
+  color: var(--muted);
+  font-size: 1.06rem;
+  max-width: 68ch;
+  margin: 0 0 20px;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 24px;
+}
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+.chip b, .chip strong { color: var(--text); font-weight: 600; }
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-soft);
+}
+.fact-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.fact-value { font-weight: 700; font-size: 1.02rem; line-height: 1.35; }
+.fact-sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+
+/* ---------- layout: sticky TOC + main ---------- */
+
+.layout {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 40px 24px 110px;
+  display: grid;
+  grid-template-columns: 262px minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.sidebar { position: relative; }
+.toc-card {
+  position: sticky;
+  top: 28px;
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px 12px;
+  scrollbar-width: thin;
+}
+.toc-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  padding: 0 10px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-list li { margin: 2px 0; }
+.toc-list a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  box-shadow: inset 3px 0 0 transparent;
+}
+.toc-list a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.toc-list a.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.toc-list li.sub a { padding-left: 22px; font-size: 0.84rem; }
+.content { min-width: 0; }
+
+/* ---------- sections ---------- */
+
+.sec { margin-top: 64px; }
+.content > .sec:first-child { margin-top: 0; }
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.sec-num {
+  flex: none;
+  min-width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.sec-head h2 {
+  font-size: clamp(1.45rem, 2.4vw, 1.85rem);
+  margin: 0;
+}
+.sec-intro {
+  color: var(--muted);
+  margin: 2px 0 22px 56px;
+  max-width: 74ch;
+}
+.sec h3 {
+  font-size: 1.16rem;
+  margin: 30px 0 12px;
+  scroll-margin-top: 92px;
+}
+.sec h4 { font-size: 1rem; margin: 20px 0 8px; }
+
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
+.reveal.in { opacity: 1; transform: none; }
+
+/* ---------- cards & grids ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-soft);
+}
+.card > h3:first-child, .card > h4:first-child { margin-top: 0; }
+.card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+.card-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+  margin: 0 0 8px;
+}
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.grid-2 > *, .grid-3 > * { min-width: 0; }
+
+.kv-list { margin: 0; display: grid; gap: 0; }
+.kv-list > div {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.kv-list > div:last-child { border-bottom: 0; }
+.kv-list dt {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding-top: 2px;
+}
+.kv-list dd { margin: 0; font-size: 0.95rem; }
+/* ---------- callouts ---------- */
+
+.callout {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  padding: 13px 16px;
+  margin: 14px 0;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .callout-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+  color: var(--accent);
+}
+.callout.warning { border-left-color: var(--warning); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); }
+.callout.warning .callout-label { color: var(--warning); }
+.callout.good { border-left-color: var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); }
+.callout.good .callout-label { color: var(--success); }
+.callout.danger { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+.callout.danger .callout-label { color: var(--danger); }
+.callout.note { border-left-color: var(--violet); background: color-mix(in srgb, var(--violet) 8%, var(--surface)); }
+.callout.note .callout-label { color: var(--violet); }
+
+/* ---------- badges ---------- */
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.badge.sev-critical { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.badge.sev-high { color: var(--high); border-color: color-mix(in srgb, var(--high) 55%, transparent); background: color-mix(in srgb, var(--high) 12%, transparent); }
+.badge.sev-medium { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.badge.sev-low { color: var(--low); border-color: color-mix(in srgb, var(--low) 55%, transparent); background: color-mix(in srgb, var(--low) 12%, transparent); }
+.badge.cat { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 50%, transparent); background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
+.badge.ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 50%, transparent); background: color-mix(in srgb, var(--success) 10%, transparent); }
+
+/* ---------- tables ---------- */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  margin: 14px 0;
+}
+.table-wrap table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.table-wrap.wide table { min-width: 780px; }
+.table-wrap th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: var(--surface-2);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table-wrap td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.table-wrap tbody tr:last-child td { border-bottom: 0; }
+.table-wrap tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+
+/* ---------- code blocks ---------- */
+
+.code-block {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--elevated);
+  border-bottom: 1px solid var(--border);
+}
+.code-lang {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.code-block pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  scrollbar-width: thin;
+}
+.code-block pre code { white-space: pre; }
+
+/* ---------- buttons & controls ---------- */
+
+.btn, .step-chip {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+.btn:hover, .step-chip:hover { background: var(--elevated); border-color: var(--accent); }
+.btn:active, .step-chip:active { transform: translateY(1px); }
+.btn:disabled, .step-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.copied { color: var(--success); border-color: var(--success); }
+.copy-btn { padding: 4px 12px; font-size: 0.8rem; }
+.select {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 10px;
+}
+
+/* ---------- timeline ---------- */
+
+.timeline {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0 0 0 24px;
+  border-left: 2px solid var(--border);
+}
+.timeline li { position: relative; margin: 0 0 18px; }
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: -31px;
+  top: 5px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.tl-when {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-2);
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+.tl-what { font-weight: 700; margin-bottom: 4px; }
+.timeline p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- triage flow ---------- */
+
+.flow {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  counter-reset: flow;
+}
+.flow li {
+  counter-increment: flow;
+  position: relative;
+  padding: 0 0 18px 52px;
+}
+.flow li::before {
+  content: counter(flow);
+  position: absolute;
+  left: 0; top: 0;
+  width: 34px; height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.flow li::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 38px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--border);
+}
+.flow li:last-child::after { display: none; }
+.flow .flow-step { font-weight: 700; display: block; margin-bottom: 3px; }
+.flow p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- checklists ---------- */
+
+.check { list-style: none; margin: 12px 0; padding: 0; }
+.check li {
+  position: relative;
+  padding: 6px 0 6px 34px;
+  border-bottom: 1px dashed var(--border);
+}
+.check li:last-child { border-bottom: 0; }
+.check li::before {
+  content: "";
+  position: absolute;
+  left: 4px; top: 11px;
+  width: 15px; height: 15px;
+  border-radius: 4px;
+  border: 2px solid var(--accent);
+  background: transparent;
+}
+
+/* ---------- attack chain strip ---------- */
+
+.chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.chain-step {
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+.chain-step.hot {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  font-weight: 700;
+}
+.chain-arrow { color: var(--muted); }
+
+/* ---------- misc helpers ---------- */
+
+.muted { color: var(--muted); }
+.small { font-size: 0.86rem; }
+.mt-0 { margin-top: 0; }
+.mono { font-family: var(--font-mono); }
+.stack > * + * { margin-top: 12px; }
+/* ---------- simulation ---------- */
+
+.sim-shell { padding: 0; overflow: hidden; }
+.sim-stage {
+  position: relative;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.sim-stage canvas { display: block; width: 100%; }
+.sim-tip {
+  position: absolute;
+  z-index: 5;
+  max-width: 240px;
+  background: var(--elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+  pointer-events: none;
+}
+.sim-tip strong { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--accent-2); margin-bottom: 2px; }
+.sim-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sim-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+.sim-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 12px 14px 2px;
+}
+.step-chip { font-size: 0.8rem; padding: 4px 11px; border-radius: 999px; }
+.step-chip.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 700;
+}
+.sim-caption {
+  padding: 12px 14px 16px;
+}
+.sim-cap-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+}
+.sim-cap-text { margin: 0 0 10px; }
+.sim-hint {
+  border-left: 3px solid var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+  border-radius: 0 10px 10px 0;
+  padding: 9px 13px;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+/* ---------- floating controls ---------- */
+
+.fab {
+  position: fixed;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s ease;
+}
+.fab:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.theme-fab { left: 18px; bottom: 18px; width: 46px; height: 46px; font-size: 1.05rem; }
+.back-top { right: 18px; bottom: 74px; padding: 0 16px; opacity: 0; pointer-events: none; transform: translateY(8px); }
+.back-top.show { opacity: 1; pointer-events: auto; transform: none; }
+.contents-fab { right: 18px; bottom: 18px; padding: 0 16px; display: none; }
+
+/* ---------- mobile contents overlay ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: rgba(4, 8, 18, 0.55);
+  border: 0;
+  padding: 0;
+}
+.toc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 24px;
+  overflow: auto;
+}
+.toc-overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.toc-overlay-head span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.toc-overlay .toc-list a { font-size: 1rem; padding: 10px 12px; }
+.toc-overlay .toc-list li.sub a { padding-left: 30px; font-size: 0.9rem; }
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1040px) {
+  .layout { display: block; padding-top: 28px; }
+  .sidebar { display: none; }
+  .contents-fab { display: inline-flex; }
+  .sec { margin-top: 48px; }
+  .sec-intro { margin-left: 0; }
+}
+
+@media (max-width: 900px) {
+  .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .hero-inner { padding: 30px 16px 26px; }
+  .layout { padding: 24px 16px 96px; }
+  .fact-grid { grid-template-columns: 1fr; gap: 10px; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .kv-list > div { grid-template-columns: 1fr; gap: 2px; }
+  .sec { margin-top: 40px; }
+  .sec-head { gap: 10px; }
+  .sec-num { min-width: 36px; height: 36px; font-size: 0.95rem; border-radius: 10px; }
+  .sec-intro { margin-bottom: 16px; }
+  .sim-speed { margin-left: 0; width: 100%; }
+  .sim-toolbar .btn { flex: 1 1 auto; }
+  .theme-fab { left: 12px; bottom: 12px; }
+  .back-top { right: 12px; bottom: 78px; }
+  .contents-fab { right: 12px; bottom: 12px; }
+  .page-title { font-size: clamp(1.55rem, 7.2vw, 2rem); }
+}
+
+@media (max-width: 400px) {
+  .hero-inner { padding: 24px 12px 20px; }
+  .layout { padding: 18px 12px 90px; }
+  .chip { font-size: 11px; padding: 3px 9px; }
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; }
+  #progressFill { transition: none; }
+}
+
+/* ---------- print ---------- */
+
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f6fa;
+    --elevated: #eef1f7;
+    --text: #111827;
+    --muted: #4b5563;
+    --border: #d1d5db;
+    --border-strong: #9ca3af;
+    --accent: #1d4ed8;
+    --accent-2: #0e7490;
+    --violet: #6d28d9;
+    --success: #047857;
+    --warning: #92400e;
+    --danger: #b91c1c;
+    --high: #9a3412;
+    --low: #166534;
+    --shadow-soft: none;
+  }
+  body { background: #fff; color: #111827; font-size: 11.5pt; }
+  .sidebar, .progress-bar, .fab, .back-top, .contents-fab, .theme-fab,
+  .sim-toolbar, .sim-steps, .copy-btn, .scrim, .toc-overlay, .skip-link {
+    display: none !important;
+  }
+  .hero { border-bottom: 1px solid #ccc; background: #fff; }
+  .layout { display: block; max-width: none; padding: 0; }
+  .sec { margin-top: 22pt; }
+  .sec-intro { margin-left: 0; }
+  a { color: #1d4ed8; text-decoration: underline; }
+  .code-block, .table-wrap, .card, .callout { box-shadow: none; break-inside: avoid; }
+  .code-block pre { white-space: pre-wrap; overflow: visible; }
+  .table-wrap { overflow: visible; }
+  .table-wrap table { min-width: 0; }
+  h2, h3 { break-after: avoid; }
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1485.001"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip-link" href="#mainContent">Skip to main content</a>
+<div class="progress-bar" aria-hidden="true"><div id="progressFill"></div></div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&amp;CK · Impact · Sub-technique of T1485</p>
+    <h1 class="page-title" id="pageTitle"><span class="tech-id">T1485.001</span> Lifecycle-Triggered Deletion</h1>
+    <p class="hero-intro">This guide explains how attackers abuse cloud storage lifecycle rules to delete data and logs on a timer. One API call can schedule the destruction of a whole bucket.</p>
+    <div class="chip-row">
+      <span class="chip">Tactic: Impact</span>
+      <span class="chip">Platforms: IaaS</span>
+      <span class="chip">Technique version 1.1 · added 25 September 2024</span>
+      <span class="chip">Detection strategy: DET0041</span>
+      <span class="chip">Guide v2.0</span>
+    </div>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <div class="fact-label">Attack stage</div>
+        <div class="fact-value">Cloud impact phase</div>
+        <div class="fact-sub">Often part of cloud ransomware</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Attacker goal</div>
+        <div class="fact-value">Timed, hands-off destruction</div>
+        <div class="fact-sub">Also wipes log buckets to hide</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Key evidence</div>
+        <div class="fact-value">PutBucketLifecycle in CloudTrail</div>
+        <div class="fact-sub">Management events, one rare call</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Detection effort</div>
+        <div class="fact-value">Low</div>
+        <div class="fact-sub">A single high-signal API call</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar" aria-label="Table of contents">
+    <nav class="toc-card" aria-label="Sections">
+      <div class="toc-title">Contents</div>
+      <ul class="toc-list" id="tocList"></ul>
+    </nav>
+  </aside>
+  <main class="content" id="mainContent">
+<section class="sec" id="sec-1-overview">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2>Overview</h2></div>
+  <p class="sec-intro">A plain-language tour of T1485.001: how one API call can schedule the destruction of a whole cloud storage bucket, and why you get an early warning before any damage.</p>
+
+  <p><strong>Lifecycle-Triggered Deletion</strong> means an attacker abuses the automatic cleanup rules of cloud storage to destroy data. A <em>bucket</em> is a named container for files in cloud object storage, such as Amazon S3, Azure Blob Storage, or Google Cloud Storage. A <em>lifecycle policy</em> is a set of automatic rules for objects as they age. It tells the storage service to move them to cheaper storage, to archive them, or to delete them after a set number of days. These rules exist to save money and keep storage tidy. An attacker who can write a lifecycle policy can weaponize it. One rule that expires every object after one day quietly schedules the destruction of the whole bucket.</p>
+
+  <p>The attack feels strange because nothing breaks at first. The attacker sends one API call and leaves. The storage service does the deletion later, on a timer, often while the company sleeps. By the next day the objects are gone, and no attacker was connected when it happened. ATT&amp;CK also warns about a second use of the same trick. The attacker applies the rule to the bucket that stores <em>CloudTrail</em> logs, the activity records of a cloud account. The audit trail then deletes itself. That turns an impact technique into a cover-up tool, because responders lose the very evidence they need.</p>
+
+  <div class="card">
+    <h3 class="card-title">Where it sits in the attack chain</h3>
+    <p>The attacker does not need any server. A single set of stolen cloud keys is enough, which is why leaked access keys and token theft are the usual starting point. When you see this technique, the intruder already has working cloud credentials and has finished looking around.</p>
+    <p class="chain">
+      <span class="chain-step">Initial Access</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Discovery</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Collection / Exfiltration</span><span class="chain-arrow">→</span>
+      <span class="chain-step hot">Impact — T1485.001</span>
+    </p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What you will learn in this guide</h3>
+      <ul class="check">
+        <li>How lifecycle policies work and how attackers turn them into timers.</li>
+        <li>Why the destruction is delayed and automated, and why that helps you.</li>
+        <li>Which exact CloudTrail events give you the earliest warning.</li>
+        <li>Five ready-to-use Sigma rules (an open detection-rule format) and matching Splunk SPL queries (the Splunk search language).</li>
+        <li>How permission design and protected copies make this attack fail.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Key facts at a glance</h3>
+      <dl class="kv-list">
+        <div><dt>ATT&amp;CK ID</dt><dd>T1485.001 — Lifecycle-Triggered Deletion.</dd></div>
+        <div><dt>Parent technique</dt><dd>T1485 — Data Destruction.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact (data availability and evidence integrity).</dd></div>
+        <div><dt>Platforms</dt><dd>IaaS. Concrete examples are AWS S3, Azure Blob Storage, and Google Cloud Storage.</dd></div>
+        <div><dt>ATT&amp;CK version</dt><dd>v1.1. Added 25 September 2024, last modified 15 April 2025.</dd></div>
+        <div><dt>Main evidence</dt><dd>PutBucketLifecycleConfiguration in CloudTrail.</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">Note</div>
+    <p>ATT&amp;CK lists this behavior only for IaaS, which means cloud infrastructure services rather than your own servers. The parent technique T1485 covers wider data destruction, such as disk wipers. This page stays on the cloud storage story: S3 lifecycle rules first, with the Azure and Google equivalents covered where they matter.</p>
+  </div>
+
+  <div class="callout warning">
+    <div class="callout-label">Warning</div>
+    <p>The destructive effect is delayed, but the evidence is instant. The API call that arms the timer is logged the moment it happens, usually hours or a full day before objects start disappearing. Treat a suspicious lifecycle change as an active countdown, not as a routine configuration edit.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-2-simulation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2>Animated simulation</h2></div>
+  <p class="sec-intro">Watch the attack unfold through the cloud control plane, and see at the same time what the SOC can observe. The SOC is the security operations center: the team that watches security alerts and responds to them. Hover over any box for details, or use the step buttons to jump around.</p>
+
+  <div class="sim-shell card">
+    <div class="sim-stage">
+      <canvas id="simCanvas" width="960" height="540" role="img" aria-label="Animated simulation of T1485.001: an attacker with a leaked cloud access key applies one-day expiry lifecycle rules to a data bucket and the audit log bucket, the SIEM alerts on the lifecycle API call, and responders remove the rule and restore from a replica."></canvas>
+      <div class="sim-tip" id="simTip" hidden></div>
+    </div>
+    <div class="sim-toolbar">
+      <button class="btn" id="simPlay" type="button">Play</button>
+      <button class="btn" id="simPause" type="button" disabled>Pause</button>
+      <button class="btn" id="simRestart" type="button">Restart</button>
+      <label class="sim-speed">Speed
+        <select id="simSpeed" class="select">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+    </div>
+    <div class="sim-steps" id="simSteps" aria-label="Simulation steps"></div>
+    <div class="sim-caption" aria-live="polite">
+      <div class="sim-cap-label" id="simCapLabel">Step 1 of 8</div>
+      <p class="sim-cap-text" id="simCaption">Press Play to start the simulation.</p>
+      <div class="sim-hint" id="simHint">Defender hints appear here during playback.</div>
+    </div>
+  </div>
+
+  <h3>Written version of the simulation</h3>
+  <p>The same story in text, for screen readers and for printing. Each step names the action, the evidence it leaves, and what the defender should notice. The key lesson repeats in every step: the API call is the alarm, and the deletion only happens later.</p>
+
+  <div class="grid-2">
+    <div class="card"><h3 class="card-title">Step 1 — Use a leaked access key</h3><p>The attacker finds an IAM access key — a username and secret pair for the cloud API — that a developer pushed to a public code repository. A quick test call to the cloud API works, so the key is live. Evidence: a CloudTrail <code>GetCallerIdentity</code> call from an unknown internet address. The SOC should compare API caller addresses with known office, VPN, and build systems.</p></div>
+    <div class="card"><h3 class="card-title">Step 2 — Enumerate the buckets</h3><p>The attacker calls <code>ListBuckets</code> and receives the names of every bucket in the account. This is quiet recon; nothing is changed yet. Evidence: a <code>ListBuckets</code> event from the same key minutes later. The SOC should alert when an identity lists all buckets for the first time in its history.</p></div>
+    <div class="card"><h3 class="card-title">Step 3 — Pick the two targets</h3><p>The attacker reads bucket names and settings and chooses two targets: the backup data bucket and the central log bucket that stores CloudTrail records. Evidence: <code>GetBucketLifecycleConfiguration</code> and <code>GetBucketVersioning</code> lookups on both buckets. The SOC should treat reads of lifecycle settings on log buckets as preparation for an evidence wipe.</p></div>
+    <div class="card"><h3 class="card-title">Step 4 — Arm the data bucket</h3><p>The attacker sends <code>PutBucketLifecycleConfiguration</code> with one rule: expire every object after one day. The cloud now holds a destruction timer for the whole bucket. Evidence: a CloudTrail management event whose rule shows <code>Expiration</code> with <code>Days: 1</code>. The SOC should page on this call immediately, because it is the single best moment to act.</p></div>
+    <div class="card"><h3 class="card-title">Step 5 — Arm the log bucket</h3><p>The same one-day expiry rule is applied to the CloudTrail log bucket, so the audit trail will delete itself after the attacker exits. Evidence: another <code>PutBucketLifecycleConfiguration</code> call, this time with the log bucket name. The SOC should treat any lifecycle change on a log bucket as critical, because it destroys evidence, not just data.</p></div>
+    <div class="card"><h3 class="card-title">Step 6 — The timer runs</h3><p>Nothing else happens for 24 hours. The lifecycle service then deletes expired objects on schedule while no attacker is connected. Evidence: no security event at all — only shrinking object counts in storage inventory. The SOC should watch object counts on critical buckets so silent shrinkage is visible.</p></div>
+    <div class="card"><h3 class="card-title">Step 7 — The SIEM catches the call</h3><p>The SIEM is the security monitoring system that collects logs and raises alerts. It raised an alert the moment step 4 happened, because a role that never writes lifecycle policies suddenly wrote one. The SOC now works a destruction timer that is still hours away from doing damage. Evidence: a correlated alert with the identity, bucket, and expiry value. The SOC should page on short-expiry rules that have no matching change ticket.</p></div>
+    <div class="card"><h3 class="card-title">Step 8 — Remove, restore, revoke</h3><p>Responders delete the lifecycle rule, restore the data bucket from the cross-region replica, revoke the leaked key, and rotate credentials the identity could reach. Evidence: <code>DeleteBucketLifecycle</code> plus successful restore jobs. The SOC should verify the rule is gone in every region and check whether any logs were lost while the rule was active.</p></div>
+  </div>
+</section>
+<section class="sec" id="sec-3-red-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2>Red team / hacker perspective</h2></div>
+  <p class="sec-intro">Understanding the attacker's choices helps you predict the move and place your sensors. Everything here is described for defense and for cloud labs you own.</p>
+
+  <h3>When and why attackers use it</h3>
+  <p>Cloud extortion is the main reason. In extortion, a crew steals or destroys data and demands payment to stop or undo the damage. The research this technique cites — Balassiano and Shaty's cloud ransomware study and the Halcyon RISE team's work on abused AWS services — describes crews that copy the data first. Then they destroy the originals, so the victim cannot simply restore and refuse to pay. The lifecycle rule is attractive because it is native: the attacker uses the cloud's own housekeeping feature, so no malware lands on any server and no antivirus ever fires. Pure disruption teams use the same call to wipe storage during sabotage. Intrusion teams use it on log buckets to delete the record of what they did. ATT&amp;CK ties that second use to indicator removal: destroying the signs of an intrusion.</p>
+  <p>Timing is the attacker's second advantage. The deletion happens hours after the person has logged off, so the moment of damage and the moment of access are different. Attribution becomes harder, and an automated timer keeps working even if the attacker loses access. A third appeal is reach: one permission, <code>s3:PutLifecycleConfiguration</code>, can affect every object in a bucket, including terabytes of backups. Attackers do not need to download or encrypt anything to cause loss.</p>
+
+  <h3>How it is performed</h3>
+  <p>The whole attack is a short API conversation. The attacker needs credentials with the <code>PutLifecycleConfiguration</code> permission, then writes a rule whose <code>Expiration</code> is one day or less and whose filter matches every object. The commands below are shown for lab study only. Run them exclusively in a dedicated test AWS account or sandbox that you own, on a bucket that holds nothing important, and delete the rule afterwards.</p>
+
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">AWS CLI · lab-only in a dedicated test account</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>:: 1. Check which identity the leaked key belongs to
+aws sts get-caller-identity
+
+:: 2. List every bucket in the account
+aws s3api list-buckets
+
+:: 3. Read the current lifecycle policy (recon)
+aws s3api get-bucket-lifecycle-configuration --bucket lab-bucket-01
+
+:: 4. Save this rule to rule.json, then arm the timer
+::    (expires every object in the lab bucket after one day)
+{
+  "Rules": [
+    {
+      "ID": "lab-expire-all",
+      "Filter": { "Prefix": "" },
+      "Status": "Enabled",
+      "Expiration": { "Days": 1 }
+    }
+  ]
+}
+aws s3api put-bucket-lifecycle-configuration --bucket lab-bucket-01 --lifecycle-configuration file://rule.json
+
+:: 5. Confirm the rule is active
+aws s3api get-bucket-lifecycle-configuration --bucket lab-bucket-01
+
+:: 6. Clean up the lab (remove the rule)
+aws s3api delete-bucket-lifecycle --bucket lab-bucket-01</code></pre>
+  </figure>
+
+  <p>Step 4 is the entire technique: one call, one rare event in CloudTrail. Hardened variants add preparation. An attacker may suspend <em>versioning</em> first. Versioning is the feature that keeps old copies of objects when they are overwritten or deleted. With versioning suspended, the later deletion leaves nothing to roll back. They may add a <em>noncurrent-version expiration</em> rule, which deletes those old copies on its own schedule. They may scope the rule to a prefix, a folder-like path inside the bucket, so the change looks like routine cleanup. Or they may set the expiry on the central log bucket, so the security team loses its own logs first. Public adversary emulation such as Stratus Red Team ships exactly this CloudTrail log impairment scenario so defenders can test against it.</p>
+
+  <h3>Prerequisites and conditions</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What the attacker needs first</h3>
+      <ul class="check">
+        <li>Working cloud credentials: a leaked access key, a stolen session token, or a compromised role.</li>
+        <li>Permission to change lifecycle configuration on the target bucket, such as <code>s3:PutLifecycleConfiguration</code>.</li>
+        <li>Knowledge of bucket names, which <code>ListBuckets</code> or public exposure often reveals.</li>
+        <li>Patience: the payload is a timer, so they benefit from staying quiet afterwards.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">What limits them</h3>
+      <ul class="check">
+        <li>Service control policies that deny <code>PutBucketLifecycle</code> except for approved roles.</li>
+        <li>Buckets they cannot see: separate accounts and restricted listing hide the log bucket.</li>
+        <li>Cross-region replicas and immutable copies the credentials cannot touch.</li>
+        <li>The CloudTrail event fires instantly, so a monitored environment gets a day of warning.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Common variations and attacker mistakes</h3>
+  <p>The same abuse exists on other clouds. In Azure, the operation is a write to the storage account's management policy (<code>managementPolicies/write</code>), and in Google Cloud Storage it is a bucket update that adds a delete-after-days condition. Attackers also chain the technique with other cloud-native moves. One move is encrypting objects with customer-supplied keys before demanding payment. Another is following the lifecycle rule with a mass <code>DeleteObjects</code> call when they want data gone immediately. CloudWatch log groups have a related control: the <code>PutRetentionPolicy</code> call sets how long log events live, and shortening it is a similar cover-up move that CloudTrail also records. Each variant still travels through the control plane, which means each variant writes an audit event.</p>
+  <p>Attacker mistakes are useful to know. A rule with a typo in the prefix silently matches nothing, so the timer arms but never fires. Applying the rule to the wrong bucket wastes their one quiet window. Reusing an interactive console session for the call links the change to a suspicious login. Forgetting that many organizations copy logs to a second account is the classic error. The audit trail survives in that copy. The destruction attempt then becomes the clearest evidence of intent.</p>
+
+  <div class="callout danger">
+    <div class="callout-label">Danger · lab-only</div>
+    <p>Never run these commands against a production or shared AWS account. A one-day expiry rule on a real bucket destroys its contents automatically and may also break backup chains. Use a dedicated test account or sandbox, keep nothing valuable in the target bucket, and remove the rule when the exercise ends.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-4-blue-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2>Blue team / SOC perspective</h2></div>
+  <p class="sec-intro">This technique gives you one of the cleanest early warnings in cloud security: a rare management event that fires before the damage. Here is how to see it, what it leaves behind, and how to triage it fast.</p>
+
+  <h3>How defenders can see it</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">CloudTrail management events</h3>
+      <p>CloudTrail is AWS's audit log. It records every API call made to your account, with the caller, the source address, and the parameters. Management events record control-plane actions such as policy changes; data events record object-level actions such as reads and deletes. The events <code>PutBucketLifecycleConfiguration</code>, <code>DeleteBucketLifecycle</code>, and <code>PutBucketVersioning</code> are the core signals for this technique, and they are rare enough to alert on directly.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Storage-level evidence</h3>
+      <p>Object counts, storage inventory reports, and replication metrics show the delayed effect: a bucket that quietly loses objects day after day. This is the only signal for the deletion phase itself, because the lifecycle service deletes objects without a security event.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Other cloud audit logs</h3>
+      <p>Azure Activity Logs record <code>managementPolicies/write</code> on storage accounts, and Google Cloud audit logs record <code>storage.buckets.update</code> calls that add lifecycle rules. If you run more than one cloud, cover all three, because attackers follow the data.</p>
+    </div>
+  </div>
+
+  <h3>Artifacts the technique leaves behind</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Artifact</th><th>Where you find it</th><th>What it tells you</th></tr></thead>
+      <tbody>
+        <tr><td><code>PutBucketLifecycleConfiguration</code> with <code>Expiration Days</code> of 1 or less.</td><td>CloudTrail management events.</td><td>Direct proof that a destruction timer was armed, with the exact identity and source address.</td></tr>
+        <tr><td>Lifecycle change on the central log bucket name.</td><td>CloudTrail management events.</td><td>Evidence destruction was planned; treat the incident as a cover-up, not just impact.</td></tr>
+        <tr><td><code>PutBucketVersioning</code> switching status to <code>Suspended</code>.</td><td>CloudTrail management events.</td><td>Recovery copies were disabled first; expect the main rule to follow.</td></tr>
+        <tr><td><code>DeleteBucketLifecycle</code> by an unusual identity.</td><td>CloudTrail management events.</td><td>Either cleanup by an attacker or a responder removing a malicious rule; check the timeline.</td></tr>
+        <tr><td><code>DeleteObjects</code> batches or <code>DeleteBucket</code> calls.</td><td>CloudTrail data events.</td><td>The fast variant of destruction, often after exfiltration in extortion cases.</td></tr>
+        <tr><td>Object count drop with no matching change.</td><td>Storage inventory, replication metrics, billing data.</td><td>Confirms the timer fired; helps measure what was lost and what remains.</td></tr>
+        <tr><td><code>AccessDenied</code> on lifecycle APIs.</td><td>CloudTrail management events.</td><td>Cheap early warning: someone probed for the permission and failed.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Where to look, in priority order</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Log source</th><th>What to pull</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>CloudTrail (all regions, including us-east-1, the main US East region).</td><td>Lifecycle, versioning, and bucket delete events for the last 90 days.</td><td>The primary evidence; S3 calls made through the global endpoint are recorded against us-east-1.</td></tr>
+        <tr><td>CloudTrail organization trail copy.</td><td>Independent copy of the same events in a separate account.</td><td>Survives an attack on the log bucket, which is exactly what attackers target.</td></tr>
+        <tr><td>S3 server-side telemetry.</td><td>Object counts, inventory reports, replication lag.</td><td>Shows the deletion phase, which produces no security event of its own.</td></tr>
+        <tr><td>IAM and identity logs.</td><td>Key creation, role assumption, and console logins for the calling identity.</td><td>Links the lifecycle change to the entry path, such as a leaked key.</td></tr>
+        <tr><td>Azure Activity Log and GCP audit logs.</td><td><code>managementPolicies/write</code> and <code>storage.buckets.update</code>.</td><td>Covers the same abuse on the other clouds your company uses.</td></tr>
+        <tr><td>SIEM correlation.</td><td>Lifecycle events joined with data theft signals such as <code>GetObject</code> volume spikes.</td><td>Separates extortion playbooks (copy, then destroy) from simple mistakes.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Why the timing helps you</h3>
+  <p>The gap between the call and the deletion is your window, and it is usually measured in hours. A one-day expiry rule does not delete anything for up to 24 hours, and removing the rule stops the timer completely. That means a page at 11:27 can save a bucket that would have vanished at 11:30 the next morning. The CloudTrail record is also worth more than it looks. The identity, source address, and user agent in the event usually point straight at the leaked credential. That lets you scope every other action that key has taken. Finally, remember that attackers often target the log bucket first. If a lifecycle change lands on the bucket that stores your CloudTrail records, assume the intruder wants to erase a specific investigation, and protect the copy immediately.</p>
+
+  <h3>Short triage flow</h3>
+  <ol class="flow">
+    <li><span class="flow-step">Confirm the rule is real</span><p>Open the raw CloudTrail event and read the rule: which bucket, which expiry, which identity. Read the bucket's current lifecycle configuration. Rule out your own automation by comparing with the change calendar.</p></li>
+    <li><span class="flow-step">Stop the timer</span><p>Delete the malicious rule with <code>DeleteBucketLifecycle</code> or an approved change, and apply a temporary denial on lifecycle writes for affected buckets. Removing the rule stops all future deletions at once.</p></li>
+    <li><span class="flow-step">Protect the copies</span><p>Check that versioning is still enabled, that the cross-region replica is intact, and that the organization trail copy is safe. Snapshot the bucket listing and object counts so you can measure loss.</p></li>
+    <li><span class="flow-step">Revoke and scope</span><p>Disable the access key or session that made the call, rotate credentials it could reach, and review everything that identity did. Pay attention to <code>GetObject</code> volume, because stolen data plus destruction means extortion.</p></li>
+    <li><span class="flow-step">Restore and verify</span><p>If objects already expired, restore from the replica or versioned copies. Verify object counts against the snapshot, confirm the log bucket kept its records, and write down the gap for the investigation.</p></li>
+  </ol>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>Write the triage steps above into your cloud incident runbook before you need them. The first minutes matter: a team that removes the rule and protects the replicas quickly converts a potential data loss event into a near miss with a clear story to tell.</p>
+  </div>
+</section>
+<section class="sec" id="sec-5-detection">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2>Detection engineering deep dive</h2></div>
+  <p class="sec-intro">This is the practical core of the guide. It covers regulation mapping, threat intelligence, five ranked threats, real log events, and five Sigma rules with matching Splunk queries you can adapt today.</p>
+
+  <h3 id="sec-5-1-regulation">5.1 Regulation mapping</h3>
+  <p>This technique attacks two things auditors care about: the ability to recover data, and the integrity of records. A bucket that deletes itself breaks backup expectations, and a log bucket that deletes itself breaks record-keeping expectations. The table below shows what major frameworks expect and the evidence a detection program provides.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Framework and control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>GDPR</strong> — Article 32 (security of processing).</td>
+          <td>Requires the ability to restore availability of and access to personal data after an incident. A bucket wiped by a lifecycle rule makes restoration impossible and turns an intrusion into a prolonged, reportable breach.</td>
+          <td>Documented backup and restore procedures for cloud storage, tested restorations, alerts on destructive policy changes, incident records showing recovery time.</td>
+        </tr>
+        <tr>
+          <td><strong>HIPAA Security Rule</strong> — §164.308(a)(7) contingency plan.</td>
+          <td>Covered entities must keep a data backup plan and disaster recovery plan for electronic protected health information, including data stored in cloud buckets.</td>
+          <td>Written contingency plan, backup success reports for storage buckets, restore test results, monitoring proof for policy changes on protected data.</td>
+        </tr>
+        <tr>
+          <td><strong>ISO/IEC 27001:2022</strong> — A.8.13 (information backup), A.8.16 (monitoring activities).</td>
+          <td>Backup copies must be maintained and protected, and activities that could undermine them must be monitored. Lifecycle abuse is the direct failure case for both controls.</td>
+          <td>Backup policy with immutable or offsite copies, monitoring rules for lifecycle APIs, alert tickets for suspicious policy writes.</td>
+        </tr>
+        <tr>
+          <td><strong>SOC 2</strong> — CC7.2 (anomaly detection), A1.2 (recovery infrastructure).</td>
+          <td>Trust services criteria expect detection of unusual activity and tested recovery. A self-deleting log bucket hides exactly the anomalies auditors expect you to catch.</td>
+          <td>Detection rule documentation, alert and response records for lifecycle changes, restore drill results, change management evidence.</td>
+        </tr>
+        <tr>
+          <td><strong>PCI DSS</strong> — 12.10.x (incident response plan and testing).</td>
+          <td>Organizations handling cardholder data must prepare for scenarios that destroy or lock data, which a self-deleting bucket does at cloud scale.</td>
+          <td>Incident response plan covering cloud destruction scenarios, quarterly tests, records of restore exercises from protected copies.</td>
+        </tr>
+        <tr>
+          <td><strong>NIST SP 800-53 Rev.5</strong> — CP-9 (system backup), CP-10 (recovery), AU-9 (log protection).</td>
+          <td>Federal-aligned controls require protected backups and recovery, and AU-9 specifically requires protection of audit information from deletion and tampering.</td>
+          <td>Control implementation statements, protected replica configuration, monitoring coverage proof, log retention guarantees.</td>
+        </tr>
+        <tr>
+          <td><strong>EU DORA</strong> — Article 11 (backup policies and recovery).</td>
+          <td>Financial entities must maintain ICT backup policies with restoration procedures for data in cloud infrastructure, including detection of destructive changes.</td>
+          <td>Backup policy documents, restoration and testing records, detection coverage for cloud storage control planes.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="sec-5-2-threat-intel">5.2 Threat intelligence</h3>
+  <p>Intelligence makes your rules stronger and your priorities honest. The picture for this technique is young — ATT&amp;CK added it in September 2024 — but the underlying cloud ransomware research is solid and public. Collect from several source types, then record how confident you are in each finding before you change a rule or a runbook.</p>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">MITRE ATT&amp;CK</h3>
+      <p>Start with the T1485.001 page and its detection strategy DET0041. It names the exact API calls and the three attacker goals: impact, log removal, and extortion.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Vendor research</h3>
+      <p>Balassiano and Shaty's cloud ransomware paper and the Halcyon RISE reports document native-service abuse in AWS with real API sequences. Turn their timelines into tuning notes.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Adversary emulation</h3>
+      <p>Stratus Red Team publishes an open emulation of CloudTrail log impairment through an S3 lifecycle rule. Run it in a test account to prove your rules fire end to end.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Government advisories</h3>
+      <p>CISA and partner agencies publish cloud credential abuse guidance under the StopRansomware banner. Their advisories list the permissions and APIs crews abuse. Vendor blogs and government advisories together are OSINT: open-source intelligence from free public sources.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">ISACs and commercial feeds</h3>
+      <p>Sector ISACs share member sightings of cloud attacks. Commercial feeds add actor infrastructure and campaign context. Treat both as secondary sources, and confirm their reports against your own logs before you tune a rule.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Internal telemetry</h3>
+      <p>Your own CloudTrail history is the best source. Denied lifecycle calls, policy writes by automation roles, and near misses show what attackers actually try in your environment.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Confidence levels</h3>
+      <p><strong>High</strong> means several independent reports plus your own sightings. <strong>Medium</strong> means one solid public report. <strong>Low</strong> means a hypothesis that still needs testing. Write the level next to every intelligence note.</p>
+    </div>
+  </div>
+
+  <p>The actors, tools, and risk groups below are relevant to this technique, based on public incident reporting. Each row carries the confidence a typical enterprise SOC can hold in it:</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Actor or tool</th><th>Observed behavior</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>Cloud extortion crews abusing AWS native services.</td><td>Documented playbooks that use stolen keys to copy data, then abuse native features such as lifecycle rules or customer-supplied encryption to destroy or hold data hostage.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Storm-0501.</td><td>Azure-focused extortion crew that migrated victims into Azure storage and destroyed cloud-hosted data and backups to force payment.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Scattered Spider (UNC3944).</td><td>Cloud intrusions built on stolen credentials and native tooling, including data theft and disruptive actions in storage and identity services.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Stratus Red Team (open-source tool).</td><td>Not a threat actor: a public adversary emulation tool with a scenario that impairs CloudTrail logging through an S3 lifecycle rule. Valuable for testing your detections.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Ransomware crews using SSE-C on S3.</td><td>2025 reporting described crews that encrypted S3 objects with SSE-C, which means server-side encryption with customer-provided keys: the attacker supplies the key. They used stolen credentials and paired theft with destruction pressure.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>Insider risk with storage privileges.</td><td>Any employee or contractor who holds lifecycle permissions can cause the same impact without malware, which keeps this technique relevant outside organized crime.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">How to apply this</div>
+    <p>Use the actor list to justify rule coverage in reviews. Use it to brief your cloud team on which permissions matter. It also shows where to extend coverage next, such as Azure management policy rules if your company keeps backups in Azure blobs.</p>
+  </div>
+
+  <h3 id="sec-5-3-threat-ranking">5.3 Threats ranking and categorization</h3>
+  <p>Five realistic threats cover this technique well. The rank reflects how likely the threat is and how much damage it causes when it works. Preconditions describe what an attacker must already have; the justification explains the rank so you can defend it in planning meetings.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Threat</th><th>Rank</th><th>Platform</th><th>Description and preconditions</th><th>Impact and justification</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>THR-01 · Short-expiry lifecycle rule applied to a data bucket.</td>
+          <td><span class="badge sev-critical">Critical</span></td>
+          <td><span class="badge cat">Cloud (AWS S3)</span></td>
+          <td>A <code>PutBucketLifecycleConfiguration</code> call sets <code>Expiration</code> to 1 day (or 0) with a filter that matches everything. Preconditions: credentials with <code>PutLifecycleConfiguration</code> on the bucket.</td>
+          <td>One call schedules total loss of the bucket contents on a timer, with no malware and no further attacker activity. It is the core case of the technique and the cheapest attack to perform, hence Critical.</td>
+        </tr>
+        <tr>
+          <td>THR-02 · Lifecycle rule applied to the central log or audit bucket.</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Cloud (AWS S3)</span></td>
+          <td>The same rule is written against the bucket that stores CloudTrail or SIEM exports, so audit evidence expires after the attacker leaves. Preconditions: write access to the log bucket, which is often a different account.</td>
+          <td>Data loss plus evidence destruction in one move. The organization may still recover data, so this ranks High, but the investigation cost is severe and the intent is clearly hostile.</td>
+        </tr>
+        <tr>
+          <td>THR-03 · Versioning suspended combined with noncurrent-version expiration.</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Cloud (AWS S3)</span></td>
+          <td><code>PutBucketVersioning</code> switches versioning to <code>Suspended</code>, and a lifecycle rule deletes noncurrent versions. Preconditions: permission to change versioning on the bucket.</td>
+          <td>Removes the rollback path that protects against both lifecycle abuse and ordinary deletes. Rare as a legitimate change, so it is high-signal, but it usually supports the main rule rather than standing alone.</td>
+        </tr>
+        <tr>
+          <td>THR-04 · Equivalent lifecycle abuse in Azure Blob or Google Cloud Storage.</td>
+          <td><span class="badge sev-medium">Medium</span></td>
+          <td><span class="badge cat">Cloud (Azure, GCP)</span></td>
+          <td>A management policy write in Azure (<code>managementPolicies/write</code>) or a bucket update in GCP (<code>storage.buckets.update</code>) adds delete-after-days conditions. Preconditions: storage admin rights on the account or project.</td>
+          <td>Same damage on the other clouds. Ranked Medium only because fewer organizations keep their primary data there and the event names are less commonly harvested yet; the trend is rising.</td>
+        </tr>
+        <tr>
+          <td>THR-05 · Mass object or bucket deletion as an extortion destruction wave.</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Cloud (AWS S3)</span></td>
+          <td>After copying data, the attacker runs <code>DeleteObjects</code> in large batches or calls <code>DeleteBucket</code>, sometimes following a short-expiry rule. Preconditions: read and delete permissions, plus exfiltrated data used as pressure.</td>
+          <td>Immediate, visible loss that pairs with extortion demands. Requires data events to be enabled to see it, which many organizations miss, so it stays dangerous; ranked High because it is louder and faster than the timer variant.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="sec-5-4-logs-patterns">5.4 Logs and patterns</h3>
+  <p>Each threat below lists the log sources that see it and the fields that matter. It also shows what normal looks like, what suspicious looks like, and the detection logic in plain words. A realistic event example follows each table so you can validate your pipeline against real shapes.</p>
+
+  <h4>Threat 1 (THR-01) — Short-expiry lifecycle rule applied to a data bucket</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>AWS CloudTrail management events for <code>s3.amazonaws.com</code>. Bucket-level S3 calls made through the global endpoint are recorded against <code>us-east-1</code>, so your trail must cover all regions and your searches must include it.</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>requestParameters.bucketName</code>, <code>requestParameters.LifecycleConfiguration.Rules[].Expiration.Days</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code>, <code>userAgent</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Storage and data platform teams write lifecycle policies a few times per year, inside change windows, with expiries of 30 to 365 days and named prefixes. Automation roles rewrite the same known rules on schedule.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Any rule with <code>Expiration Days</code> of 1 or 0. An empty prefix that matches the whole bucket. A rule named like <code>expire-all</code>. An interactive user, or a role that has never written policies. Changes outside change windows.</td></tr>
+        <tr><td>Detection logic</td><td>Alert when a <code>PutBucketLifecycleConfiguration</code> event carries any rule with an expiry of one day or less and has no matching change ticket. Page immediately, because deletion is already scheduled and the clock is running.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · AWS CloudTrail (JSON)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.09",
+  "userIdentity": {
+    "type": "IAMUser",
+    "principalId": "AIDAXQJ7VQ2WM4KZP6TR",
+    "arn": "arn:aws:iam::111122223333/user/finance-deploy",
+    "accountId": "111122223333",
+    "accessKeyId": "AKIAIOSFODNN7EXAMPLE",
+    "userName": "finance-deploy"
+  },
+  "eventTime": "2026-03-04T02:17:44Z",
+  "eventSource": "s3.amazonaws.com",
+  "eventName": "PutBucketLifecycleConfiguration",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "203.0.113.77",
+  "userAgent": "aws-cli/2.15.0 md/awscrt#0.19.0",
+  "requestParameters": {
+    "bucketName": "acme-finance-data-eu",
+    "LifecycleConfiguration": {
+      "Rules": [
+        {
+          "ID": "expire-all",
+          "Status": "Enabled",
+          "Filter": { "Prefix": "" },
+          "Expiration": { "Days": 1 }
+        }
+      ]
+    }
+  },
+  "responseElements": null,
+  "requestID": "8F4Q2K7Z9T1EXAMPLE",
+  "eventID": "b1c2d3e4-1111-4a5b-8c6d-7e8f9a0b1c2d",
+  "eventType": "AwsApiCall"
+}</code></pre>
+  </figure>
+
+  <h4>Threat 2 (THR-02) — Lifecycle rule applied to the central log or audit bucket</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>AWS CloudTrail management events. The independent organization trail copy, stored in a separate account, which survives an attack on the main log bucket. Azure Activity Log and GCP audit logs for the same behavior on their log containers.</td></tr>
+        <tr><td>Key fields</td><td><code>requestParameters.bucketName</code>, <code>eventName</code>, <code>userIdentity.arn</code>, <code>userIdentity.sessionContext</code> (which role was assumed), <code>sourceIPAddress</code>, <code>awsRegion</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>The logging platform team changes log bucket retention rarely, through a documented change, from the log admin role. Retention numbers such as 365 or 2555 days are the norm, not 1.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Any lifecycle API call against a bucket whose name matches your CloudTrail, audit, or SIEM buckets. Assumed roles that never touch logging. The change arriving shortly after failed permission probes on the same key.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on lifecycle API calls against an explicit allow list of log buckets, at critical severity, and protect the org trail copy at the same time. Correlate with <code>GetObject</code> volume from the same identity, because evidence theft often precedes evidence destruction.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · AWS CloudTrail (JSON)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.09",
+  "userIdentity": {
+    "type": "AssumedRole",
+    "principalId": "AROAXQJ7VQ2WMEXAMPLE:deploy-bot",
+    "arn": "arn:aws:sts::111122223333:assumed-role/DevOpsSupport/deploy-bot",
+    "accountId": "111122223333",
+    "sessionContext": {
+      "sessionIssuer": {
+        "type": "Role",
+        "principalId": "AROAXQJ7VQ2WMEXAMPLE",
+        "arn": "arn:aws:iam::111122223333:role/DevOpsSupport",
+        "accountId": "111122223333",
+        "userName": "DevOpsSupport"
+      }
+    }
+  },
+  "eventTime": "2026-03-04T02:31:12Z",
+  "eventSource": "s3.amazonaws.com",
+  "eventName": "PutBucketLifecycleConfiguration",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "203.0.113.77",
+  "userAgent": "aws-cli/2.15.0 md/awscrt#0.19.0",
+  "requestParameters": {
+    "bucketName": "aws-cloudtrail-logs-111122223333",
+    "LifecycleConfiguration": {
+      "Rules": [
+        {
+          "ID": "rotate-logs",
+          "Status": "Enabled",
+          "Filter": { "Prefix": "" },
+          "Expiration": { "Days": 1 }
+        }
+      ]
+    }
+  },
+  "responseElements": null,
+  "requestID": "K2P8Q4R6T8EXAMPLE0",
+  "eventID": "c2d3e4f5-2222-4b6c-9d7e-8f9a0b1c2d3e",
+  "eventType": "AwsApiCall"
+}</code></pre>
+  </figure>
+
+  <h4>Threat 3 (THR-03) — Versioning suspended combined with noncurrent-version expiration</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>AWS CloudTrail management events. <code>PutBucketVersioning</code> shows the status change. <code>PutBucketLifecycleConfiguration</code> with a <code>NoncurrentDays</code> value shows the rule that removes old versions.</td></tr>
+        <tr><td>Key fields</td><td><code>requestParameters.VersioningConfiguration.Status</code>, <code>requestParameters.bucketName</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code>, <code>userAgent</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Administrators pause versioning rarely, during planned migrations or cost cleanup, and re-enable it afterwards. The change comes from the storage admin role inside a change window.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Status switching to <code>Suspended</code> on data or backup buckets, especially followed within hours by a lifecycle rule. Noncurrent-version expiration with a small <code>NoncurrentDays</code> value such as 1. Interactive identities making the change.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on any <code>PutBucketVersioning</code> event whose status is <code>Suspended</code> outside an approved migration project. Raise the severity to critical when a lifecycle rule is written against the same bucket within 24 hours.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · AWS CloudTrail (JSON)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.09",
+  "userIdentity": {
+    "type": "IAMUser",
+    "principalId": "AIDAXQJ7VQ2WM4KZP6TR",
+    "arn": "arn:aws:iam::111122223333/user/finance-deploy",
+    "accountId": "111122223333",
+    "accessKeyId": "AKIAIOSFODNN7EXAMPLE",
+    "userName": "finance-deploy"
+  },
+  "eventTime": "2026-03-04T02:12:03Z",
+  "eventSource": "s3.amazonaws.com",
+  "eventName": "PutBucketVersioning",
+  "awsRegion": "eu-west-1",
+  "sourceIPAddress": "203.0.113.77",
+  "userAgent": "aws-cli/2.15.0 md/awscrt#0.19.0",
+  "requestParameters": {
+    "bucketName": "acme-finance-data-eu",
+    "VersioningConfiguration": {
+      "Status": "Suspended"
+    }
+  },
+  "responseElements": null,
+  "requestID": "V3N6B8X1Z4EXAMPLE7",
+  "eventID": "d3e4f5a6-3333-4c7d-8e9f-0a1b2c3d4e5f",
+  "eventType": "AwsApiCall"
+}</code></pre>
+  </figure>
+
+  <h4>Threat 4 (THR-04) — Equivalent lifecycle abuse in Azure Blob or Google Cloud Storage</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Azure Activity Log, administrative category. The operation to watch is <code>Microsoft.Storage/storageAccounts/managementPolicies/write</code>. Google Cloud audit logs (Data Access) show <code>storage.buckets.update</code>. Both platforms must have audit logging enabled and exported before they can help.</td></tr>
+        <tr><td>Key fields</td><td>Azure: <code>operationName</code>, <code>caller</code>, <code>resourceId</code>, <code>httpRequest.clientIpAddress</code>, <code>resultSignature</code>. GCP: <code>protoPayload.methodName</code>, <code>protoPayload.authenticationInfo.principalEmail</code>, <code>resource.labels.name</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Storage administrators publish management policies during provisioning or tiering projects, through service principals or named admins, with delete thresholds of 30 days or more.</td></tr>
+        <tr><td>Suspicious behavior</td><td>A policy write that adds delete actions with short day thresholds, made by an interactive user. Writes against containers that hold backups. Bucket updates from unfamiliar principals or new source addresses.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on every management policy write and bucket update that touches lifecycle rules. Extract the policy document, and page when a delete action appears with a threshold of a few days or when the caller is not on the storage admin allow list.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Azure Activity Log (JSON)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "records": [
+    {
+      "time": "2026-03-04T02:41:09.8847121Z",
+      "resourceId": "/subscriptions/aaaa7c1e-1111-4a5b-8c6d-7e8f9a0b1c2d/resourceGroups/rg-data/providers/Microsoft.Storage/storageAccounts/acmedatalake",
+      "operationName": {
+        "value": "Microsoft.Storage/storageAccounts/managementPolicies/write",
+        "localizedValue": "Create or Update Storage Account Management Policy"
+      },
+      "category": {
+        "value": "Administrative",
+        "localizedValue": "Administrative"
+      },
+      "resultType": "Success",
+      "resultSignature": "Succeeded.Created",
+      "caller": "svc-dataops@acme.example.com",
+      "httpRequest": {
+        "clientIpAddress": "203.0.113.77",
+        "method": "PUT"
+      },
+      "level": "Information",
+      "properties": {
+        "statusCode": "Created",
+        "serviceRequestId": "8f4q2k7z9t1example0"
+      }
+    }
+  ]
+}</code></pre>
+  </figure>
+
+  <h4>Threat 5 (THR-05) — Mass object or bucket deletion as a destruction wave</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>AWS CloudTrail data events record <code>DeleteObjects</code>. Data events must be enabled on the trail, because they are off by default. CloudTrail management events record <code>DeleteBucket</code>. Storage inventory and server access logs measure scale.</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>requestParameters.bucketName</code>, <code>requestParameters.delete.objects[].key</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code>, <code>userAgent</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Application cleanup jobs delete known temporary prefixes with fixed service identities on schedule. Test suites empty scratch buckets at predictable times and volumes.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Large delete batches from interactive identities or new source addresses. Keys outside known temporary prefixes. Any <code>DeleteBucket</code> call. Deletes that start right after a spike of <code>GetObject</code> traffic on the same key.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on <code>DeleteObjects</code> batches above your daily baseline (for example ten or more keys in one call) and on every <code>DeleteBucket</code> from a non-approved identity. Correlate with exfiltration signals, because theft followed by deletion is the extortion pattern.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · AWS CloudTrail (JSON)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.09",
+  "userIdentity": {
+    "type": "IAMUser",
+    "principalId": "AIDAXQJ7VQ2WM4KZP6TR",
+    "arn": "arn:aws:iam::111122223333/user/finance-deploy",
+    "accountId": "111122223333",
+    "accessKeyId": "AKIAIOSFODNN7EXAMPLE",
+    "userName": "finance-deploy"
+  },
+  "eventTime": "2026-03-04T03:02:51Z",
+  "eventSource": "s3.amazonaws.com",
+  "eventName": "DeleteObjects",
+  "awsRegion": "eu-west-1",
+  "sourceIPAddress": "203.0.113.77",
+  "userAgent": "aws-cli/2.15.0 md/awscrt#0.19.0",
+  "requestParameters": {
+    "bucketName": "acme-finance-data-eu",
+    "delete": {
+      "objects": [
+        { "key": "backups/2026-03-01/db-dump.tar.gz" },
+        { "key": "backups/2026-03-02/db-dump.tar.gz" },
+        { "key": "exports/invoices-2026-02.parquet" },
+        { "key": "exports/ledger-2026-02.parquet" },
+        { "key": "reports/q1-forecast.xlsx" }
+      ],
+      "quiet": true
+    }
+  },
+  "responseElements": null,
+  "requestID": "W7Y2Z4A6B8EXAMPLE1",
+  "eventID": "e4f5a6b7-4444-4d8e-9f0a-1b2c3d4e5f60",
+  "eventType": "AwsApiCall"
+}</code></pre>
+  </figure>
+
+  <h3 id="sec-5-5-sigma-spl">5.5 Sigma rules and Splunk SPL</h3>
+  <p>Five complete Sigma rules follow, one per threat, each with a matching Splunk query. Sigma is an open format for writing detection rules; Splunk SPL is the search language that Splunk uses. If your CloudTrail lands in a different index, change the index name and keep the field logic. The Splunk queries assume the index and sourcetype conventions listed below, and each query states its own assumptions.</p>
+  <div class="callout note">
+    <div class="callout-label">Field assumptions for Splunk</div>
+    <p><code>index=aws</code> holds CloudTrail with <code>sourcetype="aws:cloudtrail"</code> and JSON fields extracted, such as <code>eventName</code> and <code>userIdentity.arn</code>. <code>index=azure</code> holds Activity Logs with <code>sourcetype="azure:activity"</code>. <code>index=gcp</code> holds audit logs with <code>sourcetype="gcp:audit"</code>. Nested CloudTrail lists need <code>spath</code>, as shown. Adjust index names to your environment and document the change.</p>
+  </div>
+
+  <h4>Rule 1 (THR-01) — Short-expiry lifecycle rule applied to an S3 bucket</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Short-Expiry Lifecycle Rule Applied to an S3 Bucket
+id: 7c3e1a90-52b4-4f8e-9d61-3a0c8f5b21e4
+status: stable
+description: Detects PutBucketLifecycleConfiguration calls that enable object expiration
+  after one day or less. An attacker with the PutLifecycleConfiguration permission can
+  use this to destroy all objects in a bucket on a timer, per MITRE ATT&amp;CK T1485.001.
+references:
+  - https://attack.mitre.org/techniques/T1485/001/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: 's3.amazonaws.com'
+    eventName: 'PutBucketLifecycleConfiguration'
+  short_expiry:
+    requestParameters.LifecycleConfiguration.Rules[*].Expiration.Days|lte: 1
+  condition: selection and short_expiry
+fields:
+  - eventName
+  - requestParameters.bucketName
+  - userIdentity.arn
+  - sourceIPAddress
+  - userAgent
+  - awsRegion
+falsepositives:
+  - Genuine cleanup jobs that expire short-lived test data after one day
+  - Approved storage automation rewriting lifecycle rules inside a change window
+level: critical
+tags:
+  - attack.impact
+  - attack.t1485
+  - attack.t1485.001</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype="aws:cloudtrail" eventName=PutBucketLifecycleConfiguration
+| spath requestParameters.LifecycleConfiguration{}.Rules{}.Expiration.Days output=exp_days
+| mvexpand exp_days
+| where tonumber(exp_days) &lt;= 1
+| table _time requestParameters.bucketName exp_days userIdentity.arn sourceIPAddress userAgent
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Assumptions:</strong> CloudTrail JSON is parsed by the AWS add-on. That lets <code>spath</code> reach the nested rule list. Adjust the index name if your trail lands elsewhere. <strong>Mapping note:</strong> the Sigma list-style rule match becomes the event filter, and the <code>Days|lte: 1</code> modifier becomes <code>spath</code> plus a numeric comparison. <strong>False positives:</strong> real one-day cleanup policies for scratch data. <strong>Tuning:</strong> keep a lookup of approved short-expiry buckets and rule IDs. Page on every hit that is not on the list, because the deletion timer is already running.</p>
+
+  <h4>Rule 2 (THR-02) — Lifecycle rule on a central log or audit bucket</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Lifecycle Rule Applied to a Central Log Bucket
+id: 91b7d4c2-8e3f-4a67-b5d2-6f0e9a4c83d7
+status: stable
+description: Detects lifecycle policy changes on buckets whose names look like central
+  log or audit storage. Deleting the CloudTrail log bucket removes audit evidence and
+  supports indicator removal after an intrusion.
+references:
+  - https://attack.mitre.org/techniques/T1485/001/
+  - https://attack.mitre.org/techniques/T1562/008/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: 's3.amazonaws.com'
+    eventName:
+      - 'PutBucketLifecycleConfiguration'
+      - 'DeleteBucketLifecycle'
+  log_buckets:
+    requestParameters.bucketName|re: '(?i)(cloudtrail|audit|log-archive|logs-archive|siem)'
+  condition: selection and log_buckets
+fields:
+  - eventName
+  - requestParameters.bucketName
+  - userIdentity.arn
+  - sourceIPAddress
+  - awsRegion
+falsepositives:
+  - Documented retention changes by the logging platform team inside a change window
+level: critical
+tags:
+  - attack.impact
+  - attack.t1485
+  - attack.t1485.001</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype="aws:cloudtrail"
+  eventName IN ("PutBucketLifecycleConfiguration", "DeleteBucketLifecycle")
+  requestParameters.bucketName="*cloudtrail*"
+| table _time eventName requestParameters.bucketName userIdentity.arn sourceIPAddress awsRegion
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Assumptions:</strong> replace the <code>cloudtrail</code> wildcard with your real log bucket names. Splunk term matches are case-insensitive. <strong>Mapping note:</strong> the Sigma regex becomes a wildcard match for simple names. For exact coverage, keep a lookup file of log bucket names and join on it. <strong>False positives:</strong> the logging team's own retention work. <strong>Tuning:</strong> keep the organization trail copy in a separate account, so this alert is never your only chance. Add the caller identity to the alert context, so triage can spot a role that never touches logging.</p>
+
+  <h4>Rule 3 (THR-03) — S3 versioning suspended ahead of destructive deletion</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: S3 Versioning Suspended Ahead of Destructive Deletion
+id: 4f2a8b6d-1c95-4e70-a3b8-9d5e2f7c04a6
+status: stable
+description: Detects PutBucketVersioning calls that switch versioning from Enabled to
+  Suspended. With versioning suspended, a later lifecycle rule or delete call removes
+  data without leaving recoverable noncurrent copies.
+references:
+  - https://attack.mitre.org/techniques/T1485/001/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: 's3.amazonaws.com'
+    eventName: 'PutBucketVersioning'
+    requestParameters.VersioningConfiguration.Status: 'Suspended'
+  condition: selection
+fields:
+  - eventName
+  - requestParameters.bucketName
+  - userIdentity.arn
+  - sourceIPAddress
+  - userAgent
+falsepositives:
+  - Planned migration or cost cleanup projects that pause versioning on purpose
+level: high
+tags:
+  - attack.impact
+  - attack.t1485
+  - attack.t1485.001</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype="aws:cloudtrail" eventName=PutBucketVersioning
+  requestParameters.VersioningConfiguration.Status="Suspended"
+| table _time requestParameters.bucketName userIdentity.arn sourceIPAddress userAgent
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Assumptions:</strong> the AWS add-on flattens <code>requestParameters</code> into dotted fields. Verify the extraction on one known event. <strong>Mapping note:</strong> the Sigma field path maps one to one to the Splunk field. <strong>False positives:</strong> approved migrations. <strong>Tuning:</strong> link the rule to your change calendar. Add a companion query for <code>PutBucketLifecycleConfiguration</code> events with small <code>NoncurrentDays</code> values, so the paired pattern is also detected.</p>
+
+  <h4>Rule 4 (THR-04) — Azure and Google Cloud lifecycle policy abuse</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Azure Storage Lifecycle Management Policy Written
+id: b6e0f3a5-72d4-4c81-8f2b-1a9c5d0e46b3
+status: experimental
+description: Detects writes to the lifecycle management policy of an Azure storage
+  account. An attacker with storage rights can add a delete-after-days rule to destroy
+  blob data, mirroring the S3 lifecycle abuse of MITRE ATT&amp;CK T1485.001.
+references:
+  - https://attack.mitre.org/techniques/T1485/001/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  category: cloud
+  product: azure
+  service: activitylogs
+detection:
+  selection:
+    operationName: 'Microsoft.Storage/storageAccounts/managementPolicies/write'
+  condition: selection
+fields:
+  - operationName
+  - caller
+  - resourceId
+  - httpRequest.clientIpAddress
+  - resultSignature
+falsepositives:
+  - Storage administrators enabling tiering or cleanup policies during approved work
+level: high
+tags:
+  - attack.impact
+  - attack.t1485
+  - attack.t1485.001</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL · Azure and GCS</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=azure sourcetype="azure:activity" operationName="Microsoft.Storage/storageAccounts/managementPolicies/write"
+| table _time caller operationName resourceId resultSignature
+| sort - _time
+
+index=gcp sourcetype="gcp:audit" protoPayload.methodName="storage.buckets.update" lifecycle
+| table _time protoPayload.methodName protoPayload.authenticationInfo.principalEmail protoPayload.resourceName
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Assumptions:</strong> Azure Activity Logs land in <code>index=azure</code>. GCP audit logs land in <code>index=gcp</code>. Both arrive through vendor add-ons, so run the two queries in this block separately. The GCP query keeps the term <code>lifecycle</code>, so only bucket updates that mention the policy survive. <strong>Mapping note:</strong> Sigma supports one log source per rule, so the Azure rule carries the detection. The GCP query covers the twin behavior in the same block. <strong>False positives:</strong> provisioning scripts and tiering projects. <strong>Tuning:</strong> extract the policy document on every hit. Page when delete actions carry thresholds of a few days. Require change tickets for any caller outside the storage admin allow list.</p>
+
+  <h4>Rule 5 (THR-05) — Mass object deletion or bucket deletion after credential theft</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Mass S3 Object Deletion or Bucket Deletion
+id: 2d9c7e14-5a83-4b62-9e1d-c4f0a6b8d57e
+status: stable
+description: Detects DeleteObjects calls that remove many objects at once and
+  DeleteBucket calls that remove a whole bucket. Cloud extortion crews run these after
+  copying data and applying short-expiry lifecycle rules.
+references:
+  - https://attack.mitre.org/techniques/T1485/001/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection_mass_delete:
+    eventSource: 's3.amazonaws.com'
+    eventName: 'DeleteObjects'
+  selection_bucket_delete:
+    eventSource: 's3.amazonaws.com'
+    eventName: 'DeleteBucket'
+  condition: 1 of selection_*
+fields:
+  - eventName
+  - requestParameters.bucketName
+  - requestParameters.delete.objects[].key
+  - userIdentity.arn
+  - sourceIPAddress
+falsepositives:
+  - Application cleanup jobs and test suites emptying known temporary prefixes
+level: high
+tags:
+  - attack.impact
+  - attack.t1485
+  - attack.t1485.001</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype="aws:cloudtrail" eventName IN ("DeleteObjects", "DeleteBucket")
+| spath requestParameters.delete.objects{}.key output=del_key
+| eval del_count=coalesce(mvcount(del_key), 0)
+| where eventName="DeleteBucket" OR del_count &gt;= 10
+| table _time eventName requestParameters.bucketName del_count userIdentity.arn sourceIPAddress
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Assumptions:</strong> <code>DeleteObjects</code> is a data event. S3 data events must be enabled on the trail before this query has anything to find. The key count of ten is a starting baseline, not a universal number. <strong>Mapping note:</strong> the two Sigma selections become one event filter with an <code>IN</code> clause. The batch size becomes a count of the extracted keys. <strong>False positives:</strong> scheduled cleanup of temporary prefixes. <strong>Tuning:</strong> baseline your normal batch sizes per bucket and identity. Exclude the known cleanup service identities by exact ARN, which is the unique ID string AWS gives each resource. Add <code>GetObject</code> volume to the alert context, so theft plus deletion is visible in one view.</p>
+</section>
+<section class="sec" id="sec-6-case-study">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2>Real-world case study</h2></div>
+  <p class="sec-intro">A composite incident built from public cloud attack research: a leaked key, a self-deleting bucket, and the CloudTrail alert that saved the data.</p>
+
+  <div class="card">
+    <h3 class="card-title">Context — how to read this case study</h3>
+    <p>This incident is a <strong>composite</strong>: it was assembled from public cloud attack research rather than from one named breach. The ATT&amp;CK references for this technique are all public research. They include the Balassiano and Shaty study <em>Ransomware in the Cloud: Breaking Down the Attack Vectors</em> (2023). They also include the Halcyon RISE report <em>Abusing AWS Native Services</em> (2025). A third source is the Stratus Red Team scenario <em>CloudTrail Logs Impairment Through S3 Lifecycle Rule</em>. Company names, bucket names, times, and numbers below are invented for teaching. Every step, API call, and log event is real-world plausible and matches the published research.</p>
+    <p>The victim, "ACME Finance," runs its analytics and backups in AWS. The finance data bucket holds roughly 8,400 objects, including database dumps and invoice exports. The central CloudTrail log bucket in the same account holds the audit records for the whole organization. A cross-region replica of the data bucket exists in another region, and an organization trail copy is stored in a separate security account. Those two protected copies decide how this story ends.</p>
+  </div>
+
+  <p class="chain">
+    <span class="chain-step">Credential leak</span><span class="chain-arrow">→</span>
+    <span class="chain-step">Discovery</span><span class="chain-arrow">→</span>
+    <span class="chain-step">Exfiltration</span><span class="chain-arrow">→</span>
+    <span class="chain-step hot">Impact (T1485.001)</span><span class="chain-arrow">→</span>
+    <span class="chain-step">Cover-up on the log bucket</span>
+  </p>
+
+  <h3>Timeline</h3>
+  <ol class="timeline">
+    <li><div class="tl-when">Day 0 · 08:15</div><div class="tl-what">An access key leaks</div><p>A developer pushes a personal script to a public repository with a hardcoded IAM access key. Automated scanners harvest the key within minutes and offer it for sale. The key belongs to a deployment user with broad storage permissions, including <code>PutLifecycleConfiguration</code>.</p></li>
+    <li><div class="tl-when">Day 0 · 11:02</div><div class="tl-what">The stolen key works</div><p>The attacker validates the key with a <code>GetCallerIdentity</code> call from a hosting provider address and then calls <code>ListBuckets</code>. The response names 14 buckets, including the finance data bucket and the CloudTrail log bucket.</p></li>
+    <li><div class="tl-when">Day 0 · 11:20</div><div class="tl-what">Recon of cleanup settings</div><p>The attacker reads the lifecycle configuration and versioning status of both target buckets. Versioning is enabled on the data bucket, and the log bucket has a 365-day retention rule. They now know exactly what they are about to change.</p></li>
+    <li><div class="tl-when">Day 0 · 11:26</div><div class="tl-what">Data bucket armed (T1485.001)</div><p>A <code>PutBucketLifecycleConfiguration</code> call enables a rule named <code>expire-all</code> with <code>Expiration Days: 1</code> and an empty prefix. CloudTrail records the event instantly. Nothing visible happens to the bucket.</p></li>
+    <li><div class="tl-when">Day 0 · 11:27</div><div class="tl-what">The saving detection fires</div><p>The SIEM alert for lifecycle writes by unusual identities fires within a minute of the API call. The alert lands in the queue labeled like a routine configuration change and waits. The timer is now running, and the SOC has roughly 24 hours.</p></li>
+    <li><div class="tl-when">Day 0 · 11:31</div><div class="tl-what">Log bucket armed</div><p>The attacker applies the same one-day expiry rule to the CloudTrail log bucket. If it runs, the audit trail for the entire organization will delete itself, hiding everything they did.</p></li>
+    <li><div class="tl-when">Day 0 · 12:05 to 15:40</div><div class="tl-what">Data theft and an extortion note</div><p>The attacker downloads several gigabytes of database dumps and invoice exports with <code>GetObject</code>. Then they upload a ransom note object that demands payment before the cleanup job finishes. This matches the copy-then-destroy pattern described in the cloud ransomware research.</p></li>
+    <li><div class="tl-when">Day 1 · 11:30</div><div class="tl-what">The expiry wave begins</div><p>Objects older than one day start disappearing. Storage monitoring shows the object count falling by hundreds per hour. No security event fires, because the lifecycle service is doing exactly what a lifecycle service does.</p></li>
+    <li><div class="tl-when">Day 1 · 13:40</div><div class="tl-what">The alert gets its hour</div><p>An analyst works the Day 0 alert backlog, opens the raw CloudTrail event, and sees <code>Days: 1</code> on a bucket that holds backups. The case is escalated immediately as an active destruction timer, one hour into the expiry wave.</p></li>
+    <li><div class="tl-when">Day 1 · 14:20</div><div class="tl-what">Containment</div><p>Responders delete both malicious rules with <code>DeleteBucketLifecycle</code>. That one action stops the deletion wave at its source. They revoke the leaked access key. They also apply a temporary service control policy that denies lifecycle writes to all roles except the storage admin.</p></li>
+    <li><div class="tl-when">Day 1 to Day 3</div><div class="tl-what">Recovery and the remaining gap</div><p>The team restores the data bucket from the cross-region replica and verifies object counts against a pre-incident snapshot. Several hours of log objects expired before the rule was removed, so the log bucket keeps a visible gap. The organization trail copy in the security account fills most of it.</p></li>
+  </ol>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Detection point</h3>
+      <p>The saving detection was the CloudTrail alert on <code>PutBucketLifecycleConfiguration</code>, which fired one minute after the rule was armed — almost a full day before the first object expired. This is the core lesson of the technique: the API call is the alarm, and the deletion is only the echo. Even a delayed response on Day 1 arrived while the wave was still running, and the rule removal stopped all further loss within minutes.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Containment</h3>
+      <p>Responders removed both lifecycle rules first, because that single action stops the automated destruction immediately. They then revoked the leaked key and the sessions that used it, applied a temporary service control policy blocking lifecycle writes, and protected the log bucket with an explicit deny. The ransom note object was preserved as evidence.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Eradication</h3>
+      <p>The team reviewed every action the deployment identity had taken in the last 90 days, hunting for persistence beyond the keys. They found the exfiltration pattern but no new accounts, roles, or instances. The public repository contact removed the key, and a full credential rotation covered every secret the identity could reach.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Recovery</h3>
+      <p>The cross-region replica made restoration a copy job instead of a crisis: the data bucket returned to its pre-incident object count within a day. The log gap could not be closed completely, but the organization trail copy in the security account preserved the critical window. Restore tests run the previous quarter proved their value here.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Impact and consequences</h3>
+    <p>Data loss stayed small because the alert existed and a replica existed: roughly six hours of expired objects and a partial log gap. The costs that remained were investigation time, credential rotation across several systems, and a report to the regulator, since personal data had been exfiltrated before the destruction attempt. Had the alert been missing, the public research behind this case study points to a clear outcome. The bucket would have emptied silently. The log bucket would have erased the attacker's tracks. The extortion note would have been the only warning the company ever received.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Team response and communication</h3>
+    <p>The SOC, cloud platform team, and legal team worked from the cloud incident runbook. The platform team removed rules and revoked keys. The SOC hunted the identity's history. Legal handled the extortion note and the regulatory clock. Executives received a single plain summary twice a day, with one message repeated: the timer is stopped, the data is being restored, no payment is needed. The calm tone mattered, because the first instinct of leadership on seeing a ransom note is to move fast and pay faster.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Lessons learned</h3>
+    <ul class="check">
+      <li>Alert on the API call, not on the deletion; lifecycle destruction announces itself a day early.</li>
+      <li>Give lifecycle alerts a named owner and a critical default, so they do not wait in a config-change queue.</li>
+      <li>Keep one copy the attacker cannot touch: a cross-region replica and an organization trail in a separate account.</li>
+      <li>Deny lifecycle writes by default with a service control policy, and allow only named storage admin roles.</li>
+      <li>Scan repositories for leaked keys, because the cheapest attack in this guide starts in a code commit.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec" id="sec-7-mitigation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2>Mitigation and defense</h2></div>
+  <p class="sec-intro">You cannot stop every key from leaking. But you can make this attack fail twice: first by denying the permission, then by keeping copies the attacker cannot reach. The controls below are ordered by how much risk they remove.</p>
+
+  <h3>Controls by domain</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Backup architecture (ATT&amp;CK M1053)</h3>
+      <p>ATT&amp;CK's first mitigation for this technique is data backup. In the cloud this means: enable cross-region replication (a second copy kept automatically in another region) for critical buckets, and keep S3 versioning on. Add Object Lock, a setting that freezes copies, so a window of protected versions cannot be deleted or shortened by anyone, including admins. Follow the 3-2-1-1-0 pattern: three copies, two media types, one offsite, one immutable or offline, zero restore-test errors.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Permission design (ATT&amp;CK M1018)</h3>
+      <p>ATT&amp;CK's second mitigation is user account management: limit <code>PutLifecycleConfiguration</code> to only the accounts that require it. In AWS, use a <em>service control policy</em> (an organization-wide guardrail that denies listed API calls) to restrict <code>PutBucketLifecycle</code> to named storage admin roles. Remove lifecycle write permissions from developer, CI (continuous integration — automated build and test jobs), and deployment roles entirely.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Protect the log bucket first</h3>
+      <p>Attackers use this technique on log buckets for indicator removal. The audit store therefore needs its own defenses. Use a separate security account. Add explicit deny policies for lifecycle and versioning changes. Keep an organization trail copy that no production credential can modify. If the main trail dies, the copy must live.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Monitoring and detection</h3>
+      <p>Ship CloudTrail management events to the SIEM, confirm coverage in all regions including us-east-1, and deploy the five rules from section 5. Enable S3 data events so <code>DeleteObjects</code> is visible, and watch object counts on critical buckets so the silent phase of this attack is not silent to you.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Change management for storage</h3>
+      <p>Treat lifecycle policy changes like firewall rule changes. Require a ticket, a named approver, and a maintenance window. Keep a lookup of approved rules, their prefixes, and their expiry values, and feed it to the detection rules so approved changes do not page.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Response readiness</h3>
+      <p>Write the runbook before the timer starts: who removes the rule, who revokes the key, who protects the replicas, and who decides on restoration. Rehearse once with a table-top exercise and once against a Stratus Red Team scenario in a test account, so the first real run is not the first run.</p>
+    </div>
+  </div>
+
+  <h3>Prioritized actions</h3>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Risk reduction</th><th>How to verify</th></tr></thead>
+      <tbody>
+        <tr><td>Apply a service control policy that denies <code>PutBucketLifecycle</code> and <code>PutBucketVersioning</code> except for named admin roles.</td><td><span class="badge sev-medium">Medium</span></td><td>Cloud platform team.</td><td><span class="badge sev-critical">Critical</span></td><td>Attempt a test lifecycle write with a standard role in a sandbox account and confirm the denial event.</td></tr>
+        <tr><td>Enable cross-region replication with Object Lock for critical buckets.</td><td><span class="badge sev-medium">Medium</span></td><td>Storage team.</td><td><span class="badge sev-critical">Critical</span></td><td>Restore a test dataset from the replica and confirm protected copies reject deletion.</td></tr>
+        <tr><td>Deploy the five detection rules from section 5.</td><td><span class="badge sev-low">Low</span></td><td>Detection engineering.</td><td><span class="badge sev-high">High</span></td><td>Run a lifecycle write in a test account and confirm the alert reaches the queue in minutes.</td></tr>
+        <tr><td>Copy the organization trail to a separate security account.</td><td><span class="badge sev-medium">Medium</span></td><td>Cloud platform team.</td><td><span class="badge sev-high">High</span></td><td>Confirm the copy account accepts writes but rejects all reads and modifications from production roles.</td></tr>
+        <tr><td>Remove lifecycle permissions from developer, CI, and deployment roles.</td><td><span class="badge sev-medium">Medium</span></td><td>IAM team.</td><td><span class="badge sev-high">High</span></td><td>Run an IAM access review and confirm no non-admin role holds <code>PutLifecycleConfiguration</code>.</td></tr>
+        <tr><td>Enable S3 data events and object count dashboards for critical buckets.</td><td><span class="badge sev-low">Low</span></td><td>Security engineering.</td><td><span class="badge sev-medium">Medium</span></td><td>Trigger a small batch delete in a sandbox and confirm both the data event and the dashboard move.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Small organization advice</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Protect your own buckets</h3>
+      <ul class="check">
+        <li>Turn on versioning for every bucket that holds anything important.</li>
+        <li>Keep one copy outside the same account, such as a second account or a local offline export.</li>
+        <li>Never reuse the root account or an admin user for daily work or for CI pipelines.</li>
+        <li>Review your lifecycle rules once a quarter and delete the ones nobody can explain.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Small-team quick wins</h3>
+      <ul class="check">
+        <li>Turn on CloudTrail for all regions and send it somewhere you control, even a simple log archive.</li>
+        <li>Add a secret scanner to your repositories; leaked keys are the start of most of these incidents.</li>
+        <li>Once a quarter, restore one important file from backup and time how long it takes.</li>
+        <li>Set a calendar reminder to review who holds storage admin rights in your cloud account.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Home and small-office advice</h3>
+  <p>This attack also works against personal cloud accounts, because home users often hold admin rights and keep only one copy of their files. The same two defenses still work: a protected copy, and fewer permissions. You do not need a security team to apply them; use the cards below as a checklist.</p>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Protect personal backups</h3>
+      <ul class="check">
+        <li>Turn on versioning and Object Lock — a setting that blocks deletion for a time you choose — on the bucket that holds your backups.</li>
+        <li>Keep a second copy offline, such as an external drive that stays unplugged between backups.</li>
+        <li>Never rely on a single cloud bucket; keep copies in two different places or with two providers.</li>
+        <li>Test a restore once or twice a year, so you know the copies actually work.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Separate accounts and rule checks</h3>
+      <ul class="check">
+        <li>Use a normal, non-admin account for daily work; save the root or admin account for rare changes.</li>
+        <li>Give each person, app, or backup job its own account, so one leaked key does not open everything.</li>
+        <li>After any suspicious account activity, open the storage settings and check the "lifecycle" and "retention" rules for changes you did not make.</li>
+        <li>Turn on sign-in alerts from your cloud provider, and act on any alert you cannot explain.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout warning">
+    <div class="callout-label">Warning</div>
+    <p>Cloud providers hide lifecycle rules in a settings page named "management", "lifecycle", or "retention". Open that page once today and write down what you find. If files later vanish on schedule, that page is the first place to look, and it is the first place an attacker would have struck.</p>
+  </div>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>The strongest defense against a self-deleting bucket is a copy that cannot be deleted. A cross-region replica with Object Lock, stored behind a permission boundary the attacker's stolen key cannot cross, does exactly that. It turns the entire technique into a harmless API call with a loud alert attached.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-8-mistakes">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2>Common mistakes and best practices</h2></div>
+  <p class="sec-intro">Teams rarely miss this attack because the signal is weak. They miss it because of fixable process errors. Here are the twelve we see most, with the symptom, the root cause, the fix, and the prevention.</p>
+
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>Mistake 1 — Watching only data events, not management events.</td><td>The destructive API call never reaches the SIEM.</td><td>CloudTrail coverage focused on object access, not control-plane changes.</td><td>Enable management events for all regions and ingest them.</td><td>Keep a logging coverage matrix that includes every control-plane API family.</td></tr>
+        <tr><td>Mistake 2 — Assuming versioning alone protects the bucket.</td><td>Data vanishes with no noncurrent copies to roll back.</td><td>No alert on <code>PutBucketVersioning</code> changes.</td><td>Deploy the versioning rule from section 5 and deny status changes by default.</td><td>Treat versioning as a control that needs monitoring, not a setting you forget.</td></tr>
+        <tr><td>Mistake 3 — Leaving the log bucket unprotected.</td><td>Attackers rewrite retention on the audit store without a page.</td><td>Guardrails applied to data buckets but not to the trail bucket.</td><td>Add explicit denies for lifecycle and versioning writes on log buckets.</td><td>Inventory every log destination and protect it like a domain controller.</td></tr>
+        <tr><td>Mistake 4 — Lifecycle alerts with no owner.</td><td>The saving alert waits in a config-change queue for a day.</td><td>Alerts routed to a shared queue with no named team.</td><td>Assign lifecycle alerts to the SOC with critical default severity.</td><td>Every rule gets an owner, a severity, and a response expectation.</td></tr>
+        <tr><td>Mistake 5 — Wildcard storage permissions on developer and CI roles.</td><td>Any leaked key becomes a destruction key.</td><td><code>s3:*</code> used for convenience in deployment policies.</td><td>Scope policies to needed buckets and remove lifecycle writes entirely.</td><td>Quarterly IAM access reviews with a deny list for destructive permissions.</td></tr>
+        <tr><td>Mistake 6 — Allow-listing all automation roles at once.</td><td>A stolen automation role rewrites policies silently.</td><td>Over-broad exclusions added to reduce noise.</td><td>Exclude roles by exact ARN and match on expected rule content.</td><td>Review exclusions monthly; every exclusion needs a written reason.</td></tr>
+        <tr><td>Mistake 7 — No baseline for bucket object counts.</td><td>Silent shrinkage during the expiry wave goes unnoticed.</td><td>Storage metrics not connected to security monitoring.</td><td>Dashboard object counts for critical buckets and alert on drops.</td><td>Feed storage inventory into the SIEM as a daily metric.</td></tr>
+        <tr><td>Mistake 8 — Untested restore path from the replica.</td><td>Restoration fails during the real incident.</td><td>Replication enabled but never restored from.</td><td>Schedule quarterly restore drills with timing data.</td><td>Track restore success as a published metric.</td></tr>
+        <tr><td>Mistake 9 — Treating the alert as a configuration change.</td><td>Days: 1 on a backup bucket closed as routine cleanup.</td><td>No default severity or runbook for lifecycle events.</td><td>Write a lifecycle-specific runbook with critical severity.</td><td>Map every destructive API family to a minimum severity.</td></tr>
+        <tr><td>Mistake 10 — Searching only one region for S3 events.</td><td>Global-endpoint S3 events in us-east-1 are missed.</td><td>Regional habits carried over from EC2 investigations.</td><td>Search all regions and confirm trail coverage includes us-east-1.</td><td>Add a data source health check per region.</td></tr>
+        <tr><td>Mistake 11 — Ignoring AccessDenied on lifecycle APIs.</td><td>Permission probing goes unnoticed for months.</td><td>Denied calls treated as noise.</td><td>Alert on denied destructive API calls from human identities.</td><td>Track denied destructive calls as an early-warning metric.</td></tr>
+        <tr><td>Mistake 12 — Closing the case when the rule is removed.</td><td>Deletion continues and the loss is discovered later.</td><td>Fixing the cause but not verifying the effect.</td><td>Verify object counts against a snapshot after rule removal.</td><td>Incident closure checklist includes a data-integrity step.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Healthy operating habits</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">Daily</h3>
+      <ul class="check">
+        <li>Confirm CloudTrail and cloud log sources are reporting, including the us-east-1 feed.</li>
+        <li>Review every lifecycle and versioning alert from the last 24 hours.</li>
+        <li>Glance at object count dashboards for the buckets you would miss most.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Weekly</h3>
+      <ul class="check">
+        <li>Walk one lifecycle alert end-to-end and time the triage.</li>
+        <li>Review new IAM roles or keys with storage write permissions.</li>
+        <li>Sync with the cloud team about planned storage or retention changes.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Monthly</h3>
+      <ul class="check">
+        <li>Test one rule against a lifecycle write in a sandbox account.</li>
+        <li>Verify the service control policy still denies lifecycle writes to standard roles.</li>
+        <li>Update actor notes from new public cloud ransomware research.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="sec-9-cheatsheet">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2>Cheat sheet and quick reference</h2></div>
+  <p class="sec-intro">Everything important on one screen, for the wall and for the incident channel.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Key facts</h3>
+      <dl class="kv-list">
+        <div><dt>Technique</dt><dd>T1485.001 — Lifecycle-Triggered Deletion.</dd></div>
+        <div><dt>Parent</dt><dd>T1485 — Data Destruction.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact.</dd></div>
+        <div><dt>What it does</dt><dd>Writes a lifecycle rule that deletes every object in a cloud storage bucket after a short delay, often on log buckets to erase evidence.</dd></div>
+        <div><dt>Typical timing</dt><dd>Deletion is scheduled hours ahead; the API call is logged instantly.</dd></div>
+        <div><dt>Signature events</dt><dd><code>PutBucketLifecycleConfiguration</code>, <code>PutBucketVersioning</code>, <code>DeleteBucketLifecycle</code>, <code>DeleteObjects</code>.</dd></div>
+        <div><dt>Best single defense</dt><dd>One protected copy (cross-region replica with Object Lock) plus an SCP denying lifecycle writes.</dd></div>
+      </dl>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Top detections</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Signal</th><th>Source</th><th>First action</th></tr></thead>
+          <tbody>
+            <tr><td><code>PutBucketLifecycleConfiguration</code> with <code>Days</code> of 1 or less.</td><td>CloudTrail.</td><td>Page as an active destruction timer; delete the rule.</td></tr>
+            <tr><td>Lifecycle change on the log bucket name.</td><td>CloudTrail.</td><td>Treat as evidence destruction; protect the org trail copy.</td></tr>
+            <tr><td><code>PutBucketVersioning</code> set to <code>Suspended</code>.</td><td>CloudTrail.</td><td>Check who and why; expect a lifecycle rule next.</td></tr>
+            <tr><td><code>DeleteObjects</code> batches or <code>DeleteBucket</code>.</td><td>CloudTrail data events.</td><td>Check scale and identity; correlate with exfiltration.</td></tr>
+            <tr><td><code>AccessDenied</code> on lifecycle APIs.</td><td>CloudTrail.</td><td>Review the identity; treat as permission probing.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Response checklist</h3>
+    <ul class="check">
+      <li>Confirm the raw event: bucket, expiry value, identity, source address, user agent.</li>
+      <li>Delete the malicious rule immediately; removing the rule stops the timer completely.</li>
+      <li>Apply a temporary deny on lifecycle writes for affected buckets and accounts.</li>
+      <li>Check versioning status and confirm the cross-region replica is intact.</li>
+      <li>Disable the leaked key or session and rotate every credential it could reach.</li>
+      <li>Review the identity's history for data theft signals such as <code>GetObject</code> spikes.</li>
+      <li>Snapshot object counts, then restore from the replica and verify the numbers.</li>
+      <li>Confirm the log bucket kept its records; if not, pull the organization trail copy.</li>
+    </ul>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Official and related references</h3>
+      <ul class="check">
+        <li><a href="https://attack.mitre.org/techniques/T1485/001/" target="_blank" rel="noopener">MITRE ATT&amp;CK — T1485.001 Lifecycle-Triggered Deletion</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1485/" target="_blank" rel="noopener">Parent — T1485 Data Destruction</a>.</li>
+        <li><a href="https://attack.mitre.org/detectionstrategies/DET0041/" target="_blank" rel="noopener">Detection strategy DET0041</a>.</li>
+        <li><a href="https://attack.mitre.org/mitigations/M1053/" target="_blank" rel="noopener">Mitigation M1053 Data Backup</a>.</li>
+        <li><a href="https://attack.mitre.org/mitigations/M1018/" target="_blank" rel="noopener">Mitigation M1018 User Account Management</a>.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1562/008/" target="_blank" rel="noopener">Related — T1562.008 Disable Cloud Logs</a>.</li>
+        <li><a href="https://www.cisa.gov/stopransomware" target="_blank" rel="noopener">CISA — StopRansomware guidance</a>.</li>
+        <li><a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html" target="_blank" rel="noopener">AWS — Managing the lifecycle of objects</a>.</li>
+        <li><a href="https://learn.microsoft.com/en-us/azure/storage/blobs/lifecycle-management-overview" target="_blank" rel="noopener">Microsoft — Azure Blob lifecycle management</a>.</li>
+        <li><a href="https://cloud.google.com/storage/docs/lifecycle" target="_blank" rel="noopener">Google Cloud — Object lifecycle management</a>.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">One-line summary</h3>
+      <p>A lifecycle rule is a deletion timer for your data. The attacker leaves the receipt behind: the API call that arms it is logged the moment it happens. Alert on that call, keep one copy the attacker cannot reach, and the whole technique collapses into a loud, harmless page.</p>
+    </div>
+  </div>
+</section>
+  </main>
+</div>
+
+<button class="fab back-top" id="backTop" type="button" aria-label="Back to top">Top</button>
+<button class="fab contents-fab" id="contentsFab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="fab theme-fab" id="themeToggle" type="button" aria-label="Switch between dark and light theme">&#9680;</button>
+<div class="scrim" id="scrim" hidden></div>
+<div class="toc-overlay" id="tocOverlay" role="dialog" aria-modal="true" aria-label="Contents" hidden>
+  <div class="toc-overlay-head"><span>Contents</span><button class="btn" id="overlayClose" type="button">Close</button></div>
+  <ul class="toc-list" id="overlayList"></ul>
+</div>
+
+<script>
+window.SIM_STORY = function () {
+  var N = [
+    { id: "attacker", x: 36, y: 52, w: 170, h: 60, label: "Attacker host", desc: "The laptop the attacker uses with a leaked IAM access key." },
+    { id: "api", x: 306, y: 52, w: 196, h: 60, label: "Cloud control plane", desc: "The cloud API that checks the key and applies lifecycle rules." },
+    { id: "datab", x: 606, y: 28, w: 186, h: 58, label: "Data bucket", desc: "Object storage that holds customer files and backups." },
+    { id: "logb", x: 606, y: 104, w: 186, h: 58, label: "Log bucket", desc: "The central bucket that stores CloudTrail audit logs." },
+    { id: "replica", x: 606, y: 182, w: 186, h: 58, label: "Versioned replica", desc: "A cross-region replica with versioning that keeps protected copies." },
+    { id: "siem", x: 306, y: 330, w: 210, h: 60, label: "SIEM", desc: "Collects CloudTrail management events and raises alerts." },
+    { id: "soc", x: 640, y: 330, w: 200, h: 66, label: "SOC analyst", desc: "Triages the alert, removes the rule, and starts the restore." }
+  ];
+
+  function byId(id) {
+    for (var i = 0; i < N.length; i++) { if (N[i].id === id) return N[i]; }
+    return null;
+  }
+
+  function drawNode(ctx, id, state, S, H, C) {
+    var n = byId(id);
+    var o = { label: n.label, state: state };
+    if (S.hover === id) { o.state = "active"; }
+    H.node(ctx, n.x, n.y, n.w, n.h, o);
+  }
+
+  function logLine(ctx, H, C, x1, y1, x2, y2) {
+    H.flow(ctx, x1, y1, x2, y2, C.border, { n: 0, speed: 0, dash: [3, 4] });
+  }
+
+  function base(ctx, w, h, S, H, C) {
+    drawNode(ctx, "attacker", "active", S, H, C);
+    drawNode(ctx, "api", S.i >= 1 ? "active" : "idle", S, H, C);
+
+    var ds = "idle";
+    if (S.i >= 3 && S.i <= 4) { ds = "alert"; }
+    if (S.i === 5) { ds = "warn"; }
+    if (S.i === 6) { ds = "dead"; }
+    if (S.i >= 7) { ds = "good"; }
+    drawNode(ctx, "datab", ds, S, H, C);
+
+    var ls = "idle";
+    if (S.i >= 4 && S.i <= 5) { ls = "alert"; }
+    if (S.i === 6) { ls = "dead"; }
+    if (S.i >= 7) { ls = "warn"; }
+    drawNode(ctx, "logb", ls, S, H, C);
+
+    drawNode(ctx, "replica", S.i >= 6 ? "good" : "idle", S, H, C);
+    drawNode(ctx, "siem", S.i >= 6 ? "alert" : "idle", S, H, C);
+    drawNode(ctx, "soc", S.i >= 7 ? "good" : (S.i >= 6 ? "alert" : "idle"), S, H, C);
+
+    logLine(ctx, H, C, 404, 112, 404, 330);
+    H.text(ctx, "CloudTrail events", 416, 225, { size: 10, color: C.muted, mono: true, maxWidth: 120 });
+
+    if (S.i === 5) {
+      var n = Math.max(0, Math.round(8400 * (1 - S.p)));
+      H.text(ctx, "objects left: " + n, 699, 95, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 150 });
+      H.text(ctx, "logs expiring", 699, 171, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 150 });
+    }
+    if (S.i === 6) {
+      H.text(ctx, "objects left: 0", 699, 95, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 150 });
+      H.text(ctx, "logs expired", 699, 171, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 150 });
+    }
+    if (S.i >= 7) {
+      H.text(ctx, "restored", 699, 95, { size: 10, color: C.success, mono: true, align: "center", maxWidth: 150 });
+      H.text(ctx, "log gap", 699, 171, { size: 10, color: C.warning, mono: true, align: "center", maxWidth: 150 });
+    }
+  }
+
+  function evidence(ctx, S, H, C) {
+    var x = 40;
+    if (S.i >= 3) { x += H.chip(ctx, "CloudTrail: PutBucketLifecycleConfiguration", x, 416, C.warning) + 10; }
+    if (S.i >= 4) { x += H.chip(ctx, "log bucket targeted", x, 416, C.danger) + 10; }
+    if (S.i >= 6) { x += H.chip(ctx, "SOC alert fired", x, 416, C["accent-2"]) + 10; }
+    if (S.i >= 7) { x += H.chip(ctx, "replica OK", x, 416, C.success) + 10; }
+    H.text(ctx, "EVIDENCE", 40, 396, { size: 10, color: C.muted, mono: true, weight: "700" });
+    var cmds = [
+      "sts get-caller-identity with the leaked key - access confirmed",
+      "s3api list-buckets - 14 buckets returned",
+      "reads lifecycle and versioning settings on 2 target buckets",
+      "s3api put-bucket-lifecycle-configuration --bucket acme-fin-data (expires in 1 day)",
+      "same 1-day expiry rule applied to the CloudTrail log bucket",
+      "24 hours pass - the lifecycle service deletes expired objects",
+      "SIEM: lifecycle write by an unusual role - SOC alerted",
+      "delete-bucket-lifecycle - restore from replica - revoke the key"
+    ];
+    H.text(ctx, "API>", 40, 458, { size: 12, color: C.muted, mono: true, weight: "700" });
+    H.text(ctx, cmds[S.i] || "", 86, 458, { size: 12, color: C.text, mono: true, maxWidth: 830 });
+  }
+
+  var S = [
+    {
+      label: "Leaked access key", dur: 5,
+      caption: "The attacker finds an IAM access key that a developer leaked into a public code repository. A quick test call to the cloud API works, so the key is live and trusted. Nothing in the cloud has changed yet.",
+      hint: "Alert on GetCallerIdentity or console logins for human identities from new source addresses.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 206, 82, 306, 82, C.danger, { t: S.t, n: 3 });
+        H.text(ctx, "leaked IAM access key", 256, 40, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 150 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Enumerate the buckets", dur: 4.5,
+      caption: "The attacker calls ListBuckets and receives the names of all 14 buckets in the account. The data bucket and the audit log bucket are now known targets. Still nothing is changed.",
+      hint: "A first-time ListBuckets by an identity that never does it is cheap recon evidence worth an alert.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 502, 68, 606, 57, C.violet, { t: S.t, n: 3, speed: 0.4 });
+        H.flow(ctx, 502, 96, 606, 133, C.violet, { t: S.t + 0.2, n: 2, speed: 0.4 });
+        H.text(ctx, "ListBuckets", 554, 20, { size: 10, color: C.violet, mono: true, align: "center", maxWidth: 120 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Pick the two targets", dur: 4.5,
+      caption: "The attacker reads lifecycle and versioning settings on the two targets. They learn that versioning protects the data bucket and that the log bucket keeps one year of audit records.",
+      hint: "GetBucketLifecycleConfiguration on a log bucket by a new identity is recon for an evidence wipe.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 502, 62, 606, 55, C.accent, { t: S.t, n: 2, dash: [4, 4] });
+        H.flow(ctx, 502, 98, 606, 135, C.accent, { t: S.t + 0.15, n: 2, dash: [4, 4] });
+        H.text(ctx, "reads settings", 554, 40, { size: 10, color: C.accent, mono: true, align: "center", maxWidth: 120 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Arm the data bucket", dur: 5.5,
+      caption: "One PutBucketLifecycleConfiguration call arms a rule that expires every object after one day. The cloud now holds a destruction timer for the whole data bucket, and the attacker can leave the console.",
+      hint: "Page on any lifecycle write with an expiry of one day or less that has no change ticket.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 502, 66, 606, 52, C.danger, { t: S.t, n: 4, speed: 0.5 });
+        H.chip(ctx, "Expiration: 1 day", 448, 20, C.danger);
+        if (S.p > 0.3) { H.pulse(ctx, 699, 57, 44, C.danger, { t: S.t }); }
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Arm the log bucket", dur: 5,
+      caption: "The same one-day expiry rule is applied to the CloudTrail log bucket. Audit evidence is now scheduled to destroy itself, which is the cover-up half of this technique.",
+      hint: "Any lifecycle write on a log bucket should page, because it erases the investigation trail itself.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 502, 98, 606, 132, C.danger, { t: S.t, n: 4, speed: 0.5 });
+        H.chip(ctx, "Expiration: 1 day", 448, 148, C.danger);
+        if (S.p > 0.3) { H.pulse(ctx, 699, 133, 44, C.danger, { t: S.t, phase: 0.3 }); }
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "The timer runs", dur: 5.5,
+      caption: "Twenty-four hours pass with no attacker online. The lifecycle service quietly deletes expired objects, so the data bucket empties while the company sleeps. This is why the API call, not the deletion, is the detection moment.",
+      hint: "Watch object counts and inventory reports on critical buckets so silent shrinkage is visible.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.pulse(ctx, 699, 57, 30, C.warning, { t: S.t * 0.3 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "The SIEM catches the call", dur: 5.5,
+      caption: "The SIEM raised an alert the moment the rule was written, because an unusual role never writes lifecycle policies. The SOC now works a destruction timer that still has hours left to run.",
+      hint: "Correlate lifecycle writes with identity history and change tickets so unusual roles stand out.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 404, 112, 404, 330, C["accent-2"], { t: S.t, n: 4, speed: 0.45 });
+        H.arrow(ctx, 516, 356, 640, 356, C["accent-2"], { width: 2 });
+        H.pulse(ctx, 411, 360, 44, C["accent-2"], { t: S.t });
+        H.pulse(ctx, 740, 363, 50, C.danger, { t: S.t, phase: 0.4 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Remove, restore, revoke", dur: 6,
+      caption: "Responders delete the lifecycle rule, restore the data bucket from the cross-region replica, and revoke the leaked key. Some already-expired log objects are gone, which is exactly why the early alert matters.",
+      hint: "After removing a malicious rule, verify object counts everywhere and rotate every credential the identity could reach.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        drawNode(ctx, "attacker", "warn", S, H, C);
+        H.arrow(ctx, 700, 330, 700, 244, C.success, { dash: [4, 4] });
+        H.text(ctx, "restore from replica", 786, 287, { size: 10, color: C.success, mono: true, align: "center", maxWidth: 170 });
+        H.text(ctx, "lifecycle rule removed", 404, 126, { size: 10, color: C.success, mono: true, align: "center", maxWidth: 190 });
+        evidence(ctx, S, H, C);
+      }
+    }
+  ];
+
+  SimEngine.init({ nodes: N, steps: S });
+};
+</script>
+<script>
+/* ============================================================
+   Detection Engineering Guide — shared page behavior
+   Theme, progress bar, TOC (generated from real headings),
+   mobile overlay, back-to-top, copy buttons, reveal-on-scroll.
+   No external libraries. No alert/prompt/confirm.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  var doc = document;
+  var rootEl = doc.documentElement;
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  /* ---------- theme toggle ---------- */
+  var themeBtn = doc.getElementById("themeToggle");
+  function setTheme(t, save) {
+    rootEl.setAttribute("data-theme", t);
+    if (save) { try { localStorage.setItem("atk-theme", t); } catch (e) {} }
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      setTheme(next, true);
+    });
+  }
+
+  /* ---------- progress bar + back to top ---------- */
+  var fill = doc.getElementById("progressFill");
+  var backTop = doc.getElementById("backTop");
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      var st = window.scrollY || doc.documentElement.scrollTop || 0;
+      var dh = (doc.documentElement.scrollHeight - window.innerHeight) || 1;
+      if (fill) fill.style.width = Math.min(100, (st / dh) * 100) + "%";
+      if (backTop) backTop.classList.toggle("show", st > 520);
+      trackActive();
+      ticking = false;
+    });
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  if (backTop) {
+    backTop.addEventListener("click", function () {
+      var smooth = !reduced.matches;
+      window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+    });
+  }
+
+  /* ---------- table of contents (generated from real headings) ---------- */
+  var secEls = [].slice.call(doc.querySelectorAll("main.content > section.sec"));
+  var tocList = doc.getElementById("tocList");
+  var ovList = doc.getElementById("overlayList");
+  var targets = []; // { id, el, linkEls }
+
+  function makeLink(t) {
+    var a = doc.createElement("a");
+    a.href = "#" + t.id;
+    a.textContent = t.text;
+    a.addEventListener("click", function () { closeOverlay(); });
+    return a;
+  }
+
+  secEls.forEach(function (sec) {
+    var numEl = sec.querySelector(".sec-num");
+    var h2 = sec.querySelector("h2");
+    if (!h2 || !sec.id) return;
+    var num = numEl ? numEl.textContent.trim() : "";
+    var t = { id: sec.id, el: sec, text: (num ? num + ". " : "") + h2.textContent.trim(), linkEls: [] };
+    [tocList, ovList].forEach(function (list) {
+      if (!list) return;
+      var li = doc.createElement("li");
+      li.appendChild(makeLink(t));
+      list.appendChild(li);
+      t.linkEls.push(li.firstChild);
+    });
+    targets.push(t);
+    if (sec.id === "sec-5-detection") {
+      [].slice.call(sec.querySelectorAll("h3[id]")).forEach(function (h3) {
+        var st = { id: h3.id, el: h3, text: h3.textContent.trim(), linkEls: [] };
+        [tocList, ovList].forEach(function (list) {
+          if (!list) return;
+          var li = doc.createElement("li");
+          li.className = "sub";
+          li.appendChild(makeLink(st));
+          list.appendChild(li);
+          st.linkEls.push(li.firstChild);
+        });
+        targets.push(st);
+      });
+    }
+  });
+
+  var activeId = null;
+  function trackActive() {
+    if (!targets.length) return;
+    var probe = (window.scrollY || 0) + 140;
+    var cur = targets[0];
+    for (var i = 0; i < targets.length; i++) {
+      var el = targets[i].el;
+      var top = el.getBoundingClientRect().top + (window.scrollY || 0);
+      if (top <= probe) cur = targets[i];
+    }
+    if (cur.id !== activeId) {
+      activeId = cur.id;
+      targets.forEach(function (t) {
+        t.linkEls.forEach(function (a) { a.classList.toggle("active", t.id === activeId); });
+      });
+    }
+  }
+
+  /* ---------- mobile contents overlay ---------- */
+  var contentsFab = doc.getElementById("contentsFab");
+  var overlay = doc.getElementById("tocOverlay");
+  var scrim = doc.getElementById("scrim");
+  var overlayClose = doc.getElementById("overlayClose");
+
+  function openOverlay() {
+    if (!overlay) return;
+    overlay.hidden = false;
+    if (scrim) scrim.hidden = false;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "true");
+    doc.body.style.overflow = "hidden";
+    var first = overlay.querySelector("a, button");
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    if (scrim) scrim.hidden = true;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "false");
+    doc.body.style.overflow = "";
+    if (contentsFab) contentsFab.focus();
+  }
+  if (contentsFab) contentsFab.addEventListener("click", openOverlay);
+  if (overlayClose) overlayClose.addEventListener("click", closeOverlay);
+  if (scrim) scrim.addEventListener("click", closeOverlay);
+  doc.addEventListener("keydown", function (e) {
+    if (overlay && !overlay.hidden) {
+      if (e.key === "Escape") { closeOverlay(); return; }
+      if (e.key === "Tab") {
+        var f = [].slice.call(overlay.querySelectorAll("a[href], button:not([disabled])"));
+        if (!f.length) return;
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && doc.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && doc.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+  });
+
+  /* ---------- copy buttons ---------- */
+  function flash(btn) {
+    var old = btn.getAttribute("data-label") || btn.textContent;
+    btn.setAttribute("data-label", old);
+    btn.textContent = "Copied";
+    btn.classList.add("copied");
+    window.setTimeout(function () {
+      btn.textContent = old;
+      btn.classList.remove("copied");
+    }, 1600);
+  }
+  function copyText(txt, btn) {
+    function legacy() {
+      var ta = doc.createElement("textarea");
+      ta.value = txt;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      doc.body.appendChild(ta);
+      ta.select();
+      try { doc.execCommand("copy"); flash(btn); } catch (err) {}
+      doc.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(function () { flash(btn); }, legacy);
+    } else { legacy(); }
+  }
+  [].slice.call(doc.querySelectorAll(".code-block")).forEach(function (block) {
+    var btn = block.querySelector(".copy-btn");
+    var code = block.querySelector("pre code");
+    if (!btn || !code) return;
+    btn.addEventListener("click", function () { copyText(code.innerText || code.textContent, btn); });
+  });
+
+  /* ---------- reveal on scroll ---------- */
+  if (!reduced.matches && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          en.target.classList.add("in");
+          io.unobserve(en.target);
+        }
+      });
+    }, { rootMargin: "0px 0px -6% 0px" });
+    secEls.forEach(function (s) { s.classList.add("reveal"); io.observe(s); });
+  }
+
+  /* ---------- initial paint ---------- */
+  onScroll();
+  /* ============================================================
+     SimEngine — shared canvas simulation engine
+     Techniques provide: nodes (tooltip hit areas) + steps with
+     { label, caption, hint, dur, draw(ctx, w, h, S, H, C) }.
+     Handles play/pause/restart/speed, step chips, captions,
+     tooltips, scaling, theme refresh and reduced motion.
+     ============================================================ */
+  window.SimEngine = (function () {
+    var SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+    var MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+    var DW = 960, DH = 540;
+
+    function hexA(hex, a) {
+      hex = (hex || "").trim();
+      if (hex.charAt(0) === "#") {
+        if (hex.length === 4) hex = "#" + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2) + hex.charAt(3) + hex.charAt(3);
+        var n = parseInt(hex.slice(1), 16);
+        if (isNaN(n)) return hex;
+        return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+      }
+      return hex;
+    }
+    function resolveColors() {
+      var cs = window.getComputedStyle(rootEl);
+      var names = ["bg", "surface", "surface-2", "elevated", "text", "muted", "border", "border-strong",
+        "accent", "accent-2", "violet", "success", "warning", "danger", "high", "low"];
+      var c = {};
+      for (var i = 0; i < names.length; i++) {
+        var v = cs.getPropertyValue("--" + names[i]);
+        c[names[i]] = v ? v.trim() : "#888888";
+      }
+      return c;
+    }
+
+    var H = {
+      hexA: hexA,
+      _C: null,
+      rr: function (ctx, x, y, w, h, r) {
+        r = Math.min(r || 8, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      },
+      grid: function (ctx, w, h, C) {
+        ctx.save();
+        ctx.fillStyle = hexA(C.border, 0.42);
+        for (var x = 24; x < w; x += 48) {
+          for (var y = 24; y < h; y += 48) {
+            ctx.beginPath();
+            ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      },
+      node: function (ctx, x, y, w, h, o) {
+        o = o || {};
+        var C = this._C;
+        var state = o.state || "idle";
+        var fill = C["surface-2"];
+        var stroke = C["border-strong"];
+        if (state === "active") stroke = C.accent;
+        if (state === "alert") stroke = C.danger;
+        if (state === "good") stroke = C.success;
+        if (state === "warn") stroke = C.warning;
+        if (state === "dead") { stroke = C.danger; fill = hexA(C.danger, 0.10); }
+        ctx.save();
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.lineWidth = state === "idle" ? 1 : 1.7;
+        ctx.strokeStyle = stroke;
+        ctx.stroke();
+        if (state === "dead") {
+          ctx.strokeStyle = hexA(C.danger, 0.95);
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(x + 9, y + 9);
+          ctx.lineTo(x + w - 9, y + h - 9);
+          ctx.moveTo(x + w - 9, y + 9);
+          ctx.lineTo(x + 9, y + h - 9);
+          ctx.stroke();
+        }
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        var cx = x + w / 2;
+        if (o.sub) {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2 - 8, w - 14);
+          ctx.fillStyle = C.muted;
+          ctx.font = "400 10.5px " + MONO;
+          ctx.fillText(o.sub, cx, y + h / 2 + 10, w - 14);
+        } else {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2, w - 14);
+        }
+        ctx.restore();
+      },
+      arrow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var ang = Math.atan2(y2 - y1, x2 - x1);
+        var head = o.head || 9;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = o.width || 1.6;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2 - Math.cos(ang) * head, y2 - Math.sin(ang) * head);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - Math.cos(ang - 0.42) * head, y2 - Math.sin(ang - 0.42) * head);
+        ctx.lineTo(x2 - Math.cos(ang + 0.42) * head, y2 - Math.sin(ang + 0.42) * head);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      },
+      flow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var t = o.t || 0;
+        var n = o.n || 3;
+        var speed = o.speed == null ? 0.32 : o.speed;
+        var size = o.size || 3.2;
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.32);
+        ctx.lineWidth = 1.2;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        for (var i = 0; i < n; i++) {
+          var f = (t * speed + i / n) % 1;
+          var px = x1 + (x2 - x1) * f;
+          var py = y1 + (y2 - y1) * f;
+          ctx.beginPath();
+          ctx.arc(px, py, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      },
+      pulse: function (ctx, x, y, r, color, o) {
+        o = o || {};
+        var p = ((o.t || 0) * 0.8 + (o.phase || 0)) % 1;
+        var rr2 = r * (0.4 + p * 0.9);
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.55 * (1 - p));
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, rr2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      },
+      text: function (ctx, str, x, y, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.fillStyle = o.color || C.text;
+        ctx.font = (o.weight || "400") + " " + (o.size || 13) + "px " + (o.mono ? MONO : SANS);
+        ctx.textAlign = o.align || "left";
+        ctx.textBaseline = o.baseline || "middle";
+        ctx.fillText(str, x, y, o.maxWidth);
+        ctx.restore();
+      },
+      chip: function (ctx, str, x, y, color, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.font = "700 11px " + MONO;
+        var w = ctx.measureText(str).width + 18;
+        var h = 21;
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = hexA(color, o.bgA == null ? 0.13 : o.bgA);
+        ctx.fill();
+        ctx.strokeStyle = hexA(color, 0.55);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(str, x + 9, y + h / 2 + 0.5);
+        ctx.restore();
+        return w;
+      }
+    };
+
+    function init(cfg) {
+      var canvas = doc.getElementById(cfg.canvas || "simCanvas");
+      if (!canvas || !canvas.getContext) return null;
+      var stage = canvas.parentElement;
+      var ctx = canvas.getContext("2d");
+      var steps = cfg.steps || [];
+      var nodes = cfg.nodes || [];
+      var C = resolveColors();
+      H._C = C;
+      var st = { i: 0, p: 0, t: 0, playing: false, speed: 1, last: 0, hover: null, scale: 1 };
+      var rm = reduced.matches;
+
+      var playBtn = doc.getElementById("simPlay");
+      var pauseBtn = doc.getElementById("simPause");
+      var restartBtn = doc.getElementById("simRestart");
+      var speedSel = doc.getElementById("simSpeed");
+      var stepsBox = doc.getElementById("simSteps");
+      var capLabel = doc.getElementById("simCapLabel");
+      var capText = doc.getElementById("simCaption");
+      var capHint = doc.getElementById("simHint");
+      var tip = doc.getElementById("simTip");
+
+      var chips = [];
+      steps.forEach(function (s, idx) {
+        var b = doc.createElement("button");
+        b.type = "button";
+        b.className = "step-chip";
+        b.textContent = (idx + 1) + ". " + s.label;
+        b.addEventListener("click", function () { go(idx); });
+        if (stepsBox) stepsBox.appendChild(b);
+        chips.push(b);
+      });
+
+      function syncCaption() {
+        var s = steps[st.i];
+        if (!s) return;
+        if (capLabel) capLabel.textContent = "Step " + (st.i + 1) + " of " + steps.length + " — " + s.label;
+        if (capText) capText.textContent = s.caption;
+        if (capHint) capHint.textContent = "Defender hint: " + s.hint;
+        chips.forEach(function (c, i) {
+          c.classList.toggle("active", i === st.i);
+          if (i === st.i) c.setAttribute("aria-current", "step");
+          else c.removeAttribute("aria-current");
+        });
+      }
+      function syncButtons() {
+        if (playBtn) playBtn.disabled = st.playing;
+        if (pauseBtn) pauseBtn.disabled = !st.playing;
+      }
+      function go(i) {
+        st.i = Math.max(0, Math.min(steps.length - 1, i));
+        st.p = 0;
+        syncCaption();
+      }
+      function play() {
+        if (!steps.length) return;
+        if (st.i === steps.length - 1 && st.p >= 1) go(0);
+        st.playing = true;
+        syncButtons();
+      }
+      function pause() { st.playing = false; syncButtons(); }
+      function restart() { st.t = 0; go(0); }
+      if (playBtn) playBtn.addEventListener("click", play);
+      if (pauseBtn) pauseBtn.addEventListener("click", pause);
+      if (restartBtn) restartBtn.addEventListener("click", restart);
+      if (speedSel) speedSel.addEventListener("change", function () { st.speed = parseFloat(speedSel.value) || 1; });
+
+      function fit() {
+        var w = (stage && stage.clientWidth) || 960;
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var cssH = Math.round(w * DH / DW);
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(cssH * dpr);
+        canvas.style.height = cssH + "px";
+        st.scale = canvas.width / DW;
+      }
+      window.addEventListener("resize", function () { fit(); render(); });
+
+      function toDesign(e) {
+        var r = canvas.getBoundingClientRect();
+        return { x: (e.clientX - r.left) / r.width * DW, y: (e.clientY - r.top) / r.height * DH };
+      }
+      function hit(d) {
+        for (var i = nodes.length - 1; i >= 0; i--) {
+          var n = nodes[i];
+          if (d.x >= n.x && d.x <= n.x + n.w && d.y >= n.y && d.y <= n.y + n.h) return n;
+        }
+        return null;
+      }
+      canvas.addEventListener("pointermove", function (e) {
+        if (!nodes.length) return;
+        var n = hit(toDesign(e));
+        st.hover = n ? n.id : null;
+        canvas.style.cursor = n ? "pointer" : "default";
+        if (tip) {
+          if (n) {
+            tip.textContent = "";
+            var b1 = doc.createElement("strong");
+            b1.textContent = n.label;
+            var p1 = doc.createElement("span");
+            p1.textContent = n.desc || "";
+            tip.appendChild(b1);
+            tip.appendChild(p1);
+            var wrapR = stage.getBoundingClientRect();
+            var lx = e.clientX - wrapR.left + 14;
+            var ly = e.clientY - wrapR.top + 14;
+            lx = Math.max(4, Math.min(lx, wrapR.width - 250));
+            ly = Math.max(4, Math.min(ly, wrapR.height - 90));
+            tip.style.left = lx + "px";
+            tip.style.top = ly + "px";
+            tip.hidden = false;
+          } else { tip.hidden = true; }
+        }
+      });
+      canvas.addEventListener("pointerleave", function () {
+        st.hover = null;
+        if (tip) tip.hidden = true;
+      });
+
+      if (window.MutationObserver) {
+        var mo = new MutationObserver(function () {
+          C = resolveColors();
+          H._C = C;
+          render();
+        });
+        mo.observe(rootEl, { attributes: true, attributeFilter: ["data-theme"] });
+      }
+
+      function render() {
+        var s = st.scale || 1;
+        ctx.setTransform(s, 0, 0, s, 0, 0);
+        ctx.fillStyle = C.bg;
+        ctx.fillRect(0, 0, DW, DH);
+        H.grid(ctx, DW, DH, C);
+        var step = steps[st.i];
+        if (step && step.draw) {
+          step.draw(ctx, DW, DH, { i: st.i, p: st.p, t: st.t, hover: st.hover, playing: st.playing, reduced: rm }, H, C);
+        }
+      }
+
+      function frame(ts) {
+        var dt = st.last ? Math.min((ts - st.last) / 1000, 0.08) : 0;
+        st.last = ts;
+        st.t += dt;
+        if (st.playing && steps.length) {
+          var d = steps[st.i].dur || 4.5;
+          st.p += dt * st.speed / d;
+          if (st.p >= 1) {
+            if (st.i < steps.length - 1) { st.i++; st.p = 0; syncCaption(); }
+            else { st.p = 1; pause(); }
+          }
+        }
+        render();
+        window.requestAnimationFrame(frame);
+      }
+
+      fit();
+      syncCaption();
+      syncButtons();
+      if (rm) { st.p = 1; } // reduced motion: static first step, no autoplay
+      window.requestAnimationFrame(frame);
+      return { go: go, play: play, pause: pause, restart: restart, state: st };
+    }
+
+    return { init: init, h: H };
+  })();
+
+  /* ---------- boot the simulation if present ---------- */
+  if (typeof window.SIM_STORY === "function") {
+    try { window.SIM_STORY(); } catch (e) { /* keep the rest of the page working */ }
+  }
+})();
+
+</script>
+</body>
+</html>

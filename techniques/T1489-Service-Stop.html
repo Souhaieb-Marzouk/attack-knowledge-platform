@@ -1,0 +1,2792 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1489 - Service Stop · Detection Engineering Guide</title>
+<meta name="description" content="Beginner-friendly detection guide for MITRE ATT&amp;CK T1489 (Service Stop): attacker view, SOC view, Sigma rules, Splunk SPL, mitigations and a real case study.">
+<script>(function(){try{var t=null;try{t=localStorage.getItem("atk-theme")}catch(e){}if(!t){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark"}document.documentElement.setAttribute("data-theme",t)}catch(e){document.documentElement.setAttribute("data-theme","dark")}})();</script>
+<style>
+/* ============================================================
+   Detection Engineering Guide — shared design system
+   Dark + light themes, layout, components. No external assets.
+   ============================================================ */
+
+:root {
+  --bg: #0b0f1a;
+  --surface: #121a2e;
+  --surface-2: #172138;
+  --elevated: #1a2542;
+  --text: #e7edf8;
+  --muted: #9aa8c0;
+  --border: #24314e;
+  --border-strong: #2f4066;
+  --accent: #4f8cff;
+  --accent-2: #22d3ee;
+  --violet: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --high: #fb923c;
+  --low: #4ade80;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --radius-card: 14px;
+  --radius-ctl: 9px;
+  --shadow-soft: 0 10px 30px rgba(2, 6, 18, 0.35);
+  --max-w: 1280px;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f3f6fc;
+  --surface: #ffffff;
+  --surface-2: #f5f8ff;
+  --elevated: #e9eefa;
+  --text: #182238;
+  --muted: #5a6a85;
+  --border: #d9e2f2;
+  --border-strong: #c2d0ea;
+  --accent: #2f6fe4;
+  --accent-2: #0891b2;
+  --violet: #7c5ce0;
+  --success: #0d9e6e;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --high: #c2410c;
+  --low: #15803d;
+  --shadow-soft: 0 10px 30px rgba(24, 34, 56, 0.10);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 96px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16.5px;
+  line-height: 1.65;
+  overflow-x: clip;
+}
+
+img, canvas { max-width: 100%; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+::selection { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+p, li, dd, dt { overflow-wrap: break-word; }
+p { max-width: 78ch; }
+
+h1, h2, h3, h4 {
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.5em;
+  font-weight: 750;
+  text-wrap: balance;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+:where(p, li, td, th, dd, h3, h4) > code:not(pre code) {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.08em 0.4em;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0; border: 0;
+  clip: rect(0 0 0 0); clip-path: inset(50%);
+  overflow: hidden; white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px; top: -48px;
+  z-index: 200;
+  background: var(--accent);
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 0 0 10px 10px;
+  font-weight: 600;
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 0; text-decoration: none; }
+
+/* ---------- progress bar ---------- */
+
+.progress-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  z-index: 90;
+  background: transparent;
+  pointer-events: none;
+}
+#progressFill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.08s linear;
+}
+
+/* ---------- hero ---------- */
+
+.hero {
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(900px 320px at 12% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 70%),
+    radial-gradient(700px 300px at 88% -20%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 70%),
+    linear-gradient(color-mix(in srgb, var(--surface) 55%, var(--bg)), var(--bg));
+}
+.hero-inner {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 44px 24px 36px;
+}
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin: 0 0 14px;
+}
+.page-title {
+  font-size: clamp(1.8rem, 3.6vw, 2.65rem);
+  margin: 0 0 14px;
+  max-width: 22ch;
+}
+.tech-id {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.62em;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 12px;
+  padding: 0.08em 0.5em;
+  margin-right: 0.45em;
+  vertical-align: 0.18em;
+  white-space: nowrap;
+}
+.hero-intro {
+  color: var(--muted);
+  font-size: 1.06rem;
+  max-width: 68ch;
+  margin: 0 0 20px;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 24px;
+}
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+.chip b, .chip strong { color: var(--text); font-weight: 600; }
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.fact-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-soft);
+}
+.fact-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.fact-value { font-weight: 700; font-size: 1.02rem; line-height: 1.35; }
+.fact-sub { color: var(--muted); font-size: 0.85rem; margin-top: 4px; }
+
+/* ---------- layout: sticky TOC + main ---------- */
+
+.layout {
+  max-width: var(--max-w);
+  margin: 0 auto;
+  padding: 40px 24px 110px;
+  display: grid;
+  grid-template-columns: 262px minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.sidebar { position: relative; }
+.toc-card {
+  position: sticky;
+  top: 28px;
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px 12px;
+  scrollbar-width: thin;
+}
+.toc-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  padding: 0 10px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-list li { margin: 2px 0; }
+.toc-list a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+  box-shadow: inset 3px 0 0 transparent;
+}
+.toc-list a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.toc-list a.active {
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.toc-list li.sub a { padding-left: 22px; font-size: 0.84rem; }
+.content { min-width: 0; }
+
+/* ---------- sections ---------- */
+
+.sec { margin-top: 64px; }
+.content > .sec:first-child { margin-top: 0; }
+.sec-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.sec-num {
+  flex: none;
+  min-width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.sec-head h2 {
+  font-size: clamp(1.45rem, 2.4vw, 1.85rem);
+  margin: 0;
+}
+.sec-intro {
+  color: var(--muted);
+  margin: 2px 0 22px 56px;
+  max-width: 74ch;
+}
+.sec h3 {
+  font-size: 1.16rem;
+  margin: 30px 0 12px;
+  scroll-margin-top: 92px;
+}
+.sec h4 { font-size: 1rem; margin: 20px 0 8px; }
+
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.5s ease, transform 0.5s ease; }
+.reveal.in { opacity: 1; transform: none; }
+
+/* ---------- cards & grids ---------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-soft);
+}
+.card > h3:first-child, .card > h4:first-child { margin-top: 0; }
+.card p:last-child, .card ul:last-child, .card ol:last-child { margin-bottom: 0; }
+.card-title {
+  font-weight: 700;
+  font-size: 1.02rem;
+  margin: 0 0 8px;
+}
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.grid-2 > *, .grid-3 > * { min-width: 0; }
+
+.kv-list { margin: 0; display: grid; gap: 0; }
+.kv-list > div {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.kv-list > div:last-child { border-bottom: 0; }
+.kv-list dt {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding-top: 2px;
+}
+.kv-list dd { margin: 0; font-size: 0.95rem; }
+/* ---------- callouts ---------- */
+
+.callout {
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  padding: 13px 16px;
+  margin: 14px 0;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .callout-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 4px;
+  color: var(--accent);
+}
+.callout.warning { border-left-color: var(--warning); background: color-mix(in srgb, var(--warning) 8%, var(--surface)); }
+.callout.warning .callout-label { color: var(--warning); }
+.callout.good { border-left-color: var(--success); background: color-mix(in srgb, var(--success) 8%, var(--surface)); }
+.callout.good .callout-label { color: var(--success); }
+.callout.danger { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+.callout.danger .callout-label { color: var(--danger); }
+.callout.note { border-left-color: var(--violet); background: color-mix(in srgb, var(--violet) 8%, var(--surface)); }
+.callout.note .callout-label { color: var(--violet); }
+
+/* ---------- badges ---------- */
+
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+.badge.sev-critical { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.badge.sev-high { color: var(--high); border-color: color-mix(in srgb, var(--high) 55%, transparent); background: color-mix(in srgb, var(--high) 12%, transparent); }
+.badge.sev-medium { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 12%, transparent); }
+.badge.sev-low { color: var(--low); border-color: color-mix(in srgb, var(--low) 55%, transparent); background: color-mix(in srgb, var(--low) 12%, transparent); }
+.badge.cat { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 50%, transparent); background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
+.badge.ok { color: var(--success); border-color: color-mix(in srgb, var(--success) 50%, transparent); background: color-mix(in srgb, var(--success) 10%, transparent); }
+
+/* ---------- tables ---------- */
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  margin: 14px 0;
+}
+.table-wrap table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.table-wrap.wide table { min-width: 780px; }
+.table-wrap th {
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: var(--surface-2);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table-wrap td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.table-wrap tbody tr:last-child td { border-bottom: 0; }
+.table-wrap tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+
+/* ---------- code blocks ---------- */
+
+.code-block {
+  margin: 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--elevated);
+  border-bottom: 1px solid var(--border);
+}
+.code-lang {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.code-block pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  scrollbar-width: thin;
+}
+.code-block pre code { white-space: pre; }
+
+/* ---------- buttons & controls ---------- */
+
+.btn, .step-chip {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+.btn:hover, .step-chip:hover { background: var(--elevated); border-color: var(--accent); }
+.btn:active, .step-chip:active { transform: translateY(1px); }
+.btn:disabled, .step-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn.copied { color: var(--success); border-color: var(--success); }
+.copy-btn { padding: 4px 12px; font-size: 0.8rem; }
+.select {
+  font-family: var(--font-sans);
+  font-size: 0.88rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-ctl);
+  padding: 6px 10px;
+}
+
+/* ---------- timeline ---------- */
+
+.timeline {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0 0 0 24px;
+  border-left: 2px solid var(--border);
+}
+.timeline li { position: relative; margin: 0 0 18px; }
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: -31px;
+  top: 5px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.tl-when {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-2);
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+.tl-what { font-weight: 700; margin-bottom: 4px; }
+.timeline p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- triage flow ---------- */
+
+.flow {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  counter-reset: flow;
+}
+.flow li {
+  counter-increment: flow;
+  position: relative;
+  padding: 0 0 18px 52px;
+}
+.flow li::before {
+  content: counter(flow);
+  position: absolute;
+  left: 0; top: 0;
+  width: 34px; height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.flow li::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 38px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--border);
+}
+.flow li:last-child::after { display: none; }
+.flow .flow-step { font-weight: 700; display: block; margin-bottom: 3px; }
+.flow p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+/* ---------- checklists ---------- */
+
+.check { list-style: none; margin: 12px 0; padding: 0; }
+.check li {
+  position: relative;
+  padding: 6px 0 6px 34px;
+  border-bottom: 1px dashed var(--border);
+}
+.check li:last-child { border-bottom: 0; }
+.check li::before {
+  content: "";
+  position: absolute;
+  left: 4px; top: 11px;
+  width: 15px; height: 15px;
+  border-radius: 4px;
+  border: 2px solid var(--accent);
+  background: transparent;
+}
+
+/* ---------- attack chain strip ---------- */
+
+.chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.chain-step {
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 11px;
+  white-space: nowrap;
+}
+.chain-step.hot {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  font-weight: 700;
+}
+.chain-arrow { color: var(--muted); }
+
+/* ---------- misc helpers ---------- */
+
+.muted { color: var(--muted); }
+.small { font-size: 0.86rem; }
+.mt-0 { margin-top: 0; }
+.mono { font-family: var(--font-mono); }
+.stack > * + * { margin-top: 12px; }
+/* ---------- simulation ---------- */
+
+.sim-shell { padding: 0; overflow: hidden; }
+.sim-stage {
+  position: relative;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.sim-stage canvas { display: block; width: 100%; }
+.sim-tip {
+  position: absolute;
+  z-index: 5;
+  max-width: 240px;
+  background: var(--elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  box-shadow: var(--shadow-soft);
+  pointer-events: none;
+}
+.sim-tip strong { display: block; font-family: var(--font-mono); font-size: 12px; color: var(--accent-2); margin-bottom: 2px; }
+.sim-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sim-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin-left: auto;
+}
+.sim-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 12px 14px 2px;
+}
+.step-chip { font-size: 0.8rem; padding: 4px 11px; border-radius: 999px; }
+.step-chip.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  font-weight: 700;
+}
+.sim-caption {
+  padding: 12px 14px 16px;
+}
+.sim-cap-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 6px;
+}
+.sim-cap-text { margin: 0 0 10px; }
+.sim-hint {
+  border-left: 3px solid var(--success);
+  background: color-mix(in srgb, var(--success) 8%, var(--surface));
+  border-radius: 0 10px 10px 0;
+  padding: 9px 13px;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+/* ---------- floating controls ---------- */
+
+.fab {
+  position: fixed;
+  z-index: 70;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 999px;
+  background: var(--elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-soft);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s ease;
+}
+.fab:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.theme-fab { left: 18px; bottom: 18px; width: 46px; height: 46px; font-size: 1.05rem; }
+.back-top { right: 18px; bottom: 74px; padding: 0 16px; opacity: 0; pointer-events: none; transform: translateY(8px); }
+.back-top.show { opacity: 1; pointer-events: auto; transform: none; }
+.contents-fab { right: 18px; bottom: 18px; padding: 0 16px; display: none; }
+
+/* ---------- mobile contents overlay ---------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  background: rgba(4, 8, 18, 0.55);
+  border: 0;
+  padding: 0;
+}
+.toc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 24px;
+  overflow: auto;
+}
+.toc-overlay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.toc-overlay-head span {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.toc-overlay .toc-list a { font-size: 1rem; padding: 10px 12px; }
+.toc-overlay .toc-list li.sub a { padding-left: 30px; font-size: 0.9rem; }
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 1040px) {
+  .layout { display: block; padding-top: 28px; }
+  .sidebar { display: none; }
+  .contents-fab { display: inline-flex; }
+  .sec { margin-top: 48px; }
+  .sec-intro { margin-left: 0; }
+}
+
+@media (max-width: 900px) {
+  .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .hero-inner { padding: 30px 16px 26px; }
+  .layout { padding: 24px 16px 96px; }
+  .fact-grid { grid-template-columns: 1fr; gap: 10px; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .kv-list > div { grid-template-columns: 1fr; gap: 2px; }
+  .sec { margin-top: 40px; }
+  .sec-head { gap: 10px; }
+  .sec-num { min-width: 36px; height: 36px; font-size: 0.95rem; border-radius: 10px; }
+  .sec-intro { margin-bottom: 16px; }
+  .sim-speed { margin-left: 0; width: 100%; }
+  .sim-toolbar .btn { flex: 1 1 auto; }
+  .theme-fab { left: 12px; bottom: 12px; }
+  .back-top { right: 12px; bottom: 78px; }
+  .contents-fab { right: 12px; bottom: 12px; }
+  .page-title { font-size: clamp(1.55rem, 7.2vw, 2rem); }
+}
+
+@media (max-width: 400px) {
+  .hero-inner { padding: 24px 12px 20px; }
+  .layout { padding: 18px 12px 90px; }
+  .chip { font-size: 11px; padding: 3px 9px; }
+}
+
+/* ---------- reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1; transform: none; }
+  #progressFill { transition: none; }
+}
+
+/* ---------- print ---------- */
+
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f4f6fa;
+    --elevated: #eef1f7;
+    --text: #111827;
+    --muted: #4b5563;
+    --border: #d1d5db;
+    --border-strong: #9ca3af;
+    --accent: #1d4ed8;
+    --accent-2: #0e7490;
+    --violet: #6d28d9;
+    --success: #047857;
+    --warning: #92400e;
+    --danger: #b91c1c;
+    --high: #9a3412;
+    --low: #166534;
+    --shadow-soft: none;
+  }
+  body { background: #fff; color: #111827; font-size: 11.5pt; }
+  .sidebar, .progress-bar, .fab, .back-top, .contents-fab, .theme-fab,
+  .sim-toolbar, .sim-steps, .copy-btn, .scrim, .toc-overlay, .skip-link {
+    display: none !important;
+  }
+  .hero { border-bottom: 1px solid #ccc; background: #fff; }
+  .layout { display: block; max-width: none; padding: 0; }
+  .sec { margin-top: 22pt; }
+  .sec-intro { margin-left: 0; }
+  a { color: #1d4ed8; text-decoration: underline; }
+  .code-block, .table-wrap, .card, .callout { box-shadow: none; break-inside: avoid; }
+  .code-block pre { white-space: pre-wrap; overflow: visible; }
+  .table-wrap { overflow: visible; }
+  .table-wrap table { min-width: 0; }
+  h2, h3 { break-after: avoid; }
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1489"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip-link" href="#mainContent">Skip to main content</a>
+<div class="progress-bar" aria-hidden="true"><div id="progressFill"></div></div>
+
+<div class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&amp;CK · Impact</p>
+    <h1 class="page-title" id="pageTitle"><span class="tech-id">T1489</span> Service Stop</h1>
+    <p class="hero-intro">This guide explains how attackers stop or disable services to break availability, free locked files, or blind security tools. You will learn how to spot it and how to stop it.</p>
+    <div class="chip-row">
+      <span class="chip">Tactic: Impact</span>
+      <span class="chip">Platforms: Windows · macOS · Linux · ESXi · IaaS</span>
+      <span class="chip">Technique version 1.4 · created 29 March 2019</span>
+      <span class="chip">Detection strategy: DET0021</span>
+      <span class="chip">Guide v2.0</span>
+    </div>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <div class="fact-label">Attack stage</div>
+        <div class="fact-value">Impact and preparation</div>
+        <div class="fact-sub">Often runs just before encryption</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Attacker goal</div>
+        <div class="fact-value">Break locks, blind defenses</div>
+        <div class="fact-sub">Stop EDR, backup and database services</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Key evidence</div>
+        <div class="fact-value">Service control events</div>
+        <div class="fact-sub">System 7036, 7040, 7034 plus command logs</div>
+      </div>
+      <div class="fact-card">
+        <div class="fact-label">Detection effort</div>
+        <div class="fact-value">Low to medium</div>
+        <div class="fact-sub">Watch for stop bursts and security service names</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar" aria-label="Table of contents">
+    <nav class="toc-card" aria-label="Sections">
+      <div class="toc-title">Contents</div>
+      <ul class="toc-list" id="tocList"></ul>
+    </nav>
+  </aside>
+  <main class="content" id="mainContent">
+<section class="sec" id="sec-1-overview">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2>Overview</h2></div>
+  <p class="sec-intro">A plain-language tour of Service Stop: what it is, why attackers do it, and what this guide teaches you.</p>
+
+  <p><strong>Service Stop</strong> means an attacker stops or disables <em>services</em> on a computer or in the cloud. A service is a background program that runs without a window: antivirus protection, a database engine, a backup agent, or a mail system. Each service does quiet work that other programs depend on. When an attacker stops the right services, the business feels it at once. Websites stop answering, backups stop running, and protection tools go silent.</p>
+  <p>Attackers use this technique for three main goals. First, they stop security tools so nothing records their next steps. Second, they stop backup agents, database engines, and shadow copy writers. These services keep files locked open; stopping them frees the files for encryption. Third, they stop many services at once to make whole systems unusable. On the cloud side, attackers with stolen admin roles can abuse cloud APIs as well. With the AWS <code>DisableAPIServiceAccess</code> call, they can stop a cloud service from creating its service-linked roles on new accounts across the organization. A service-linked role is a special role that connects one cloud service to one account.</p>
+  <p>This technique matters because it changes how an incident ends. A ransomware crew that first stops your protection and your backups leaves you with two bad choices: restore from something they did not reach, or pay. ATT&amp;CK procedure records show this pattern across many groups. Conti stopped up to 146 Windows services covering security, backup, database, and email tools. Lazarus stopped <code>MSExchangeIS</code>, so Exchange mail content became unreachable. RobbinHood stopped 181 services. Prestige stopped <code>MSSQLSERVER</code> before encrypting. When you see services stopping in a burst, you are usually watching the final minutes before encryption.</p>
+
+  <div class="card">
+    <h3 class="card-title">Where it sits in the attack chain</h3>
+    <p>Attackers reach this stage late. Stopping services needs admin rights or a serious local flaw, so they must already control the machine or the cloud account. When you see this technique, the quiet phase is over and the attacker is causing harm or preparing to cause harm.</p>
+    <p class="chain">
+      <span class="chain-step">Initial Access</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Execution</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Lateral Movement</span><span class="chain-arrow">→</span>
+      <span class="chain-step">Privilege Escalation</span><span class="chain-arrow">→</span>
+      <span class="chain-step hot">Impact — T1489</span>
+    </p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What you will learn in this guide</h3>
+      <ul class="check">
+        <li>Why attackers stop services, and which services they pick first.</li>
+        <li>Which exact Windows, Linux, macOS, and cloud log events show the attack.</li>
+        <li>Five ready-to-use Sigma rules with matching Splunk queries.</li>
+        <li>How the Conti playbook used this technique against Ireland's health service.</li>
+        <li>Which defenses make service stops fail or matter less.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Key facts at a glance</h3>
+      <dl class="kv-list">
+        <div><dt>ATT&amp;CK ID</dt><dd>T1489 — Service Stop.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact (availability).</dd></div>
+        <div><dt>Platforms</dt><dd>Windows, Linux, macOS, ESXi hypervisors, and IaaS cloud.</dd></div>
+        <div><dt>Version</dt><dd>1.4, created 29 March 2019.</dd></div>
+        <div><dt>Sub-techniques</dt><dd>None.</dd></div>
+        <div><dt>Detection strategy</dt><dd>DET0021 — Behavioral Detection for Service Stop across Platforms.</dd></div>
+        <div><dt>Typical actors</dt><dd>Ransomware groups such as Conti, LockBit 3.0, Wizard Spider, Prestige, and EKANS.</dd></div>
+        <div><dt>Main data sources</dt><dd>Service control events, process creation with command line, PowerShell script logs, cloud audit logs.</dd></div>
+      </dl>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">T1489 and T1562.001 — the overlap</div>
+    <p>ATT&amp;CK also lists <strong>T1562.001 Impair Defenses</strong>, which covers defeating security tools. The difference is the goal. In T1489 the attacker stops a service to break availability or to free locked files. In T1562.001 the attacker stops a security tool to stay hidden. Stopping an EDR agent fits both goals, so the same event can map to both techniques. Log it once, and let your incident process decide the label.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-2-simulation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2>Animated simulation</h2></div>
+  <p class="sec-intro">Watch the attack unfold on a compromised application server, and see at the same time what the SOC can observe. Hover over any box for details, or use the step buttons to jump around.</p>
+
+  <div class="sim-shell card">
+    <div class="sim-stage">
+      <canvas id="simCanvas" width="960" height="540" role="img" aria-label="Animated simulation of T1489: an attacker with stolen admin rights enumerates services, fails to stop Windows Defender, stops the Sysmon service and backup and SQL services, runs a bulk stop storm, and is caught when the SIEM correlates the service stop burst with a lost EDR heartbeat; the SOC isolates the host and restores services."></canvas>
+      <div class="sim-tip" id="simTip" hidden></div>
+    </div>
+    <div class="sim-toolbar">
+      <button class="btn" id="simPlay" type="button">Play</button>
+      <button class="btn" id="simPause" type="button" disabled>Pause</button>
+      <button class="btn" id="simRestart" type="button">Restart</button>
+      <label class="sim-speed">Speed
+        <select id="simSpeed" class="select">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+    </div>
+    <div class="sim-steps" id="simSteps" aria-label="Simulation steps"></div>
+    <div class="sim-caption" aria-live="polite">
+      <div class="sim-cap-label" id="simCapLabel">Step 1 of 8</div>
+      <p class="sim-cap-text" id="simCaption">Press Play to start the simulation.</p>
+      <div class="sim-hint" id="simHint">Defender hints appear here during playback.</div>
+    </div>
+  </div>
+
+  <h3>Written version of the simulation</h3>
+  <p>The same story in text, for screen readers and for printing. Each step names the action, the evidence it leaves, and what the defender should notice.</p>
+
+  <div class="grid-2">
+    <div class="card"><h3 class="card-title">Step 1 — Shell with stolen creds</h3><p>The attacker signs in to APP01, a Windows application server, and opens a command shell. The account is an admin account stolen by an infostealer; that is malware that saves passwords and sends them to attackers. Nothing looks broken yet. Evidence: a Security event 4624 logon from a source outside the admin jump hosts. The SOC should compare every admin logon source with the known list.</p></div>
+    <div class="card"><h3 class="card-title">Step 2 — Map the services</h3><p>The attacker runs <code>sc query state= all</code> and <code>tasklist /svc</code> to list running services and the programs behind them. This is target selection: they pick protection, backup, and database services. Evidence: Sysmon event 1 with those command lines. The SOC should flag service enumeration run from an interactive admin session on a server.</p></div>
+    <div class="card"><h3 class="card-title">Step 3 — Defender stop fails</h3><p>The attacker runs <code>net stop WinDefend</code>. Tamper protection blocks the stop, because Windows Defender refuses commands from untrusted callers. Evidence: a Defender configuration event and the failed command in process logs. The SOC should alert on any attempt to stop security services, even when it fails.</p></div>
+    <div class="card"><h3 class="card-title">Step 4 — Sysmon stops</h3><p>The attacker runs <code>net stop Sysmon64</code>. This logging service has no tamper protection, so it stops, and System event 7036 records the stopped state. The host now sends less telemetry, and the SOC view shows a missing line. The SOC should treat a silent log source as an alert, not as a network fault.</p></div>
+    <div class="card"><h3 class="card-title">Step 5 — Free the locked files</h3><p>The attacker stops the SQL Writer and the backup agent services, for example <code>net stop SQLWriter</code> and <code>net stop VeeamVssSupport</code>. These services keep data files locked open, so stopping them frees the files for encryption. Evidence: System 7036 stop events for both services. The SOC should page when backup or SQL services stop outside a change window.</p></div>
+    <div class="card"><h3 class="card-title">Step 6 — The bulk stop storm</h3><p>The attacker runs a script that stops a dozen services in seconds: web, print, time, update, and more. System 7036 events pour in, and service nodes gray out one after another. Evidence: more than ten 7036 stop events for one host in minutes. The SOC should alert on the burst pattern, not on each event.</p></div>
+    <div class="card"><h3 class="card-title">Step 7 — SIEM links the facts</h3><p>The SIEM, the central log platform that stores and links events, connects three facts from one host. It links a burst of 7036 stop events, a missing EDR heartbeat, and a failed Defender stop minutes earlier. An EDR agent is the endpoint detection and response software that watches the host and reports to the SOC. The rule raises one critical incident for review instead of a pile of noise. Evidence: a correlated alert with host and account fields. The SOC should build this correlation rule before the attack, not during it.</p></div>
+    <div class="card"><h3 class="card-title">Step 8 — Isolate and restore</h3><p>The SOC isolates APP01 from the network, blocks the stolen account, and restarts the stopped services from a clean session. Data comes back from the immutable backup copy the attacker never reached. Evidence: incident ticket with the full timeline. The lesson: an offline backup copy turns a stop storm into a short delay.</p></div>
+  </div>
+</section>
+<section class="sec" id="sec-3-red-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2>Red team / hacker perspective</h2></div>
+  <p class="sec-intro">Understanding the attacker's choices helps you predict the move and place your sensors. Everything here is described for defense and for labs you own.</p>
+
+  <h3>When and why attackers use it</h3>
+  <p>Timing is the whole point. Ransomware crews run Service Stop in the final minutes before encryption, and they run it for one blunt reason: running services hold files open. A database engine keeps its data files locked, the Volume Shadow Copy service holds snapshots, and a backup agent locks what it is copying. An encryptor that hits locked files fails or skips them. Stopping those services first removes the locks. ATT&amp;CK describes exactly this use: attackers stop services so that data destruction or encryption can follow.</p>
+  <p>The second reason is blindness. Stopping the antivirus service, the Sysmon collector, or the EDR agent reduces what the victim can see while the attack runs. This is where T1489 overlaps with T1562.001 Impair Defenses, which covers defeating security tools. Crews do not care which label a defender picks; they simply stop what watches them. The leaked Conti playbooks told operators to stop security and backup services before doing anything else, and LockBit 3.0 terminates security, backup, and database services the same way.</p>
+  <p>The third reason is sabotage. Some groups stop so many services that the system becomes unusable even without encryption. Lazarus stopped <code>MSExchangeIS</code>, the Exchange information store, which made mailbox content unreachable. RobbinHood stopped 181 services on victim machines. Olympic Destroyer used the <code>ChangeServiceConfigW</code> API to disable every service it could find, so repair after the wipe became far harder.</p>
+
+  <h3>How it is performed</h3>
+  <p>On Windows, the attacker needs local admin or SYSTEM rights, then uses small built-in tools. On macOS, they unload background agents with <code>launchctl</code> instead. The commands below are the classic sequence, shown for lab study only. Run them only inside a disposable virtual machine that you own, and take a snapshot first.</p>
+
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">CMD · lab-only on a VM you own</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>:: 1. Map what is running: services and their processes
+sc query state= all
+tasklist /svc
+
+:: 2. Stop a service (needs admin)
+net stop Sysmon64
+sc stop Sysmon64
+
+:: 3. Make sure it never starts again
+sc config Sysmon64 start= disabled
+
+:: 4. Kill the process directly instead of the service
+taskkill /F /IM Sysmon64.exe /T
+
+:: 5. PowerShell variant of the same action
+powershell -c "Stop-Service -Name Sysmon64 -Force"
+
+:: 6. Linux variant: stop and disable a critical service
+systemctl stop auditd
+systemctl disable auditd
+
+:: 7. macOS variant: stop a background agent (launchd job)
+launchctl bootout system/com.example.agent
+launchctl disable system/com.example.agent
+
+:: 8. ESXi variant: force-kill a running virtual machine
+esxcli vm process kill --type=force --world-id=12345</code></pre>
+  </figure>
+
+  <p>Real crews use exactly these shapes. Conti scripts ran <code>net stop</code> against a list of up to 146 service names covering security, backup, database, and email software. Prestige ran <code>net stop MSSQLSERVER</code> on transport-sector servers before encryption. The Gentlemen Ransomware combined all three Windows steps: <code>sc config</code> with <code>start=disabled</code>, then <code>net stop</code> and <code>sc stop</code>, then <code>taskkill</code>. Medusa ransomware used <code>taskkill /F /IM /T</code> to kill whole process trees. Wizard Spider used <code>taskkill.exe</code> and <code>net.exe</code> against backup, catalog, and cloud services. EKANS stopped database, backup, and antivirus processes and even carried an industrial control list. Cheerscrypt ran <code>esxcli vm process kill</code> on ESXi hosts, and Ryuk used a <code>kill.bat</code> batch script. Indrik Spider reached remote servers with PsExec to stop services ahead of ransomware.</p>
+
+  <h3>Prerequisites and conditions</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">What the attacker needs first</h3>
+      <ul class="check">
+        <li>Admin, root, or SYSTEM rights on the Windows, Linux, or macOS host.</li>
+        <li>A shell, an RDP session, or a remote path such as PsExec or a scheduled task.</li>
+        <li>A service list, gathered with <code>sc query</code>, <code>tasklist /svc</code>, or <code>systemctl list-units</code>.</li>
+        <li>For the cloud variant: a role with rights over organization or service settings.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">What limits them</h3>
+      <ul class="check">
+        <li>Tamper protection blocks stops of well-shielded security services.</li>
+        <li>Services with restricted access control lists refuse stop calls from normal admins.</li>
+        <li>A stopped service restarts automatically unless the start type was changed too.</li>
+        <li>Every stop attempt and result lands in the System log, even when process logs are missing.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Common variations and attacker mistakes</h3>
+  <p>Variations mostly differ in which tool touches the service. Some attackers call the Windows Service Control Manager API directly from custom code, as Olympic Destroyer did with <code>ChangeServiceConfigW</code>. Others wrap the same calls in PowerShell with <code>Stop-Service</code> or in scripts with <code>kill.bat</code> style batch files. On Linux they may stop a service with <code>systemctl</code>, <code>service</code>, or a direct <code>kill</code> of the daemon process. On macOS they unload background jobs with <code>launchctl bootout</code> or <code>launchctl remove</code>. ATT&amp;CK's macOS detection guidance for this technique also names follow-on tools such as <code>rm</code> and <code>diskutil</code>. On hypervisors they kill virtual machine processes with <code>esxcli</code> or <code>vim-cmd</code>. The variety of tools is wide, but every path still passes through one or two choke points: a process creation event, a service control event, or both.</p>
+  <p>Attacker mistakes are worth studying. Stopping a service without changing its start type invites an automatic restart, so careless crews get their damage rolled back. Killing the wrong process can crash the encryptor itself, which ends the attack early. Some crews stop a monitoring service and forget the cloud-side heartbeat, so the vendor raises the alarm instead. And the loudest mistake is the stop storm: dozens of 7036 events in one minute is a pattern no legitimate maintenance produces, and it is the signature that catches Conti-style playbooks.</p>
+
+  <div class="callout danger">
+    <div class="callout-label">Danger · lab-only</div>
+    <p>Never run the commands above on a production or shared system. They stop real services, break running applications, and can disable protection tools. Use an isolated virtual machine with a fresh snapshot, and treat every command as if a real SOC were logging it.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-4-blue-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2>Blue team / SOC perspective</h2></div>
+  <p class="sec-intro">Service Stop is one of the most reliable ransomware warnings a SOC can get. Here is how to see it, what it leaves behind, and how to triage it fast.</p>
+
+  <h3>How defenders can see it</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">Service control events</h3>
+      <p>The Windows Service Control Manager writes event 7036 when a service enters the stopped state. It writes event 7040 when a start type changes, and event 7034 when a service crashes. These events are cheap to collect and very hard for an attacker to avoid, because the manager itself records them.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Process telemetry</h3>
+      <p>Sysmon event 1 or Security event 4688 with command-line auditing shows <code>net stop</code>, <code>sc config</code>, and <code>taskkill</code> with full arguments. PowerShell event 4104 shows <code>Stop-Service</code> script blocks. This source names the actor, the parent process, and the target service.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Health and heartbeat signals</h3>
+      <p>A stopped logging service stops sending logs. SIEM source health monitors, EDR heartbeats, and Linux journal or auditd feeds all show a missing stream. A silent host is evidence on its own, and cloud audit logs show the API path on cloud platforms.</p>
+    </div>
+  </div>
+
+  <h3>Artifacts the technique leaves behind</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Artifact</th><th>Where you find it</th><th>What it tells you</th></tr></thead>
+      <tbody>
+        <tr><td>System event 7036, service entered the stopped state.</td><td>Windows System log.</td><td>Which services stopped, in what order, on which host.</td></tr>
+        <tr><td>System event 7040, start type changed to disabled.</td><td>Windows System log.</td><td>The attacker wants the service to stay down after a reboot.</td></tr>
+        <tr><td>System event 7034, service terminated unexpectedly.</td><td>Windows System log.</td><td>A process kill instead of a clean stop, such as <code>taskkill</code>.</td></tr>
+        <tr><td>Process event for <code>net.exe</code>, <code>sc.exe</code>, or <code>taskkill.exe</code>.</td><td>Sysmon 1, Security 4688.</td><td>Direct proof with user, parent process, and exact target service.</td></tr>
+        <tr><td>PowerShell 4104 with <code>Stop-Service</code> or <code>Set-Service</code>.</td><td>PowerShell operational log.</td><td>Scripted variant of the same technique.</td></tr>
+        <tr><td>auditd EXECVE with <code>systemctl stop</code> or <code>kill</code>.</td><td>Linux audit logs.</td><td>Which daemon was stopped and by which account.</td></tr>
+        <tr><td><code>launchctl bootout</code> or <code>remove</code> for a background agent.</td><td>macOS process and unified logs.</td><td>A background job on a Mac was stopped or disabled.</td></tr>
+        <tr><td>Missing heartbeat or silent log source.</td><td>SIEM source health, EDR console.</td><td>Logging or protection was switched off on a live host.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Where to look, in priority order</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Log source</th><th>What to pull</th><th>Why it matters</th></tr></thead>
+      <tbody>
+        <tr><td>Windows System log from all servers.</td><td>Events 7036, 7040, and 7034 for the last hour.</td><td>Shows the stop burst even when process logging is off.</td></tr>
+        <tr><td>Sysmon or command-line auditing.</td><td>Events with <code>net stop</code>, <code>sc stop</code>, <code>sc config</code>, <code>taskkill</code>, <code>Stop-Service</code>.</td><td>Names the actor and the parent process behind the stops.</td></tr>
+        <tr><td>EDR console and heartbeats.</td><td>Agents offline, protection tamper events, failed stops.</td><td>Confirms the attacker is targeting security tools.</td></tr>
+        <tr><td>Backup application logs.</td><td>Agent service stopped, job failures, repository changes.</td><td>Backup tampering is the strongest ransomware precursor.</td></tr>
+        <tr><td>Linux audit and journal logs.</td><td><code>systemctl stop</code>, <code>kill</code> on sshd, auditd, mysql.</td><td>Covers the Linux side of the same play.</td></tr>
+        <tr><td>macOS endpoint and unified logs.</td><td><code>launchctl bootout</code> or <code>remove</code>, agent exits.</td><td>Covers Mac background agents that security tools depend on.</td></tr>
+        <tr><td>Cloud audit trails.</td><td><code>DisableAPIServiceAccess</code> and similar organization-level calls.</td><td>Covers the cloud variant that endpoint logs never show.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Why it matters and how it fits the chain</h3>
+  <p>Treat a service stop burst as a ransomware timer. Public incident reporting shows the gap between mass service stops and encryption is often minutes to a few hours. If you act inside that window, you can stop the encryption event entirely, because the attacker is still preparing. The signals also carry forensics. The user, parent process, and source host in a process event point back at the entry path. The target list tells you what the attacker plans next. A host whose EDR went quiet is not just a logging problem; it is the host the attacker plans to hurt.</p>
+  <p>The technique also multiplies recovery time. If a start type was changed to disabled, every restart leaves the service off, so the outage repeats until someone walks each host. That is why responders check 7040 events during recovery, not only 7036 events during detection.</p>
+
+  <h3>Short triage flow</h3>
+  <ol class="flow">
+    <li><span class="flow-step">Confirm the burst is real</span><p>Open the raw 7036 events for the host. Count the stops and list the service names. Compare with your change calendar to rule out planned maintenance.</p></li>
+    <li><span class="flow-step">Find the actor</span><p>Pull Sysmon 1 or 4688 events for <code>net.exe</code>, <code>sc.exe</code>, and <code>taskkill.exe</code> in the same window. Record the user, the parent process, and the source address.</p></li>
+    <li><span class="flow-step">Check the security tools</span><p>Confirm whether antivirus, EDR, or logging services were targeted. A failed stop with tamper protection still proves intent and deserves a high-severity alert.</p></li>
+    <li><span class="flow-step">Protect and restore visibility</span><p>Isolate the host, restart the stopped security services from a trusted session, and lock the involved account. Check 7040 events so disabled services do not stay off after reboot.</p></li>
+    <li><span class="flow-step">Scope and escalate</span><p>Search all hosts for the same commands and the same stop burst in the last 24 hours. Multiple hosts mean an active campaign, so page the incident commander and prepare ransomware checks.</p></li>
+  </ol>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>Write the triage steps above into your incident runbook before you need them. During a live event, the team that follows a prepared checklist restores visibility minutes faster than the team that improvises.</p>
+  </div>
+</section>
+<section class="sec" id="sec-5-detection">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2>Detection engineering deep dive</h2></div>
+  <p class="sec-intro">The practical core of this guide: regulation mapping, threat intelligence, ranked threats, and real log examples. Five Sigma rules with matching Splunk queries follow, ready to adapt.</p>
+
+  <h3 id="sec-5-1-regulation">5.1 Regulation mapping</h3>
+  <p>This technique attacks the availability of the systems that process data, so it maps to continuity and monitoring controls. Auditors ask for proof that services stay available, that outages are detected, and that recovery works. The table below shows what each framework expects and the evidence a detection program provides.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Framework and control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>GDPR</strong> — Article 32 (security of processing)</td>
+          <td>Requires the ability to restore availability of and access to personal data after an incident. Stopped services and backups turn an attack into a longer, reportable outage.</td>
+          <td>Documented service and backup recovery procedures, monitoring of service stop events, incident reports with recovery times.</td>
+        </tr>
+        <tr>
+          <td><strong>HIPAA Security Rule</strong> — §164.308(a)(7) contingency plan</td>
+          <td>Covered entities must keep an emergency mode operation plan and a data backup plan for electronic protected health information.</td>
+          <td>Written contingency plan, alerts on critical service stops, restore test results, records of outages affecting patient systems.</td>
+        </tr>
+        <tr>
+          <td><strong>ISO/IEC 27001:2022</strong> — A.8.13 (information backup), A.8.16 (monitoring activities)</td>
+          <td>Backup and protection services must be monitored, and anomalies that could undermine availability should be detected. T1489 is the failure case for both controls.</td>
+          <td>Monitoring rules for service control events, alert tickets for security and backup service stops, review records.</td>
+        </tr>
+        <tr>
+          <td><strong>SOC 2</strong> — CC7.4 (incident response execution), A1.2 (availability commitments)</td>
+          <td>Trust services criteria expect detection of attacks and recovery of the service the organization promised to customers.</td>
+          <td>Runbooks for service stop bursts, alert and response evidence, availability reports showing detection-to-recovery times.</td>
+        </tr>
+        <tr>
+          <td><strong>PCI DSS</strong> — 12.10.x (incident response plan and testing)</td>
+          <td>Organizations handling cardholder data must prepare for attacks that take systems out of service, which is exactly what a stop storm does.</td>
+          <td>IR plan covering service stop and ransomware scenarios, quarterly tests, records showing cardholder systems restored.</td>
+        </tr>
+        <tr>
+          <td><strong>NIST SP 800-53 Rev.5</strong> — CP-10 (recovery), SI-4 (system monitoring)</td>
+          <td>Federal and industry-aligned controls that require monitoring for attacks and tested recovery of system services.</td>
+          <td>Control implementation statements, monitoring coverage proof, service restoration test logs.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="sec-5-2-threat-intel">5.2 Threat intelligence</h3>
+  <p>Intelligence makes your detection rules stronger and your priorities honest. For this technique the picture is unusually clear, because nearly every destructive campaign since 2017 has stopped services with the same small set of tools. Collect from several source types, then record how confident you are in each finding before you change a rule or a runbook.</p>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">MITRE ATT&amp;CK</h3>
+      <p>Start with the technique page and its procedure examples. The group and malware list for T1489 is long and current, which makes rule coverage easy to justify.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Vendor reporting</h3>
+      <p>Security vendor blogs publish exact service names, command lines, and timelines for each crew. Turn their incident timelines into your detection logic and tuning notes.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">OSINT and ISACs</h3>
+      <p>Free sources such as CISA advisories (CISA is the US cyber defense agency) and the StopRansomware guide share tactics early. Sector ISACs, which are information sharing groups for each industry, tell you which crews target organizations like yours.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Commercial feeds</h3>
+      <p>Paid feeds add actor tracking, infrastructure, and malware families. Use them for context and prioritization, not as a replacement for your own telemetry.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Internal telemetry</h3>
+      <p>Your own logs are the most valuable source. Failed stop attempts, tamper protection blocks, and near misses show what attackers actually try in your environment.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Confidence levels</h3>
+      <p><strong>High</strong> means several independent reports plus your own sightings. <strong>Medium</strong> means one solid public report. <strong>Low</strong> means a hypothesis that still needs testing. Write the level next to every intelligence note.</p>
+    </div>
+  </div>
+
+  <p>Known actors and campaigns associated with this technique, with a confidence level for each.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Actor or malware</th><th>Observed behavior</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>Conti / Wizard Spider</td><td>Leaked playbooks instruct operators to stop security, backup, database, and email services. Scripts used <code>net stop</code> against up to 146 services.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Lazarus Group</td><td>Stopped <code>MSExchangeIS</code> so Exchange mailbox content became inaccessible to legitimate users.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Prestige</td><td>Ran <code>net stop MSSQLSERVER</code> on transport and logistics servers just before encrypting.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>RobbinHood</td><td>Stopped 181 services on victim machines as part of its ransomware routine.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Olympic Destroyer</td><td>Used the <code>ChangeServiceConfigW</code> API to disable all services it could reach before the wipe.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>EKANS</td><td>Stopped database, backup, and antivirus processes and carried a list of industrial control processes to kill.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>Cheerscrypt</td><td>Used <code>esxcli vm process kill</code> to terminate virtual machine processes on ESXi hosts.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>LockBit 3.0</td><td>Terminated security, backup, and database services as part of its pre-encryption routine.</td><td><span class="badge ok">High</span></td></tr>
+        <tr><td>The Gentlemen Ransomware</td><td>Combined <code>sc config</code> start disabled, <code>net stop</code>, <code>sc stop</code>, and <code>taskkill</code> on the same host.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>Medusa Ransomware</td><td>Used <code>taskkill /F /IM /T</code> to kill whole process trees and <code>net stop</code> against target services.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+        <tr><td>InvisibleFerret</td><td>Used <code>taskkill</code> on Windows and <code>killall</code> on Linux and macOS to terminate Chrome and Brave browsers.</td><td><span class="badge sev-medium">Medium</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout note">
+    <div class="callout-label">How to apply this</div>
+    <p>Use the actor list to justify rule coverage in reviews. Use it to write threat profiles for your team. Let it guide which platforms to extend first, such as ESXi, macOS, and cloud rules when you run large estates.</p>
+  </div>
+
+  <h3 id="sec-5-3-threat-ranking">5.3 Threats ranking and categorization</h3>
+  <p>Five realistic threats cover this technique well, numbered THR-01 to THR-05. The rank reflects how likely the threat is and how much damage it causes when it works. Preconditions describe what an attacker must already have; the justification explains the rank so you can defend it in planning meetings.</p>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Threat</th><th>Rank</th><th>Platform</th><th>Description and preconditions</th><th>Impact and justification</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>THR-01 — Security tool service stopped (WinDefend, Sysmon64, EDR agents).</td>
+          <td><span class="badge sev-critical">Critical</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>Attacker with local admin runs <code>net stop</code>, <code>sc stop</code>, or <code>taskkill</code> against a protection or logging service. Preconditions: admin rights and a shell on the host.</td>
+          <td>Removes visibility and defense right before the main attack, and a lost heartbeat blinds the SOC. Highest damage per event and the most common target in procedure reports.</td>
+        </tr>
+        <tr>
+          <td>THR-02 — Bulk service stop burst before encryption.</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td>Script stops ten or more services in minutes, including SQL services, VSS writers, and backup agents. Preconditions: admin rights and a prepared service list.</td>
+          <td>Frees locked data files for encryption and breaks business applications at once. The burst pattern is a strong ransomware timer, as documented for Conti and RobbinHood.</td>
+        </tr>
+        <tr>
+          <td>THR-03 — Start type changed to disabled, then stopped.</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="badge cat">Windows</span></td>
+          <td><code>sc config &lt;service&gt; start= disabled</code> followed by a stop. The Gentlemen Ransomware did this with <code>sc config</code>; Olympic Destroyer did it with the <code>ChangeServiceConfigW</code> API. Preconditions: admin rights over service configuration.</td>
+          <td>Keeps the service down across reboots, so the outage repeats and recovery drags. Rarer than a plain stop but far more persistent, hence High.</td>
+        </tr>
+        <tr>
+          <td>THR-04 — Critical Linux or macOS service stopped.</td>
+          <td><span class="badge sev-medium">Medium</span></td>
+          <td><span class="badge cat">Linux</span> <span class="badge cat">macOS</span></td>
+          <td><code>systemctl stop</code> or <code>kill</code> against sshd, auditd, or a database daemon. On macOS, <code>launchctl bootout</code> or <code>remove</code> against security or backup agents. Preconditions: root, sudo, or admin rights on the host.</td>
+          <td>Cuts remote access, logging, or the database behind an application. Less common in public reporting than the Windows case, which caps the likelihood.</td>
+        </tr>
+        <tr>
+          <td>THR-05 — Hypervisor or cloud service kill.</td>
+          <td><span class="badge sev-medium">Medium</span></td>
+          <td><span class="badge cat">IaaS</span> <span class="badge cat">ESXi</span></td>
+          <td><code>esxcli vm process kill</code> or <code>vim-cmd</code> on ESXi hosts, or the AWS <code>DisableAPIServiceAccess</code> call with stolen cloud admin rights. Preconditions: deep control of hypervisor or cloud organization settings.</td>
+          <td>One hypervisor command stops many machines at once. The cloud call can stop a service from creating its roles on new accounts across the organization. Rising with ESXi-focused ransomware, but needs deep access first.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <h3 id="sec-5-4-logs-patterns">5.4 Logs and patterns</h3>
+  <p>Each threat below lists its log sources, key fields, normal behavior, suspicious behavior, and detection logic in plain words. A realistic event example follows each table so you can validate your pipeline against real shapes.</p>
+
+  <h4>Threat 1 — Security tool service stopped</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Windows System log event 7036 (service entered the stopped state). Sysmon event 1 and Security 4688 for the stop command. EDR tamper alerts. SIEM source health monitor.</td></tr>
+        <tr><td>Key fields</td><td><code>param1</code> (service name), <code>param2</code> (state), <code>Image</code>, <code>CommandLine</code>, <code>User</code>, <code>host</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Administrators stop security services during planned upgrades and reboots, from management tools, inside change windows. The events map to tickets.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Any stop of Sysmon, Defender, or an EDR agent from an interactive shell or script. A failed stop blocked by tamper protection. The matching log source going silent right after the stop.</td></tr>
+        <tr><td>Detection logic</td><td>Alert when a security service name appears in a 7036 stopped event, or when a stop command targets one, outside an approved maintenance list. Treat tamper blocks as high severity even though nothing stopped.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · System EID 7036 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Service Control Manager" Guid="{555908d1-a6d7-4695-8e1e-26931d2012f4}"/&gt;
+    &lt;EventID Qualifiers="16384"&gt;7036&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-22T02:41:07.512Z"/&gt;
+    &lt;Computer&gt;APP01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="param1"&gt;Sysmon64&lt;/Data&gt;
+    &lt;Data Name="param2"&gt;entered the stopped state&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 2 — Bulk service stop burst before encryption</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Windows System log event 7036 in bulk. Sysmon event 1 or Security 4688 for the <code>net stop</code> loop or batch script. Backup application logs showing the agent stop.</td></tr>
+        <tr><td>Key fields</td><td><code>host</code>, <code>param1</code>, <code>EventID</code>, event count per time window, <code>CommandLine</code>, <code>ParentImage</code>, <code>User</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Planned patching restarts a handful of services; a maintenance script may stop a known list with a matching change ticket. Counts stay low and schedules are known.</td></tr>
+        <tr><td>Suspicious behavior</td><td>Ten or more distinct services stopped on one host within minutes. The list includes SQL services, Volume Shadow Copy (VSS) writers, or backup agents. Stops run at night from cmd.exe or a temp directory script.</td></tr>
+        <tr><td>Detection logic</td><td>Count 7036 stopped events per host in a rolling window and alert when the count crosses your threshold. Weigh each stop higher when the service name matches SQL, VSS, or backup keywords.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · Sysmon EID 1 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon"/&gt;
+    &lt;EventID&gt;1&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-22T02:44:19.884Z"/&gt;
+    &lt;Computer&gt;APP01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-22 02:44:19.884&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\System32\cmd.exe&lt;/Data&gt;
+    &lt;Data Name="CommandLine"&gt;cmd.exe /c net stop SQLWriter &amp; net stop VeeamVssSupport &amp; net stop MSSQLSERVER&lt;/Data&gt;
+    &lt;Data Name="CurrentDirectory"&gt;C:\Users\Public\Temp\&lt;/Data&gt;
+    &lt;Data Name="ParentImage"&gt;C:\Users\Public\Temp\stage2.exe&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\svc_backup&lt;/Data&gt;
+    &lt;Data Name="IntegrityLevel"&gt;High&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 3 — Start type changed to disabled, then stopped</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Windows System log event 7040 (start type changed). Sysmon event 1 or Security 4688 for <code>sc config</code>. PowerShell 4104 for <code>Set-Service</code>.</td></tr>
+        <tr><td>Key fields</td><td><code>param1</code> (service name), start type values in the message, <code>Image</code>, <code>CommandLine</code>, <code>User</code>, <code>host</code>.</td></tr>
+        <tr><td>Normal behavior</td><td>Hardening scripts and administrators disable unused services during provisioning or decommissioning, from management hosts, with change records.</td></tr>
+        <tr><td>Suspicious behavior</td><td><code>sc config</code> with <code>start= disabled</code> run from a shell or script on a live server. A security or backup service switched to disabled outside provisioning. A stop event for the same service seconds later.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on any 7040 event whose start type becomes disabled for a protected service list, and on any <code>sc config</code> command containing <code>start=</code> and <code>disabled</code>, excluding known provisioning hosts.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · System EID 7040 (XML)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Service Control Manager" Guid="{555908d1-a6d7-4695-8e1e-26931d2012f4}"/&gt;
+    &lt;EventID Qualifiers="16384"&gt;7040&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-22T02:45:02.130Z"/&gt;
+    &lt;Computer&gt;APP01.corp.local&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="param1"&gt;VeeamVssSupport&lt;/Data&gt;
+    &lt;Data Name="param2"&gt;auto start&lt;/Data&gt;
+    &lt;Data Name="param3"&gt;disabled&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+
+  <h4>Threat 4 — Critical Linux or macOS service stopped</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Linux auditd EXECVE records for <code>systemctl</code>, <code>service</code>, and <code>kill</code>. Journal entries for unit state changes. Host-based EDR process events. On macOS, process events for <code>launchctl bootout</code> or <code>remove</code>.</td></tr>
+        <tr><td>Key fields</td><td><code>a0</code>, <code>a1</code>, <code>a2</code> (program and arguments), <code>exe</code>, <code>uid</code>, <code>auid</code>, <code>pid</code>, <code>host</code>, unit name.</td></tr>
+        <tr><td>Normal behavior</td><td>Configuration management tools (Ansible, Puppet) and admins restart or stop services during deploys. Sources are known hosts and accounts, and actions match tickets.</td></tr>
+        <tr><td>Suspicious behavior</td><td><code>systemctl stop</code> or <code>mask</code> against sshd, auditd, or mysql from an interactive shell. A root <code>kill -9</code> of a daemon from a tmp path. Auditd itself being stopped, which ends the evidence stream. On macOS, <code>launchctl</code> unload commands from an unusual session.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on EXECVE records where the program is systemctl or service with a stop, disable, or mask argument and the target is a protected unit list. Correlate with the unit's state change in the journal. On macOS, alert when launchctl unloads an agent from the protected list.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · auditd (plain text)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>type=SYSCALL msg=audit(1795277659.512:8842) arch=c000003e syscall=59 success=yes exit=0
+    ppid=1203 pid=2201 auid=1000 uid=0 gid=0 euid=0 suid=0
+    exe="/usr/bin/systemctl" key="servicectl"
+type=EXECVE msg=audit(1795277659.512:8842) argc=3 a0="systemctl" a1="stop" a2="mysql"
+type=SERVICE_STOP msg=audit(1795277659.904:8843) pid=1 uid=0 auid=4294967295 ses=4294967295
+    msg='unit=mysql comm="systemd"' hostname=db01 addr=? terminal=? res=success</code></pre>
+  </figure>
+
+  <h4>Threat 5 — Hypervisor or cloud service kill</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Aspect</th><th>Details</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>AWS CloudTrail management events. ESXi shell history and <code>hostd.log</code> forwarded to your SIEM. vCenter events for virtual machine power actions.</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>eventSource</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code>, ESXi world-id and vm name, host name, account.</td></tr>
+        <tr><td>Normal behavior</td><td>Cloud administrators change organization settings during approved governance work; ESXi admins kill a stuck virtual machine from a management host with a ticket.</td></tr>
+        <tr><td>Suspicious behavior</td><td><code>DisableAPIServiceAccess</code> called by an interactive user rather than your approved automation. <code>esxcli vm process kill</code> run from an SSH session on the host itself. Several virtual machines killed in minutes.</td></tr>
+        <tr><td>Detection logic</td><td>Alert on the cloud call by event name and source, allow-listing your automation roles. Watch both spellings: ATT&amp;CK writes <code>DisableAPIServiceAccess</code>, and AWS documents the same call as <code>DisableAWSServiceAccess</code>. For ESXi, alert on vm process kill commands from shell logins, and page when more than one machine dies per host per hour.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Example event · AWS CloudTrail (JSON)</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>{
+  "eventVersion": "1.08",
+  "userIdentity": {
+    "type": "IAMUser",
+    "principalId": "AIDA4EXAMPLEJJ7VQ2WM",
+    "arn": "arn:aws:iam::111122223333/user/org-admin",
+    "accountId": "111122223333",
+    "userName": "org-admin"
+  },
+  "eventTime": "2026-10-22T02:46:12Z",
+  "eventSource": "organizations.amazonaws.com",
+  "eventName": "DisableAPIServiceAccess",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "203.0.113.77",
+  "userAgent": "aws-cli/2.15.0",
+  "requestParameters": {},
+  "responseElements": null
+}</code></pre>
+  </figure>
+
+  <div class="callout note">
+    <div class="callout-label">Pipeline check</div>
+    <p>Before trusting these rules, confirm the fields exist in your SIEM. For XML inputs, enable field extraction so <code>param1</code> and <code>param2</code> arrive as fields. For auditd, forward raw records and parse <code>a0</code> through <code>a2</code>. For CloudTrail, JSON field paths must resolve. Then replay the example events above through the pipeline and confirm each one alerts.</p>
+  </div>
+  <h3 id="sec-5-5-sigma-spl">5.5 Sigma rules and Splunk SPL</h3>
+  <p>Five complete Sigma rules follow, one per threat (THR-01 to THR-05), each with a matching Splunk query. The rules use the same log sources as the tables above; if you collect Security 4688 instead of Sysmon, swap the logsource and keep the field logic. The Splunk queries assume the index and sourcetype conventions listed below; adjust the index names to your environment and document the change. Rules 3 and 5 each carry a second query in the same block: a System log confirmation and an ESXi shell check.</p>
+  <div class="callout note">
+    <div class="callout-label">Field assumptions for Splunk</div>
+    <p><code>index=sysmon</code> holds Sysmon XML events with fields like <code>Image</code> and <code>CommandLine</code>. <code>index=wineventlog</code> holds <code>XmlWinEventLog:System</code> with <code>param1</code> and <code>param2</code> extracted. <code>index=linux</code> holds auditd records with <code>a0</code> to <code>a2</code>. <code>index=aws</code> holds <code>aws:cloudtrail</code> JSON. Field extraction must be enabled for XML inputs before these queries work.</p>
+  </div>
+
+  <h4>Rule 1 — Security tool service stopped</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Security Service Stopped via Service Control Manager
+id: 7c1d4a2e-9f3b-4e86-a1d5-3b2c8f9e0a11
+status: stable
+description: Detects stop events for security and monitoring services such as Sysmon,
+  Windows Defender and EDR agents, which attackers stop to remove visibility before
+  the main attack.
+references:
+  - https://attack.mitre.org/techniques/T1489/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: system
+detection:
+  selection:
+    EventID: 7036
+    param1|contains:
+      - 'Sysmon'
+      - 'WinDefend'
+      - 'Defender'
+      - 'Falcon'
+      - 'Sentinel'
+      - 'Carbon Black'
+      - 'CrowdStrike'
+      - 'EDR'
+    param2|contains: 'stopped'
+  condition: selection
+fields:
+  - EventID
+  - param1
+  - param2
+  - Computer
+falsepositives:
+  - Planned upgrades or reboots performed by security administrators inside change windows
+level: high
+tags:
+  - attack.impact
+  - attack.t1489</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=wineventlog sourcetype="XmlWinEventLog:System" EventCode=7036
+  param2="*entered the stopped state*"
+  (param1="*Sysmon*" OR param1="*WinDefend*" OR param1="*Defender*"
+   OR param1="*Falcon*" OR param1="*Sentinel*" OR param1="*EDR*")
+| table _time host param1 param2
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> each Sigma <code>param1|contains</code> value becomes one OR branch of wildcard matches. The <code>param2</code> filter keeps only stops, not starts. <strong>False positives:</strong> planned security tool upgrades inside change windows. <strong>Tuning:</strong> move the service name list into a lookup table. Add an exception for documented change records. Raise severity when the same host loses its log source heartbeat right after the stop.</p>
+
+  <h4>Rule 2 — Bulk service stop burst before encryption</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Bulk Service Stop Burst on a Single Windows Host
+id: 8d2e5b3f-0a4c-4f97-b2e6-4c3d9a0f1b22
+status: stable
+description: Detects ten or more services entering the stopped state on one host within
+  ten minutes, the stop storm pattern ransomware runs just before encryption.
+references:
+  - https://attack.mitre.org/techniques/T1489/
+  - https://www.cisa.gov/stopransomware
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: system
+detection:
+  selection:
+    EventID: 7036
+    param2|contains: 'stopped'
+  condition: selection | count() by host &gt;= 10
+  timeframe: 10m
+fields:
+  - param1
+  - param2
+  - Computer
+falsepositives:
+  - Large maintenance scripts or patch reboot waves that stop many services at once
+level: high
+tags:
+  - attack.impact
+  - attack.t1489</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=wineventlog sourcetype="XmlWinEventLog:System" EventCode=7036
+  param2="*entered the stopped state*"
+| bin _time span=10m
+| stats dc(param1) as services_stopped values(param1) as service_names by _time host
+| where services_stopped &gt;= 10
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> the Sigma <code>count() by host</code> condition becomes a <code>bin</code> plus <code>stats</code> count in Splunk. The timeframe and the <code>where</code> filter then keep only bursts. <strong>False positives:</strong> patch waves that restart many services at once. <strong>Tuning:</strong> raise the threshold for hosts with known maintenance jobs. Add weight to stops whose names match SQL, VSS, or backup keywords, since those free files for encryption.</p>
+
+  <h4>Rule 3 — Start type changed to disabled, then stopped</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Service Start Type Changed to Disabled via Sc Config
+id: 9e3f6c4a-1b5d-4a08-8c37-5d4e0b1a2c33
+status: stable
+description: Detects sc.exe commands that set a service start type to disabled, which
+  keeps the service off across reboots, a persistent variant of service stop used by
+  destructive malware.
+references:
+  - https://attack.mitre.org/techniques/T1489/
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 1
+    Image|endswith: '\sc.exe'
+    CommandLine|contains|all:
+      - 'config'
+      - 'start='
+      - 'disabled'
+  condition: selection
+fields:
+  - CommandLine
+  - ParentImage
+  - User
+  - Hostname
+falsepositives:
+  - Hardening or decommissioning scripts that intentionally disable unused services
+level: high
+tags:
+  - attack.impact
+  - attack.t1489</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL · two queries</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  Image="*\\sc.exe" CommandLine="*config*" CommandLine="*start*" CommandLine="*disabled*"
+| table _time host User Image CommandLine ParentImage
+| sort - _time
+
+index=wineventlog sourcetype="XmlWinEventLog:System" EventCode=7040 disabled
+| table _time host param1 param2 param3
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> the three <code>contains|all</code> terms become three required wildcard tokens. Splunk matches are case-insensitive, so <code>start=</code> with or without a space still matches. The second query in the block is the System log confirmation, and it also catches start type changes made by tools other than <code>sc.exe</code>. <strong>False positives:</strong> provisioning hosts that disable unused roles. <strong>Tuning:</strong> exclude imaging and configuration management hosts by group.</p>
+
+  <h4>Rule 4 — Critical Linux service stopped</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: Critical Linux Service Stopped via Systemctl
+id: 0f4a7d5b-2c6e-4b19-9d48-6e5f1c2b3d44
+status: experimental
+description: Detects systemctl or service commands that stop, disable or mask units on
+  Linux hosts, focusing on remote access, logging and database services.
+references:
+  - https://attack.mitre.org/techniques/T1489/
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: linux
+  service: auditd
+detection:
+  selection_systemctl:
+    a0: 'systemctl'
+    a1:
+      - 'stop'
+      - 'disable'
+      - 'mask'
+  selection_service:
+    a0: 'service'
+    a2: 'stop'
+  condition: 1 of selection_*
+fields:
+  - a0
+  - a1
+  - a2
+  - exe
+  - uid
+  - auid
+falsepositives:
+  - Configuration management and deployment tools restarting services during releases
+level: medium
+tags:
+  - attack.impact
+  - attack.t1489</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=linux sourcetype="linux:audit" syscall=EXECVE
+  (a0="systemctl" a1 IN ("stop","disable","mask")) OR (a0="service" a2="stop")
+| table _time host auid uid a0 a1 a2 exe
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> auditd EXECVE fields map one to one. The Sigma list of verbs for <code>a1</code> becomes the Splunk <code>IN</code> clause. <strong>False positives:</strong> Ansible, Puppet, or package upgrades that restart services. <strong>Tuning:</strong> keep a protected unit list such as sshd, auditd, and mysql. Watch for <code>kill -9</code> against daemon names from tmp paths as a second rule. Treat an auditd stop itself as critical, because it ends the evidence. On macOS, cover <code>launchctl bootout</code> and <code>remove</code> events through your Mac management feed.</p>
+
+  <h4>Rule 5 — Hypervisor or cloud service kill</h4>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">YAML · Sigma rule</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>title: AWS Organization API Service Access Disabled
+id: 1a5b8e6c-3d7f-4c2a-a859-7f6a2d3c4e55
+status: stable
+description: Detects calls that turn off access to an AWS service for the organization,
+  which can stop service-linked roles from being created on new accounts.
+references:
+  - https://attack.mitre.org/techniques/T1489/
+  - https://www.cisa.gov/stopransomware
+  - https://docs.aws.amazon.com/organizations/latest/APIReference/API_DisableAWSServiceAccess.html
+author: Detection Engineering Guild
+date: 2026-10-22
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: 'organizations.amazonaws.com'
+    eventName:
+      - 'DisableAPIServiceAccess'
+      - 'DisableAWSServiceAccess'
+  condition: selection
+fields:
+  - eventName
+  - userIdentity.arn
+  - sourceIPAddress
+  - awsRegion
+falsepositives:
+  - Approved governance changes that restrict AWS service access for the organization
+level: high
+tags:
+  - attack.impact
+  - attack.t1489</code></pre>
+  </figure>
+  <figure class="code-block">
+    <figcaption class="code-head"><span class="code-lang">Splunk SPL · CloudTrail + ESXi logs</span><button class="copy-btn" type="button">Copy</button></figcaption>
+    <pre><code>index=aws sourcetype="aws:cloudtrail" eventSource="organizations.amazonaws.com"
+  eventName IN ("DisableAPIServiceAccess", "DisableAWSServiceAccess")
+| table _time userIdentity.arn sourceIPAddress eventName awsRegion
+| sort - _time
+
+index=linux sourcetype="linux:syslog" ("vm process kill" OR "vim-cmd")
+| table _time host process message
+| sort - _time</code></pre>
+  </figure>
+  <p><strong>Mapping note:</strong> CloudTrail JSON fields map directly to Splunk search-time extractions. The event name list becomes the <code>IN</code> clause. ATT&amp;CK writes <code>DisableAPIServiceAccess</code>; AWS documents the same call as <code>DisableAWSServiceAccess</code>, so the rule watches both spellings. <strong>False positives:</strong> approved governance work by the organization management account. <strong>Tuning:</strong> allow-list the fixed role ARN and page on any interactive user, new source IP, or call outside your change calendar. The second query in the block covers the ESXi half of this threat from shell and <code>hostd</code> logs; point <code>index=linux</code> at wherever your ESXi estate actually lands them.</p>
+</section>
+<section class="sec" id="sec-6-case-study">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2>Real-world case study</h2></div>
+  <p class="sec-intro">The Conti ransomware playbook and the May 2021 attack on Ireland's Health Service Executive (HSE). This is the best-documented use of Service Stop against a national health system.</p>
+
+  <div class="card">
+    <h3 class="card-title">Context</h3>
+    <p>This case study is a factual account of a real incident, based on public reporting; it is not a training scenario. Named sources include the HSE's independent post-incident review (PwC, 2021) and published analyses of the leaked Conti playbooks. Conti was a ransomware group linked to the Wizard Spider crew. When its internal playbooks leaked in 2021, defenders could read the operator manual step by step. The manual told operators to stop security tools, stop or delete backups, and only then start encryption. The Health Service Executive (HSE), Ireland's public health service, experienced this playbook directly. Public reporting describes how attackers reached the network around March 2021 through a malicious document, moved quietly for about two months, and launched ransomware across the organization on 14 May 2021. The HSE shut down thousands of its own systems to stop the spread, and patient services were disrupted for weeks.</p>
+    <p>Attack chain mapping: a malicious document gave the attackers Initial Access. Stolen credentials enabled Lateral Movement and Privilege Escalation. The operators then prepared Impact with T1489, tampered with backups in the manner of Inhibit System Recovery (T1490), and finally ran Data Encrypted for Impact (T1486).</p>
+  </div>
+
+  <h3>Timeline</h3>
+  <ol class="timeline">
+    <li><div class="tl-when">March 2021</div><div class="tl-what">A malicious document opens the door</div><p>According to public reporting, an employee opened a malicious Excel attachment. The malware gave the attackers their first foothold inside the HSE network, and they began stealing credentials.</p></li>
+    <li><div class="tl-when">March to May 2021</div><div class="tl-what">About two months of quiet movement</div><p>The attackers moved laterally, harvested accounts, and mapped the estate. The long dwell time matters: nothing visible broke, while the operators prepared the impact phase described in their playbook.</p></li>
+    <li><div class="tl-when">Days before 14 May</div><div class="tl-what">Preparing the impact phase</div><p>Following the leaked playbook, the operators located high-value servers, backup infrastructure, and security tooling. The playbook's core instruction was to stop or remove anything that could interfere with encryption or help recovery.</p></li>
+    <li><div class="tl-when">13 to 14 May 2021</div><div class="tl-what">Security and backup services targeted</div><p>Just before the main attack, the operators worked to stop protection and backup services. They also tampered with backup data. These are the Service Stop and backup-removal steps this guide describes. Freeing locked files and cutting recovery were the goals.</p></li>
+    <li><div class="tl-when">14 May 2021</div><div class="tl-what">Ransomware starts across the HSE</div><p>Encryption began across many systems at once. The HSE made a defensive decision to shut down thousands of its own systems to stop the spread, which protected some sites but took services offline by design.</p></li>
+    <li><div class="tl-when">Weeks after</div><div class="tl-what">Patient services disrupted</div><p>Appointments and treatments were canceled or delayed, staff reverted to paper, and teams rebuilt systems in business-critical order. Because recovery options had been tampered with, many systems had to be rebuilt rather than restored in place.</p></li>
+    <li><div class="tl-when">Later in 2021</div><div class="tl-what">A decryptor, but no short cut</div><p>Under public pressure, Conti released a decryptor. Even with it, recovery took months, because the preparation phase had damaged or removed recovery paths before the encryption event.</p></li>
+  </ol>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Detection point</h3>
+      <p>The playbook made the attack predictable. Stopping security and backup services produces System event 7036 entries, tamper alerts, and silent log sources, and these signals fire before encryption. The missed chance was visibility: service stop events and backup job failures were not being correlated into one alarm during the two months of preparation. A rule that pages on a burst of stops, or on a backup agent going quiet, would have raised the alarm while the attackers were still preparing.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Containment</h3>
+      <p>The defining containment move was the mass shutdown of thousands of systems to stop the encryption wave from spreading. Teams then cut network paths, blocked the involved accounts, and preserved what still ran. The scale shows the trade-off of late detection: when the alarm comes at the last minute, containment looks like turning the organization off.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Eradication</h3>
+      <p>Responders searched for every foothold, removed the attackers' access, and reset credentials at scale. Because the operators had targeted security tooling, teams had to confirm that protection services were running again on every host before trusting it. Each rebuilt machine also had to be checked for disabled services left behind in the start type changes.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Recovery</h3>
+      <p>Recovery came from clean images, surviving systems, and whatever backups remained intact. The released decryptor helped with some data, but it did not repair the preparation damage, so the HSE rebuilt in a clinical-priority order and ran a long recovery program. The outages lasted weeks, and full restoration stretched into months.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Impact and consequences</h3>
+    <p>The incident disrupted health services across Ireland for weeks. It forced the cancellation of appointments and procedures. It also required one of the largest IT recovery efforts in the country's history. Public reporting describes extensive rebuilding of servers and endpoints, and the event became a national reference case for health-sector cyber resilience. The financial and operational cost of the outage far exceeded the ransom demand, which underlines the real objective of the preparation phase: maximum disruption.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Team response and communication</h3>
+    <p>The response ran as a national incident with a dedicated command structure, daily coordination between IT, clinical leadership, and government, and external incident response support. Communication channels had to survive the outage itself, which proved the value of an out-of-band channel that does not depend on the compromised estate. Teams published clear staff guidance, prioritized clinical systems, and kept a running public statement flow, which reduced confusion while systems were down.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Lessons learned</h3>
+    <ul class="check">
+      <li>A long dwell time is a planning window for the attacker; hunt for service enumeration and stop attempts, not only for encryption.</li>
+      <li>Stopping security and backup services is the playbook's signature; alert on those stops and on failed tamper-blocked attempts.</li>
+      <li>Keep one backup copy the playbook cannot reach, offline or immutable, and prove the restore path quarterly.</li>
+      <li>Shutting down thousands of systems defensively is a hard call; segment networks so one decision does not need to be that large.</li>
+      <li>Out-of-band communication and a rehearsed runbook decide how fast the organization moves on the worst day.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="sec" id="sec-7-mitigation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2>Mitigation and defense</h2></div>
+  <p class="sec-intro">You cannot stop every attacker from reaching one machine, but you can make service stops fail, restart quickly, and stop mattering. The controls below follow the ATT&amp;CK mitigation list for this technique and are ordered by how much risk they remove.</p>
+
+  <h3>Enterprise controls by domain</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Service protection and tamper resistance</h3>
+      <p>Turn on tamper protection for antivirus and EDR so a plain <code>net stop</code> cannot touch them. Also configure restricted service access control lists on critical services, so only approved accounts can stop them. These are the controls that turned step 3 of the simulation into a detection instead of a loss.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Identity and privileges (M1018)</h3>
+      <p>Apply least privilege: most admins do not need to stop services on servers. Separate backup and security administration from general server administration, and remove standing rights over service configuration. User Account Management, ATT&amp;CK mitigation M1018, is one of the five mitigations ATT&amp;CK lists for this technique.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Registry and file permissions (M1024, M1022)</h3>
+      <p>Restrict registry permissions on <code>HKLM\SYSTEM\CurrentControlSet\Services</code> (M1024), so a start type cannot be flipped to disabled by a normal admin. Also restrict file and directory permissions (M1022) on service binaries and agent folders. Together these controls block the persistent variant of the technique.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Network segmentation (M1030)</h3>
+      <p>Segment server farms, backup infrastructure, hypervisor management, and cloud control planes away from workstations, and limit which hosts may call remote service control at all (M1030). A segmented estate turns one stop storm into one damaged host instead of a fleet, and it protects the management interfaces that ESXi attackers target.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Out-of-band communications channel (M1060)</h3>
+      <p>Keep an alerting path that survives a stop storm (M1060). Use a SIEM or alerting service outside the attacked network. Add phone or messenger escalation that does not depend on the victim's own mail and chat. If the attacker blinds the estate, the alarm must still arrive somewhere else.</p>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Logging, monitoring, and readiness</h3>
+      <p>Ship System 7036, 7040, and 7034, Sysmon 1, Security 4688, PowerShell 4104, auditd, and cloud audit logs into the SIEM. Deploy the five rules from section 5, monitor log source heartbeats, and write a stop-storm runbook: who isolates, who restarts services, and who checks 7040 before declaring a host healthy.</p>
+    </div>
+  </div>
+
+  <h3>Prioritized actions</h3>
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Risk reduction</th><th>How to verify</th></tr></thead>
+      <tbody>
+        <tr><td>Enable tamper protection on all security services.</td><td><span class="badge sev-low">Low</span></td><td>Endpoint team</td><td><span class="badge sev-critical">Critical</span></td><td>Run <code>net stop</code> on a pilot host and confirm the block event.</td></tr>
+        <tr><td>Set restricted service ACLs on logging and backup services.</td><td><span class="badge sev-medium">Medium</span></td><td>Platform team</td><td><span class="badge sev-high">High</span></td><td>Attempt a stop with a standard admin account and confirm denial.</td></tr>
+        <tr><td>Deploy the five detection rules and heartbeat monitoring.</td><td><span class="badge sev-low">Low</span></td><td>Detection engineering</td><td><span class="badge sev-high">High</span></td><td>Replay the section 5 example events and confirm alerts.</td></tr>
+        <tr><td>Separate backup and security admin accounts from general admins.</td><td><span class="badge sev-medium">Medium</span></td><td>Identity team</td><td><span class="badge sev-high">High</span></td><td>Confirm a general admin cannot open the backup console.</td></tr>
+        <tr><td>Segment ESXi and backup management interfaces.</td><td><span class="badge sev-medium">Medium</span></td><td>Network team</td><td><span class="badge sev-high">High</span></td><td>Confirm workstation subnets cannot reach the management planes.</td></tr>
+        <tr><td>Restrict write access to service registry keys (M1024).</td><td><span class="badge sev-medium">Medium</span></td><td>Platform team</td><td><span class="badge sev-medium">Medium</span></td><td>Attempt <code>sc config</code> on a pilot host with a standard admin.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Home and small office advice</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Protect your own services</h3>
+      <ul class="check">
+        <li>Keep the built-in antivirus on and leave tamper protection enabled.</li>
+        <li>Do not run daily work from an administrator account.</li>
+        <li>Let updates finish; stopped update services are how damage hides.</li>
+        <li>Restart a stopped protection service and check why it stopped.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Small-office quick wins</h3>
+      <ul class="check">
+        <li>Keep the backup agent on every machine and check its dashboard weekly.</li>
+        <li>Keep one backup copy offline or in cloud storage with version history.</li>
+        <li>Turn on alerts from the backup product so a stopped agent is noticed.</li>
+        <li>Once a quarter, restore one file and time how long it takes.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <div class="callout-label">Good practice</div>
+    <p>Plan for the restart as well as the block. A stopped service that restarts in minutes is an incident; a stopped service that nobody noticed is an outage. Heartbeat monitoring plus a rehearsed runbook keeps the difference small.</p>
+  </div>
+</section>
+
+<section class="sec" id="sec-8-mistakes">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2>Common mistakes and best practices</h2></div>
+  <p class="sec-intro">Most teams do not miss this attack because the signals are weak. They miss it because of fixable process errors. Here are the twelve we see most, with the symptom, the root cause, the fix, and the prevention.</p>
+
+  <div class="table-wrap wide">
+    <table>
+      <thead><tr><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>Mistake 1 — Only alerting on encryption, never on preparation.</td><td>First alert is mass file change events.</td><td>Detections built from the final payload only.</td><td>Deploy the section 5 stop-burst and security-service rules.</td><td>Map every playbook step to a rule, not just the last one.</td></tr>
+        <tr><td>Mistake 2 — Not collecting the Windows System log.</td><td>No 7036 or 7040 events to investigate with.</td><td>Collection focused on Security log only.</td><td>Ship the System log from all servers.</td><td>Include Service Control Manager events in the logging baseline.</td></tr>
+        <tr><td>Mistake 3 — Ignoring failed stop attempts.</td><td>Tamper blocks are treated as noise.</td><td>Alerts closed because nothing stopped.</td><td>Alert on attempts, not only successes.</td><td>Track blocked tamper attempts as a weekly metric.</td></tr>
+        <tr><td>Mistake 4 — No alert on silent log sources.</td><td>Host telemetry missing for hours unnoticed.</td><td>Source health not monitored.</td><td>Alert on missing heartbeats from critical sources.</td><td>Daily source health check in the SOC shift list.</td></tr>
+        <tr><td>Mistake 5 — Tamper protection disabled on servers.</td><td>Plain <code>net stop</code> kills protection.</td><td>Compatibility concerns from years ago.</td><td>Re-enable and test critical apps.</td><td>Configuration baseline check each quarter.</td></tr>
+        <tr><td>Mistake 6 — Backup console shares the domain admin account.</td><td>One stolen credential unlocks backups too.</td><td>Convenience-driven account reuse.</td><td>Dedicated accounts with multi-factor authentication (MFA) for backup administration.</td><td>Quarterly access review of backup roles.</td></tr>
+        <tr><td>Mistake 7 — Stop-burst threshold set so high it never fires.</td><td>A dozen stops produce no alert.</td><td>Threshold raised after one noisy patch night.</td><td>Set the burst threshold by host type.</td><td>Tune with an exception list, not by muting the rule.</td></tr>
+        <tr><td>Mistake 8 — No change calendar in the SIEM.</td><td>Cannot tell maintenance from attack.</td><td>Rules deployed without context.</td><td>Feed change records into the SIEM as a lookup.</td><td>Require a ticket reference for maintenance exceptions.</td></tr>
+        <tr><td>Mistake 9 — Recovery restarts without checking start types.</td><td>Services stay stopped after reboot.</td><td>Only 7036 events reviewed, not 7040.</td><td>Check 7040 events and reset start types.</td><td>Add the check to the host-recovery runbook.</td></tr>
+        <tr><td>Mistake 10 — Over-broad exclusions for net.exe and sc.exe.</td><td>Attacker using the same tools is exempt.</td><td>Exclusions added in a hurry.</td><td>Scope exclusions to specific admin hosts and accounts.</td><td>Review exclusions monthly; every exclusion needs a reason.</td></tr>
+        <tr><td>Mistake 11 — Windows-only detection coverage.</td><td>Linux, macOS, and ESXi stops are invisible.</td><td>Rules written once, for one platform.</td><td>Add the auditd, macOS, ESXi, and cloud rules from section 5.</td><td>Platform coverage matrix reviewed each quarter.</td></tr>
+        <tr><td>Mistake 12 — Silent SIEM pipeline failures.</td><td>Rules exist but no data flows.</td><td>Broken forwarder or expired token.</td><td>Monitor log source health with daily checks.</td><td>Alert on missing heartbeat from critical log sources.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Healthy operating habits</h3>
+  <div class="grid-3">
+    <div class="card">
+      <h3 class="card-title">Daily</h3>
+      <ul class="check">
+        <li>Confirm critical log sources are reporting, including security and backup agents.</li>
+        <li>Review every security-service stop alert and every tamper block.</li>
+        <li>Check backup job dashboards for agents that stopped reporting.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Weekly</h3>
+      <ul class="check">
+        <li>Walk one stop-burst alert end-to-end and time the triage.</li>
+        <li>Review new exclusions and tuning changes with a second reviewer.</li>
+        <li>Sync with the platform team about patch windows and restart plans.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Monthly</h3>
+      <ul class="check">
+        <li>Test one rule against a lab host running the technique safely.</li>
+        <li>Review service ACLs and admin group memberships.</li>
+        <li>Update actor notes from new public incident reports.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="sec" id="sec-9-cheatsheet">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2>Cheat sheet and quick reference</h2></div>
+  <p class="sec-intro">Everything important on one screen, for the wall and for the incident channel.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Key facts</h3>
+      <dl class="kv-list">
+        <div><dt>Technique</dt><dd>T1489 — Service Stop.</dd></div>
+        <div><dt>Tactic</dt><dd>Impact.</dd></div>
+        <div><dt>What it does</dt><dd>Stops or disables services to break availability, blind defenses, or free locked files.</dd></div>
+        <div><dt>Typical timing</dt><dd>Minutes to hours before encryption, after admin rights are won.</dd></div>
+        <div><dt>Signature commands</dt><dd><code>net stop</code>, <code>sc config start= disabled</code>, <code>taskkill /F /IM</code>, <code>Stop-Service</code>, <code>systemctl stop</code>, <code>launchctl bootout</code>, <code>esxcli vm process kill</code>.</dd></div>
+        <div><dt>Key evidence</dt><dd>System 7036, 7040, 7034; Sysmon 1; PowerShell 4104; auditd EXECVE; CloudTrail.</dd></div>
+        <div><dt>Best single defense</dt><dd>Tamper protection plus one offline backup copy and heartbeat monitoring.</dd></div>
+      </dl>
+    </div>
+    <div class="card">
+      <h3 class="card-title">Top detections</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Signal</th><th>Source</th><th>First action</th></tr></thead>
+          <tbody>
+            <tr><td>Security service entered the stopped state</td><td>System 7036</td><td>Page as critical; check for tamper context.</td></tr>
+            <tr><td>10+ services stopped in minutes on one host</td><td>System 7036 burst</td><td>Treat as a ransomware timer; isolate and scope.</td></tr>
+            <tr><td><code>sc config</code> start type set to disabled</td><td>Sysmon 1 / System 7040</td><td>Correlate with the following stop event.</td></tr>
+            <tr><td><code>net stop</code> or <code>taskkill</code> against backup or SQL</td><td>Sysmon 1 / 4688</td><td>Protect the backup repository and scope the host.</td></tr>
+            <tr><td>Missing EDR or log source heartbeat</td><td>SIEM source health</td><td>Treat the silent host as a live incident.</td></tr>
+            <tr><td><code>DisableAPIServiceAccess</code> or ESXi vm kill</td><td>CloudTrail / hostd logs</td><td>Revoke the identity, check what stopped.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="card-title">Response checklist</h3>
+    <ul class="check">
+      <li>Confirm the burst: raw 7036 events, service names, count, and host.</li>
+      <li>Find the actor: Sysmon 1 or 4688 for net.exe, sc.exe, taskkill.exe, and PowerShell.</li>
+      <li>Check tamper alerts and failed stop attempts; they prove intent.</li>
+      <li>Isolate the host and block the involved account.</li>
+      <li>Restart security and logging services from a trusted session.</li>
+      <li>Review 7040 events and reset any start type set to disabled.</li>
+      <li>Search all hosts for the same commands in the last 24 hours.</li>
+      <li>Verify the backup copy is intact before declaring safety.</li>
+    </ul>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 class="card-title">Official and related references</h3>
+      <ul class="check">
+        <li><a href="https://attack.mitre.org/techniques/T1489/" target="_blank" rel="noopener">MITRE ATT&amp;CK — T1489 Service Stop.</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1562/001/" target="_blank" rel="noopener">Related — T1562.001 Impair Defenses.</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1486/" target="_blank" rel="noopener">Related — T1486 Data Encrypted for Impact.</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1490/" target="_blank" rel="noopener">Related — T1490 Inhibit System Recovery.</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1529/" target="_blank" rel="noopener">Related — T1529 System Shutdown or Reboot.</a></li>
+        <li><a href="https://www.cisa.gov/stopransomware" target="_blank" rel="noopener">CISA — StopRansomware guidance.</a></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 class="card-title">One-line summary</h3>
+      <p>When services start stopping in a burst, the attacker is preparing the main attack. The stops free files for encryption and blind your defenses, so treat the burst as your ransomware alarm: protect backups first, and move. The SOC that notices a silent heartbeat in minutes keeps its data; the one that finds out after encryption loses weeks.</p>
+    </div>
+  </div>
+</section>
+  </main>
+</div>
+
+<button class="fab back-top" id="backTop" type="button" aria-label="Back to top">Top</button>
+<button class="fab contents-fab" id="contentsFab" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="tocOverlay">Contents</button>
+<button class="fab theme-fab" id="themeToggle" type="button" aria-label="Switch between dark and light theme">&#9680;</button>
+<div class="scrim" id="scrim" hidden></div>
+<div class="toc-overlay" id="tocOverlay" role="dialog" aria-modal="true" aria-label="Contents" hidden>
+  <div class="toc-overlay-head"><span>Contents</span><button class="btn" id="overlayClose" type="button">Close</button></div>
+  <ul class="toc-list" id="overlayList"></ul>
+</div>
+
+<script>
+window.SIM_STORY = function () {
+  var N = [
+    { id: "attacker", x: 40, y: 64, w: 172, h: 62, label: "Attacker host", desc: "The laptop the attacker controls, using a stolen admin account." },
+    { id: "server", x: 288, y: 54, w: 204, h: 66, label: "APP01 server", desc: "A Windows application server the attacker has signed in to." },
+    { id: "secsvc", x: 552, y: 24, w: 180, h: 56, label: "Security services", sub: "WinDefend - Sysmon64", desc: "Protection and logging services on the host, the attacker's first targets." },
+    { id: "bkpsvc", x: 768, y: 24, w: 180, h: 56, label: "Backup + SQL", sub: "Veeam - SQLWriter", desc: "Backup agent and SQL writer services that lock data files while running." },
+    { id: "siem", x: 576, y: 190, w: 196, h: 58, label: "SIEM", desc: "Collects System 7036 events and EDR heartbeats and correlates them." },
+    { id: "soc", x: 640, y: 286, w: 220, h: 74, label: "SOC analyst", desc: "Watches the correlated incident and leads isolation and recovery." }
+  ];
+
+  var MINI = [
+    { x: 288, y: 196, w: 82, h: 32, label: "IIS" },
+    { x: 378, y: 196, w: 82, h: 32, label: "Spooler" },
+    { x: 288, y: 238, w: 82, h: 32, label: "WinRM" },
+    { x: 378, y: 238, w: 82, h: 32, label: "W32Time" }
+  ];
+
+  function byId(id) {
+    for (var i = 0; i < N.length; i++) { if (N[i].id === id) return N[i]; }
+    return null;
+  }
+
+  function drawNode(ctx, id, state, S, H, C) {
+    var n = byId(id);
+    var o = { label: n.label, state: state };
+    if (n.sub) { o.sub = n.sub; }
+    if (S.hover === id) { o.state = "active"; }
+    H.node(ctx, n.x, n.y, n.w, n.h, o);
+  }
+
+  function mini(ctx, m, dead, S, H, C) {
+    var state = dead ? "dead" : "idle";
+    H.rr(ctx, m.x, m.y, m.w, m.h, 6);
+    ctx.fillStyle = dead ? H.hexA(C.danger, 0.10) : C["surface-2"];
+    ctx.fill();
+    ctx.lineWidth = dead ? 1.4 : 1;
+    ctx.strokeStyle = dead ? H.hexA(C.danger, 0.9) : C["border-strong"];
+    ctx.stroke();
+    if (dead) {
+      ctx.beginPath();
+      ctx.moveTo(m.x + 7, m.y + 7);
+      ctx.lineTo(m.x + m.w - 7, m.y + m.h - 7);
+      ctx.moveTo(m.x + m.w - 7, m.y + 7);
+      ctx.lineTo(m.x + 7, m.y + m.h - 7);
+      ctx.stroke();
+    }
+    H.text(ctx, m.label, m.x + m.w / 2, m.y + m.h / 2, { size: 10, color: dead ? C.muted : C.text, mono: true, align: "center", maxWidth: m.w - 8 });
+  }
+
+  function logLine(ctx, H, C, x1, y1, x2, y2) {
+    H.flow(ctx, x1, y1, x2, y2, C.border, { n: 0, speed: 0, dash: [3, 4] });
+  }
+
+  function base(ctx, w, h, S, H, C) {
+    drawNode(ctx, "attacker", S.i >= 7 ? "warn" : "active", S, H, C);
+    drawNode(ctx, "server", S.i >= 7 ? "warn" : (S.i >= 1 ? "active" : "idle"), S, H, C);
+    drawNode(ctx, "secsvc", S.i >= 3 ? "dead" : (S.i >= 2 ? "warn" : "idle"), S, H, C);
+    drawNode(ctx, "bkpsvc", S.i >= 4 ? "dead" : "idle", S, H, C);
+    drawNode(ctx, "siem", S.i >= 6 ? "alert" : "idle", S, H, C);
+    drawNode(ctx, "soc", S.i >= 7 ? "good" : (S.i >= 6 ? "alert" : "idle"), S, H, C);
+    for (var m = 0; m < MINI.length; m++) {
+      mini(ctx, MINI[m], S.i >= 5, S, H, C);
+    }
+
+    logLine(ctx, H, C, 492, 95, 576, 208);
+    H.text(ctx, "System 7036 / 7040", 540, 162, { size: 9.5, color: C.muted, mono: true, align: "center", maxWidth: 100 });
+    logLine(ctx, H, C, 620, 80, 620, 190);
+    H.text(ctx, "heartbeat", 680, 130, { size: 9.5, color: C.muted, mono: true, align: "center", maxWidth: 100 });
+    if (S.i >= 3 && S.i < 6) {
+      H.text(ctx, "heartbeat LOST", 680, 146, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 110 });
+    }
+
+    H.text(ctx, "service boxes on APP01", 376, 178, { size: 9.5, color: C.muted, mono: true, align: "center", maxWidth: 180 });
+  }
+
+  function evidence(ctx, S, H, C) {
+    var x = 40;
+    if (S.i >= 0) { x += H.chip(ctx, "EID 4624 logon", x, 416, C.warning) + 10; }
+    if (S.i >= 2) { x += H.chip(ctx, "WinDefend blocked", x, 416, C.warning) + 10; }
+    if (S.i >= 3) { x += H.chip(ctx, "heartbeat lost", x, 416, C.danger) + 10; }
+    if (S.i >= 4) { x += H.chip(ctx, "7036 SQLWriter", x, 416, C.danger) + 10; }
+    if (S.i >= 5) { x += H.chip(ctx, "7036 burst x12", x, 416, C.danger) + 10; }
+    if (S.i >= 6) { x += H.chip(ctx, "CORRELATED T1489", x, 416, C.danger) + 10; }
+    if (S.i >= 7) { x += H.chip(ctx, "Services restored", x, 416, C.success) + 10; }
+    var cmds = [
+      "RDP logon as CORP\\svc_app from 203.0.113.77",
+      "sc query state= all   |   tasklist /svc",
+      "net stop WinDefend  -  ACCESS DENIED (tamper protection)",
+      "net stop Sysmon64  -  service stopped, telemetry silent",
+      "net stop SQLWriter  &  net stop VeeamVssSupport",
+      "bulk stop: IIS Spooler WinRM W32Time ... (12 services)",
+      "SIEM rule: 7036 burst + heartbeat lost = 1 incident",
+      "isolate APP01 - restart services - restore from backup"
+    ];
+    H.text(ctx, "CMD>", 40, 458, { size: 12, color: C.muted, mono: true, weight: "700" });
+    H.text(ctx, cmds[S.i] || "", 86, 458, { size: 12, color: C.text, mono: true, maxWidth: 820 });
+    H.text(ctx, "EVIDENCE", 40, 396, { size: 10, color: C.muted, mono: true, weight: "700" });
+  }
+
+  var S = [
+    {
+      label: "Shell with stolen creds", dur: 5,
+      caption: "The attacker signs in to APP01 with an admin account stolen by an infostealer and opens a shell. Nothing looks broken yet, but they now hold the keys to the services.",
+      hint: "Compare every admin logon source with your jump host list and alert on the rest.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 212, 95, 288, 87, C.danger, { t: S.t, n: 3 });
+        H.text(ctx, "stolen credentials", 250, 40, { size: 10, color: C.danger, mono: true, align: "center", maxWidth: 130 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Map the services", dur: 5,
+      caption: "The attacker runs sc query and tasklist /svc to list services and their processes. They pick targets: protection, backup, and database services go on the list.",
+      hint: "Flag service enumeration from an interactive admin session on a server.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.pulse(ctx, 390, 87, 56, C.accent, { t: S.t });
+        H.text(ctx, "sc query state= all", 390, 28, { size: 11, color: C.accent, mono: true, align: "center", maxWidth: 170 });
+        H.text(ctx, "tasklist /svc", 390, 42, { size: 11, color: C.accent, mono: true, align: "center", maxWidth: 150 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Defender stop fails", dur: 5,
+      caption: "The attacker runs net stop WinDefend, but tamper protection blocks the stop. The attempt still lands in the logs, and the SOC sees someone testing the protection.",
+      hint: "Alert on any attempt to stop security services, even when it fails.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 492, 74, 552, 50, C.danger, { t: S.t, n: 3, speed: 0.5 });
+        if (S.p > 0.3) { H.pulse(ctx, 642, 52, 46, C.success, { t: S.t }); }
+        H.text(ctx, "BLOCKED", 642, 12, { size: 11, color: C.success, mono: true, align: "center", maxWidth: 100 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Sysmon stops", dur: 5.5,
+      caption: "The attacker runs net stop Sysmon64. The logging service has no tamper protection, so it stops and System event 7036 records it. The host's telemetry stops, and the SOC view shows a missing line.",
+      hint: "Treat a silent log source as an alert, not as a network fault.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 492, 70, 552, 54, C.danger, { t: S.t, n: 4, speed: 0.55 });
+        if (S.p > 0.25) { H.pulse(ctx, 642, 52, 50, C.danger, { t: S.t }); }
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Free the locked files", dur: 5,
+      caption: "The attacker stops the SQL Writer and the backup agent. These services hold data files locked open, so stopping them frees the files for encryption minutes later.",
+      hint: "Page when backup or SQL services stop outside a change window.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 492, 112, 790, 82, C.danger, { t: S.t, n: 4, speed: 0.55 });
+        if (S.p > 0.25) { H.pulse(ctx, 858, 52, 50, C.danger, { t: S.t, phase: 0.5 }); }
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "The bulk stop storm", dur: 5.5,
+      caption: "A script stops a dozen services in seconds: web, print, time, update, and more. Service boxes gray out one after another and System 7036 events pour into the log.",
+      hint: "Alert on the burst pattern, ten or more stops in minutes, not on each event.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 430, 120, 340, 196, C.danger, { t: S.t, n: 4, speed: 0.6 });
+        H.flow(ctx, 460, 122, 430, 196, C.danger, { t: S.t + 0.2, n: 4, speed: 0.6 });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "SIEM links the facts", dur: 6,
+      caption: "The SIEM links three facts from one host: the 7036 burst, the lost heartbeat, and the failed Defender stop. It raises one critical incident instead of a pile of noise.",
+      hint: "Build this correlation rule before the attack, with host and account in the alert.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        H.flow(ctx, 620, 80, 620, 190, C["accent-2"], { t: S.t, n: 4, speed: 0.45 });
+        H.flow(ctx, 492, 95, 576, 208, C["accent-2"], { t: S.t + 0.3, n: 4, speed: 0.45 });
+        H.arrow(ctx, 674, 248, 674, 286, C["accent-2"], { width: 2 });
+        H.pulse(ctx, 750, 323, 64, C.danger, { t: S.t });
+        evidence(ctx, S, H, C);
+      }
+    },
+    {
+      label: "Isolate and restore", dur: 6,
+      caption: "The SOC isolates APP01, blocks the stolen account, and restarts the stopped services from a clean session. Data comes back from the immutable backup copy the attacker never reached.",
+      hint: "Check 7040 events so disabled services do not stay off after reboot.",
+      draw: function (ctx, w, h, S, H, C) {
+        base(ctx, w, h, S, H, C);
+        drawNode(ctx, "attacker", "warn", S, H, C);
+        H.text(ctx, "isolated", 390, 36, { size: 11, color: C.warning, mono: true, align: "center", maxWidth: 120 });
+        H.arrow(ctx, 640, 350, 470, 122, C.success, { dash: [4, 4] });
+        evidence(ctx, S, H, C);
+      }
+    }
+  ];
+
+  SimEngine.init({ nodes: N, steps: S });
+};
+</script>
+<script>
+/* ============================================================
+   Detection Engineering Guide — shared page behavior
+   Theme, progress bar, TOC (generated from real headings),
+   mobile overlay, back-to-top, copy buttons, reveal-on-scroll.
+   No external libraries. No alert/prompt/confirm.
+   ============================================================ */
+(function () {
+  "use strict";
+
+  var doc = document;
+  var rootEl = doc.documentElement;
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  /* ---------- theme toggle ---------- */
+  var themeBtn = doc.getElementById("themeToggle");
+  function setTheme(t, save) {
+    rootEl.setAttribute("data-theme", t);
+    if (save) { try { localStorage.setItem("atk-theme", t); } catch (e) {} }
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener("click", function () {
+      var next = rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      setTheme(next, true);
+    });
+  }
+
+  /* ---------- progress bar + back to top ---------- */
+  var fill = doc.getElementById("progressFill");
+  var backTop = doc.getElementById("backTop");
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      var st = window.scrollY || doc.documentElement.scrollTop || 0;
+      var dh = (doc.documentElement.scrollHeight - window.innerHeight) || 1;
+      if (fill) fill.style.width = Math.min(100, (st / dh) * 100) + "%";
+      if (backTop) backTop.classList.toggle("show", st > 520);
+      trackActive();
+      ticking = false;
+    });
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  if (backTop) {
+    backTop.addEventListener("click", function () {
+      var smooth = !reduced.matches;
+      window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" });
+    });
+  }
+
+  /* ---------- table of contents (generated from real headings) ---------- */
+  var secEls = [].slice.call(doc.querySelectorAll("main.content > section.sec"));
+  var tocList = doc.getElementById("tocList");
+  var ovList = doc.getElementById("overlayList");
+  var targets = []; // { id, el, linkEls }
+
+  function makeLink(t) {
+    var a = doc.createElement("a");
+    a.href = "#" + t.id;
+    a.textContent = t.text;
+    a.addEventListener("click", function () { closeOverlay(); });
+    return a;
+  }
+
+  secEls.forEach(function (sec) {
+    var numEl = sec.querySelector(".sec-num");
+    var h2 = sec.querySelector("h2");
+    if (!h2 || !sec.id) return;
+    var num = numEl ? numEl.textContent.trim() : "";
+    var t = { id: sec.id, el: sec, text: (num ? num + ". " : "") + h2.textContent.trim(), linkEls: [] };
+    [tocList, ovList].forEach(function (list) {
+      if (!list) return;
+      var li = doc.createElement("li");
+      li.appendChild(makeLink(t));
+      list.appendChild(li);
+      t.linkEls.push(li.firstChild);
+    });
+    targets.push(t);
+    if (sec.id === "sec-5-detection") {
+      [].slice.call(sec.querySelectorAll("h3[id]")).forEach(function (h3) {
+        var st = { id: h3.id, el: h3, text: h3.textContent.trim(), linkEls: [] };
+        [tocList, ovList].forEach(function (list) {
+          if (!list) return;
+          var li = doc.createElement("li");
+          li.className = "sub";
+          li.appendChild(makeLink(st));
+          list.appendChild(li);
+          st.linkEls.push(li.firstChild);
+        });
+        targets.push(st);
+      });
+    }
+  });
+
+  var activeId = null;
+  function trackActive() {
+    if (!targets.length) return;
+    var probe = (window.scrollY || 0) + 140;
+    var cur = targets[0];
+    for (var i = 0; i < targets.length; i++) {
+      var el = targets[i].el;
+      var top = el.getBoundingClientRect().top + (window.scrollY || 0);
+      if (top <= probe) cur = targets[i];
+    }
+    if (cur.id !== activeId) {
+      activeId = cur.id;
+      targets.forEach(function (t) {
+        t.linkEls.forEach(function (a) { a.classList.toggle("active", t.id === activeId); });
+      });
+    }
+  }
+
+  /* ---------- mobile contents overlay ---------- */
+  var contentsFab = doc.getElementById("contentsFab");
+  var overlay = doc.getElementById("tocOverlay");
+  var scrim = doc.getElementById("scrim");
+  var overlayClose = doc.getElementById("overlayClose");
+
+  function openOverlay() {
+    if (!overlay) return;
+    overlay.hidden = false;
+    if (scrim) scrim.hidden = false;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "true");
+    doc.body.style.overflow = "hidden";
+    var first = overlay.querySelector("a, button");
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    if (scrim) scrim.hidden = true;
+    if (contentsFab) contentsFab.setAttribute("aria-expanded", "false");
+    doc.body.style.overflow = "";
+    if (contentsFab) contentsFab.focus();
+  }
+  if (contentsFab) contentsFab.addEventListener("click", openOverlay);
+  if (overlayClose) overlayClose.addEventListener("click", closeOverlay);
+  if (scrim) scrim.addEventListener("click", closeOverlay);
+  doc.addEventListener("keydown", function (e) {
+    if (overlay && !overlay.hidden) {
+      if (e.key === "Escape") { closeOverlay(); return; }
+      if (e.key === "Tab") {
+        var f = [].slice.call(overlay.querySelectorAll("a[href], button:not([disabled])"));
+        if (!f.length) return;
+        var first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && doc.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && doc.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+  });
+
+  /* ---------- copy buttons ---------- */
+  function flash(btn) {
+    var old = btn.getAttribute("data-label") || btn.textContent;
+    btn.setAttribute("data-label", old);
+    btn.textContent = "Copied";
+    btn.classList.add("copied");
+    window.setTimeout(function () {
+      btn.textContent = old;
+      btn.classList.remove("copied");
+    }, 1600);
+  }
+  function copyText(txt, btn) {
+    function legacy() {
+      var ta = doc.createElement("textarea");
+      ta.value = txt;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      doc.body.appendChild(ta);
+      ta.select();
+      try { doc.execCommand("copy"); flash(btn); } catch (err) {}
+      doc.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(function () { flash(btn); }, legacy);
+    } else { legacy(); }
+  }
+  [].slice.call(doc.querySelectorAll(".code-block")).forEach(function (block) {
+    var btn = block.querySelector(".copy-btn");
+    var code = block.querySelector("pre code");
+    if (!btn || !code) return;
+    btn.addEventListener("click", function () { copyText(code.innerText || code.textContent, btn); });
+  });
+
+  /* ---------- reveal on scroll ---------- */
+  if (!reduced.matches && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          en.target.classList.add("in");
+          io.unobserve(en.target);
+        }
+      });
+    }, { rootMargin: "0px 0px -6% 0px" });
+    secEls.forEach(function (s) { s.classList.add("reveal"); io.observe(s); });
+  }
+
+  /* ---------- initial paint ---------- */
+  onScroll();
+  /* ============================================================
+     SimEngine — shared canvas simulation engine
+     Techniques provide: nodes (tooltip hit areas) + steps with
+     { label, caption, hint, dur, draw(ctx, w, h, S, H, C) }.
+     Handles play/pause/restart/speed, step chips, captions,
+     tooltips, scaling, theme refresh and reduced motion.
+     ============================================================ */
+  window.SimEngine = (function () {
+    var SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+    var MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+    var DW = 960, DH = 540;
+
+    function hexA(hex, a) {
+      hex = (hex || "").trim();
+      if (hex.charAt(0) === "#") {
+        if (hex.length === 4) hex = "#" + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2) + hex.charAt(3) + hex.charAt(3);
+        var n = parseInt(hex.slice(1), 16);
+        if (isNaN(n)) return hex;
+        return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+      }
+      return hex;
+    }
+    function resolveColors() {
+      var cs = window.getComputedStyle(rootEl);
+      var names = ["bg", "surface", "surface-2", "elevated", "text", "muted", "border", "border-strong",
+        "accent", "accent-2", "violet", "success", "warning", "danger", "high", "low"];
+      var c = {};
+      for (var i = 0; i < names.length; i++) {
+        var v = cs.getPropertyValue("--" + names[i]);
+        c[names[i]] = v ? v.trim() : "#888888";
+      }
+      return c;
+    }
+
+    var H = {
+      hexA: hexA,
+      _C: null,
+      rr: function (ctx, x, y, w, h, r) {
+        r = Math.min(r || 8, w / 2, h / 2);
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      },
+      grid: function (ctx, w, h, C) {
+        ctx.save();
+        ctx.fillStyle = hexA(C.border, 0.42);
+        for (var x = 24; x < w; x += 48) {
+          for (var y = 24; y < h; y += 48) {
+            ctx.beginPath();
+            ctx.arc(x, y, 1.1, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      },
+      node: function (ctx, x, y, w, h, o) {
+        o = o || {};
+        var C = this._C;
+        var state = o.state || "idle";
+        var fill = C["surface-2"];
+        var stroke = C["border-strong"];
+        if (state === "active") stroke = C.accent;
+        if (state === "alert") stroke = C.danger;
+        if (state === "good") stroke = C.success;
+        if (state === "warn") stroke = C.warning;
+        if (state === "dead") { stroke = C.danger; fill = hexA(C.danger, 0.10); }
+        ctx.save();
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.lineWidth = state === "idle" ? 1 : 1.7;
+        ctx.strokeStyle = stroke;
+        ctx.stroke();
+        if (state === "dead") {
+          ctx.strokeStyle = hexA(C.danger, 0.95);
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(x + 9, y + 9);
+          ctx.lineTo(x + w - 9, y + h - 9);
+          ctx.moveTo(x + w - 9, y + 9);
+          ctx.lineTo(x + 9, y + h - 9);
+          ctx.stroke();
+        }
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        var cx = x + w / 2;
+        if (o.sub) {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2 - 8, w - 14);
+          ctx.fillStyle = C.muted;
+          ctx.font = "400 10.5px " + MONO;
+          ctx.fillText(o.sub, cx, y + h / 2 + 10, w - 14);
+        } else {
+          ctx.fillStyle = state === "dead" ? C.muted : C.text;
+          ctx.font = "700 12.5px " + MONO;
+          ctx.fillText(o.label, cx, y + h / 2, w - 14);
+        }
+        ctx.restore();
+      },
+      arrow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var ang = Math.atan2(y2 - y1, x2 - x1);
+        var head = o.head || 9;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = o.width || 1.6;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2 - Math.cos(ang) * head, y2 - Math.sin(ang) * head);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - Math.cos(ang - 0.42) * head, y2 - Math.sin(ang - 0.42) * head);
+        ctx.lineTo(x2 - Math.cos(ang + 0.42) * head, y2 - Math.sin(ang + 0.42) * head);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      },
+      flow: function (ctx, x1, y1, x2, y2, color, o) {
+        o = o || {};
+        var t = o.t || 0;
+        var n = o.n || 3;
+        var speed = o.speed == null ? 0.32 : o.speed;
+        var size = o.size || 3.2;
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.32);
+        ctx.lineWidth = 1.2;
+        if (o.dash) ctx.setLineDash(o.dash);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        for (var i = 0; i < n; i++) {
+          var f = (t * speed + i / n) % 1;
+          var px = x1 + (x2 - x1) * f;
+          var py = y1 + (y2 - y1) * f;
+          ctx.beginPath();
+          ctx.arc(px, py, size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      },
+      pulse: function (ctx, x, y, r, color, o) {
+        o = o || {};
+        var p = ((o.t || 0) * 0.8 + (o.phase || 0)) % 1;
+        var rr2 = r * (0.4 + p * 0.9);
+        ctx.save();
+        ctx.strokeStyle = hexA(color, 0.55 * (1 - p));
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, rr2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      },
+      text: function (ctx, str, x, y, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.fillStyle = o.color || C.text;
+        ctx.font = (o.weight || "400") + " " + (o.size || 13) + "px " + (o.mono ? MONO : SANS);
+        ctx.textAlign = o.align || "left";
+        ctx.textBaseline = o.baseline || "middle";
+        ctx.fillText(str, x, y, o.maxWidth);
+        ctx.restore();
+      },
+      chip: function (ctx, str, x, y, color, o) {
+        o = o || {};
+        var C = this._C;
+        ctx.save();
+        ctx.font = "700 11px " + MONO;
+        var w = ctx.measureText(str).width + 18;
+        var h = 21;
+        H.rr(ctx, x, y, w, h, 10);
+        ctx.fillStyle = hexA(color, o.bgA == null ? 0.13 : o.bgA);
+        ctx.fill();
+        ctx.strokeStyle = hexA(color, 0.55);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(str, x + 9, y + h / 2 + 0.5);
+        ctx.restore();
+        return w;
+      }
+    };
+
+    function init(cfg) {
+      var canvas = doc.getElementById(cfg.canvas || "simCanvas");
+      if (!canvas || !canvas.getContext) return null;
+      var stage = canvas.parentElement;
+      var ctx = canvas.getContext("2d");
+      var steps = cfg.steps || [];
+      var nodes = cfg.nodes || [];
+      var C = resolveColors();
+      H._C = C;
+      var st = { i: 0, p: 0, t: 0, playing: false, speed: 1, last: 0, hover: null, scale: 1 };
+      var rm = reduced.matches;
+
+      var playBtn = doc.getElementById("simPlay");
+      var pauseBtn = doc.getElementById("simPause");
+      var restartBtn = doc.getElementById("simRestart");
+      var speedSel = doc.getElementById("simSpeed");
+      var stepsBox = doc.getElementById("simSteps");
+      var capLabel = doc.getElementById("simCapLabel");
+      var capText = doc.getElementById("simCaption");
+      var capHint = doc.getElementById("simHint");
+      var tip = doc.getElementById("simTip");
+
+      var chips = [];
+      steps.forEach(function (s, idx) {
+        var b = doc.createElement("button");
+        b.type = "button";
+        b.className = "step-chip";
+        b.textContent = (idx + 1) + ". " + s.label;
+        b.addEventListener("click", function () { go(idx); });
+        if (stepsBox) stepsBox.appendChild(b);
+        chips.push(b);
+      });
+
+      function syncCaption() {
+        var s = steps[st.i];
+        if (!s) return;
+        if (capLabel) capLabel.textContent = "Step " + (st.i + 1) + " of " + steps.length + " — " + s.label;
+        if (capText) capText.textContent = s.caption;
+        if (capHint) capHint.textContent = "Defender hint: " + s.hint;
+        chips.forEach(function (c, i) {
+          c.classList.toggle("active", i === st.i);
+          if (i === st.i) c.setAttribute("aria-current", "step");
+          else c.removeAttribute("aria-current");
+        });
+      }
+      function syncButtons() {
+        if (playBtn) playBtn.disabled = st.playing;
+        if (pauseBtn) pauseBtn.disabled = !st.playing;
+      }
+      function go(i) {
+        st.i = Math.max(0, Math.min(steps.length - 1, i));
+        st.p = 0;
+        syncCaption();
+      }
+      function play() {
+        if (!steps.length) return;
+        if (st.i === steps.length - 1 && st.p >= 1) go(0);
+        st.playing = true;
+        syncButtons();
+      }
+      function pause() { st.playing = false; syncButtons(); }
+      function restart() { st.t = 0; go(0); }
+      if (playBtn) playBtn.addEventListener("click", play);
+      if (pauseBtn) pauseBtn.addEventListener("click", pause);
+      if (restartBtn) restartBtn.addEventListener("click", restart);
+      if (speedSel) speedSel.addEventListener("change", function () { st.speed = parseFloat(speedSel.value) || 1; });
+
+      function fit() {
+        var w = (stage && stage.clientWidth) || 960;
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        var cssH = Math.round(w * DH / DW);
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(cssH * dpr);
+        canvas.style.height = cssH + "px";
+        st.scale = canvas.width / DW;
+      }
+      window.addEventListener("resize", function () { fit(); render(); });
+
+      function toDesign(e) {
+        var r = canvas.getBoundingClientRect();
+        return { x: (e.clientX - r.left) / r.width * DW, y: (e.clientY - r.top) / r.height * DH };
+      }
+      function hit(d) {
+        for (var i = nodes.length - 1; i >= 0; i--) {
+          var n = nodes[i];
+          if (d.x >= n.x && d.x <= n.x + n.w && d.y >= n.y && d.y <= n.y + n.h) return n;
+        }
+        return null;
+      }
+      canvas.addEventListener("pointermove", function (e) {
+        if (!nodes.length) return;
+        var n = hit(toDesign(e));
+        st.hover = n ? n.id : null;
+        canvas.style.cursor = n ? "pointer" : "default";
+        if (tip) {
+          if (n) {
+            tip.textContent = "";
+            var b1 = doc.createElement("strong");
+            b1.textContent = n.label;
+            var p1 = doc.createElement("span");
+            p1.textContent = n.desc || "";
+            tip.appendChild(b1);
+            tip.appendChild(p1);
+            var wrapR = stage.getBoundingClientRect();
+            var lx = e.clientX - wrapR.left + 14;
+            var ly = e.clientY - wrapR.top + 14;
+            lx = Math.max(4, Math.min(lx, wrapR.width - 250));
+            ly = Math.max(4, Math.min(ly, wrapR.height - 90));
+            tip.style.left = lx + "px";
+            tip.style.top = ly + "px";
+            tip.hidden = false;
+          } else { tip.hidden = true; }
+        }
+      });
+      canvas.addEventListener("pointerleave", function () {
+        st.hover = null;
+        if (tip) tip.hidden = true;
+      });
+
+      if (window.MutationObserver) {
+        var mo = new MutationObserver(function () {
+          C = resolveColors();
+          H._C = C;
+          render();
+        });
+        mo.observe(rootEl, { attributes: true, attributeFilter: ["data-theme"] });
+      }
+
+      function render() {
+        var s = st.scale || 1;
+        ctx.setTransform(s, 0, 0, s, 0, 0);
+        ctx.fillStyle = C.bg;
+        ctx.fillRect(0, 0, DW, DH);
+        H.grid(ctx, DW, DH, C);
+        var step = steps[st.i];
+        if (step && step.draw) {
+          step.draw(ctx, DW, DH, { i: st.i, p: st.p, t: st.t, hover: st.hover, playing: st.playing, reduced: rm }, H, C);
+        }
+      }
+
+      function frame(ts) {
+        var dt = st.last ? Math.min((ts - st.last) / 1000, 0.08) : 0;
+        st.last = ts;
+        st.t += dt;
+        if (st.playing && steps.length) {
+          var d = steps[st.i].dur || 4.5;
+          st.p += dt * st.speed / d;
+          if (st.p >= 1) {
+            if (st.i < steps.length - 1) { st.i++; st.p = 0; syncCaption(); }
+            else { st.p = 1; pause(); }
+          }
+        }
+        render();
+        window.requestAnimationFrame(frame);
+      }
+
+      fit();
+      syncCaption();
+      syncButtons();
+      if (rm) { st.p = 1; } // reduced motion: static first step, no autoplay
+      window.requestAnimationFrame(frame);
+      return { go: go, play: play, pause: pause, restart: restart, state: st };
+    }
+
+    return { init: init, h: H };
+  })();
+
+  /* ---------- boot the simulation if present ---------- */
+  if (typeof window.SIM_STORY === "function") {
+    try { window.SIM_STORY(); } catch (e) { /* keep the rest of the page working */ }
+  }
+})();
+
+</script>
+</body>
+</html>

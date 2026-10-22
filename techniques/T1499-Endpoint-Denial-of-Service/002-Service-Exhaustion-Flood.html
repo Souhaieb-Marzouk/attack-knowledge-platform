@@ -1,0 +1,2303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1499.002 — Service Exhaustion Flood: Beginner Guide and Detection Reference</title>
+<meta name="description" content="A defensive, beginner-friendly guide to MITRE ATT&amp;CK sub-technique T1499.002 (Service Exhaustion Flood): how it works, how to detect it in logs, Sigma rules, Splunk SPL, and mitigations.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2016%2016'%3E%3Crect%20width='16'%20height='16'%20rx='3'%20fill='%234f8cff'/%3E%3Cpath%20d='M4%2012V6l4-3%204%203v6H9V9H7v3z'%20fill='%230b0f1a'/%3E%3C/svg%3E">
+<script>
+(function () {
+  try {
+    var t = null;
+    var u = new URLSearchParams(window.location.search);
+    var p = u.get("theme");
+    if (p === "dark" || p === "light") { t = p; }
+    if (!t) { t = window.localStorage.getItem("atk-theme"); }
+    if (t !== "dark" && t !== "light") {
+      t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+    }
+    document.documentElement.setAttribute("data-theme", t);
+  } catch (e) { /* keep dark default */ }
+})();
+</script>
+<style>
+/* ===== Tokens: dark is the default palette ===== */
+:root {
+  color-scheme: dark light;
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --shadow: 0 10px 30px rgba(3, 8, 24, 0.35);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, "Courier New", monospace;
+  --radius-card: 14px; --radius-ctl: 9px;
+}
+html[data-theme="light"] {
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow: 0 10px 30px rgba(23, 34, 68, 0.10);
+  color-scheme: light;
+}
+/* ===== Base ===== */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: var(--font-sans); font-size: 16.5px; line-height: 1.65;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 2px; border-radius: 4px; }
+.mono { font-family: var(--font-mono); }
+.skip-link {
+  position: absolute; left: -999px; top: 0; z-index: 100;
+  background: var(--accent); color: #ffffff; padding: 10px 18px;
+  border-radius: 0 0 10px 0; font-weight: 600;
+}
+.skip-link:focus { left: 0; }
+/* ===== Progress bar ===== */
+.progress-bar {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  z-index: 90; transition: width 0.08s linear;
+}
+/* ===== Hero ===== */
+.hero { max-width: 1280px; margin: 0 auto; padding: 56px 24px 26px; }
+.kicker {
+  font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--accent-2);
+}
+.hero-title {
+  font-size: clamp(1.9rem, 4vw, 2.85rem); line-height: 1.14; margin: 0.45rem 0 0.9rem;
+  font-weight: 800; letter-spacing: -0.015em;
+}
+.hero-title .tech-id { color: var(--accent); font-family: var(--font-mono); font-weight: 700; }
+.hero .lead { max-width: 72ch; color: var(--muted); font-size: 1.04rem; margin: 0 0 18px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; padding: 0; list-style: none; }
+.chip {
+  font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted);
+  border: 1px solid var(--border-strong); background: var(--surface);
+  border-radius: 999px; padding: 5px 12px;
+}
+.chip b { color: var(--text); font-weight: 600; }
+.keyfacts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.keyfact {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
+  padding: 14px 16px; box-shadow: var(--shadow);
+}
+.keyfact .kf-label {
+  display: block; font-family: var(--font-mono); font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--accent-2); margin-bottom: 6px;
+}
+.keyfact .kf-text { font-size: 0.92rem; line-height: 1.5; margin: 0; }
+.keyfact code { font-family: var(--font-mono); font-size: 0.85em; }
+/* ===== Two-column layout ===== */
+.layout {
+  max-width: 1280px; margin: 0 auto; padding: 10px 24px 80px;
+  display: grid; grid-template-columns: 264px minmax(0, 1fr); gap: 36px; align-items: start;
+}
+.sidebar { min-width: 0; }
+.toc {
+  position: sticky; top: 20px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-card); padding: 16px; box-shadow: var(--shadow);
+  max-height: calc(100vh - 40px); overflow: auto;
+}
+.toc-title {
+  font-family: var(--font-mono); font-size: 0.76rem; text-transform: uppercase;
+  letter-spacing: 0.14em; color: var(--muted); margin: 0 0 10px; font-weight: 600;
+}
+.toc ol, .toc-noscript { list-style: none; margin: 0; padding: 0; }
+.toc a {
+  display: block; padding: 6px 9px; border-radius: 8px; color: var(--muted);
+  font-size: 0.88rem; line-height: 1.35;
+}
+.toc a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.toc a.active {
+  background: var(--surface-2); color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent); font-weight: 600;
+}
+.toc a.toc-sub { padding-left: 24px; font-size: 0.82rem; }
+.toc a.toc-sub.active { color: var(--accent-2); box-shadow: inset 2px 0 0 var(--accent-2); }
+/* ===== Content sections ===== */
+.content { min-width: 0; }
+.section { margin: 0 0 56px; scroll-margin-top: 88px; }
+.sec-head { display: flex; align-items: center; gap: 12px; margin: 0 0 6px; flex-wrap: wrap; }
+.sec-badge {
+  font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent-2);
+  border: 1px solid var(--border-strong); border-radius: 8px; padding: 3px 9px;
+  background: var(--surface-2); flex: none;
+}
+.sec-title { font-size: 1.55rem; margin: 0; font-weight: 800; letter-spacing: -0.01em; }
+.sec-intro { color: var(--muted); max-width: 75ch; margin: 4px 0 18px; }
+.content h3 { font-size: 1.14rem; margin: 28px 0 10px; scroll-margin-top: 88px; font-weight: 750; }
+.content h4 { font-size: 1rem; margin: 0 0 8px; font-weight: 700; }
+.content p { max-width: 72ch; margin: 0 0 14px; }
+.content ul, .content ol { max-width: 74ch; padding-left: 22px; margin: 0 0 14px; }
+.content li { margin: 0 0 6px; }
+code {
+  font-family: var(--font-mono); font-size: 0.86em; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 6px; padding: 1px 5px;
+  overflow-wrap: anywhere;
+}
+/* ===== Cards and grids ===== */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin: 0 0 18px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
+  padding: 16px; box-shadow: var(--shadow);
+}
+.card > :last-child { margin-bottom: 0; }
+.card p { max-width: none; }
+.card-tag {
+  display: inline-block; font-family: var(--font-mono); font-size: 0.68rem; color: var(--accent-2);
+  text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px;
+}
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 0 18px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 0 0 18px; }
+/* ===== Callouts ===== */
+.callout {
+  border: 1px solid var(--border); border-left: 4px solid var(--accent);
+  background: var(--surface-2); border-radius: 12px; padding: 12px 16px; margin: 0 0 16px;
+}
+.callout p { max-width: none; margin: 0 0 8px; }
+.callout > :last-child { margin-bottom: 0; }
+.callout .callout-label {
+  display: block; font-family: var(--font-mono); font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.14em; margin-bottom: 6px; font-weight: 700;
+}
+.callout-note { border-left-color: var(--accent); }
+.callout-note .callout-label { color: var(--accent); }
+.callout-warn { border-left-color: var(--warning); }
+.callout-warn .callout-label { color: var(--warning); }
+.callout-good { border-left-color: var(--success); }
+.callout-good .callout-label { color: var(--success); }
+.callout-danger { border-left-color: var(--danger); }
+.callout-danger .callout-label { color: var(--danger); }
+/* ===== Tables ===== */
+.table-wrap {
+  overflow-x: auto; border: 1px solid var(--border); border-radius: 12px;
+  margin: 0 0 16px; background: var(--surface);
+}
+.table-wrap table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 0.9rem; }
+.table-wrap th, .table-wrap td {
+  text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top;
+}
+.table-wrap th {
+  background: var(--surface-2); font-family: var(--font-mono); font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600;
+}
+.table-wrap tr:last-child td { border-bottom: none; }
+.table-wrap td code { white-space: nowrap; }
+/* ===== Code blocks ===== */
+.code-block {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden; margin: 0 0 16px;
+}
+.code-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+}
+.code-lang {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.12em;
+}
+.copy-btn {
+  font-family: var(--font-mono); font-size: 0.72rem; color: var(--text);
+  background: var(--elevated); border: 1px solid var(--border-strong);
+  border-radius: 8px; padding: 4px 12px; cursor: pointer; flex: none;
+}
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+.copy-btn.copied { color: var(--success); border-color: var(--success); }
+.code-block pre { margin: 0; padding: 14px 16px; overflow-x: auto; background: var(--bg); }
+pre { font-family: var(--font-mono); font-size: 0.84rem; line-height: 1.55; }
+pre code { background: none; border: none; padding: 0; font-size: inherit; white-space: pre; }
+/* ===== Badges ===== */
+.badge {
+  display: inline-block; font-family: var(--font-mono); font-size: 0.68rem; font-weight: 700;
+  padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border-strong);
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+.sev-critical { color: var(--danger); border-color: var(--danger); }
+.sev-high { color: var(--high); border-color: var(--high); }
+.sev-medium { color: var(--warning); border-color: var(--warning); }
+.sev-low { color: var(--low); border-color: var(--low); }
+.cat { color: var(--accent-2); border-color: var(--border-strong); background: var(--surface-2); }
+/* ===== Key/value list ===== */
+.kv {
+  display: grid; grid-template-columns: max-content 1fr; gap: 9px 20px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
+  padding: 16px 18px; box-shadow: var(--shadow); margin: 0 0 18px; font-size: 0.93rem;
+}
+.kv dt { font-family: var(--font-mono); color: var(--accent-2); font-size: 0.8rem; padding-top: 2px; }
+.kv dd { margin: 0; }
+/* ===== Timeline ===== */
+.timeline { list-style: none; margin: 0 0 16px; padding: 0 0 0 8px; border-left: 2px solid var(--border-strong); max-width: 74ch; }
+.timeline li { position: relative; padding: 0 0 16px 18px; }
+.timeline li:last-child { padding-bottom: 0; }
+.timeline li::before {
+  content: ""; position: absolute; left: -9px; top: 5px; width: 12px; height: 12px;
+  border-radius: 50%; background: var(--accent); border: 2px solid var(--bg);
+}
+.tl-when { display: block; font-family: var(--font-mono); font-size: 0.76rem; color: var(--accent-2); margin-bottom: 2px; }
+/* ===== Simulation ===== */
+.sim-wrap {
+  position: relative; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 16px; box-shadow: var(--shadow); margin: 0 0 16px;
+}
+.sim-canvas {
+  display: block; width: 100%; height: auto; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--border); touch-action: pan-y;
+}
+.sim-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+.sim-controls button, .sim-controls select {
+  font-family: var(--font-mono); font-size: 0.85rem; padding: 8px 14px; border-radius: var(--radius-ctl);
+  border: 1px solid var(--border-strong); background: var(--elevated); color: var(--text); cursor: pointer;
+}
+.sim-controls button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.sim-controls button:disabled { opacity: 0.5; cursor: default; }
+.sim-caption { margin: 12px 0 0; font-size: 0.96rem; font-weight: 650; }
+.sim-hint { margin: 4px 0 0; font-size: 0.87rem; color: var(--muted); }
+.sim-hint strong { color: var(--accent-2); font-weight: 650; }
+.sim-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.sim-chip {
+  font-family: var(--font-mono); font-size: 0.74rem; padding: 4px 11px; border-radius: 999px;
+  border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--muted); cursor: pointer;
+}
+.sim-chip:hover { color: var(--text); }
+.sim-chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--surface); font-weight: 700; }
+.sim-tooltip {
+  position: absolute; display: none; max-width: 260px; background: var(--elevated); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 10px; padding: 8px 11px;
+  font-size: 0.78rem; line-height: 1.45; box-shadow: var(--shadow); pointer-events: none; z-index: 20;
+}
+.sim-tooltip.show { display: block; }
+.sim-story { margin-top: 18px; }
+/* ===== Checklist ===== */
+.checklist { list-style: none; padding: 0; margin: 0 0 16px; max-width: 74ch; }
+.checklist li { position: relative; padding-left: 30px; margin-bottom: 9px; }
+.checklist li::before {
+  content: ""; position: absolute; left: 0; top: 4px; width: 13px; height: 13px;
+  border: 2px solid var(--accent); border-radius: 4px; background: var(--surface-2);
+}
+/* ===== Mobile contents button, overlay, back-to-top ===== */
+.mobile-toc-btn {
+  display: none; position: fixed; right: 16px; bottom: 16px; z-index: 80;
+  background: var(--accent); color: #ffffff; border: none; border-radius: 999px;
+  padding: 12px 20px; font-size: 0.9rem; font-weight: 700; box-shadow: var(--shadow); cursor: pointer;
+}
+.toc-overlay { position: fixed; inset: 0; z-index: 95; display: none; background: rgba(4, 8, 20, 0.62); }
+.toc-overlay.open { display: flex; }
+.overlay-panel {
+  margin: auto; width: min(380px, 90vw); max-height: 82vh; overflow: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 18px; box-shadow: var(--shadow);
+}
+.overlay-panel .toc { position: static; max-height: none; box-shadow: none; border: none; padding: 0; background: transparent; }
+.back-top {
+  display: none; position: fixed; left: 16px; bottom: 16px; z-index: 80;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: 999px; padding: 10px 16px; cursor: pointer; box-shadow: var(--shadow); font-size: 0.85rem;
+}
+.back-top.show { display: block; }
+/* ===== Responsive ===== */
+@media (max-width: 1040px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .mobile-toc-btn { display: block; }
+  .keyfacts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .hero { padding: 40px 16px 18px; }
+  .layout { padding: 0 16px 60px; gap: 0; }
+  .keyfacts, .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .sim-controls button, .sim-controls select { flex: 1 1 100%; }
+  .sec-title { font-size: 1.3rem; }
+  body { font-size: 16px; }
+}
+/* ===== Reduced motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+/* ===== Print ===== */
+@media print {
+  .progress-bar, .sidebar, .mobile-toc-btn, .toc-overlay, .back-top, .copy-btn,
+  .sim-canvas, .sim-controls, .sim-chips, .sim-tooltip, .skip-link { display: none !important; }
+  body { background: #ffffff; color: #111111; font-size: 12pt; }
+  a { color: #000000; text-decoration: underline; }
+  .card, .code-block, .keyfact, .callout, .table-wrap, .sim-wrap, .kv {
+    box-shadow: none; border-color: #bbbbbb; background: #ffffff; break-inside: avoid;
+  }
+  .code-block pre { background: #f6f6f6; color: #111111; }
+  .section { margin-bottom: 26px; }
+  .chip { border-color: #bbbbbb; color: #333333; background: #ffffff; }
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1499.002"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<div class="progress-bar" role="presentation" aria-hidden="true"></div>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<div class="hero">
+  <p class="kicker">MITRE ATT&amp;CK · Endpoint Denial of Service · Defensive Guide</p>
+  <h1 class="hero-title"><span class="tech-id">T1499.002</span> — Service Exhaustion Flood</h1>
+  <p class="lead">This guide explains how an attacker can flood one network service until the service runs out of its own worker slots and stops answering. It also shows defenders where this attack leaves traces in logs, how to write detection rules, and how to stop it. All attack examples here are lab only: run them only on isolated test machines that you own.</p>
+  <ul class="chips">
+    <li class="chip"><b>Tactic:</b> Impact</li>
+    <li class="chip"><b>Parent:</b> T1499 Endpoint Denial of Service</li>
+    <li class="chip"><b>Platforms:</b> IaaS · Linux · Windows · macOS</li>
+    <li class="chip"><b>Primary target:</b> Service worker and connection limits</li>
+    <li class="chip"><b>Created:</b> 20 February 2020 · ATT&amp;CK v20 · Last modified: 24 October 2025</li>
+    <li class="chip"><b>Technique revision:</b> 1.4</li>
+    <li class="chip"><b>Guide:</b> v2.0</li>
+  </ul>
+  <div class="keyfacts">
+    <div class="keyfact"><span class="kf-label">Attack cost</span><p class="kf-text">Low bandwidth, many slow connections — or raw request volume. One small host can hold every worker of a busy service.</p></div>
+    <div class="keyfact"><span class="kf-label">Key evidence</span><p class="kf-text">Service error logs plus a sharp rise in concurrent connections from one source.</p></div>
+    <div class="keyfact"><span class="kf-label">Signature artifact</span><p class="kf-text"><code>worker_connections are not enough</code> in the nginx error log; <code>server reached MaxRequestWorkers</code> for Apache.</p></div>
+    <div class="keyfact"><span class="kf-label">Core control</span><p class="kf-text">Short timeouts, concurrency limits, rate limits, and a web application firewall (WAF).</p></div>
+  </div>
+</div>
+
+<div class="layout">
+  <aside class="sidebar">
+    <nav class="toc" aria-label="Table of contents">
+      <p class="toc-title">Contents</p>
+      <ol id="toc-list"></ol>
+      <noscript>
+        <ol class="toc-noscript">
+          <li><a href="#overview">1. Overview</a></li>
+          <li><a href="#simulation">2. Animated simulation</a></li>
+          <li><a href="#red-team">3. Red team perspective</a></li>
+          <li><a href="#blue-team">4. Blue team perspective</a></li>
+          <li><a href="#detection-deep-dive">5. Detection engineering deep dive</a></li>
+          <li><a class="toc-sub" href="#regulation-mapping">5.1 Regulation mapping</a></li>
+          <li><a class="toc-sub" href="#threat-intelligence">5.2 Threat intelligence</a></li>
+          <li><a class="toc-sub" href="#threat-ranking">5.3 Threats ranking and categorization</a></li>
+          <li><a class="toc-sub" href="#logs-and-patterns">5.4 Logs and patterns</a></li>
+          <li><a class="toc-sub" href="#sigma-and-spl">5.5 Sigma rules and Splunk SPL</a></li>
+          <li><a href="#case-study">6. Real-world case study</a></li>
+          <li><a href="#mitigation">7. Mitigation and defense</a></li>
+          <li><a href="#mistakes">8. Common mistakes and best practices</a></li>
+          <li><a href="#cheat-sheet">9. Cheat sheet and quick reference</a></li>
+        </ol>
+      </noscript>
+    </nav>
+  </aside>
+
+  <main id="main" class="content">
+    <section class="section" id="overview">
+      <div class="sec-head"><span class="sec-badge">1</span><h2 class="sec-title">Overview</h2></div>
+      <p class="sec-intro">What this technique is, in plain words, and how it differs from its sibling techniques.</p>
+
+      <p>A network service, such as a web server, can only talk to a limited number of clients at the same time. Think of the service as a small shop with eight chairs. Each visitor sits on a chair, gets served, and leaves. A <strong>Service Exhaustion Flood</strong> (MITRE ATT&amp;CK sub-technique <strong>T1499.002</strong>) is when an attacker fills all the chairs and then refuses to leave. New real customers find no free chair and give up.</p>
+      <p>ATT&amp;CK (Adversarial Tactics, Techniques and Common Knowledge) is a public catalog that describes how attackers operate. T1499.002 sits under the parent technique <strong>T1499 Endpoint Denial of Service</strong>, in the <strong>Impact</strong> tactic. The goal is <strong>availability loss</strong>: the service still runs, but nobody can use it. The attacker does not break the software and does not steal data. The attack just occupies the service's own capacity until it exhausts its limits: its worker pool, thread pool, maximum client count, or request queue.</p>
+
+      <p>The official ATT&amp;CK description names two patterns for this sub-technique, so they come first here. The first is the <strong>simple HTTP flood</strong>. The attacker sends a large number of ordinary HTTP requests at the web server. Each request looks normal. The raw volume exhausts the resources the victim software needs to answer: CPU time, memory, threads, or connection slots. The second is the <strong>SSL renegotiation attack</strong>. SSL/TLS (Secure Sockets Layer, and its successor Transport Layer Security) is the protocol family that encrypts HTTPS. Some versions allow <strong>renegotiation</strong>: while a connection is open, the two sides can redo the agreement on the encryption algorithm they use. Doing that many times costs the server a meaningful amount of computation, so it can break service availability.</p>
+
+      <h4>The two patterns ATT&amp;CK names</h4>
+      <div class="cards">
+        <div class="card"><span class="card-tag">Official pattern</span><h4>Simple HTTP flood (raw volume)</h4><p>Thousands of complete, valid requests hit one service as fast as the attacker can send them. Nothing is malformed and nothing is slow. The service does real work on every request until its worker pool, memory, or connection slots run out. These floods often come from many machines at once, which makes per-source limits harder to apply.</p></div>
+        <div class="card"><span class="card-tag">Official pattern</span><h4>SSL renegotiation flood</h4><p>The attacker opens TLS connections and asks the server to renegotiate the crypto agreement again and again. The server pays a heavy computational cost each time; the client pays far less. TLS 1.3 removed renegotiation, and many TLS 1.2 servers refuse client-initiated renegotiation, so this pattern mostly hits older or misconfigured endpoints.</p></div>
+      </div>
+
+      <h4>Other service-exhaustion patterns</h4>
+
+      <div class="cards">
+        <div class="card"><span class="card-tag">Attack pattern</span><h4>Slow HTTP headers (slowloris style)</h4><p>HTTP (Hypertext Transfer Protocol) is the language web browsers and web servers speak. An HTTP request starts with a small text block called the <strong>header</strong>. The attacker sends only the first header lines, then stops and waits. The server keeps a <strong>worker</strong> (one unit of serving capacity, like a process or thread) waiting for the rest. The attacker repeats this with hundreds of connections until every worker waits for bytes that never arrive.</p></div>
+        <div class="card"><span class="card-tag">Attack pattern</span><h4>Slow POST body (RUDY style)</h4><p>A <strong>POST request</strong> sends data to the server, for example a form or an upload. The attacker announces a large body, then sends it one tiny piece at a time, with long pauses. The worker stays busy holding a half-finished upload. This is the same trick as slow headers, aimed at the body instead of the header.</p></div>
+        <div class="card"><span class="card-tag">Attack pattern</span><h4>Fast connection flood to one daemon</h4><p>A <strong>daemon</strong> is a program that runs in the background and serves requests, such as a web server, DNS server, or mail server. Here the attacker simply opens as many network connections as the daemon allows, as fast as possible, and keeps them open. The daemon runs out of connection slots.</p></div>
+        <div class="card"><span class="card-tag">Attack pattern</span><h4>Service-specific floods</h4><p>The same idea works on any service with its own limits. A DNS (Domain Name System) resolver can drown in name lookups. An SMTP (Simple Mail Transfer Protocol) mail server can drown in mail connections. An LDAP (Lightweight Directory Access Protocol) server can drown in <strong>bind</strong> (login) requests. A database can lose its connection pool through the application in front of it.</p></div>
+      </div>
+
+      <h4>How this differs from the sibling techniques</h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Technique</th><th>What it exhausts</th><th>Plain example</th></tr></thead>
+          <tbody>
+            <tr><td><a href="https://attack.mitre.org/techniques/T1499/001/">T1499.001 OS Exhaustion Flood</a></td><td>Operating system resources, such as the kernel connection table or process limits</td><td>The machine itself runs out of memory or file handles</td></tr>
+            <tr><td><strong>T1499.002 Service Exhaustion Flood</strong></td><td>The limits of one specific service: workers, threads, connection slots, request queues</td><td>The machine is healthy, but the web server has no free worker</td></tr>
+            <tr><td><a href="https://attack.mitre.org/techniques/T1499/003/">T1499.003 Application Exhaustion Flood</a></td><td>Application-level request cost</td><td>Each request is expensive, for example a heavy search, so few requests are enough</td></tr>
+            <tr><td><a href="https://attack.mitre.org/techniques/T1498/">T1498 Network Denial of Service</a></td><td>Network bandwidth or middleboxes</td><td>So much traffic fills the internet pipe that nothing gets through</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>The words you need to know</h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Setting or term</th><th>What it means</th><th>What the log says when it is full</th></tr></thead>
+          <tbody>
+            <tr><td><code>MaxRequestWorkers</code> (Apache)</td><td>The maximum number of simultaneous worker processes or threads Apache may run</td><td><code>server reached MaxRequestWorkers</code></td></tr>
+            <tr><td><code>worker_connections</code> (nginx)</td><td>The maximum number of sockets (open connections) each nginx worker process may hold</td><td><code>worker_connections are not enough</code></td></tr>
+            <tr><td><code>max_connections</code> (MySQL)</td><td>The maximum number of client sessions the database accepts</td><td><code>Too many connections</code></td></tr>
+            <tr><td>Request timeout</td><td>How long the server waits for one client before dropping the connection</td><td>Status codes <code>408</code> (request timeout) or <code>499</code> (client closed) in access logs</td></tr>
+            <tr><td>Listen backlog</td><td>The waiting line for new connections before a worker takes them</td><td>Connection attempts are refused or reset</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>One boundary to keep in mind: the renegotiation attack is expensive work, yet ATT&amp;CK places it here, not under T1499.003. The difference is the layer. Renegotiation exhausts a service-level protocol feature of the TLS endpoint itself. T1499.003 targets expensive features inside an application, such as a heavy search page.</p>
+
+      <div class="callout callout-note"><span class="callout-label">Note</span>
+        <p>ATT&amp;CK lists the official platforms for T1499.002 as IaaS (Infrastructure as a Service, meaning rented cloud servers), Linux, Windows, and macOS. The threat scope is wider: any service with a worker or connection limit can be a target. This guide therefore also uses the broader labels Network, Cloud, and Identity for its threat cards.</p>
+      </div>
+    </section>
+
+    <section class="section" id="simulation">
+      <div class="sec-head"><span class="sec-badge">2</span><h2 class="sec-title">Animated simulation: Eight Chairs, Slow Guests</h2></div>
+      <p class="sec-intro">A model of one web server with eight worker slots, one attacker, one real user, and the SOC view. The SOC (Security Operations Center) is the team that watches logs and alerts. The story shown is the slow-header attack; the same eight-chair model fits the other patterns. In a raw HTTP flood the chairs turn over very fast. In a renegotiation flood each chair is held while the server does extra cryptographic work.</p>
+
+      <div class="sim-wrap" id="sim">
+        <canvas id="sim-canvas" class="sim-canvas" role="img" aria-label="Animated model of a web server with eight worker slots. An attacker opens many slow connections and holds every worker until it times out. The SOC sees a spike of connections from one source and an error message about worker connections. A defender tunes timeouts, blocks the source at the firewall, and the service recovers. The full story is written below the canvas."></canvas>
+        <div class="sim-tooltip" id="sim-tooltip"></div>
+        <div class="sim-controls" role="group" aria-label="Simulation controls">
+          <button type="button" id="sim-play" aria-label="Play simulation">Play</button>
+          <button type="button" id="sim-pause" aria-label="Pause simulation">Pause</button>
+          <button type="button" id="sim-restart" aria-label="Restart simulation">Restart</button>
+          <label for="sim-speed" class="mono" style="font-size:0.8rem;color:var(--muted);">Speed</label>
+          <select id="sim-speed" aria-label="Simulation speed">
+            <option value="0.5">0.5x</option>
+            <option value="1" selected>1x</option>
+            <option value="2">2x</option>
+          </select>
+        </div>
+        <div class="sim-chips" id="sim-chips" role="group" aria-label="Jump to simulation step"></div>
+        <p class="sim-caption" id="sim-caption" aria-live="polite">Normal traffic: eight workers serve quick requests.</p>
+        <p class="sim-hint" id="sim-hint"><strong>Defender hint:</strong> <span id="sim-hint-text">Baseline the number of concurrent connections per source while everything is calm.</span></p>
+      </div>
+
+      <div class="sim-story">
+        <h4>The same story in writing</h4>
+        <ol>
+          <li><strong>Normal traffic.</strong> Real visitors send quick requests. The eight workers serve them one after another. In the SOC panel, connections per source stay low and steady.</li>
+          <li><strong>The attacker arrives.</strong> One host opens many connections to the web server. On each connection it sends only the first header lines, such as <code>GET / HTTP/1.1</code> and <code>Host:</code>, then it stops sending and waits.</li>
+          <li><strong>All chairs are taken.</strong> Every worker now waits for header bytes that never come. Each worker holds a timer, but the timeout is long, so they wait for minutes.</li>
+          <li><strong>A real user is shut out.</strong> A normal visitor connects, waits in the queue, and finally gives up. The request times out and shows up as status <code>408</code> or <code>499</code> in the logs.</li>
+          <li><strong>The SOC sees it.</strong> The metric "concurrent connections per source" jumps for one address. The nginx error log prints <code>worker_connections are not enough</code>. These two signals together are a strong alert.</li>
+          <li><strong>The defender tunes, the attacker adapts.</strong> Shorter header timeouts and rate limits free workers faster. The attacker spreads the connections or slows the pace to stay under the new limits.</li>
+          <li><strong>The source is blocked.</strong> The firewall and WAF drop the attacking address upstream of the server. The workers free up at once.</li>
+          <li><strong>Recovery.</strong> Real users are served again. The team records the incident and adds the per-source baseline to its monitoring.</li>
+        </ol>
+      </div>
+
+      <div class="callout callout-note"><span class="callout-label">Note</span>
+        <p>This animation is a teaching model, not real traffic. While playing, the story advances by itself about every four seconds per step; use Pause or the step chips to hold one scene. If your browser has "reduce motion" turned on, the animation does not play by itself; you can still step through the eight steps with the buttons and chips.</p>
+      </div>
+    </section>
+    <section class="section" id="red-team">
+      <div class="sec-head"><span class="sec-badge">3</span><h2 class="sec-title">Red team perspective</h2></div>
+      <p class="sec-intro">Why an attacker picks this technique and how it works, so you can understand the traces it leaves. Every command here is lab only.</p>
+
+      <p>An attacker picks service exhaustion when the goal is simple downtime and the budget is small. Unlike a bandwidth flood (T1498), this attack needs very little traffic. A single laptop can hold hundreds of half-open connections. The attack is quiet on the network but loud in the service's own error logs, which is exactly what section 4 and section 5 use.</p>
+
+      <h4>When and why attackers choose it</h4>
+      <ul>
+        <li><strong>Low cost:</strong> no rented botnet or wide pipe is needed; slow connections are cheap to keep open.</li>
+        <li><strong>Small footprint:</strong> few packets per second, so volume-based network alarms stay quiet.</li>
+        <li><strong>Known weak defaults:</strong> many servers ship with long request timeouts and small worker pools.</li>
+        <li><strong>Cover:</strong> a flood of slow clients looks a little like normal mobile users on bad links.</li>
+      </ul>
+
+      <h4>Prerequisites the attacker looks for</h4>
+      <ul>
+        <li>A service that keeps a slot open while waiting for client bytes (a long <strong>timeout</strong> is the time the server waits before giving up).</li>
+        <li>A small worker or connection limit compared to expected traffic, for example Apache <code>MaxRequestWorkers 150</code> or nginx <code>worker_connections 512</code>.</li>
+        <li>No reverse proxy or WAF in front that closes slow clients early. A <strong>reverse proxy</strong> is a middle server that speaks to clients first and forwards only finished requests.</li>
+        <li>No per-source connection limit at the firewall.</li>
+      </ul>
+
+      <h4>Conceptual flow of a slow-header attack</h4>
+      <ol>
+        <li>Open a TCP (Transmission Control Protocol) connection to the web service.</li>
+        <li>Send a partial request header: the request line and one or two header lines, then stop. The request is unfinished, so the worker must wait.</li>
+        <li>Every few minutes, send one more harmless header line to keep the connection alive before the server's timeout closes it.</li>
+        <li>Open more connections in parallel until all workers are held.</li>
+        <li>Keep topping up the connections; the service stays unusable for as long as the attacker keeps going.</li>
+      </ol>
+      <p>The slow POST variant is the same, but the attacker announces a big body and then drips it in tiny pieces. The fast connection flood variant does not even need HTTP: it just fills the daemon's connection table with idle sessions.</p>
+
+      <h4>The raw-volume HTTP flood</h4>
+      <p>The official ATT&amp;CK example works the opposite way to slowloris. The requests are complete, valid, and fast, but there are enormous numbers of them. The attacker repeats ordinary GET or POST requests as fast as the target and its own uplink allow. Every request consumes worker time, memory, and upstream calls. So the service exhausts even though every individual request is harmless. Public reporting shows these floods usually come from many machines at once, because one host rarely has enough bandwidth to outrun a service alone.</p>
+      <p>In a lab you can show the mechanism at tiny scale. Run a short burst of normal benchmark requests against your own test server, then watch worker usage and response times climb while the traffic stays perfectly valid.</p>
+
+      <h4>The SSL renegotiation attack</h4>
+      <p>Here the attacker opens one or more TLS connections and then triggers renegotiation repeatedly. Renegotiation makes the server redo the key exchange and the cipher agreement. That costs the server far more computation than the client. Done in volume, it burns CPU on the TLS endpoint and slows or stalls every connection it serves. Because TLS 1.3 removed renegotiation and most modern stacks refuse client-initiated renegotiation, first check whether your services allow it at all. If they do, treat that as a finding even before any attack.</p>
+
+      <div class="callout callout-warn"><span class="callout-label">Warning — Lab only</span>
+        <p>Both checks below touch only the reserved lab address <code>10.0.0.10</code>, on a test server you own and on an isolated network. The first sends ordinary requests, only faster than a human would. The second asks the server once whether it allows renegotiation. Never point these tools at systems you do not own.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">shell — tiny raw-volume flood demonstration against your own lab server</span></div>
+          <pre><code>ab -n 2000 -c 50 http://10.0.0.10/index.html</code></pre>
+        </div>
+        <p><code>ab</code> is the ApacheBench load-test tool. <code>-n</code> is the total number of requests and <code>-c</code> is how many run at once. While it runs, watch worker usage on the server, then compare with the access-log fingerprint in section 5.4.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">shell — ask your lab server whether renegotiation is allowed</span></div>
+          <pre><code>openssl s_client -connect 10.0.0.10:443 -tls1_2
+# after the handshake appears, press R once and press Enter, then close with Ctrl+C</code></pre>
+        </div>
+        <p>If the server renegotiates, one connection can make it redo that expensive work forever. If it refuses, the pattern is already closed on that service. Record which servers still accept renegotiation, because that list drives the mitigation in section 7.</p>
+      </div>
+
+      <div class="callout callout-warn"><span class="callout-label">Warning — Lab only</span>
+        <p>Run the following only against a test web server you own, on an isolated network such as a home lab or a virtual lab. The example targets are the reserved lab addresses <code>10.0.0.10</code> and <code>lab.local</code>. Never point these tools at systems you do not own; in most countries that is a crime (see section 5.1).</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">shell — slow-header test against your own lab web server</span></div>
+          <pre><code>slowhttptest -c 200 -H -i 10 -r 50 -t "GET / HTTP/1.1" -u http://10.0.0.10/index.html -p 3 -l 60</code></pre>
+        </div>
+        <p>Flags: <code>-c</code> number of connections, <code>-H</code> slow-header mode, <code>-i</code> seconds between keep-alive bytes (small periodic bytes that stop the server closing an idle connection), <code>-r</code> connections per second, <code>-p</code> probe timeout, <code>-l</code> test duration. On the lab server, watch the effect in another terminal:</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">shell — watch the artifacts on your own lab server</span></div>
+          <pre><code>tail -f /var/log/nginx/error.log
+ss -tan state established '( dport = :80 )' | wc -l</code></pre>
+        </div>
+      </div>
+
+      <h4>Common variations</h4>
+      <ul>
+        <li>Slowing only the request body on upload endpoints (RUDY style).</li>
+        <li>Hitting several services at once: web plus DNS plus LDAP.</li>
+        <li>Running the flood from many small sources at low rate each, so per-source limits are harder to apply.</li>
+        <li>Mixing slow clients and fast floods at the same time, so each signature stays weaker.</li>
+        <li>Abusing SSL/TLS renegotiation as described above; the official ATT&amp;CK page lists this variant for T1499.002.</li>
+      </ul>
+
+      <h4>Common attacker mistakes (your detection opportunities)</h4>
+      <ul>
+        <li>Opening too many connections from one IP address, which makes the per-source count spike obvious.</li>
+        <li>Keeping perfectly regular timing between keep-alive bytes, unlike human traffic.</li>
+        <li>Leaving the default tool <code>User-Agent</code> string (such as <code>slowhttptest</code>) in every request.</li>
+        <li>Forgetting to top up connections after the server timeout closes them, so the attack fades in minutes.</li>
+        <li>Attacking through a reverse proxy that enforces short header timeouts, so the origin never feels it.</li>
+      </ul>
+    </section>
+
+    <section class="section" id="blue-team">
+      <div class="sec-head"><span class="sec-badge">4</span><h2 class="sec-title">Blue team perspective</h2></div>
+      <p class="sec-intro">What defenders can see, which artifacts this attack leaves, and a short triage flow for the SOC.</p>
+
+      <p>Defenders rarely catch this attack on the network wire first. They catch it in the service's own logs and metrics. The service is the best witness: it knows exactly how many workers are busy, who holds them, and when it runs out.</p>
+
+      <div class="cards">
+        <div class="card"><span class="card-tag">Artifact</span><h4>Daemon error messages</h4><p>nginx prints <code>worker_connections are not enough</code>. Apache prints <code>server reached MaxRequestWorkers</code>. MySQL prints <code>Too many connections</code>. These lines are precise and rare in normal operation.</p></div>
+        <div class="card"><span class="card-tag">Artifact</span><h4>Waves of 408 and 499</h4><p>Status <code>408</code> means the client sent the request too slowly. Status <code>499</code> means the client gave up before the answer. A wave of these codes from many victims, while one source holds the workers, is the classic pattern.</p></div>
+        <div class="card"><span class="card-tag">Artifact</span><h4>Concurrency spike per source</h4><p>The number of simultaneous connections from one address grows far above the baseline. Latency (response time) climbs because new requests queue behind held workers.</p></div>
+        <div class="card"><span class="card-tag">Artifact</span><h4>Tiny requests, long holds</h4><p>Access logs show requests with almost no bytes sent and very long <code>request_time</code> values, often ending in timeout codes.</p></div>
+        <div class="card"><span class="card-tag">Artifact</span><h4>TLS handshake and renegotiation counts</h4><p>TLS logging tools such as Zeek or Suricata write one event per handshake, and WAF or CDN (content delivery network) dashboards count handshakes per source. Renegotiation itself should be nearly absent today: TLS 1.3 removed it, and most TLS 1.2 servers refuse client-initiated renegotiation. A handshake storm from one source, or any renegotiation at all, is a strong signal.</p></div>
+      </div>
+
+      <h4>Where to look</h4>
+      <ul>
+        <li><strong>Service error logs:</strong> <code>/var/log/nginx/error.log</code>, Apache <code>error_log</code>, Windows DNS Server event log, MySQL error log.</li>
+        <li><strong>Access logs with timing:</strong> status, bytes, and <code>request_time</code> per request.</li>
+        <li><strong>TLS visibility:</strong> Zeek <code>ssl.log</code>, Suricata TLS events, and WAF or CDN handshake and renegotiation counters.</li>
+        <li><strong>Connection tables:</strong> <code>ss -tan</code> or <code>netstat</code> on the host, and firewall or load balancer connection counts per source.</li>
+        <li><strong>Metrics:</strong> busy workers, queue depth, and connections per source on dashboards.</li>
+      </ul>
+
+      <h4>Why it matters and where it fits in the attack chain</h4>
+      <p>MITRE ATT&amp;CK places T1499.002 in the Impact tactic, usually as the final step of an operation. It can also be a <strong>smokescreen</strong>: a noisy availability attack that keeps responders busy while a quieter intrusion happens elsewhere. For many organizations the business impact is direct lost revenue or lost public trust, which is why availability controls appear in laws and audit standards (section 5.1).</p>
+
+      <h4>Short triage flow</h4>
+      <ol class="timeline">
+        <li><span class="tl-when">Step 1 — Confirm</span>Check service health and worker usage. Is the daemon up but not answering? That points to exhaustion, not a crash.</li>
+        <li><span class="tl-when">Step 2 — Rank sources</span>Count concurrent connections per source address. A single address far above the baseline is the prime suspect.</li>
+        <li><span class="tl-when">Step 3 — Match the wave</span>Look for 408 and 499 waves, TLS handshake or renegotiation counts, and the matching error-log line. This confirms the mechanism.</li>
+        <li><span class="tl-when">Step 4 — Contain</span>Block or rate-limit the source upstream (firewall, edge, or WAF), not only on the origin server.</li>
+        <li><span class="tl-when">Step 5 — Harden while it hurts</span>Shorten the relevant timeouts now; they were too long by definition.</li>
+        <li><span class="tl-when">Step 6 — Record</span>Save logs, note the timeline, and file the incident. Add the new baseline and alert to monitoring.</li>
+      </ol>
+
+      <div class="callout callout-note"><span class="callout-label">Official mapping</span>
+        <p>MITRE ATT&amp;CK ties this sub-technique to detection strategy <strong>DET0173</strong>, "Detection Strategy for Endpoint DoS via Service Exhaustion Flood". Its analytics describe the signals above:</p>
+        <ul>
+          <li><strong>AN0489</strong> — high-frequency, repetitive service requests such as HTTP or TLS renegotiation from one or a few source addresses, ending in CPU or memory exhaustion.</li>
+          <li><strong>AN0490</strong> — excessive inbound HTTP or TLS connections to services such as Apache or Nginx, exhausting worker threads.</li>
+          <li><strong>AN0491</strong> — TLS or HTTP(S) connection floods against macOS-hosted services, causing high CPU use and unresponsiveness.</li>
+          <li><strong>AN0492</strong> — automated, scripted HTTP or TLS flooding from one cloud instance against another service.</li>
+        </ul>
+        <p>The recipes in section 5 turn these analytics into rules on logs you already collect.</p>
+      </div>
+
+      <div class="callout callout-good"><span class="callout-label">Good practice</span>
+        <p>Ship service error logs to your central log platform (SIEM, Security Information and Event Management) in real time. Most of the detections in section 5 are cheap and reliable only if those logs arrive within seconds.</p>
+      </div>
+    </section>
+    <section class="section" id="detection-deep-dive">
+      <div class="sec-head"><span class="sec-badge">5</span><h2 class="sec-title">Detection engineering deep dive</h2></div>
+      <p class="sec-intro">The longest and most practical section: why auditors care, who does this in the real world, eight concrete threats ranked, the logs they produce, and ready-to-adapt Sigma and Splunk rules.</p>
+
+      <h3 id="regulation-mapping">5.1 Regulation mapping</h3>
+      <p>Availability is not only a technical goal. Several laws and audit frameworks demand that organizations protect it and prove they can respond. The table below shows why each framework applies and what evidence an auditor expects to see.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Framework</th><th>Control / article</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+          <tbody>
+            <tr><td>GDPR</td><td>Art. 32 (security of processing); Art. 33 (breach notification)</td><td>Availability is one of the three security goals GDPR names, so Art. 32 controls must cover DoS risks. Article 33 applies to personal-data breaches: a pure outage that exposes no personal data usually does not require notification, but regulators expect the assessment and its outcome to be written down.</td><td>Risk assessment that covers DoS; incident records with timestamps; a documented Art. 33 notification decision, including the reasoning when no notification was made.</td></tr>
+            <tr><td>HIPAA Security Rule</td><td>164.306(a)(1) (ensure availability of ePHI); 164.306(a)(3) (protect against threats to availability); 164.308(a)(7) (contingency plan)</td><td>Health systems must ensure the confidentiality, integrity, and availability of electronic protected health information. They must also guard it against reasonably anticipated threats and plan for emergencies.</td><td>Contingency plan including DoS scenarios; test results; downtime logs and restoration records.</td></tr>
+            <tr><td>ISO 27001:2022</td><td>Annex A 5.29, 5.30 (ICT readiness for business continuity); 8.13 (information backup); 8.14 (redundancy of information processing facilities)</td><td>The standard asks for continuity readiness, backups, and redundant capacity, all of which bound the damage of an exhaustion flood.</td><td>Business continuity tests; capacity and redundancy documentation; backup verification records.</td></tr>
+            <tr><td>SOC 2</td><td>Availability criteria A1.1–A1.3</td><td>SOC 2 Availability tracks commitments on uptime, capacity planning, and recovery, exactly what this technique attacks.</td><td>Uptime monitoring reports; capacity planning reviews; incident postmortems with recovery times.</td></tr>
+            <tr><td>PCI DSS 4.0</td><td>Requirement 12.10 (incident response); network security controls requirements (Req. 1 family)</td><td>Card environments must have an incident response plan and controlled network entry points, which are also the main DoS defenses.</td><td>Tested response plan; firewall and WAF rule records; provider DDoS protection configuration.</td></tr>
+            <tr><td>NIST SP 800-53 Rev. 5</td><td>SC-5 (denial-of-service protection); CP-7, CP-10 (alternate site, recovery); IR-4 (incident handling)</td><td>SC-5 names resource exhaustion directly; CP and IR controls define how the organization survives and responds.</td><td>DoS protection design; system security plan entries; incident handling records and lessons learned.</td></tr>
+            <tr><td>CIS Controls v8</td><td>Control 12 (network infrastructure management); Control 13 (network monitoring and defense)</td><td>These controls ask for managed, monitored network defenses such as rate limits and traffic filtering.</td><td>Documented network architecture; monitoring coverage; alert tuning records.</td></tr>
+            <tr><td>Legal backdrop</td><td>US CFAA (Computer Fraud and Abuse Act); Council of Europe Cybercrime (Budapest) Convention Article 5 (system interference)</td><td>Launching a DoS attack against systems without permission is a crime in the US and in most party states to the convention. Article 5 of the convention covers the intentional hindering of a computer system's function. This row is why all examples here stay lab only.</td><td>Not an audit control: a reminder that written authorization and lab isolation are mandatory before any testing.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 id="threat-intelligence">5.2 Threat intelligence</h3>
+      <p>Threat intelligence answers "who does this and how". For service exhaustion floods, the picture is wide: from idealist hacktivists with free tools to extortion crews. Use the workflow below to turn public reporting into tuned detections.</p>
+      <div class="grid-2">
+        <div class="card"><span class="card-tag">Sources</span><h4>Where to collect</h4>
+          <ul>
+            <li>MITRE ATT&amp;CK group and software pages for tool use patterns.</li>
+            <li>CISA and FBI joint alerts on DDoS and hacktivist activity.</li>
+            <li>Vendor threat reports (CDN and DDoS protection providers publish quarterly data).</li>
+            <li>ISACs: sector trusts such as MS-ISAC (state and local government), FS-ISAC (finance), H-ISAC (health).</li>
+            <li>OSINT (open sources): security blogs and mailing lists.</li>
+            <li>Commercial feeds and, most valuable, your own telemetry.</li>
+          </ul>
+        </div>
+        <div class="card"><span class="card-tag">Workflow</span><h4>Collect, analyze, apply, review</h4>
+          <ol>
+            <li><strong>Collect:</strong> pull reports about Layer-7 floods and the tools used.</li>
+            <li><strong>Analyze:</strong> decide relevance to your stack: do you run the targeted software? The exposed services?</li>
+            <li><strong>Apply:</strong> write or tune the Sigma rules in section 5.5; add actor-tied indicators to watchlists.</li>
+            <li><strong>Review:</strong> each quarter, check false positives and retire rules for tools you no longer expect.</li>
+          </ol>
+        </div>
+      </div>
+      <h4>Known actors and campaigns relevant to this technique</h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Actor / campaign</th><th>Relevance</th><th>Confidence and why</th><th>Source</th></tr></thead>
+          <tbody>
+            <tr><td>Hacktivist collectives using slowloris-class tools (2009–2012 era, for example around the 2009 Iranian election protests and later Operation Payback)</td><td>Direct documented use of slow headers against government and industry websites; the tool itself was released publicly in June 2009</td><td><strong>High</strong> for that period: the release and the campaign use are documented in public reports and press coverage</td><td>RSnake's 2009 release post; contemporary press and security-blog reporting; MITRE ATT&amp;CK history</td></tr>
+            <tr><td>SSL renegotiation flood research and tooling (2009–2012, after the renegotiation flaw CVE-2009-3555 became public)</td><td>Researchers and DDoS providers documented renegotiation floods that exhaust TLS endpoints; ATT&amp;CK cites this reporting for the renegotiation pattern on the official page</td><td><strong>High</strong> that the pattern was demonstrated publicly; <strong>Medium</strong> for how often it appears today, because modern TLS stacks largely closed it</td><td>Arbor ASERT (2012), "DDoS Attacks on SSL: Something Old, Something New", cited as reference 3 on the official T1499.002 page</td></tr>
+            <tr><td>Opportunistic botnets running Layer-7 floods</td><td>Rented botnets add slow-HTTP modules to generic flood kits; any exposed origin can be hit</td><td><strong>Medium</strong>: vendor telemetry shows the pattern often, but attribution to a specific botnet is rarely firm</td><td>CDN and DDoS vendor quarterly reports</td></tr>
+            <tr><td>DDoS extortion crews switching to Layer-7 floods</td><td>Crews send downtime threats and follow up with floods that exhaust application or service limits rather than raw bandwidth</td><td><strong>Medium</strong>: extortion emails and matching attack patterns are reported, but public detail is partial</td><td>CISA and FBI alerts on DDoS extortion; vendor incident reports</td></tr>
+            <tr><td>Pentest or red-team tooling misuse (insider or contractor context)</td><td>The same lab tools appear inside authorized tests; alerts fire during sanctioned exercises, or tools are misused without authorization</td><td><strong>Low</strong> as a threat actor class, but high as an operational reality: keep a change and test calendar to label these events</td><td>Internal telemetry; engagement rules-of-engagement documents</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout callout-note"><span class="callout-label">Note</span>
+        <p>Keep claims defensible. Say what the source saw ("vendor reported slow-header floods against retail sites in June"), not what you infer ("actor X attacked us"). Confidence ratings belong next to every claim, as in the table above.</p>
+      </div>
+      <div class="callout callout-warn"><span class="callout-label">Parent-level examples are not sub-technique evidence</span>
+        <p>Some ATT&amp;CK actor examples belong to the parent technique or to a sibling, not here. The T1499 page documents that ZxShell (S0412) has a feature to perform SYN flood attacks on a host. A SYN flood exhausts operating-system limits, so it is the T1499.001 pattern; it is context, not a T1499.002 row. For this sub-technique, rely on the botnet, extortion, and hacktivist rows above, which match service-level exhaustion.</p>
+      </div>
+      <h3 id="threat-ranking">5.3 Threats ranking and categorization</h3>
+      <p>Below are the eight realistic service-exhaustion threats this guide tracks, in severity order. The two official ATT&amp;CK patterns (raw-volume HTTP flood and SSL renegotiation flood) sit beside the slow-client and service-specific variants. Severity reflects how much damage a typical attacker can do with modest resources, and how often the pattern appears in real incidents. Each threat gets a full detection recipe in 5.4 and a Sigma plus SPL pair in 5.5. The scope labels below are broader than the official platform list, so the column is called "Threat scope".</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Threat</th><th>Severity</th><th>Threat scope</th><th>One-line summary</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Slow HTTP headers (slowloris class)</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span> <span class="badge cat">Linux</span> <span class="badge cat">Windows</span> <span class="badge cat">macOS</span></td><td>Partial headers hold every web worker open</td></tr>
+            <tr><td>2</td><td>Slow POST body (RUDY class)</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span> <span class="badge cat">Linux</span> <span class="badge cat">Windows</span></td><td>Dripped upload bodies hold workers on form and upload endpoints</td></tr>
+            <tr><td>3</td><td>Raw-volume HTTP flood (official pattern)</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span> <span class="badge cat">Cloud</span> <span class="badge cat">Linux</span> <span class="badge cat">Windows</span> <span class="badge cat">macOS</span></td><td>A storm of valid requests exhausts service CPU, memory, or slots</td></tr>
+            <tr><td>4</td><td>Fast connection flood to a single daemon</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span> <span class="badge cat">Linux</span> <span class="badge cat">Windows</span> <span class="badge cat">macOS</span></td><td>Idle connections fill one service's connection slots</td></tr>
+            <tr><td>5</td><td>DNS resolver query flood</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Network</span> <span class="badge cat">Linux</span> <span class="badge cat">Cloud</span></td><td>Name-lookup storm exhausts the resolver's query slots</td></tr>
+            <tr><td>6</td><td>SSL/TLS renegotiation flood (official pattern)</td><td><span class="badge sev-high">Medium-High</span></td><td><span class="badge cat">Network</span> <span class="badge cat">Linux</span> <span class="badge cat">Windows</span> <span class="badge cat">macOS</span></td><td>Repeated TLS renegotiation burns server CPU on old endpoints</td></tr>
+            <tr><td>7</td><td>LDAP bind flood on a domain controller</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge cat">Identity</span> <span class="badge cat">Windows</span></td><td>Thousands of login binds slow directory logons</td></tr>
+            <tr><td>8</td><td>Database connection pool exhaustion via the app</td><td><span class="badge sev-medium">Medium</span></td><td><span class="badge cat">Cloud</span> <span class="badge cat">Linux</span> <span class="badge cat">Windows</span></td><td>Slow app requests park database connections until the pool is empty</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="cards">
+        <div class="card"><h4>1. Slow HTTP headers (slowloris class) <span class="badge sev-high">High</span></h4>
+          <p><strong>Preconditions:</strong> an exposed web server with long header timeouts, a small worker pool, and no reverse proxy or WAF closing slow clients.</p>
+          <p><strong>Impact:</strong> all workers wait for header bytes that never finish; the whole site or API stops answering while the machine stays healthy.</p>
+          <p><strong>Why High:</strong> one low-bandwidth host can take a full daemon offline, and the required skill is beginner level.</p></div>
+        <div class="card"><h4>2. Slow POST body (RUDY class) <span class="badge sev-high">High</span></h4>
+          <p><strong>Preconditions:</strong> an endpoint that accepts POST bodies (forms, uploads, APIs) with a long body-receive timeout.</p>
+          <p><strong>Impact:</strong> workers stay busy holding half-finished uploads; buffers and temp files fill; the endpoint and often the whole server slow down.</p>
+          <p><strong>Why High:</strong> same cheap one-host effect as slow headers, and upload endpoints are common.</p></div>
+        <div class="card"><h4>3. Raw-volume HTTP flood (official pattern) <span class="badge sev-high">High</span></h4>
+          <p><strong>Preconditions:</strong> an exposed HTTP service whose per-request work (dynamic pages, API calls, upstream lookups) adds up; attacker capacity high enough to out-pace the service.</p>
+          <p><strong>Impact:</strong> CPU, memory, or worker slots exhaust while every request still looks normal; caches often miss, so each request hits the backend.</p>
+          <p><strong>Why High:</strong> it is the canonical pattern named by ATT&amp;CK, it is trivially automated, and per-request cost means even moderate rates break the service.</p></div>
+        <div class="card"><h4>4. Fast connection flood to a single daemon <span class="badge sev-high">High</span></h4>
+          <p><strong>Preconditions:</strong> a service reachable on the network with a fixed connection-slot limit and no per-source limit at a firewall.</p>
+          <p><strong>Impact:</strong> the listen backlog and connection table fill; new clients are refused or reset even though bandwidth is barely used.</p>
+          <p><strong>Why High:</strong> trivially automated, works against almost any daemon, and is often spread over several sources.</p></div>
+        <div class="card"><h4>5. DNS resolver query flood <span class="badge sev-high">High</span></h4>
+          <p><strong>Preconditions:</strong> a resolver (a server that answers name-lookup questions) reachable by the attacker, with per-source query limits off or high.</p>
+          <p><strong>Impact:</strong> query slots and threads exhaust; every service that depends on names (web, mail, logins) fails at once.</p>
+          <p><strong>Why High:</strong> small attack, big blast radius: DNS is the phone book of the network.</p></div>
+        <div class="card"><h4>6. SSL/TLS renegotiation flood (official pattern) <span class="badge sev-high">Medium-High</span></h4>
+          <p><strong>Preconditions:</strong> a TLS endpoint that still accepts client-initiated renegotiation (older TLS 1.2 servers, some appliances), reachable by the attacker.</p>
+          <p><strong>Impact:</strong> the server spends heavy cryptographic work per renegotiation; CPU saturates and legitimate TLS connections stall or fail.</p>
+          <p><strong>Why Medium-High:</strong> modern stacks mostly closed it, so reach is shrinking, but where it exists one host can still exhaust the TLS service.</p></div>
+        <div class="card"><h4>7. LDAP bind flood on a domain controller <span class="badge sev-medium">Medium</span></h4>
+          <p><strong>Preconditions:</strong> network access to an LDAP (directory login) port on a domain controller, plus weak bind throttling; unauthenticated binds often work with default settings.</p>
+          <p><strong>Impact:</strong> directory worker threads saturate; logons, lookups, and applications that query the directory become slow or fail.</p>
+          <p><strong>Why Medium:</strong> usually needs internal network access and the effect can be throttled, but the business damage is high when it lands.</p></div>
+        <div class="card"><h4>8. Database connection pool exhaustion via the app <span class="badge sev-medium">Medium</span></h4>
+          <p><strong>Preconditions:</strong> an application with a limited database connection pool (a fixed set of reusable database sessions) that attackers can slow down or hold.</p>
+          <p><strong>Impact:</strong> the pool empties; the application throws errors; new customers cannot check out or log in while the database itself looks fine.</p>
+          <p><strong>Why Medium:</strong> often limited to one application and can self-heal after timeouts, but it converts a small flood into a business outage.</p></div>
+      </div>
+
+      <h3 id="logs-and-patterns">5.4 Logs and patterns</h3>
+      <p>For each of the eight threats: where the evidence lives, which fields matter, what normal looks like, what suspicious looks like, and the detection logic. The recipes implement the official detection strategy DET0173 and its analytics (AN0489–AN0492) on logs you already collect. Example log lines use documentation addresses such as <code>203.0.113.x</code> (attacker) and <code>10.0.0.x</code> (your servers).</p>
+
+      <div class="card">
+        <h4>Threat 1 — Slow HTTP headers (slowloris class)</h4>
+        <ul>
+          <li><strong>Log sources:</strong> nginx error log; nginx access log with timing fields; Apache error log; reverse proxy logs.</li>
+          <li><strong>Key fields:</strong> message text, worker process id (pid), connection id, client address, status code, <code>request_time</code>, bytes sent, <code>User-Agent</code>.</li>
+          <li><strong>Normal:</strong> few timeouts per hour, spread over many sources; concurrency per source usually below 10.</li>
+          <li><strong>Suspicious:</strong> the exhaustion message in the error log, at the same time as one source holds hundreds of connections. Requests have tiny sizes and long times, ending in 408 or 499.</li>
+          <li><strong>Detection logic:</strong>
+            <ul>
+              <li>Error log contains "worker_connections are not enough" (nginx) or "server reached MaxRequestWorkers" (Apache).</li>
+              <li>AND, in the same 5-minute window, one source has more than 50 open connections or more than 50 timeout statuses.</li>
+              <li>Tie-break with <code>request_time</code> above 55 seconds on those requests.</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">nginx error.log — exhaustion message</span></div>
+          <pre><code>2026/02/14 03:12:40 [alert] 5678#0: *23456 worker_connections are not enough while connecting to upstream, client: 203.0.113.50, server: lab.local</code></pre>
+        </div>
+        <p><code>5678#0</code> is the worker process and its generation; <code>*23456</code> is the connection id; the alert level marks a resource limit; <code>client</code> is the remote address that triggered the line.</p>
+      </div>
+
+      <div class="card">
+        <h4>Threat 2 — Slow POST body (RUDY class)</h4>
+        <ul>
+          <li><strong>Log sources:</strong> access logs of the origin or reverse proxy (POST endpoints), WAF logs, application error logs.</li>
+          <li><strong>Key fields:</strong> method (POST), URI (the requested path), status, <code>request_time</code>, <code>body_bytes_sent</code>, client address, content-length announced.</li>
+          <li><strong>Normal:</strong> uploads take seconds, not minutes; 408 codes are rare; bytes flow at a steady rate.</li>
+          <li><strong>Suspicious:</strong> POST requests that last minutes with almost no bytes completed, several from the same source, and a 408 wave right after.</li>
+          <li><strong>Detection logic:</strong>
+            <ul>
+              <li>method = POST AND <code>request_time</code> above 60 seconds AND status in (408, 499).</li>
+              <li>Group by source; alert when a source has more than 20 such requests in 10 minutes.</li>
+              <li>Correlate with Apache "server reached MaxRequestWorkers" if the origin is Apache.</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">nginx access.log — slow POST held until timeout</span></div>
+          <pre><code>203.0.113.51 - - [14/Feb/2026:03:20:07 +0000] "POST /upload HTTP/1.1" 408 0 "-" "RUDY-lab" rt=119.98 uct="-" uht="-" urt="-" bytes=0</code></pre>
+        </div>
+        <p><code>rt</code> is <code>request_time</code> (about 120 seconds here), <code>uct</code>/<code>uht</code>/<code>urt</code> are upstream connect, header, and response times (empty because the request never reached the backend), and <code>bytes=0</code> shows nothing useful was delivered. The <code>User-Agent</code> string here is from a lab tool; real attacks often copy a browser string instead.</p>
+      </div>
+
+      <div class="card">
+        <h4>Threat 3 — Raw-volume HTTP flood (official pattern)</h4>
+        <ul>
+          <li><strong>Log sources:</strong> nginx or Apache access logs, WAF and CDN request logs, load balancer logs, service CPU and memory metrics.</li>
+          <li><strong>Key fields:</strong> client address, method, path, status, bytes, <code>request_time</code>, <code>User-Agent</code>, requests per second per source, cache-hit ratio.</li>
+          <li><strong>Normal:</strong> request rates follow the daily traffic shape; paths spread across the site; cache-hit ratio is stable; one source rarely dominates.</li>
+          <li><strong>Suspicious:</strong> one or a few sources send hundreds of requests per minute. Most answers are 200, because every request is valid. The same few paths repeat, and CPU or memory climbs on the service. This is the AN0489 shape: high-frequency, repetitive requests that end in resource exhaustion.</li>
+          <li><strong>Detection logic:</strong>
+            <ul>
+              <li>Count GET and POST requests per client per minute; alert above a baseline-derived threshold, for example 300 per minute from one address.</li>
+              <li>Strengthen the signal when the same small path set repeats and the cache-hit ratio drops.</li>
+              <li>Correlate with service CPU or worker metrics, because volume alone on a static site may be harmless.</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">nginx access.log — valid requests at flood rate</span></div>
+          <pre><code>203.0.113.60 - - [14/Feb/2026:04:05:11 +0000] "GET /products/42 HTTP/1.1" 200 5123 "-" "python-requests/2.31.0" rt=0.31 uct="0.001" uht="0.02" urt="0.29"
+203.0.113.60 - - [14/Feb/2026:04:05:11 +0000] "GET /products/42 HTTP/1.1" 200 5123 "-" "python-requests/2.31.0" rt=0.33 uct="0.001" uht="0.02" urt="0.30"</code></pre>
+        </div>
+        <p>Two lines from the same source, 220 milliseconds apart, same path, both status 200, both doing real upstream work (<code>urt</code> about 0.3 seconds). Multiply by hundreds of requests per minute and the worker pool and CPU burn continuously. Contrast with the slow attacks: here statuses are 200 and <code>request_time</code> is short; there statuses are 408 or 499 and <code>request_time</code> is long. The <code>User-Agent</code> names a script, but real floods often copy browser strings.</p>
+      </div>
+
+      <div class="card">
+        <h4>Threat 4 — Fast connection flood to a single daemon</h4>
+        <ul>
+          <li><strong>Log sources:</strong> firewall or load balancer connection logs, host connection tables (<code>ss -tan</code> snapshots), service logs (listen queue overflows), nginx or HAProxy connection counters.</li>
+          <li><strong>Key fields:</strong> source address, destination port, connection state (ESTABLISHED, SYN_RECV), timestamp, accept-queue depth, kernel messages about SYN flood or listen overflows.</li>
+          <li><strong>Normal:</strong> steady connection counts per source; queue depth near zero; established sessions match real users.</li>
+          <li><strong>Suspicious:</strong> hundreds of ESTABLISHED sessions from one source to one port; kernel logs about listen queue overflow; connections open for the maximum allowed time.</li>
+          <li><strong>Detection logic:</strong>
+            <ul>
+              <li>Count connections per source per minute against one service port; alert above 300 from one source.</li>
+              <li>Alert on kernel messages "possible SYN flooding" or "listen queue overflow" for that port.</li>
+              <li>Alert when total service connections reach the daemon's configured slot count.</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">kernel log — the queue behind the daemon is full</span></div>
+          <pre><code>Feb 14 03:31:02 web01 kernel: TCP: request_sock_TCP: Possible SYN flooding on port 80. Sending cookies.  Check SNMP counters.</code></pre>
+        </div>
+        <p>The kernel says the accept queue for port 80 is overflowing, so it switched on SYN cookies. SYN cookies are a defense that answers half-open handshakes without storing them. This message appears when too many connection attempts arrive faster than the service can finish the handshakes. A flood of completed idle sessions may instead saturate the daemon's own slot limit without any kernel message. That is why the per-source connection count in the firewall or proxy log is the stronger signal for threat 4.</p>
+      </div>
+
+      <div class="card">
+        <h4>Threat 5 — DNS resolver query flood</h4>
+        <ul>
+          <li><strong>Log sources:</strong> BIND query log (the "queries" logging category; you enable it once, and BIND then writes one line per query it answers), Windows DNS Server analytic log, dnsdist or unbound logs, network flow records to port 53.</li>
+          <li><strong>Key fields:</strong> client address and port, queried name, record type, response code (REFUSED, SERVFAIL), queries per second per client.</li>
+          <li><strong>Normal:</strong> a few queries per second per client; names repeat across the whole client base.</li>
+          <li><strong>Suspicious:</strong> one source sending hundreds of queries per second, often random names, and REFUSED or SERVFAIL answers rising for everyone.</li>
+          <li><strong>Detection logic:</strong>
+            <ul>
+              <li>Count query-log lines per client per minute; alert above 300.</li>
+              <li>Alert when the share of REFUSED or SERVFAIL answers jumps above 30 percent.</li>
+              <li>Flag random-looking names from one source (possible random-subdomain storms).</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">BIND query log — one line per query</span></div>
+          <pre><code>14-Feb-2026 03:41:22.101 queries: info: client @0x7f8b1c02d0e0 203.0.113.7#53123 (example.com): query: example.com IN A +E(0)K (10.0.0.53)</code></pre>
+        </div>
+        <p><code>client @0x...</code> is an internal handle; <code>203.0.113.7#53123</code> is the asking address and port; <code>(example.com)</code> is the zone view; <code>IN A</code> is the record type; <code>+E(0)K</code> are query flags; <code>(10.0.0.53)</code> is your resolver. The address before the hash is the field your detection should count.</p>
+      </div>
+
+      <div class="card">
+        <h4>Threat 6 — SSL/TLS renegotiation flood (official pattern)</h4>
+        <ul>
+          <li><strong>Log sources:</strong> Zeek <code>ssl.log</code> (one record per TLS session, with a history field that marks renegotiation), Zeek <code>conn.log</code> for handshake counts, Suricata TLS events, WAF or CDN TLS handshake counters, and web server or load balancer TLS logs (nginx, HAProxy, IIS).</li>
+          <li><strong>Key fields:</strong> source address, destination address and port, TLS version, server name (SNI, the name the client asked for), handshake or renegotiation marker, handshakes per source per window.</li>
+          <li><strong>Normal:</strong> a handful of handshakes per source per minute; no renegotiation at all, because TLS 1.3 removed it and most TLS 1.2 servers refuse client-initiated renegotiation.</li>
+          <li><strong>Suspicious:</strong> a handshake storm from one source, or any renegotiation marker from a client. Renegotiation should simply not happen on a current service.</li>
+          <li><strong>Detection logic:</strong>
+            <ul>
+              <li>Count TLS handshakes per source per 5 minutes; alert above a baseline-derived threshold, for example 200 from one address.</li>
+              <li>Alert on any client-initiated renegotiation marker, for example the <code>r</code> history entry in Zeek <code>ssl.log</code>; tune only for the rare legitimate application.</li>
+              <li>Correlate with TLS endpoint CPU: the damage is computational, so the CPU graph is the confirming artifact.</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">Zeek ssl.log (tab-separated) — renegotiation markers in the history field</span></div>
+          <pre><code>1739510407.612345  CsOaGl1yxBxU8mQJ9c      203.0.113.80    53124   10.0.0.10       443     TLSv12  TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256   -       lab.local       F       -       -       T       THrr    -</code></pre>
+        </div>
+        <p>Read the line left to right. The fields are: timestamp, connection id, source <code>203.0.113.80</code>, destination <code>10.0.0.10:443</code>, TLS version, cipher, curve, server name <code>lab.local</code>, not-resumed flag, alert, next protocol, and established flag. The interesting part comes last: the <code>ssl_history</code> field <code>THrr</code>. T marks the TCP setup. H marks a completed handshake. Each r marks a renegotiation the server accepted. Two renegotiations on one connection is already abnormal, so count them per source. History letters vary slightly between Zeek versions. If yours does not mark renegotiation, count handshakes per source instead. The same logic works on Suricata TLS events (one event per handshake, counted by <code>src_ip</code>) or on WAF and CDN handshake counters.</p>
+      </div>
+
+      <div class="card">
+        <h4>Threat 7 — LDAP bind flood on a domain controller</h4>
+        <ul>
+          <li><strong>Log sources:</strong> Windows Directory Service event log (event ID 2889 records bind types), Security event log (4625 failed logons, if credentials are tried), domain controller performance counters (LDAP bind time, threads).</li>
+          <li><strong>Key fields:</strong> event ID, client IP and port, bind type (0 = unauthenticated, 1 = simple, 2 = NTLM/negotiate), count per client, LDAP bind time metric.</li>
+          <li><strong>Normal:</strong> bind type 0 is rare and mostly from old devices; binds per client are low; bind times are under milliseconds.</li>
+          <li><strong>Suspicious:</strong> thousands of unauthenticated binds (type 0) from one address in minutes, with LDAP bind time climbing.</li>
+          <li><strong>Detection logic:</strong>
+            <ul>
+              <li>Event ID 2889 with "Bind type: 0", grouped by client IP; alert above 100 in 5 minutes from one client.</li>
+              <li>Correlate with a rise in LDAP bind time or a drop in successful logon speed.</li>
+              <li>One 2889 flood source is also a finding by itself: unauthenticated binds should not exist on modern servers.</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">Windows Directory Service event — event ID 2889</span></div>
+          <pre><code>Log Name:      Directory Service
+Source:        Microsoft-Windows-ActiveDirectory_DomainService
+Event ID:      2889
+Level:         Information
+Computer:      DC01.lab.local
+Message:       Client IP and type of bind for successful binds.
+               Client IP: 203.0.113.77:51234
+               Bind type: 0 (unauthenticated)</code></pre>
+        </div>
+        <p>Each 2889 event records one successful bind. <code>Bind type: 0</code> means the client sent no credentials at all. A storm of these from one address is either a misconfigured old device or a bind flood.</p>
+      </div>
+
+      <div class="card">
+        <h4>Threat 8 — Database connection pool exhaustion via the app</h4>
+        <ul>
+          <li><strong>Log sources:</strong> MySQL or PostgreSQL error log, application server logs (pool timeout errors), cloud load balancer logs showing 5xx errors, APM traces (application performance monitoring).</li>
+          <li><strong>Key fields:</strong> message text, connection id, database name, user, client host, pool name, pool active and waiting counts.</li>
+          <li><strong>Normal:</strong> "Too many connections" is absent in steady state; pool wait time is low; connections are released in milliseconds.</li>
+          <li><strong>Suspicious:</strong> repeated "Too many connections" or pool-timeout errors in a short window, together with a request storm on the front end.</li>
+          <li><strong>Detection logic:</strong>
+            <ul>
+              <li>Error log contains "Too many connections" (MySQL) or "connection timed out" pool errors (app side); alert above 5 in 5 minutes.</li>
+              <li>Correlate with a rising rate of held app requests (slow POST) from a small set of sources.</li>
+              <li>Check <code>Aborted connection</code> warnings: they show clients being dropped when the limit hits.</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="code-block">
+          <div class="code-head"><span class="code-lang">MySQL error log — the pool is full</span></div>
+          <pre><code>2026-02-14T03:52:44.123456Z 12 [Warning] Aborted connection 8123 to db: 'appdb' user: 'appuser' host: '10.0.0.20' (Too many connections)</code></pre>
+        </div>
+        <p><code>12</code> is the internal thread id; <code>8123</code> is the connection id; the parentheses hold the reason. This warning appears when the server drops a new client because <code>max_connections</code> is already used.</p>
+      </div>
+      <h3 id="sigma-and-spl">5.5 Sigma rules and Splunk SPL</h3>
+      <p><strong>Sigma</strong> is an open rule format for log detections; any SIEM (central log platform) that supports Sigma can run these rules. <strong>SPL</strong> is the Splunk search language. Each of the eight threats below has one Sigma rule and one matching SPL query, plus one support rule that correlates timeout waves across the slow attacks. Together they implement the official detection strategy DET0173 on common logs. Every rule was reviewed for false positives and tuned to stay quiet until real exhaustion appears. Copy, adjust the field names to your environment, and test in a lab first. All YAML blocks use spaces, never tabs.</p>
+
+      <h4>Threat 1 — Slow HTTP headers (slowloris class)</h4>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">sigma — nginx worker exhaustion</span></div>
+        <pre><code>title: Nginx Worker Connection Exhaustion Alert
+id: 6f92ef76-3581-45eb-8a71-b8d695d1a0b4
+status: stable
+description: Detects the nginx alert that appears when a worker runs out of
+    connection slots. Slow-header or connection floods hold every socket open
+    until this message appears (MITRE ATT&amp;CK T1499.002).
+references:
+  - https://attack.mitre.org/techniques/T1499/002/
+author: Detection Engineering
+date: 2025-03-12
+logsource:
+  product: nginx
+  service: error
+detection:
+  selection:
+    message|contains: 'worker_connections are not enough'
+  condition: selection
+fields:
+  - pid
+  - connection_id
+  - client
+falsepositives:
+  - A legitimate traffic spike that fills all worker slots.
+  - A worker_connections value set far below real demand.
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.002</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">spl — same logic for Splunk</span></div>
+        <pre><code>index=web sourcetype=nginx:error "worker_connections are not enough"
+| stats count AS exhaustion_events, values(client) AS clients, earliest(_time) AS first_seen, latest(_time) AS last_seen BY host</code></pre>
+      </div>
+      <ul>
+        <li><strong>Field mapping:</strong> Sigma <code>message</code> maps to the Splunk raw event (<code>_raw</code>); <code>client</code> maps to the extracted <code>client</code> field.</li>
+        <li><strong>Assumptions:</strong> <code>index=web</code>, <code>sourcetype=nginx:error</code> — rename for your environment.</li>
+        <li><strong>False positives:</strong> real demand spikes; capacity too small by design.</li>
+        <li><strong>Tuning:</strong> alert only when the message repeats twice within 5 minutes, and join with the timeout wave support rule.</li>
+        <li><strong>Severity:</strong> high — the message means the service already stopped serving some clients.</li>
+      </ul>
+
+      <h4>Threat 2 — Slow POST body (RUDY class)</h4>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">sigma — Apache worker saturation</span></div>
+        <pre><code>title: Apache MaxRequestWorkers Saturation Warning
+id: 1703fefd-9c88-40ed-93ff-132a3151e913
+status: stable
+description: Detects the Apache warning that every request worker is busy.
+    Slow-POST floods parking uploads on the server are a common cause
+    (MITRE ATT&amp;CK T1499.002).
+references:
+  - https://attack.mitre.org/techniques/T1499/002/
+author: Detection Engineering
+date: 2025-04-02
+logsource:
+  product: apache
+  service: error
+detection:
+  selection:
+    message|contains: 'server reached MaxRequestWorkers'
+  condition: selection
+fields:
+  - pid
+  - module
+falsepositives:
+  - Planned load tests against the platform.
+  - Organic peak traffic that matches designed capacity.
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.002</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">spl — same logic for Splunk</span></div>
+        <pre><code>index=web sourcetype=apache:error "server reached MaxRequestWorkers"
+| stats count AS saturation_events, earliest(_time) AS first_seen, latest(_time) AS last_seen BY host</code></pre>
+      </div>
+      <ul>
+        <li><strong>Field mapping:</strong> Sigma <code>message</code> maps to Splunk <code>_raw</code>; <code>pid</code> and <code>module</code> are parsed from the Apache error format.</li>
+        <li><strong>Assumptions:</strong> <code>index=web</code>, <code>sourcetype=apache:error</code> — rename for your environment.</li>
+        <li><strong>False positives:</strong> scheduled load tests; genuine capacity limits at peak hours.</li>
+        <li><strong>Tuning:</strong> keep a calendar of load tests and suppress those windows; alert on the first occurrence outside test windows.</li>
+        <li><strong>Severity:</strong> high — new clients are queued and start timing out.</li>
+      </ul>
+
+      <h4>Support rule — timeout wave per source (supports Threats 1 and 2)</h4>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">sigma — 408 and 499 wave from one source</span></div>
+        <pre><code>title: Nginx Slow Client Timeout Wave From One Source
+id: 73a05adf-bb07-4ee3-8a26-8cf13fe66615
+status: experimental
+description: Counts HTTP 408 (client too slow) and 499 (client gave up)
+    responses per client IP in the nginx access log. A tall wave from one
+    source suggests a slow-client flood holding workers open
+    (MITRE ATT&amp;CK T1499.002).
+references:
+  - https://attack.mitre.org/techniques/T1499/002/
+author: Detection Engineering
+date: 2025-05-20
+logsource:
+  product: nginx
+  service: access
+detection:
+  selection_status:
+    status:
+      - 408
+      - 499
+  condition: selection_status | count() by client_ip &gt; 50
+timeframe: 5m
+fields:
+  - client_ip
+  - status
+  - request
+  - http_user_agent
+falsepositives:
+  - A flaky mobile network that produces a few timeouts.
+  - Monitoring probes that restart at the same moment.
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.002</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">spl — same logic for Splunk</span></div>
+        <pre><code>index=web sourcetype=nginx:access status IN (408, 499)
+| bin _time span=5m
+| stats count AS slow_responses BY _time, client_ip
+| where slow_responses &gt; 50
+| sort - _time</code></pre>
+      </div>
+      <ul>
+        <li><strong>Field mapping:</strong> Sigma <code>client_ip</code> maps to the Splunk <code>client_ip</code> extraction; <code>status</code> maps to <code>status</code>.</li>
+        <li><strong>Assumptions:</strong> <code>index=web</code>, <code>sourcetype=nginx:access</code>, fields already extracted by your add-on — rename for your environment.</li>
+        <li><strong>False positives:</strong> a shared proxy or carrier NAT (one address for many users) crossing the count.</li>
+        <li><strong>Tuning:</strong> raise the threshold until a busy week stays quiet; start at 50 per 5 minutes and adjust to three times your normal 99th percentile.</li>
+        <li><strong>Severity:</strong> high — the wave usually coincides with worker saturation.</li>
+      </ul>
+
+      <h4>Threat 3 — Raw-volume HTTP flood (official pattern)</h4>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">sigma — high request volume from one source</span></div>
+        <pre><code>title: High Volume Web Request Flood From One Source
+id: 5b20c05d-59b1-4373-a3fc-8632ae86a750
+status: experimental
+description: Counts GET and POST requests per client IP in the nginx access
+    log. A raw-volume HTTP flood (MITRE ATT&amp;CK T1499.002) sends valid requests
+    at a rate that exhausts service CPU, memory, or worker slots, which is
+    analytic AN0489 of detection strategy DET0173.
+references:
+  - https://attack.mitre.org/techniques/T1499/002/
+  - https://attack.mitre.org/detectionstrategies/DET0173/
+author: Detection Engineering
+date: 2025-09-15
+logsource:
+  product: nginx
+  service: access
+detection:
+  selection_get:
+    method: GET
+  selection_post:
+    method: POST
+  condition: (selection_get or selection_post) | count() by client_ip &gt; 300
+timeframe: 1m
+fields:
+  - client_ip
+  - method
+  - request
+  - status
+  - http_user_agent
+falsepositives:
+  - A shared NAT, proxy, or office exit address that serves many users.
+  - Load tests, uptime monitors, or a crawler that polls frequently.
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.002</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">spl — same logic for Splunk</span></div>
+        <pre><code>index=web sourcetype=nginx:access (method=GET OR method=POST)
+| bin _time span=1m
+| stats count AS requests, dc(request) AS distinct_paths, avg(status) AS avg_status BY _time, client_ip
+| where requests &gt; 300
+| sort - _time</code></pre>
+      </div>
+      <ul>
+        <li><strong>Field mapping:</strong> Sigma <code>method</code> comes from the quoted request line of the access log (nginx add-ons extract it); <code>client_ip</code>, <code>request</code>, <code>status</code>, and <code>http_user_agent</code> match the example lines in 5.4.</li>
+        <li><strong>Assumptions:</strong> <code>index=web</code>, <code>sourcetype=nginx:access</code>, fields already extracted — rename for your environment. <code>dc()</code> counts distinct paths, which helps spot repetitive floods.</li>
+        <li><strong>False positives:</strong> a shared office or carrier NAT; health checks; a search engine crawler with a fast crawl rate.</li>
+        <li><strong>Tuning:</strong> set the threshold at three times your normal per-source 99th percentile; whitelist known load-test sources; raise the level when <code>avg_status</code> is near 200 and CPU climbs.</li>
+        <li><strong>Severity:</strong> high — this is the official raw-volume pattern, and sustained rates exhaust the service.</li>
+      </ul>
+
+      <h4>Threat 4 — Fast connection flood to a single daemon</h4>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">sigma — connection flood per source (Zeek conn)</span></div>
+        <pre><code>title: Connection Flood From One Source to One Service
+id: 903bd64f-054b-4305-9b63-2a1f382b81c6
+status: experimental
+description: Counts TCP connections per source address in Zeek conn.log. A
+    fast connection flood (MITRE ATT&amp;CK T1499.002) opens and holds as many
+    connections as a daemon allows until its connection slots exhaust. The
+    protocol-agnostic view covers web, mail, DNS, and other services.
+references:
+  - https://attack.mitre.org/techniques/T1499/002/
+  - https://attack.mitre.org/detectionstrategies/DET0173/
+author: Detection Engineering
+date: 2025-09-22
+logsource:
+  category: network
+  product: zeek
+  service: conn
+detection:
+  selection:
+    proto: tcp
+  condition: selection | count() by id.orig_h &gt; 300
+timeframe: 1m
+fields:
+  - id.orig_h
+  - id.resp_h
+  - id.resp_p
+  - conn_state
+falsepositives:
+  - A NAT gateway or proxy that opens many outbound connections.
+  - A vulnerability scanner or load-test host inside the network.
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.002</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">spl — same logic for Splunk</span></div>
+        <pre><code>index=network sourcetype=zeek:conn proto=tcp
+| bin _time span=1m
+| stats count AS connections, values(id.resp_p) AS dst_ports BY _time, id.orig_h
+| where connections &gt; 300
+| sort - _time</code></pre>
+      </div>
+      <ul>
+        <li><strong>Field mapping:</strong> Sigma <code>id.orig_h</code> (Zeek's source address) maps to the same field name in Splunk when Zeek data lands as JSON; <code>proto</code> carries the transport protocol.</li>
+        <li><strong>Assumptions:</strong> <code>index=network</code>, <code>sourcetype=zeek:conn</code> — rename for your environment; on a firewall instead, count sessions per source the same way.</li>
+        <li><strong>False positives:</strong> proxies, NAT devices, and backup jobs that legitimately open many connections.</li>
+        <li><strong>Tuning:</strong> whitelist internal scanner and proxy addresses; group by destination port too, so one busy proxy to many ports does not mask one host hammering one port.</li>
+        <li><strong>Severity:</strong> high — slot exhaustion refuses every new client of that daemon.</li>
+      </ul>
+
+      <h4>Threat 5 — DNS resolver query flood</h4>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">sigma — BIND query flood per client</span></div>
+        <pre><code>title: High DNS Query Volume From One Client on BIND
+id: a47b0e5c-4998-42a7-9a63-6e1978fd23f2
+status: experimental
+description: Counts DNS queries per client address in the BIND query log.
+    A storm of queries from one address can exhaust the resolver's query
+    slots and break name lookups for everyone (MITRE ATT&amp;CK T1499.002).
+    Your log pipeline must extract src_ip from the client field of each
+    line before this rule can count it.
+references:
+  - https://attack.mitre.org/techniques/T1499/002/
+author: Detection Engineering
+date: 2025-06-11
+logsource:
+  product: linux
+  service: named
+detection:
+  selection:
+    message|contains: 'query:'
+  condition: selection | count() by src_ip &gt; 300
+timeframe: 1m
+fields:
+  - src_ip
+  - message
+falsepositives:
+  - A large NAT device that shares one address across many users.
+  - Heavy monitoring or health-check probes.
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.002</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">spl — same logic for Splunk</span></div>
+        <pre><code>index=dns sourcetype=bind:query "query:"
+| rex "client @\S+ (?&lt;src_ip&gt;[0-9.]+)#"
+| bin _time span=1m
+| stats count AS queries BY _time, src_ip
+| where queries &gt; 300
+| sort - _time</code></pre>
+      </div>
+      <ul>
+        <li><strong>Field mapping:</strong> Sigma <code>src_ip</code> is parsed in SPL with <code>rex</code> from the raw BIND line; in other pipelines create the same field with a regex extraction.</li>
+        <li><strong>Assumptions:</strong> <code>index=dns</code>, <code>sourcetype=bind:query</code>, query logging enabled at info level — rename for your environment.</li>
+        <li><strong>False positives:</strong> a NAT gateway for hundreds of users; a backup name server that retries heavily.</li>
+        <li><strong>Tuning:</strong> whitelist known shared devices by address; alert on both count and a rise in REFUSED or SERVFAIL answers.</li>
+        <li><strong>Severity:</strong> high — name lookups fail, which breaks logins and other services at once.</li>
+      </ul>
+
+      <h4>Threat 6 — SSL/TLS renegotiation flood (official pattern)</h4>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">sigma — TLS renegotiation storm (Zeek ssl)</span></div>
+        <pre><code>title: TLS Renegotiation Storm From One Source (Zeek SSL)
+id: 2c458303-53b6-4f37-ba9e-2a2a04e3bad0
+status: experimental
+description: Counts TLS sessions that include a renegotiation marker per
+    source IP in Zeek ssl.log. An SSL renegotiation flood (MITRE ATT&amp;CK
+    T1499.002) makes the server redo expensive cryptographic work again and
+    again. Current TLS should not renegotiate at all, so even low counts
+    deserve a look; the threshold below catches storms.
+references:
+  - https://attack.mitre.org/techniques/T1499/002/
+  - https://attack.mitre.org/detectionstrategies/DET0173/
+author: Detection Engineering
+date: 2025-10-06
+logsource:
+  category: network
+  product: zeek
+  service: ssl
+detection:
+  selection_renego:
+    ssl_history|contains: 'r'
+  condition: selection_renego | count() by id.orig_h &gt; 50
+timeframe: 5m
+fields:
+  - id.orig_h
+  - id.resp_h
+  - id.resp_p
+  - server_name
+  - ssl_history
+falsepositives:
+  - A legacy application that legitimately renegotiates on one connection.
+  - A TLS-terminating proxy whose backend re-handshakes are logged here.
+level: high
+tags:
+  - attack.impact
+  - attack.t1499.002</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">spl — same logic for Splunk</span></div>
+        <pre><code>index=network sourcetype=zeek:ssl ssl_history=*
+| regex ssl_history="r"
+| bin _time span=5m
+| stats count AS renego_sessions, values(server_name) AS sni BY _time, id.orig_h
+| where renego_sessions &gt; 50
+| sort - _time</code></pre>
+      </div>
+      <ul>
+        <li><strong>Field mapping:</strong> Sigma <code>ssl_history|contains: 'r'</code> equals the SPL <code>regex ssl_history="r"</code>; both count sessions whose history records renegotiation, grouped by <code>id.orig_h</code>.</li>
+        <li><strong>Assumptions:</strong> <code>index=network</code>, <code>sourcetype=zeek:ssl</code> — rename for your environment. On Suricata, count <code>event_type:tls</code> events per <code>src_ip</code> instead; on WAF or CDN logs, use their handshake and renegotiation counters.</li>
+        <li><strong>False positives:</strong> one misconfigured legacy client is the main risk; quarantine and fix it rather than deleting the rule.</li>
+        <li><strong>Tuning:</strong> if your Zeek version does not mark renegotiation in <code>ssl_history</code>, count all handshakes per source (same query without the regex) and baseline it. Also raise any single renegotiation from a client as a low-level event.</li>
+        <li><strong>Severity:</strong> high — renegotiation should not happen at all on current services, and storms exhaust the TLS endpoint's CPU.</li>
+      </ul>
+
+      <h4>Threat 7 — LDAP bind flood on a domain controller</h4>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">sigma — unauthenticated bind burst (event 2889)</span></div>
+        <pre><code>title: LDAP Unauthenticated Bind Burst on Domain Controller
+id: f62d4aac-6b60-4150-9311-e1f7f9a1d318
+status: stable
+description: Detects bursts of successful unauthenticated binds (Directory
+    Service event 2889 with Bind type 0) from one client. Such bursts can
+    exhaust LDAP worker threads and slow every logon that depends on the
+    directory (MITRE ATT&amp;CK T1499.002).
+references:
+  - https://attack.mitre.org/techniques/T1499/002/
+author: Detection Engineering
+date: 2025-07-08
+logsource:
+  product: windows
+  service: directory-services
+detection:
+  selection_event:
+    EventID: 2889
+  selection_bind:
+    message|contains: 'Bind type: 0'
+  condition: selection_event and selection_bind | count() by client_ip &gt; 100
+timeframe: 5m
+fields:
+  - EventID
+  - client_ip
+  - message
+falsepositives:
+  - Legacy applications or printers that bind without credentials.
+  - A directory health probe that binds without credentials.
+level: medium
+tags:
+  - attack.impact
+  - attack.t1499.002</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">spl — same logic for Splunk</span></div>
+        <pre><code>index=main sourcetype=WinEventLog:DirectoryService EventCode=2889
+| rex field=Message "Client IP: (?&lt;client_ip&gt;[0-9.]+):"
+| bin _time span=5m
+| stats count AS unauth_binds BY _time, client_ip, host
+| where unauth_binds &gt; 100</code></pre>
+      </div>
+      <ul>
+        <li><strong>Field mapping:</strong> Sigma <code>client_ip</code> is extracted in SPL with <code>rex</code> from the <code>Message</code> field; <code>EventID</code> maps to <code>EventCode</code> in Windows event data.</li>
+        <li><strong>Assumptions:</strong> <code>index=main</code>, <code>sourcetype=WinEventLog:DirectoryService</code>, Directory Service auditing of bind events enabled — rename for your environment.</li>
+        <li><strong>False positives:</strong> one old printer that binds without credentials every few seconds.</li>
+        <li><strong>Tuning:</strong> fix the loud legacy device first, then lower the threshold; also treat any steady stream of type 0 binds as a hardening finding.</li>
+        <li><strong>Severity:</strong> medium — needs internal reach, but the effect spreads to all directory logins.</li>
+      </ul>
+
+      <h4>Threat 8 — Database connection pool exhaustion via the app</h4>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">sigma — MySQL pool exhaustion</span></div>
+        <pre><code>title: MySQL Too Many Connections Warning
+id: 0be2b8c1-a7ce-4146-8ac9-c3499b1b5c96
+status: stable
+description: Detects MySQL "Too many connections" and aborted-connection
+    warnings. Repeated bursts mean the application holds every database
+    session, for example under a slow-request flood that parks sessions
+    (MITRE ATT&amp;CK T1499.002).
+references:
+  - https://attack.mitre.org/techniques/T1499/002/
+author: Detection Engineering
+date: 2025-08-19
+logsource:
+  product: mysql
+  service: error
+detection:
+  selection_too_many:
+    message|contains: 'Too many connections'
+  selection_aborted:
+    message|contains: 'Aborted connection'
+  condition: selection_too_many or selection_aborted | count() &gt; 5
+timeframe: 5m
+fields:
+  - message
+  - host
+falsepositives:
+  - A batch job or report that opens many sessions at once.
+  - A planned max_connections change during maintenance.
+level: medium
+tags:
+  - attack.impact
+  - attack.t1499.002</code></pre>
+      </div>
+      <div class="code-block">
+        <div class="code-head"><span class="code-lang">spl — same logic for Splunk</span></div>
+        <pre><code>index=db sourcetype=mysql:error ("Too many connections" OR "Aborted connection")
+| bin _time span=5m
+| stats count AS pool_events, values(host) AS db_hosts BY _time
+| where pool_events &gt; 5</code></pre>
+      </div>
+      <ul>
+        <li><strong>Field mapping:</strong> Sigma <code>message</code> maps to Splunk <code>_raw</code>; <code>host</code> maps to the Splunk <code>host</code> field of the database server.</li>
+        <li><strong>Assumptions:</strong> <code>index=db</code>, <code>sourcetype=mysql:error</code> — rename for your environment.</li>
+        <li><strong>False positives:</strong> end-of-month reporting jobs; a redeploy that opens the pool for every app server at once.</li>
+        <li><strong>Tuning:</strong> raise the count threshold above your worst batch job; add a lookup of change windows to suppress planned events.</li>
+        <li><strong>Severity:</strong> medium — the database stays healthy, but the application in front of it fails.</li>
+      </ul>
+    </section>
+    <section class="section" id="case-study">
+      <div class="sec-head"><span class="sec-badge">6</span><h2 class="sec-title">Real-world case study</h2></div>
+      <p class="sec-intro">The documented history of the slowloris tool, then a clearly labeled representative scenario that shows how a full response plays out.</p>
+
+      <h4>The documented anchor: slowloris, June 2009</h4>
+      <p>In June 2009, the researcher known as RSnake (Robert Hansen) published slowloris on his website ha.ckers.org. The tool sent partial HTTP headers and held web server workers open with almost no bandwidth. The release post explained that classic detection methods and many firewalls would miss it. The attack looks like a crowd of very slow clients, not like a flood. Security journalists and bloggers widely covered the release, and server administrators around the world could suddenly test the weakness themselves.</p>
+      <p>Slowloris was then used in the wild in a politically visible way. During the 2009 Iranian election protests, activists used slowloris against Iranian government websites. Press and security-blog reporting at the time documented that the tool was chosen partly because it produced little network noise and could be run by individuals with limited resources. Slowloris is widely treated as the classic service-exhaustion tool, because it exhausts the web server's own worker capacity rather than the operating system or the network pipe. That is exactly the mechanism this sub-technique describes.</p>
+
+      <h4>Representative scenario based on public incident reports</h4>
+      <p>The following timeline is a <strong>representative scenario based on public incident reports</strong>: a composite that reflects common patterns reported by mid-size software companies, not a specific named company. It is set on 14 February 2026, the same fictional date used in the log samples across this guide. It shows a slow-POST flood against a SaaS (Software as a Service) API.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Time (2026-02-14)</th><th>Event</th><th>Signal seen</th></tr></thead>
+          <tbody>
+            <tr><td>03:02</td><td>Attack begins: one host opens 400 connections to the public API and starts slow POST uploads to the upload endpoint.</td><td>Nothing unusual yet in volume-based network alerts.</td></tr>
+            <tr><td>03:07</td><td>All application workers hold half-finished uploads; the database connection pool empties behind them.</td><td>First <code>Aborted connection</code> warnings in the MySQL error log.</td></tr>
+            <tr><td>03:12</td><td>Real users see slow answers and errors; checkout fails for some customers.</td><td>5xx error rate climbs; support chat gets first tickets.</td></tr>
+            <tr><td>03:15</td><td>Detection fires: one source with more than 50 timeout statuses in 5 minutes, plus "server reached MaxRequestWorkers" in the Apache error log.</td><td>SOC alert: slow-client wave plus worker saturation.</td></tr>
+            <tr><td>03:19</td><td>Responder confirms per-source concurrency of 380 from one address; confirms no other anomalies.</td><td>Connection table snapshot; clean host health checks.</td></tr>
+            <tr><td>03:24</td><td>Containment: WAF slow-attack rule enabled and the source blocked at the edge firewall, upstream of the origin.</td><td>Worker usage falls within minutes.</td></tr>
+            <tr><td>03:31</td><td>Harden: <code>RequestReadTimeout</code> tightened on Apache; request-body limits reviewed.</td><td>Config change recorded in the ticket.</td></tr>
+            <tr><td>03:40</td><td>Recovery verified: error rates and latency back to baseline; attacker retries twice more and is blocked each time.</td><td>Dashboards green; small residual 408 counts.</td></tr>
+            <tr><td>04:10</td><td>Closing: logs preserved, timeline written, monitoring tuned, runbook updated.</td><td>Incident report published internally.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>What the team did right, and what it cost</h4>
+      <div class="grid-2">
+        <div class="card"><span class="card-tag">Response</span><h4>Attack chain and detection point</h4>
+          <p>The chain was short: a single host, a slow-POST flood, worker exhaustion, and a database pool emptied from behind. The decisive detection point was the combination of two cheap signals: a per-source timeout wave and the Apache worker saturation line. Neither signal alone was as convincing.</p></div>
+        <div class="card"><span class="card-tag">Response</span><h4>Containment and eradication</h4>
+          <p>Containment happened at the edge, not on the origin: the WAF rule and the firewall block removed the load before workers were touched. Eradication was simple because the attack left no foothold: nothing to remove, only a source to keep blocked.</p></div>
+        <div class="card"><span class="card-tag">Response</span><h4>Recovery and impact</h4>
+          <p>Recovery was quick once the source was gone: workers drained in minutes. Total degraded time was about 38 minutes, with checkout errors for part of it. No data was lost. The main cost was engineering time and a handful of failed customer transactions.</p></div>
+        <div class="card"><span class="card-tag">Response</span><h4>Communication and lessons</h4>
+          <p>Support received one clear message instead of guesswork: "checkout may be slow, engineers are on it". Lessons learned: keep error logs in the SIEM with low delay, alert on per-source concurrency, shorten request timeouts by default, and keep a one-page runbook so the first responder does not improvise.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="mitigation">
+      <div class="sec-head"><span class="sec-badge">7</span><h2 class="sec-title">Mitigation and defense</h2></div>
+      <p class="sec-intro">Controls that stop service exhaustion floods, from quick server settings to organization-wide policy, plus simple advice for small setups.</p>
+
+      <div class="cards">
+        <div class="card"><span class="card-tag">Policy</span><h4>Runbook and ownership</h4><p>Write a one-page response runbook: who decides to block, who calls the provider, what to measure. Assign an owner for the WAF and proxy configuration. Rehearse the runbook quarterly with a short tabletop, and run a full load-test drill twice a year.</p></div>
+        <div class="card"><span class="card-tag">Web server</span><h4>Short timeouts and limits</h4><p>nginx: set <code>client_header_timeout</code> (default wait for headers) and <code>send_timeout</code> to 10–15 seconds, and use <code>limit_req</code> plus <code>limit_conn</code> for per-source rates and connection counts. Apache: enable <code>mod_reqtimeout</code> with <code>RequestReadTimeout</code> so slow headers and slow bodies are cut off automatically.</p></div>
+        <div class="card"><span class="card-tag">Endpoint</span><h4>Server hardening</h4><p>Keep web and TLS stacks patched. Size worker pools against available RAM instead of raising them blindly. Cap per-source keep-alive sessions (nginx <code>keepalive_requests</code>, Apache <code>KeepAliveTimeout</code> kept short), and set request-body limits on upload endpoints. Export worker, queue, and connection metrics from the server itself.</p></div>
+        <div class="card"><span class="card-tag">TLS</span><h4>Disable renegotiation where feasible</h4><p>TLS 1.3 removed renegotiation, so preferring TLS 1.3 closes the pattern outright. On TLS 1.2 endpoints, disable client-initiated renegotiation (for example OpenSSL's <code>SSL_OP_NO_RENEGOTIATION</code> option, the renegotiation limits in HAProxy or F5, or the platform's equivalent setting). Verify each service with the openssl check in section 3 and record the result.</p></div>
+        <div class="card"><span class="card-tag">Network</span><h4>Filter upstream (M1037)</h4><p>Put a CDN (content delivery network) or DDoS protection provider in front of origins, and block attacking sources at the edge firewall, not only on the server. Use a reverse proxy so slow clients never reach the application workers.</p></div>
+        <div class="card"><span class="card-tag">WAF</span><h4>Slow-attack rules</h4><p>Enable the WAF rule groups for slowloris and slow-POST patterns, and cap request duration and body rate per source. Test the rules with your own lab load tests before you rely on them.</p></div>
+        <div class="card"><span class="card-tag">Cloud</span><h4>Provider protection and quotas</h4><p>Turn on the cloud provider's DoS protection (for example the managed edge protection on major clouds), set autoscaling maxima, and know the billing effect of a flood before an incident starts.</p></div>
+        <div class="card"><span class="card-tag">Identity</span><h4>Protect the directory</h4><p>Keep LDAP ports off the internet, require authenticated binds, firewall domain controllers to expected client ranges, and monitor bind counts per source as in rule 7.</p></div>
+        <div class="card"><span class="card-tag">Logging</span><h4>Ship error logs fast</h4><p>Send web, DNS, and database error logs to the SIEM within seconds. Keep access-log timing fields (request time, upstream time) enabled; the detections in section 5 need them.</p></div>
+        <div class="card"><span class="card-tag">Monitoring</span><h4>Per-source baselines</h4><p>Dashboard concurrent connections and request rates per source, plus worker usage and queue depth. Alert on deviations from the baseline, not on fixed magic numbers alone.</p></div>
+        <div class="card"><span class="card-tag">Backup and response</span><h4>Assume downtime will happen</h4><p>Backups do not stop floods, but tested recovery and a status page keep the business running during one. Define the incident roles before the incident.</p></div>
+      </div>
+
+      <div class="callout callout-good"><span class="callout-label">Good practice — Home and small office</span>
+        <p>Do not run web, DNS, or mail services directly on your home or small-office connection. If you must: hide them behind a reverse proxy with short timeouts, enable the router's built-in flood protection, keep the default connection limits, and turn off port forwarding you do not need. For anything important, use a small cloud server or a provider with DDoS protection instead of exposing your own box.</p>
+      </div>
+
+      <h4>Prioritized actions</h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr></thead>
+          <tbody>
+            <tr><td>nginx: <code>client_header_timeout</code> 10s, <code>send_timeout</code> 15s, <code>limit_req</code> and <code>limit_conn</code> per source</td><td>Low</td><td>Web platform team</td><td>High — removes the mechanism most slow-header floods rely on</td></tr>
+            <tr><td>Apache: <code>RequestReadTimeout header=10-20,MinRate=500 body=20,MinRate=500</code> via <code>mod_reqtimeout</code></td><td>Low</td><td>Web platform team</td><td>High — cuts both slow headers and slow bodies</td></tr>
+            <tr><td>WAF slow-attack rules enabled and tested</td><td>Medium</td><td>Security engineering</td><td>High — blocks known slow-client patterns upstream</td></tr>
+            <tr><td>Reverse proxy or CDN in front of every origin (M1037 Filter Network Traffic: filter traffic upstream with a CDN or DoS-mitigation provider, and block attacking source addresses, ports, or protocols at the boundary)</td><td>Medium</td><td>Platform / network</td><td>High — origin workers stop meeting raw clients</td></tr>
+            <tr><td>Disable client-initiated TLS renegotiation on every TLS 1.2 endpoint; prefer TLS 1.3</td><td>Low</td><td>Platform / security</td><td>Medium-High — removes the renegotiation flood mechanism outright</td></tr>
+            <tr><td>Ship error logs to the SIEM and deploy the rules in section 5.5 (eight threats plus one support rule)</td><td>Medium</td><td>Detection engineering</td><td>Medium-High — turns the attack into a fast, precise alert</td></tr>
+            <tr><td>Per-source concurrency dashboard and baseline alerting</td><td>Medium</td><td>SOC</td><td>Medium — shortens detection and triage time</td></tr>
+            <tr><td>Capacity and DoS load test twice a year against a staging copy</td><td>Medium</td><td>SRE / platform</td><td>Medium — proves the limits before an attacker does</td></tr>
+            <tr><td>One-page DoS runbook with owners, provider contacts, and block procedure, rehearsed quarterly</td><td>Low</td><td>Security manager</td><td>Medium — cuts response time from guesswork to minutes</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="section" id="mistakes">
+      <div class="sec-head"><span class="sec-badge">8</span><h2 class="sec-title">Common mistakes and best practices</h2></div>
+      <p class="sec-intro">Eleven concrete blue-team mistakes around this technique, each with symptom, root cause, fix, and prevention. Then the habits that keep detections healthy.</p>
+
+      <div class="grid-2">
+        <div class="card"><h4>1. Treating every 408 as an attack</h4>
+          <p><strong>Symptom:</strong> constant alerts about timeout statuses.</p>
+          <p><strong>Root cause:</strong> 408 also happens when a mobile user walks into an elevator; the status alone is not an attack.</p>
+          <p><strong>Fix:</strong> require volume (many timeouts from one source in a window) before alerting.</p>
+          <p><strong>Prevention:</strong> baseline first, then set thresholds from data.</p></div>
+        <div class="card"><h4>2. One giant alert, then alert fatigue</h4>
+          <p><strong>Symptom:</strong> responders ignore the DoS alert channel.</p>
+          <p><strong>Root cause:</strong> a single high-volume rule with no severity tiers fires all day.</p>
+          <p><strong>Fix:</strong> split into information (trend), warning (wave), and critical (saturation message) tiers.</p>
+          <p><strong>Prevention:</strong> review alert noise weekly and prune.</p></div>
+        <div class="card"><h4>3. Error logs never shipped to the SIEM</h4>
+          <p><strong>Symptom:</strong> the first place you learn of exhaustion is a user complaint.</p>
+          <p><strong>Root cause:</strong> only access logs were onboarded; the error log holds the exhaustion messages.</p>
+          <p><strong>Fix:</strong> ship nginx, Apache, DNS, and database error logs with low delay.</p>
+          <p><strong>Prevention:</strong> add "error logs in SIEM" to every new service checklist.</p></div>
+        <div class="card"><h4>4. Timeouts left at unsafe defaults</h4>
+          <p><strong>Symptom:</strong> a few dozen connections take the service down.</p>
+          <p><strong>Root cause:</strong> header or body timeouts of minutes let one slow client park a worker for a long time.</p>
+          <p><strong>Fix:</strong> set 10–20 second read timeouts as in section 7.</p>
+          <p><strong>Prevention:</strong> include timeout review in server build standards.</p></div>
+        <div class="card"><h4>5. Rate limits on the wrong scope</h4>
+          <p><strong>Symptom:</strong> limits pass lab tests, but a real flood still saturates the service.</p>
+          <p><strong>Root cause:</strong> the limit is per worker or global, not per source address.</p>
+          <p><strong>Fix:</strong> apply <code>limit_conn</code> / <code>limit_req</code> per source, and per source behind the proxy use the real client header only when you trust it.</p>
+          <p><strong>Prevention:</strong> test limits with many connections from one lab address.</p></div>
+        <div class="card"><h4>6. No owner for the WAF and proxy config</h4>
+          <p><strong>Symptom:</strong> slow-attack rules are off, and nobody knows why.</p>
+          <p><strong>Root cause:</strong> the WAF console has no named owner, so changes stall.</p>
+          <p><strong>Fix:</strong> assign an owner and a change process; document the rule set.</p>
+          <p><strong>Prevention:</strong> quarterly review of WAF coverage against this technique.</p></div>
+        <div class="card"><h4>7. Blocking only at the origin</h4>
+          <p><strong>Symptom:</strong> the attack returns from new addresses and workers keep filling.</p>
+          <p><strong>Root cause:</strong> blocks applied on the origin server, after the proxy already opened connections to it.</p>
+          <p><strong>Fix:</strong> block upstream (edge, CDN, firewall) so the origin never sees the traffic.</p>
+          <p><strong>Prevention:</strong> keep the edge blocklist as the documented first step.</p></div>
+        <div class="card"><h4>8. Only raising the worker limit</h4>
+          <p><strong>Symptom:</strong> the server runs out of memory instead of workers.</p>
+          <p><strong>Root cause:</strong> "fix" means doubling <code>MaxRequestWorkers</code> without checking RAM per worker.</p>
+          <p><strong>Fix:</strong> size limits against memory, and keep short timeouts as the real control.</p>
+          <p><strong>Prevention:</strong> capacity math documented for every profile change.</p></div>
+        <div class="card"><h4>9. No capacity testing before big events</h4>
+          <p><strong>Symptom:</strong> a product launch or election-night traffic looks exactly like an attack.</p>
+          <p><strong>Root cause:</strong> limits and baselines were never exercised.</p>
+          <p><strong>Fix:</strong> run staged load tests; record the worker and connection profiles they produce.</p>
+          <p><strong>Prevention:</strong> schedule tests twice a year and before major launches.</p></div>
+        <div class="card"><h4>10. No runbook, so responders improvise</h4>
+          <p><strong>Symptom:</strong> the first responder spends the incident deciding who may block what.</p>
+          <p><strong>Root cause:</strong> no documented decision path or contact list.</p>
+          <p><strong>Fix:</strong> write the one-page runbook from section 7 and rehearse it.</p>
+          <p><strong>Prevention:</strong> include a DoS scenario in yearly incident exercises.</p></div>
+        <div class="card"><h4>11. No TLS handshake or renegotiation visibility</h4>
+          <p><strong>Symptom:</strong> a renegotiation flood or handshake storm is invisible, and the team blames "mysterious CPU load" on the TLS endpoint.</p>
+          <p><strong>Root cause:</strong> only web access logs are collected; no Zeek, Suricata, WAF, or load balancer TLS counters exist.</p>
+          <p><strong>Fix:</strong> enable TLS logging (Zeek ssl.log, Suricata TLS, or WAF handshake metrics) and deploy rule 6 from section 5.5.</p>
+          <p><strong>Prevention:</strong> add TLS handshake visibility to the same service onboarding checklist that covers error logs.</p></div>
+      </div>
+
+      <h4>Habits that keep detections healthy</h4>
+      <div class="grid-3">
+        <div class="card"><span class="card-tag">Daily</span><h4>Check the pulse</h4><p>Review worker usage, timeout waves, and per-source connection trends for the last 24 hours. One glance at the dashboard is enough when the baselines exist.</p></div>
+        <div class="card"><span class="card-tag">Weekly</span><h4>Prune noise</h4><p>Read the week's false positives, tune thresholds, and confirm error logs still arrive from every web and DNS server. Retire alerts that fired only on noise.</p></div>
+        <div class="card"><span class="card-tag">Monthly</span><h4>Rehearse and update</h4><p>Run one rule in a test search, re-read the MITRE page for updates, and check the WAF and proxy configs still match section 7. Update the runbook if people changed roles.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="cheat-sheet">
+      <div class="sec-head"><span class="sec-badge">9</span><h2 class="sec-title">Cheat sheet and quick reference</h2></div>
+      <p class="sec-intro">The whole guide on one screen: key facts, top detections, a response checklist, and links for further reading.</p>
+
+      <h4>Key facts</h4>
+      <dl class="kv">
+        <dt>Technique</dt><dd>T1499.002 — Service Exhaustion Flood (sub-technique of T1499)</dd>
+        <dt>Tactic</dt><dd>Impact (availability loss)</dd>
+        <dt>Platforms</dt><dd>IaaS, Linux, Windows, macOS; the service limit is the real target</dd>
+        <dt>Official patterns</dt><dd>Simple HTTP flood (raw volume) and SSL renegotiation attack, named in the official description</dd>
+        <dt>Attack cost</dt><dd>Low bandwidth, many slow or idle connections; or raw request volume</dd>
+        <dt>Key artifacts</dt><dd><code>worker_connections are not enough</code>; <code>server reached MaxRequestWorkers</code>; 408/499 waves; per-source concurrency spike; TLS handshake and renegotiation counts</dd>
+        <dt>Core controls</dt><dd>Short timeouts, per-source limits, WAF, TLS renegotiation disabled, upstream filtering (M1037)</dd>
+        <dt>Official detection</dt><dd>Strategy DET0173 with analytics AN0489–AN0492</dd>
+        <dt>Technique revision</dt><dd>1.4 — created 20 February 2020, last modified 24 October 2025, live ATT&amp;CK v20</dd>
+      </dl>
+
+      <h4>Top detections</h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>What to look for</th><th>Source</th><th>Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td>Exhaustion messages ("worker_connections are not enough", "server reached MaxRequestWorkers")</td><td>Web server error logs</td><td>Rare in normal operation; near-certain proof the limit was hit</td></tr>
+            <tr><td>50 or more 408/499 statuses from one source in 5 minutes</td><td>Web access logs</td><td>The fingerprint of slow-client floods</td></tr>
+            <tr><td>Concurrent connections per source far above baseline</td><td>Proxy, firewall, host metrics</td><td>Names the attacker before the saturation line appears</td></tr>
+            <tr><td>Over 300 queries per minute per client on the resolver</td><td>DNS query logs</td><td>Resolver exhaustion breaks every dependent service</td></tr>
+            <tr><td>Bursts of unauthenticated binds (event 2889, type 0)</td><td>Directory Service event log</td><td>LDAP flood pressure plus a hardening finding in one signal</td></tr>
+            <tr><td>"Too many connections" bursts</td><td>Database error logs</td><td>Shows the flood reached through the application to the data tier</td></tr>
+            <tr><td>More than 300 requests per minute from one source, mostly 200s</td><td>Web access logs</td><td>The fingerprint of the raw-volume HTTP flood (official pattern)</td></tr>
+            <tr><td>TLS handshake storms, or any renegotiation marker, from one source</td><td>Zeek ssl.log, Suricata TLS events, WAF or CDN counters</td><td>Catches the SSL renegotiation flood and misconfigured TLS in one signal</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Response checklist</h4>
+      <ul class="checklist">
+        <li>Confirm the service is up but not answering, and record the time.</li>
+        <li>Snapshot the connection table and count connections per source.</li>
+        <li>Match the exhaustion message, the 408/499 wave, and any TLS handshake or renegotiation spike in the logs.</li>
+        <li>Block the suspect source at the edge, not only on the origin.</li>
+        <li>Verify workers free up and real users succeed again.</li>
+        <li>Shorten the timeout that let the attack work.</li>
+        <li>Save the evidence and write the incident timeline.</li>
+        <li>Tune one detection and update the runbook with what you learned.</li>
+      </ul>
+
+      <h4>Links</h4>
+      <ul>
+        <li><a href="https://attack.mitre.org/techniques/T1499/002/">MITRE ATT&amp;CK T1499.002 — Service Exhaustion Flood</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1499/">MITRE ATT&amp;CK T1499 — Endpoint Denial of Service (parent)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1499/001/">T1499.001 — OS Exhaustion Flood (sibling)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1499/003/">T1499.003 — Application Exhaustion Flood (sibling)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1499/004/">T1499.004 — Application or System Exploitation (sibling)</a></li>
+        <li><a href="https://attack.mitre.org/techniques/T1498/">T1498 — Network Denial of Service</a></li>
+        <li><a href="https://attack.mitre.org/mitigations/M1037/">MITRE ATT&amp;CK M1037 — Filter Network Traffic</a></li>
+      </ul>
+
+      <div class="callout callout-danger"><span class="callout-label">Danger — Lab only</span>
+        <p>Every tool and command in this guide may be used only against isolated systems that you own, with written permission for anything beyond your own lab. Denial-of-service attacks against other people's systems are crimes in most countries, including under the US CFAA and the Council of Europe Cybercrime Convention.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<button type="button" class="mobile-toc-btn" id="mobile-toc-btn" aria-haspopup="dialog" aria-expanded="false">Contents</button>
+<div class="toc-overlay" id="toc-overlay" role="dialog" aria-modal="true" aria-label="Table of contents">
+  <div class="overlay-panel">
+    <nav class="toc" aria-label="Table of contents (overlay)">
+      <p class="toc-title">Contents</p>
+      <ol id="toc-list-overlay"></ol>
+    </nav>
+  </div>
+</div>
+<button type="button" class="back-top" id="back-top" aria-label="Back to top">Back to top</button>
+
+<script>
+(function () {
+  "use strict";
+  var doc = document;
+  function $(sel, root) { try { return (root || doc).querySelector(sel); } catch (e) { return null; } }
+  function $all(sel, root) { try { return Array.prototype.slice.call((root || doc).querySelectorAll(sel)); } catch (e) { return []; } }
+  function prefersReduced() { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+  function safe(fn) { try { fn(); } catch (e) { /* never break the page */ } }
+
+  /* ===== Theme API for the site shell ===== */
+  safe(function () {
+    window.__setAtkPageTheme = function (mode) {
+      if (mode !== "dark" && mode !== "light") { return; }
+      doc.documentElement.setAttribute("data-theme", mode);
+      try { window.localStorage.setItem("atk-theme", mode); } catch (err) { /* ignore */ }
+    };
+  });
+
+  /* ===== Reading progress bar ===== */
+  safe(function () {
+    var bar = $(".progress-bar");
+    if (!bar) { return; }
+    var update = function () {
+      var max = doc.documentElement.scrollHeight - window.innerHeight;
+      var y = window.scrollY || doc.documentElement.scrollTop || 0;
+      var p = max > 0 ? Math.min(1, Math.max(0, y / max)) : 0;
+      bar.style.width = (p * 100).toFixed(2) + "%";
+    };
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    update();
+  });
+
+  /* ===== Build the table of contents from real headings ===== */
+  var tocEntries = [];
+  safe(function () {
+    var list = $("#toc-list");
+    var listOverlay = $("#toc-list-overlay");
+    if (!list && !listOverlay) { return; }
+    var items = [];
+    $all(".content .section").forEach(function (sec) {
+      var h2 = $("h2.sec-title", sec);
+      if (!h2) { return; }
+      items.push({ el: h2, id: sec.id || "", text: h2.textContent, level: 2 });
+      $all("h3", sec).forEach(function (h3) {
+        if (h3.id) { items.push({ el: h3, id: h3.id, text: h3.textContent, level: 3 }); }
+      });
+    });
+    items.forEach(function (item) {
+      if (!item.id) { return; }
+      [list, listOverlay].forEach(function (target) {
+        if (!target) { return; }
+        var li = doc.createElement("li");
+        var a = doc.createElement("a");
+        a.href = "#" + item.id;
+        a.textContent = item.text;
+        if (item.level === 3) { a.className = "toc-sub"; }
+        li.appendChild(a);
+        target.appendChild(li);
+        if (target === list) { tocEntries.push({ id: item.id, el: item.el, link: a }); }
+      });
+    });
+  });
+
+  /* ===== Highlight the active section while scrolling ===== */
+  safe(function () {
+    if (!tocEntries.length) { return; }
+    var current = -1;
+    var setActive = function () {
+      var idx = -1;
+      for (var i = 0; i < tocEntries.length; i++) {
+        var el = tocEntries[i].el;
+        if (el && el.getBoundingClientRect().top <= 120) { idx = i; }
+      }
+      if (idx === current) { return; }
+      current = idx;
+      tocEntries.forEach(function (t, i) {
+        if (i === idx) { t.link.classList.add("active"); t.link.setAttribute("aria-current", "true"); }
+        else { t.link.classList.remove("active"); t.link.removeAttribute("aria-current"); }
+      });
+    };
+    var raf = 0;
+    var onScroll = function () {
+      if (raf) { return; }
+      raf = window.requestAnimationFrame(function () { raf = 0; setActive(); });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    setActive();
+  });
+
+  /* ===== Mobile contents overlay ===== */
+  var overlayEl = null;
+  var lastFocus = null;
+  function overlayOpen() {
+    if (!overlayEl) { return; }
+    lastFocus = doc.activeElement;
+    overlayEl.classList.add("open");
+    doc.body.style.overflow = "hidden";
+    var btn = $("#mobile-toc-btn");
+    if (btn) { btn.setAttribute("aria-expanded", "true"); }
+    var first = overlayEl.querySelector("a");
+    if (first) { first.focus(); }
+  }
+  function overlayClose() {
+    if (!overlayEl) { return; }
+    overlayEl.classList.remove("open");
+    doc.body.style.overflow = "";
+    var btn = $("#mobile-toc-btn");
+    if (btn) { btn.setAttribute("aria-expanded", "false"); }
+    if (lastFocus && lastFocus.focus) { lastFocus.focus(); }
+  }
+  safe(function () {
+    overlayEl = $("#toc-overlay");
+    var btn = $("#mobile-toc-btn");
+    if (!overlayEl || !btn) { return; }
+    btn.addEventListener("click", function () {
+      if (overlayEl.classList.contains("open")) { overlayClose(); } else { overlayOpen(); }
+    });
+    overlayEl.addEventListener("mousedown", function (e) {
+      if (e.target === overlayEl) { overlayClose(); }
+    });
+    doc.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && overlayEl.classList.contains("open")) { overlayClose(); }
+    });
+  });
+
+  /* ===== Smooth scrolling for internal links ===== */
+  safe(function () {
+    doc.addEventListener("click", function (e) {
+      var t = e.target;
+      var a = t && t.closest ? t.closest('a[href^="#"]') : null;
+      if (!a) { return; }
+      var href = a.getAttribute("href") || "";
+      if (href.length < 2) { return; }
+      var target = doc.getElementById(href.slice(1));
+      if (!target) { return; }
+      e.preventDefault();
+      var smooth = !prefersReduced();
+      try { target.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "start" }); }
+      catch (err) { target.scrollIntoView(); }
+      try { window.history.replaceState(null, "", href); } catch (err2) { /* ignore */ }
+      if (overlayEl && overlayEl.classList.contains("open")) { overlayClose(); }
+    });
+  });
+
+  /* ===== Back to top ===== */
+  safe(function () {
+    var bt = $("#back-top");
+    if (!bt) { return; }
+    var update = function () {
+      var y = window.scrollY || 0;
+      if (y > 600) { bt.classList.add("show"); } else { bt.classList.remove("show"); }
+    };
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    update();
+    bt.addEventListener("click", function () {
+      var smooth = !prefersReduced();
+      try { window.scrollTo({ top: 0, behavior: smooth ? "smooth" : "auto" }); }
+      catch (err) { window.scrollTo(0, 0); }
+    });
+  });
+
+  /* ===== Copy buttons on every code block ===== */
+  safe(function () {
+    $all(".code-block").forEach(function (block) {
+      var pre = $("pre", block);
+      if (!pre) { return; }
+      var head = $(".code-head", block);
+      if (!head) {
+        head = doc.createElement("div");
+        head.className = "code-head";
+        block.insertBefore(head, block.firstChild);
+      }
+      if ($(".copy-btn", head)) { return; }
+      var btn = doc.createElement("button");
+      btn.type = "button";
+      btn.className = "copy-btn";
+      btn.textContent = "Copy";
+      btn.setAttribute("aria-label", "Copy code to clipboard");
+      var done = function () {
+        btn.textContent = "Copied";
+        btn.classList.add("copied");
+        window.setTimeout(function () {
+          btn.textContent = "Copy";
+          btn.classList.remove("copied");
+        }, 1600);
+      };
+      var legacy = function (text) {
+        var ta = doc.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        doc.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = doc.execCommand("copy"); } catch (err) { ok = false; }
+        doc.body.removeChild(ta);
+        if (ok) { done(); }
+      };
+      btn.addEventListener("click", function () {
+        var text = pre.innerText || pre.textContent || "";
+        if (window.navigator && window.navigator.clipboard && window.navigator.clipboard.writeText) {
+          window.navigator.clipboard.writeText(text).then(done, function () { legacy(text); });
+        } else { legacy(text); }
+      });
+      head.appendChild(btn);
+    });
+  });
+
+  /* ===== Simulation: Eight Chairs, Slow Guests ===== */
+  safe(function () {
+    var wrap = $("#sim");
+    var canvas = $("#sim-canvas");
+    var capEl = $("#sim-caption");
+    var hintText = $("#sim-hint-text");
+    var chipsEl = $("#sim-chips");
+    var playBtn = $("#sim-play");
+    var pauseBtn = $("#sim-pause");
+    var restartBtn = $("#sim-restart");
+    var speedSel = $("#sim-speed");
+    var tipEl = $("#sim-tooltip");
+    var ctx = null;
+    try { ctx = canvas ? canvas.getContext("2d") : null; } catch (e) { ctx = null; }
+    if (!wrap || !canvas || !ctx) { return; }
+
+    var W = 920, H = 430;
+    var scale = 1, dpr = 1;
+    var FONT_S = 'system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+    var FONT_M = 'ui-monospace, "Cascadia Mono", Consolas, monospace';
+
+    function token(name) {
+      var v = getComputedStyle(doc.documentElement).getPropertyValue(name);
+      return (v || "").trim() || "#888888";
+    }
+    var P = {};
+    function refreshPalette() {
+      P.bg = token("--bg"); P.surface = token("--surface"); P.surface2 = token("--surface-2");
+      P.elevated = token("--elevated"); P.text = token("--text"); P.muted = token("--muted");
+      P.border = token("--border"); P.borderStrong = token("--border-strong");
+      P.accent = token("--accent"); P.accent2 = token("--accent-2"); P.violet = token("--violet");
+      P.success = token("--success"); P.warning = token("--warning"); P.danger = token("--danger");
+      P.high = token("--high"); P.low = token("--low");
+    }
+    refreshPalette();
+
+    var STEPS = [
+      { cap: "Normal traffic: eight workers serve quick requests.",
+        hint: "Baseline the number of concurrent connections per source while everything is calm.",
+        chairs: "all-served", attacker: "idle", user: "ok", load: 2, alert: false,
+        log: ["access 200 GET / 31ms", "access 200 GET /style.css 12ms", "conns per source: 2 (steady)"] },
+      { cap: "The attacker opens many connections and sends only the first header lines, then waits.",
+        hint: "Watch connections from one source climb while the bytes per request stay tiny.",
+        chairs: "mix4", attacker: "slow", user: "ok", load: 6, alert: false,
+        log: ["access 408 GET / (client too slow)", "open conns from 203.0.113.50: 160", "bytes in: 58 total"] },
+      { cap: "All eight workers now wait for header bytes that never arrive.",
+        hint: "Worker pool saturation: 8 of 8 slots held by one source.",
+        chairs: "all-wait", attacker: "slow", user: "queued", load: 8, alert: false,
+        log: ["worker pool: 8/8 busy", "queue depth: 12 requests waiting", "conns per source: 380"] },
+      { cap: "A real user queues, waits, and gives up: the request times out.",
+        hint: "Client timeouts (408) and abandoned requests (499) rise for everyone else.",
+        chairs: "all-wait", attacker: "slow", user: "timeout", load: 8, alert: false,
+        log: ["access 499 GET /plans 0B rt=59.9", "access 408 POST /upload rt=60.0", "user retries fail too"] },
+      { cap: "SOC view: connections per source spike and the error log speaks.",
+        hint: "Alert on per-source concurrency and error lines like worker_connections are not enough.",
+        chairs: "all-wait", attacker: "slow", user: "timeout", load: 8, alert: true,
+        log: ["[alert] worker_connections are not enough", "conns per source: 380 (one host)", "alert: slow-client flood likely"] },
+      { cap: "The defender shortens timeouts and adds rate limits; the attacker adapts.",
+        hint: "Tune client_header_timeout, send_timeout and limit_req; expect the attacker to slow the pace.",
+        chairs: "tune", attacker: "adapt", user: "queued", load: 7, alert: false,
+        log: ["timeout 10s: 3 workers freed", "limit_req: 60 req/min per source", "attacker pace dropped"] },
+      { cap: "The firewall and WAF block the attacking source; the workers free up.",
+        hint: "Block upstream of the origin so held connections never reach the workers.",
+        chairs: "all-free", attacker: "blocked", user: "ok", load: 1, alert: false,
+        log: ["firewall DROP 203.0.113.50 (WAF)", "workers freed: 8/8", "conns per source: 0"] },
+      { cap: "Recovery: real users are served again and the baseline is restored.",
+        hint: "Record the incident and keep watching concurrent connections per source.",
+        chairs: "all-served", attacker: "blocked", user: "ok", load: 2, alert: false,
+        log: ["baseline restored: 2 conns per source", "access 200 GET / 28ms", "incident recorded, alert tuned"] }
+    ];
+
+    var ATK = { x: 28, y: 64, w: 170, h: 76 };
+    var USR = { x: 28, y: 280, w: 170, h: 76 };
+    var SRV = { x: 250, y: 36, w: 340, h: 358 };
+    var SOC = { x: 620, y: 36, w: 272, h: 358 };
+    var NODES = [
+      { rect: ATK, tip: "The attacking host opens many connections and sends only part of each request, so workers wait while doing nothing." },
+      { rect: USR, tip: "A normal visitor. When every worker is held, this visitor waits and finally times out." },
+      { rect: SRV, tip: "The web server has eight worker slots. Each half-finished request occupies one slot until a timeout ends it." },
+      { rect: SOC, tip: "The SOC watches concurrent connections per source and the error log. Two matching signals make a strong alert." }
+    ];
+
+    var chipBtns = [];
+    safe(function () {
+      if (!chipsEl) { return; }
+      var labels = ["Normal", "Attack starts", "Pool full", "User blocked", "SOC alert", "Tune limits", "Block source", "Recovery"];
+      labels.forEach(function (lab, i) {
+        var b = doc.createElement("button");
+        b.type = "button";
+        b.className = "sim-chip";
+        b.textContent = (i + 1) + " " + lab;
+        b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+        b.setAttribute("aria-label", "Jump to step " + (i + 1) + ": " + lab);
+        chipsEl.appendChild(b);
+        chipBtns.push(b);
+      });
+    });
+
+    var current = 0, playing = false, t = 0, lastTs = 0, speed = 1, rafId = 0;
+    var stepClock = 0;
+    var STEP_MS = 4200; /* one story step at 1x speed */
+
+    function applyStep(i) {
+      current = i;
+      stepClock = 0;
+      var s = STEPS[i];
+      if (capEl) { capEl.textContent = s.cap; }
+      if (hintText) { hintText.textContent = s.hint; }
+      chipBtns.forEach(function (b, j) {
+        b.setAttribute("aria-pressed", j === i ? "true" : "false");
+      });
+    }
+
+    function chairState(step, i, now) {
+      var c = step.chairs;
+      if (c === "all-served") { return "served"; }
+      if (c === "all-wait") { return "wait"; }
+      if (c === "all-free") { return "free"; }
+      if (c === "mix4") { return i < 4 ? "wait" : "served"; }
+      if (c === "tune") { return Math.sin(now / 400 + i * 1.3) > 0 ? "wait" : "free"; }
+      return "idle";
+    }
+    function chairXY(i) {
+      return { x: 274 + (i % 2) * 140, y: 96 + Math.floor(i / 2) * 66 };
+    }
+
+    function box(x, y, w, h, r, fill, stroke, lw) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y); ctx.arc(x + w - r, y + r, r, -Math.PI / 2, 0);
+      ctx.lineTo(x + w, y + h - r); ctx.arc(x + w - r, y + h - r, r, 0, Math.PI / 2);
+      ctx.lineTo(x + r, y + h); ctx.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI);
+      ctx.lineTo(x, y + r); ctx.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
+      ctx.closePath();
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke) {
+        ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1.4; ctx.stroke();
+      }
+    }
+    function line(x1, y1, x2, y2, color, dash, lw) {
+      ctx.save();
+      if (dash) { ctx.setLineDash(dash); }
+      ctx.strokeStyle = color; ctx.lineWidth = lw || 1.4;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.restore();
+    }
+    function dot(x, y, r, color) {
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.fill();
+    }
+    function xmark(x, y, size, color) {
+      ctx.strokeStyle = color; ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(x - size, y - size); ctx.lineTo(x + size, y + size);
+      ctx.moveTo(x + size, y - size); ctx.lineTo(x - size, y + size);
+      ctx.stroke();
+    }
+    function wrapLines(text, maxW, font) {
+      ctx.font = font;
+      var words = String(text).split(" ");
+      var out = [], lineNow = "";
+      for (var i = 0; i < words.length; i++) {
+        var test = lineNow ? lineNow + " " + words[i] : words[i];
+        if (ctx.measureText(test).width > maxW && lineNow) { out.push(lineNow); lineNow = words[i]; }
+        else { lineNow = test; }
+      }
+      if (lineNow) { out.push(lineNow); }
+      return out;
+    }
+    function logColor(lineText) {
+      if (lineText.indexOf("[alert]") === 0 || lineText.indexOf("alert:") === 0) { return P.danger; }
+      if (lineText.indexOf("499") >= 0 || lineText.indexOf("408") >= 0 || lineText.indexOf("DROP") >= 0) { return P.warning; }
+      if (lineText.indexOf("baseline") === 0 || lineText.indexOf("workers freed") === 0 || lineText.indexOf("incident") === 0) { return P.success; }
+      return P.muted;
+    }
+
+    function drawChair(i, state, now) {
+      var p = chairXY(i);
+      var label = "W" + (i + 1);
+      if (state === "wait") {
+        box(p.x, p.y, 130, 44, 10, P.surface2, P.warning, 1.6);
+        ctx.fillStyle = P.text; ctx.font = "700 12px " + FONT_M;
+        ctx.textAlign = "left"; ctx.fillText(label, p.x + 10, p.y + 19);
+        ctx.fillStyle = P.muted; ctx.font = "10px " + FONT_M;
+        ctx.fillText("waiting", p.x + 10, p.y + 34);
+        var prog = (now / 2600 + i * 0.17) % 1;
+        ctx.beginPath();
+        ctx.arc(p.x + 108, p.y + 22, 10, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2);
+        ctx.strokeStyle = P.warning; ctx.lineWidth = 2.4; ctx.stroke();
+      } else if (state === "served") {
+        box(p.x, p.y, 130, 44, 10, P.surface2, P.success, 1.6);
+        ctx.fillStyle = P.text; ctx.font = "700 12px " + FONT_M;
+        ctx.textAlign = "left"; ctx.fillText(label, p.x + 10, p.y + 19);
+        ctx.fillStyle = P.muted; ctx.font = "10px " + FONT_M;
+        ctx.fillText("served", p.x + 10, p.y + 34);
+        ctx.strokeStyle = P.success; ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(p.x + 100, p.y + 23); ctx.lineTo(p.x + 105, p.y + 28); ctx.lineTo(p.x + 115, p.y + 15);
+        ctx.stroke();
+      } else if (state === "free") {
+        box(p.x, p.y, 130, 44, 10, P.surface2, P.success, 1.2);
+        ctx.fillStyle = P.muted; ctx.font = "700 12px " + FONT_M;
+        ctx.textAlign = "left"; ctx.fillText(label, p.x + 10, p.y + 19);
+        ctx.fillStyle = P.success; ctx.font = "10px " + FONT_M;
+        ctx.fillText("free", p.x + 10, p.y + 34);
+      } else {
+        box(p.x, p.y, 130, 44, 10, P.surface2, P.border, 1.2);
+        ctx.fillStyle = P.muted; ctx.font = "700 12px " + FONT_M;
+        ctx.textAlign = "left"; ctx.fillText(label, p.x + 10, p.y + 19);
+      }
+    }
+
+    function drawNode(node, title, sub, titleColor, subColor) {
+      box(node.x, node.y, node.w, node.h, 12, P.elevated, P.borderStrong, 1.5);
+      ctx.fillStyle = titleColor; ctx.font = "700 14px " + FONT_S;
+      ctx.textAlign = "left"; ctx.fillText(title, node.x + 14, node.y + 28);
+      ctx.fillStyle = subColor; ctx.font = "11px " + FONT_M;
+      ctx.fillText(sub, node.x + 14, node.y + 54);
+    }
+
+    function draw(now) {
+      var step = STEPS[current];
+      ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+      ctx.fillStyle = P.bg; ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "left";
+
+      /* step counter */
+      ctx.fillStyle = P.muted; ctx.font = "11px " + FONT_M;
+      ctx.fillText("Step " + (current + 1) + " / 8", 28, 24);
+
+      /* server box */
+      box(SRV.x, SRV.y, SRV.w, SRV.h, 14, P.surface, P.borderStrong, 1.6);
+      ctx.fillStyle = P.text; ctx.font = "700 14px " + FONT_S;
+      ctx.fillText("Web server", SRV.x + 24, SRV.y + 30);
+      ctx.fillStyle = P.muted; ctx.font = "11px " + FONT_M;
+      ctx.fillText("8 worker slots", SRV.x + 130, SRV.y + 30);
+
+      /* attacker connections: chairs currently in wait state */
+      var waitIdx = [];
+      var i, cs;
+      for (i = 0; i < 8; i++) {
+        cs = chairState(step, i, now);
+        if (cs === "wait") { waitIdx.push(i); }
+      }
+      var atkEdge = { x: ATK.x + ATK.w, y: ATK.y + ATK.h / 2 };
+      if (step.attacker === "slow" || step.attacker === "adapt") {
+        for (i = 0; i < waitIdx.length; i++) {
+          var cp = chairXY(waitIdx[i]);
+          line(atkEdge.x, atkEdge.y, cp.x, cp.y + 22, step.attacker === "adapt" ? P.high : P.danger, null, 1.3);
+        }
+      } else if (step.attacker === "blocked") {
+        line(atkEdge.x, atkEdge.y, SRV.x, SRV.y + 80, P.danger, [5, 5], 1.6);
+        xmark((atkEdge.x + SRV.x) / 2, atkEdge.y + 12, 7, P.danger);
+      }
+
+      /* user connection */
+      var uEdge = { x: USR.x + USR.w, y: USR.y + USR.h / 2 };
+      if (step.user === "timeout") {
+        line(uEdge.x, uEdge.y, SRV.x, uEdge.y, P.danger, [4, 4], 1.6);
+        xmark(SRV.x - 12, uEdge.y, 6, P.danger);
+      } else {
+        line(uEdge.x, uEdge.y, SRV.x, uEdge.y, step.user === "queued" ? P.warning : P.success, null, 1.4);
+      }
+
+      /* SOC panel */
+      box(SOC.x, SOC.y, SOC.w, SOC.h, 14, P.surface, P.violet, 1.6);
+      ctx.fillStyle = P.text; ctx.font = "700 14px " + FONT_S;
+      ctx.fillText("SOC panel", SOC.x + 16, SOC.y + 28);
+      if (step.alert) {
+        box(SOC.x + SOC.w - 74, SOC.y + 12, 58, 22, 6, P.danger, P.danger, 1);
+        ctx.fillStyle = "#0b0f1a"; ctx.font = "700 10px " + FONT_M;
+        ctx.textAlign = "center"; ctx.fillText("ALERT", SOC.x + SOC.w - 45, SOC.y + 27);
+        ctx.textAlign = "left";
+      }
+      ctx.fillStyle = P.muted; ctx.font = "10px " + FONT_M;
+      ctx.fillText("concurrent conns from one source", SOC.x + 16, SOC.y + 56);
+      var meterW = 240, ratio = Math.min(1, step.load / 8);
+      box(SOC.x + 16, SOC.y + 64, meterW, 14, 7, P.bg, P.borderStrong, 1);
+      box(SOC.x + 16, SOC.y + 64, Math.max(8, meterW * ratio), 14, 7,
+          step.load >= 8 ? P.danger : (step.load >= 6 ? P.warning : P.success), null, 0);
+      ctx.fillStyle = P.text; ctx.font = "700 11px " + FONT_M;
+      ctx.fillText(step.load + " / 8", SOC.x + 16 + meterW + 6, SOC.y + 76);
+      ctx.fillStyle = P.muted; ctx.font = "10px " + FONT_M;
+      ctx.fillText("error log", SOC.x + 16, SOC.y + 104);
+
+      /* chairs */
+      for (i = 0; i < 8; i++) { drawChair(i, chairState(step, i, now), now); }
+
+      /* nodes on top of lines */
+      var atkSub = step.attacker === "idle" ? "quiet" :
+        step.attacker === "slow" ? "partial headers" :
+        step.attacker === "adapt" ? "slower pace" : "blocked by firewall";
+      drawNode(ATK, "Attacker host", atkSub,
+        step.attacker === "idle" ? P.muted : (step.attacker === "adapt" ? P.high : P.danger), P.muted);
+      var usrSub = step.user === "ok" ? "browsing happily" :
+        step.user === "queued" ? "waiting in queue" : "gave up (408 / 499)";
+      drawNode(USR, "Real user", usrSub, P.accent, P.muted);
+
+      /* moving dots */
+      if (step.attacker === "slow" || step.attacker === "adapt") {
+        for (i = 0; i < waitIdx.length; i++) {
+          var cp2 = chairXY(waitIdx[i]);
+          var p2 = (now / 1100 + i * 0.14) % 1;
+          dot(atkEdge.x + (cp2.x - atkEdge.x) * p2, atkEdge.y + (cp2.y + 22 - atkEdge.y) * p2, 3.4,
+              step.attacker === "adapt" ? P.high : P.danger);
+        }
+      }
+      if (step.user === "ok") {
+        var pu = (now / 900) % 1;
+        if (pu < 0.5) { dot(uEdge.x + (SRV.x - uEdge.x) * (pu * 2), uEdge.y, 3.4, P.success); }
+        else { dot(SRV.x + (uEdge.x - SRV.x) * ((pu - 0.5) * 2), uEdge.y, 3.4, P.success); }
+      } else if (step.user === "queued") {
+        var pq = 0.55 + 0.06 * Math.sin(now / 250);
+        dot(uEdge.x + (SRV.x - uEdge.x) * pq, uEdge.y, 3.4, P.warning);
+      } else if (step.user === "timeout") {
+        dot(uEdge.x + (SRV.x - uEdge.x) * 0.85, uEdge.y, 3.4, P.danger);
+      }
+
+      /* log lines */
+      var allLines = [], allColors = [];
+      for (i = 0; i < step.log.length; i++) {
+        var wrapped = wrapLines(step.log[i], 236, "10.5px " + FONT_M);
+        for (var j = 0; j < wrapped.length; j++) {
+          allLines.push(wrapped[j]);
+          allColors.push(j === 0 ? logColor(step.log[i]) : P.muted);
+        }
+      }
+      var startIdx = Math.max(0, allLines.length - 11);
+      var ly = SOC.y + 126;
+      for (i = startIdx; i < allLines.length; i++) {
+        ctx.fillStyle = allColors[i]; ctx.font = "10.5px " + FONT_M;
+        ctx.fillText(allLines[i], SOC.x + 16, ly);
+        ly += 18;
+      }
+    }
+
+    function frame(ts) {
+      if (!playing) { return; }
+      var dt = lastTs ? Math.min(64, ts - lastTs) : 16;
+      lastTs = ts;
+      t += dt * speed;
+      stepClock += dt * speed;
+      if (stepClock >= STEP_MS) {
+        applyStep((current + 1) % STEPS.length); /* auto-advance the story */
+      }
+      draw(t);
+      rafId = window.requestAnimationFrame(frame);
+    }
+    function play() {
+      if (prefersReduced()) { draw(t); return; }
+      if (playing) { return; }
+      playing = true; lastTs = 0;
+      if (playBtn) { playBtn.disabled = true; }
+      if (pauseBtn) { pauseBtn.disabled = false; }
+      rafId = window.requestAnimationFrame(frame);
+    }
+    function pause() {
+      playing = false;
+      if (rafId) { window.cancelAnimationFrame(rafId); rafId = 0; }
+      if (playBtn) { playBtn.disabled = false; }
+      if (pauseBtn) { pauseBtn.disabled = true; }
+    }
+    function restart() {
+      t = 0;
+      applyStep(0);
+      if (!playing) { draw(0); }
+    }
+
+    if (playBtn) { playBtn.addEventListener("click", play); }
+    if (pauseBtn) { pauseBtn.addEventListener("click", pause); }
+    if (restartBtn) { restartBtn.addEventListener("click", restart); }
+    if (speedSel) {
+      speedSel.addEventListener("change", function () { speed = parseFloat(speedSel.value) || 1; });
+    }
+    chipBtns.forEach(function (b, i) {
+      b.addEventListener("click", function () {
+        applyStep(i);
+        t = 0;
+        if (!playing) { draw(0); } else { lastTs = 0; }
+      });
+    });
+    /* tooltips: hover or click, with a pinned state for touch */
+    var pinned = null;
+    function logicalPos(e) {
+      var r = canvas.getBoundingClientRect();
+      return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+    }
+    function nodeAt(p) {
+      for (var i = 0; i < NODES.length; i++) {
+        var n = NODES[i].rect;
+        if (p.x >= n.x && p.x <= n.x + n.w && p.y >= n.y && p.y <= n.y + n.h) { return i; }
+      }
+      return -1;
+    }
+    function showTip(idx, e) {
+      if (!tipEl) { return; }
+      tipEl.textContent = NODES[idx].tip;
+      tipEl.classList.add("show");
+      var wr = wrap.getBoundingClientRect();
+      var left = e.clientX - wr.left + 14;
+      var top = e.clientY - wr.top + 14;
+      if (left + 280 > wr.width) { left = Math.max(4, wr.width - 280); }
+      if (top + 130 > wr.height) { top = Math.max(4, wr.height - 130); }
+      tipEl.style.left = left + "px";
+      tipEl.style.top = top + "px";
+    }
+    canvas.addEventListener("pointermove", function (e) {
+      var idx = nodeAt(logicalPos(e));
+      if (idx >= 0) { showTip(idx, e); }
+      else if (pinned === null) { if (tipEl) { tipEl.classList.remove("show"); } }
+      else { showTip(pinned, e); }
+    });
+    canvas.addEventListener("pointerleave", function () {
+      if (pinned === null && tipEl) { tipEl.classList.remove("show"); }
+    });
+    canvas.addEventListener("click", function (e) {
+      var idx = nodeAt(logicalPos(e));
+      if (idx === pinned) { pinned = null; if (tipEl) { tipEl.classList.remove("show"); } }
+      else { pinned = idx; if (idx >= 0) { showTip(idx, e); } }
+    });
+
+    /* resize with device pixel ratio */
+    var lastW = 0;
+    function resize() {
+      var cssW = canvas.clientWidth || (wrap.clientWidth - 32);
+      if (cssW < 10) { cssW = 300; }
+      if (Math.abs(cssW - lastW) < 0.5 && canvas.width > 0) { return; }
+      lastW = cssW;
+      var cssH = Math.round(cssW * (H / W));
+      canvas.style.height = cssH + "px";
+      dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssH * dpr);
+      scale = cssW / W;
+      draw(t);
+    }
+    if (window.ResizeObserver) {
+      var ro = new window.ResizeObserver(function () { resize(); });
+      ro.observe(wrap);
+    } else {
+      window.addEventListener("resize", resize);
+    }
+    window.addEventListener("resize", resize);
+
+    /* theme change: re-read tokens and redraw */
+    if (window.MutationObserver) {
+      var mo = new window.MutationObserver(function () { refreshPalette(); draw(t); });
+      mo.observe(doc.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    }
+
+    applyStep(0);
+    resize();
+    if (prefersReduced()) {
+      if (playBtn) {
+        playBtn.disabled = true;
+        playBtn.title = "Animation is off because your system asks for reduced motion. Use the step buttons instead.";
+      }
+      if (pauseBtn) { pauseBtn.disabled = true; }
+      draw(0);
+    } else {
+      play();
+    }
+  });
+})();
+</script>
+</body>
+</html>

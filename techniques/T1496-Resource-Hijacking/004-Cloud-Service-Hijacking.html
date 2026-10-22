@@ -1,0 +1,2359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ==== HEAD-META:BEGIN ==== -->
+<title>T1496.004 Cloud Service Hijacking — ATT&CK Sub-Technique Guide</title>
+<meta name="description" content="Beginner-friendly detection engineering guide for MITRE ATT&CK T1496.004 Cloud Service Hijacking: how attackers abuse compromised SaaS apps such as AWS SES, SNS, SendGrid, Twilio and cloud AI models (LLMjacking), what the abuse looks like in logs, and how to detect, respond and harden.">
+<meta name="guide-version" content="2.0">
+<!-- ==== HEAD-META:END ==== -->
+<script>
+(function(){try{var t=localStorage.getItem('atk-theme');if(!t){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+</script>
+<style>
+/* ============================================================
+   Design system — shared by all ATT&CK technique guide pages
+   ============================================================ */
+:root{
+  --bg:#0b0f1a;
+  --surface:#121a2e;
+  --surface-2:#172138;
+  --elevated:#1a2542;
+  --text:#e7edf8;
+  --muted:#9aa8c0;
+  --border:#24314e;
+  --border-strong:#2f4066;
+  --accent:#4f8cff;
+  --accent-2:#22d3ee;
+  --violet:#a78bfa;
+  --success:#34d399;
+  --warning:#fbbf24;
+  --danger:#f87171;
+  --high:#fb923c;
+  --low:#4ade80;
+  --shadow:0 10px 30px rgba(3,10,24,.35);
+  --code-bg:#0d1526;
+  --r-card:14px;
+  --r-ctl:9px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+  --sidebar-w:264px;
+  --maxw:1280px;
+}
+[data-theme="light"]{
+  --bg:#f3f6fc;
+  --surface:#ffffff;
+  --surface-2:#f5f8ff;
+  --elevated:#e9eefa;
+  --text:#182238;
+  --muted:#5a6a85;
+  --border:#d9e2f2;
+  --border-strong:#c2d0ea;
+  --accent:#2f6fe4;
+  --accent-2:#0891b2;
+  --violet:#7c5ce0;
+  --success:#0d9e6e;
+  --warning:#b45309;
+  --danger:#dc2626;
+  --high:#c2410c;
+  --low:#15803d;
+  --shadow:0 10px 30px rgba(30,50,90,.10);
+  --code-bg:#f6f9ff;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-sans);
+  font-size:16.5px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{line-height:1.25;margin:0 0 .5em}
+h2{font-size:1.72rem;font-weight:750;letter-spacing:-.01em}
+h3{font-size:1.22rem;font-weight:700}
+h4{font-size:1.02rem;font-weight:700}
+p{margin:0 0 1em}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+ul,ol{margin:0 0 1em;padding-left:1.35em}
+li{margin:.3em 0}
+code,kbd,samp{font-family:var(--font-mono);font-size:.92em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:.08em .35em;overflow-wrap:anywhere}
+pre{margin:0}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent);color:#fff}
+.visually-hidden{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.skip-link{position:absolute;left:12px;top:-48px;z-index:200;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;font-weight:600;transition:top .15s ease}
+.skip-link:focus{top:12px}
+.mono{font-family:var(--font-mono)}
+
+/* ---- progress bar ---- */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:120;background:transparent;pointer-events:none}
+.progress-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+/* ---- hero ---- */
+.hero{
+  position:relative;
+  padding:64px 24px 34px;
+  background:
+    radial-gradient(900px 380px at 85% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+    radial-gradient(700px 320px at 8% 0%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 55%),
+    var(--bg);
+  border-bottom:1px solid var(--border);
+}
+.hero-inner{max-width:var(--maxw);margin:0 auto}
+.kicker{
+  font-family:var(--font-mono);
+  font-size:.74rem;
+  font-weight:600;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--accent-2);
+  margin:0 0 14px;
+}
+.page-title{
+  font-size:clamp(1.9rem,4.2vw,2.9rem);
+  font-weight:800;
+  letter-spacing:-.02em;
+  margin:0 0 14px;
+  max-width:22ch;
+}
+.tid{
+  font-family:var(--font-mono);
+  font-size:.82em;
+  font-weight:700;
+  color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius:10px;
+  padding:.08em .38em;
+  margin-right:.28em;
+  white-space:nowrap;
+}
+.hero-intro{max-width:72ch;color:var(--muted);font-size:1.06rem;margin:0 0 20px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:0 0 26px}
+.chips li{
+  font-family:var(--font-mono);font-size:.74rem;color:var(--muted);
+  background:var(--surface);border:1px solid var(--border);border-radius:999px;
+  padding:5px 11px;display:inline-flex;align-items:center;gap:7px;
+}
+.chips li b{color:var(--text);font-weight:600}
+.chips .dot{width:7px;height:7px;border-radius:50%;background:var(--accent-2);display:inline-block}
+.keyfacts{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;
+  max-width:1080px;
+}
+.kf{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:14px 16px;box-shadow:var(--shadow);
+}
+.kf-label{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.kf-value{font-weight:700;font-size:.95rem;margin:0 0 4px;line-height:1.4}
+.kf-sub{font-size:.8rem;color:var(--muted);margin:0;line-height:1.5}
+
+/* ---- two column layout ---- */
+.layout{
+  max-width:var(--maxw);
+  margin:0 auto;
+  padding:34px 24px 90px;
+  display:grid;
+  grid-template-columns:var(--sidebar-w) minmax(0,1fr);
+  gap:38px;
+  align-items:start;
+}
+main#main-content{min-width:0}
+
+/* ---- table of contents ---- */
+.toc{
+  position:sticky;top:22px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:16px 14px;box-shadow:var(--shadow);
+  max-height:calc(100vh - 44px);overflow:auto;
+}
+.toc-title{
+  font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 10px;padding:0 6px;display:flex;justify-content:space-between;align-items:center;gap:8px;
+}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc li{margin:1px 0}
+.toc a{
+  display:block;color:var(--muted);font-size:.86rem;line-height:1.4;
+  padding:6px 10px;border-radius:8px;border-left:2px solid transparent;
+}
+.toc a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc a.sub{padding-left:24px;font-size:.8rem}
+.toc a.active{color:var(--accent);background:color-mix(in srgb, var(--accent) 10%, transparent);border-left-color:var(--accent);font-weight:600}
+.toc-close{display:none}
+.theme-btn{
+  font:inherit;font-size:.74rem;font-weight:600;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;
+  padding:4px 10px;cursor:pointer;white-space:nowrap;
+}
+.theme-btn:hover{border-color:var(--accent)}
+
+/* ---- sections ---- */
+.sec{margin-top:54px;scroll-margin-top:22px}
+.sec:first-child{margin-top:0}
+.sec-head{display:flex;align-items:center;gap:13px;margin-bottom:10px}
+.sec-num{
+  flex:0 0 auto;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-weight:700;font-size:.95rem;color:var(--accent-2);
+  background:color-mix(in srgb, var(--accent-2) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
+  border-radius:11px;
+}
+.sec-head h2{margin:0}
+.sec-intro{color:var(--muted);max-width:76ch;margin-bottom:22px}
+.sub-head{display:flex;align-items:baseline;gap:10px;margin:34px 0 4px;scroll-margin-top:22px}
+.sub-num{
+  font-family:var(--font-mono);font-size:.8rem;font-weight:700;color:var(--violet);
+  background:color-mix(in srgb, var(--violet) 13%, transparent);
+  border:1px solid color-mix(in srgb, var(--violet) 40%, transparent);
+  border-radius:7px;padding:2px 8px;white-space:nowrap;
+}
+.sub-head h3{margin:0}
+.sub-intro{color:var(--muted);max-width:74ch;margin:0 0 16px}
+
+/* ---- cards & grids ---- */
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:20px 22px;box-shadow:var(--shadow);margin:0 0 16px;
+}
+.card>h3:first-child,.card>h4:first-child{margin-top:0}
+.card p:last-child,.card ul:last-child,.card ol:last-child{margin-bottom:0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.grid2 .card,.grid3 .card{margin:0}
+.stack>*+*{margin-top:12px}
+
+/* ---- callouts ---- */
+.callout{
+  border:1px solid var(--border);border-left:4px solid var(--accent);
+  background:var(--surface);border-radius:10px;padding:14px 18px;margin:0 0 16px;
+}
+.callout-label{font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin:0 0 6px}
+.callout p:last-child{margin-bottom:0}
+.callout.note{border-left-color:var(--accent)}
+.callout.note .callout-label{color:var(--accent)}
+.callout.warn{border-left-color:var(--warning)}
+.callout.warn .callout-label{color:var(--warning)}
+.callout.good{border-left-color:var(--success)}
+.callout.good .callout-label{color:var(--success)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .callout-label{color:var(--danger)}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:0 0 18px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:.9rem}
+th{
+  text-align:left;font-family:var(--font-mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);background:var(--surface-2);padding:10px 12px;border-bottom:1px solid var(--border-strong);
+  white-space:nowrap;
+}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:var(--surface-2)}
+td ul{margin:0;padding-left:1.1em}
+td code{white-space:normal}
+
+/* ---- badges ---- */
+.badge{
+  display:inline-block;font-family:var(--font-mono);font-size:.7rem;font-weight:700;
+  border-radius:999px;padding:2px 9px;border:1px solid;letter-spacing:.03em;white-space:nowrap;
+}
+.badge + .badge{margin-left:4px}
+.sev-critical{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 50%,transparent);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.sev-high{color:var(--high);border-color:color-mix(in srgb,var(--high) 50%,transparent);background:color-mix(in srgb,var(--high) 12%,transparent)}
+.sev-medium{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 50%,transparent);background:color-mix(in srgb,var(--warning) 12%,transparent)}
+.sev-low{color:var(--low);border-color:color-mix(in srgb,var(--low) 50%,transparent);background:color-mix(in srgb,var(--low) 12%,transparent)}
+.sev-info{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 50%,transparent);background:color-mix(in srgb,var(--accent-2) 12%,transparent)}
+.plat{color:var(--muted);border-color:var(--border-strong);background:var(--surface-2);font-weight:600}
+
+/* ---- key/value lists ---- */
+.kv{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:8px 18px}
+.kv dt{
+  font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding-top:2px;
+}
+.kv dd{margin:0;font-size:.93rem;overflow-wrap:anywhere}
+@media (max-width:640px){.kv{grid-template-columns:1fr}.kv dt{padding-top:0}.kv dd{margin:0 0 8px}}
+
+/* ---- code blocks ---- */
+.codeblock{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--code-bg)}
+.code-head{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  background:var(--surface-2);border-bottom:1px solid var(--border);
+  padding:7px 12px;
+}
+.code-lang{font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;overflow-wrap:anywhere}
+.copy-btn{
+  font:inherit;font-family:var(--font-mono);font-size:.72rem;font-weight:700;color:var(--text);
+  background:var(--elevated);border:1px solid var(--border-strong);border-radius:8px;
+  padding:4px 12px;cursor:pointer;flex:0 0 auto;
+}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.copy-btn.ok{color:var(--success);border-color:var(--success)}
+.codeblock pre{overflow-x:auto;padding:14px 16px;max-height:560px}
+.codeblock code{font-family:var(--font-mono);font-size:.82rem;line-height:1.55;background:none;border:none;padding:0;color:var(--text);white-space:pre;display:block;min-width:max-content}
+
+/* ---- timeline ---- */
+.timeline{list-style:none;margin:0 0 16px;padding:0 0 0 4px;position:relative}
+.timeline::before{content:"";position:absolute;left:12px;top:6px;bottom:6px;width:2px;background:var(--border-strong)}
+.timeline li{position:relative;padding:0 0 16px 34px;margin:0}
+.timeline li:last-child{padding-bottom:0}
+.tl-dot{
+  position:absolute;left:5px;top:5px;width:16px;height:16px;border-radius:50%;
+  background:var(--surface);border:3px solid var(--accent);z-index:1;
+}
+.timeline li.warn .tl-dot{border-color:var(--warning)}
+.timeline li.bad .tl-dot{border-color:var(--danger)}
+.timeline li.good .tl-dot{border-color:var(--success)}
+.tl-when{font-family:var(--font-mono);font-size:.76rem;font-weight:700;color:var(--accent-2);display:block;margin-bottom:2px}
+.timeline p{margin:0}
+
+/* ---- checklist ---- */
+.checklist{list-style:none;padding:0;margin:0}
+.checklist li{position:relative;padding:0 0 0 30px;margin:.45em 0}
+.checklist li::before{
+  content:"";position:absolute;left:0;top:.28em;width:15px;height:15px;
+  border:2px solid var(--accent);border-radius:4px;background:var(--surface-2);
+}
+
+/* ---- simulation ---- */
+.simwrap{padding:18px}
+.sim-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.sim-title{font-family:var(--font-mono);font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.sim-stage{position:relative;margin-bottom:12px}
+#simCanvas{width:100%;height:auto;display:block;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);touch-action:manipulation}
+.sim-tip{
+  position:absolute;display:none;max-width:270px;z-index:30;pointer-events:none;
+  background:var(--elevated);border:1px solid var(--border-strong);border-radius:9px;
+  box-shadow:var(--shadow);padding:9px 12px;font-size:.8rem;line-height:1.45;color:var(--text);
+}
+.sim-tip b{display:block;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2);margin-bottom:3px}
+.sim-caption{
+  border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  padding:12px 16px;margin-bottom:10px;
+}
+.sim-caption strong{display:block;font-family:var(--font-mono);font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.sim-caption p{margin:0;font-size:.95rem}
+.sim-hint{
+  border:1px solid color-mix(in srgb,var(--success) 35%,transparent);
+  border-left:4px solid var(--success);
+  background:color-mix(in srgb,var(--success) 8%,transparent);
+  border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:.88rem;
+}
+.sim-hint b{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--success)}
+.sim-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.btn{
+  font:inherit;font-size:.85rem;font-weight:600;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--r-ctl);
+  padding:7px 16px;cursor:pointer;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.1);color:#fff}
+.sim-controls label{font-size:.8rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.sim-controls select{
+  font:inherit;font-size:.82rem;color:var(--text);background:var(--surface-2);
+  border:1px solid var(--border-strong);border-radius:8px;padding:5px 8px;cursor:pointer;
+}
+.sim-chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip-step{
+  font-family:var(--font-mono);font-size:.72rem;font-weight:600;color:var(--muted);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:999px;
+  padding:4px 11px;cursor:pointer;
+}
+.chip-step:hover{color:var(--text);border-color:var(--border-strong)}
+.chip-step.active{color:#fff;background:var(--accent);border-color:var(--accent)}
+.sim-story{margin-top:18px}
+.sim-story ol{margin:0;padding-left:1.4em}
+.sim-story li{margin:.55em 0}
+.sim-story .st{font-family:var(--font-mono);font-weight:700;color:var(--accent-2)}
+.sim-print-note{display:none}
+
+/* ---- floating buttons, overlay ---- */
+.fab{
+  position:fixed;z-index:130;border:1px solid var(--border-strong);cursor:pointer;
+  background:var(--elevated);color:var(--text);box-shadow:var(--shadow);
+  border-radius:999px;font:inherit;font-weight:700;
+}
+.fab:hover{border-color:var(--accent);color:var(--accent)}
+.fab-toc{
+  display:none;left:16px;bottom:16px;font-size:.85rem;padding:11px 18px;
+}
+.fab-top{
+  right:16px;bottom:16px;width:46px;height:46px;font-size:1.15rem;line-height:1;
+  opacity:0;pointer-events:none;transition:opacity .2s ease;
+}
+.fab-top.show{opacity:1;pointer-events:auto}
+.backdrop{
+  position:fixed;inset:0;z-index:140;background:rgba(4,8,18,.55);
+  opacity:0;pointer-events:none;transition:opacity .2s ease;
+}
+body.toc-open .backdrop{opacity:1;pointer-events:auto}
+
+/* ---- links list ---- */
+.links-list{list-style:none;padding:0;margin:0}
+.links-list li{margin:.4em 0;font-size:.92rem}
+.links-list .lt{font-family:var(--font-mono);font-size:.72rem;color:var(--muted);display:block}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{
+    position:fixed;top:0;left:0;bottom:0;width:min(330px,88vw);max-height:none;z-index:150;
+    border-radius:0 var(--r-card) var(--r-card) 0;
+    transform:translateX(-104%);transition:transform .25s ease;
+  }
+  body.toc-open .toc{transform:translateX(0)}
+  .toc-close{
+    display:inline-block;font:inherit;font-size:.78rem;font-weight:700;color:var(--text);
+    background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;
+    padding:3px 11px;cursor:pointer;
+  }
+  .fab-toc{display:inline-flex;align-items:center;gap:7px}
+}
+@media (max-width:640px){
+  .hero{padding:44px 16px 26px}
+  .layout{padding:26px 16px 90px}
+  .grid2,.grid3{grid-template-columns:minmax(0,1fr)}
+  .card{padding:16px}
+  .sec{margin-top:44px}
+  .btn{flex:1 1 auto;text-align:center}
+  .sim-controls{gap:6px}
+  .sim-controls .btn{padding:8px 10px}
+  .page-title{max-width:none}
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+/* ============================================================
+   Print
+   ============================================================ */
+@media print{
+  .toc,.fab,.progress-bar,.backdrop,.copy-btn,.sim-controls,.sim-chips,.sim-top .btn,
+  .skip-link,.theme-btn,.toc-close{display:none!important}
+  body{background:#fff;color:#111}
+  .hero{background:#fff!important;border-bottom:2px solid #333;padding:10px 0}
+  .layout{display:block;padding:0;max-width:none}
+  .card,.callout,.tablewrap,.codeblock,.kf,.simwrap{box-shadow:none;break-inside:avoid}
+  .card,.callout{border:1px solid #bbb}
+  .tablewrap{overflow:visible}
+  table{min-width:0;font-size:.8rem}
+  .codeblock{border:1px solid #bbb;background:#f6f6f6}
+  .codeblock pre{max-height:none;overflow:visible}
+  .codeblock code{color:#111;white-space:pre-wrap;min-width:0}
+  #simCanvas{display:none}
+  .sim-stage::after{content:"(Interactive simulation is not printed. Read the written step-by-step story below.)";display:block;font-size:.85rem;color:#555}
+  .sim-caption,.sim-hint{border:1px solid #bbb;background:#fff}
+  a{color:#000;text-decoration:underline}
+  .sec{break-inside:auto}
+  h2,h3,h4{break-after:avoid}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.75em;word-break:break-all}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<!-- ==== PLATFORM:BEGIN ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1496.004"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== PLATFORM:END ==== -->
+
+<div class="progress-bar" aria-hidden="true"><span id="progressFill"></span></div>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
+<!-- ==== HERO:BEGIN ==== -->
+<div class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&amp;CK · Impact Tactic · Sub-technique Guide</p>
+    <h1 class="page-title"><span class="tid">T1496.004</span> Cloud Service Hijacking</h1>
+    <p class="hero-intro">Cloud Service Hijacking means an attacker takes a SaaS app (software-as-a-service — an application you rent and use over the internet) or a cloud service you already pay for and makes it do <em>their</em> work. They turn AWS SES or SendGrid into a phishing machine — phishing means fake messages that trick people into handing over data. They use AWS SNS or Twilio to flood phones with smishing (phishing sent by SMS). Or they run "LLMjacking": cloud AI models on stolen credentials, where the attacker pays nothing and you pay for every token. No malware is needed. You pay the bill, your sender reputation gets damaged, and your real customer mail stops arriving. This guide shows the full attack pattern, the logs it leaves, and the detections that catch it.</p>
+    <ul class="chips">
+      <li><span class="dot"></span>Tactic: <b>Impact</b></li>
+      <li>Parent technique: <b>T1496 Resource Hijacking</b></li>
+      <li>Platform: <b>SaaS</b></li>
+      <li>ATT&amp;CK v20 · technique version <b>1.0</b> · created 25 Sep 2024 · modified 15 Apr 2025</li>
+      <li>Detection strategy: <b>DET0147</b> · analytic <b>AN0417</b></li>
+      <li>Guide version: <b>2.0</b></li>
+    </ul>
+    <div class="keyfacts">
+      <div class="kf"><p class="kf-label">What it is</p><p class="kf-value">Compromised SaaS apps used as attacker infrastructure — paid on the victim's bill</p><p class="kf-sub">Email, SMS, and cloud AI services get hijacked for spam, phishing, and token-hungry model queries.</p></div>
+      <div class="kf"><p class="kf-label">Typical impact</p><p class="kf-value">Quotas exhausted, big bills, blocked sender domains</p><p class="kf-sub">Real customers stop receiving your messages; reputation damage lasts for months.</p></div>
+      <div class="kf"><p class="kf-label">Most common form</p><p class="kf-value">Mass phishing through a compromised email service</p><p class="kf-sub">AWS SES, SNS, SendGrid, and Twilio are named by ATT&amp;CK as the top targets.</p></div>
+      <div class="kf"><p class="kf-label">Why it is hard to catch</p><p class="kf-value">The service does exactly what it was built to do</p><p class="kf-sub">Only volume, identity, and context — new keys, new IP, odd hours — reveal the abuse.</p></div>
+    </div>
+  </div>
+</div>
+<!-- ==== HERO:END ==== -->
+
+<div class="layout">
+<!-- ==== TOC:BEGIN ==== -->
+<nav class="toc" id="toc" aria-label="Table of contents">
+  <p class="toc-title">Contents <button type="button" class="theme-btn" id="themeToggle" aria-label="Switch between dark and light theme">Light mode</button> <button type="button" class="toc-close" id="tocClose">Close</button></p>
+  <ol id="tocList">
+    <li><a href="#s1-overview">1. Overview</a></li>
+    <li><a href="#s2-simulation">2. Animated Simulation</a></li>
+    <li><a href="#s3-red-team">3. Red Team Perspective</a></li>
+    <li><a href="#s4-blue-team">4. Blue Team Perspective</a></li>
+    <li><a href="#s5-detection">5. Detection Engineering Deep Dive</a></li>
+    <li><a class="sub" href="#s51-regulation">5.1 Regulation Mapping</a></li>
+    <li><a class="sub" href="#s52-intel">5.2 Threat Intelligence</a></li>
+    <li><a class="sub" href="#s53-ranking">5.3 Cloud Threats Ranking</a></li>
+    <li><a class="sub" href="#s54-logs">5.4 Logs and Event Patterns</a></li>
+    <li><a class="sub" href="#s55-sigma">5.5 Sigma Rules and Splunk SPL</a></li>
+    <li><a href="#s6-case-study">6. Case Study: SCARLETEEL 2.0</a></li>
+    <li><a href="#s7-mitigation">7. Mitigation and Defense</a></li>
+    <li><a href="#s8-mistakes">8. Common Mistakes</a></li>
+    <li><a href="#s9-cheatsheet">9. Cheat Sheet</a></li>
+  </ol>
+</nav>
+<!-- ==== TOC:END ==== -->
+
+<main id="main-content">
+<!-- ==== MAIN-CONTENT:BEGIN ==== -->
+<!-- Guide v2.0: corrected & expanded edition. Audit trail: scripts/audit-v2/AUDIT-T1496.004.md -->
+<!-- ================= SECTION 1 ================= -->
+<section class="sec" id="s1-overview">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2>Overview</h2></div>
+  <p class="sec-intro">Cloud Service Hijacking means the attacker uses your paid cloud services for their own work. After stealing a key or a login, the attacker installs nothing. They simply use your paid services — email sending, SMS messaging, or cloud AI models — at full volume, for their own goals. The service stays perfectly healthy from the inside; only the usage pattern is wrong.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>What the technique is</h3>
+      <p>An attacker gains access to a SaaS application or to the cloud account behind it. Then they abuse the service itself. ATT&amp;CK names the classic targets: AWS Simple Email Service (SES), AWS Simple Notification Service (SNS), SendGrid, and Twilio. With those, an attacker can send spam and phishing at a scale no home computer could reach.</p>
+      <p>The newer form is <strong>LLMjacking</strong>: stolen cloud credentials are used to query expensive, cloud-hosted AI models. Attackers often run a small reverse-proxy tool — a server program that forwards requests and hides who is really asking. The attacker resells that "AI access", and you receive the token bill. Tokens are the text pieces that AI models read and produce — and the unit the provider bills for.</p>
+    </div>
+    <div class="card">
+      <h3>Why it matters</h3>
+      <p>Three costs arrive at once. First, money: messaging quotas (the provider's cap on how much you may send or use per day) and AI tokens burn fast. Vendor reporting shows bills can grow by thousands of dollars within days; Lacework documented one LLMjacking victim paying more than 46,000 US dollars per day while the abuse stayed undiscovered. Second, availability: once quotas or sending limits are exhausted, your own customer mail and SMS stop going out.</p>
+      <p>Third, trust: mail sent from your verified domain lands in spam folders worldwide. Blocklist entries and a damaged sender reputation can hurt delivery for months after the attacker is gone. And like every Impact technique, the abuse is proof that identity controls already failed somewhere.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where it fits in the attack chain</h3>
+    <p>This sub-technique sits in the <strong>Impact</strong> tactic. The attacker usually arrives with identity, not exploits. Common entries are a phished developer, an API key (a secret that lets software call the service) leaked to a code repository, or an access token stolen from a container (T1528). Others take over a cloud account as a valid account (T1078.004), or exploit a public application (T1190) and steal keys from the workload.</p>
+    <p>ATT&amp;CK detection strategy <strong>DET0147</strong> (analytic <strong>AN0417</strong>) describes the pattern well. The adversary gains access to cloud-hosted services such as AWS SES, SNS, or an AI API. They enable or modify usage policies, then start resource-intensive actions: mass email, mass SMS, or mass model queries. Often this comes from unexpected regions or under strange identity conditions.</p>
+  </div>
+
+  <div class="card">
+    <h3>Key facts</h3>
+    <dl class="kv">
+      <dt>ATT&amp;CK ID</dt><dd>T1496.004 — Cloud Service Hijacking (tactic: Impact)</dd>
+      <dt>Parent technique</dt><dd>T1496 Resource Hijacking — one of four sub-techniques</dd>
+      <dt>Platforms</dt><dd>SaaS</dd>
+      <dt>Created / modified</dt><dd>25 September 2024 / 15 April 2025 (ATT&amp;CK v20)</dd>
+      <dt>Named targets</dt><dd>AWS SES, AWS SNS, SendGrid, Twilio, cloud-hosted AI models</dd>
+      <dt>Typical entry paths</dt><dd>Phished SaaS admin, leaked API keys, tokens stolen from workloads, markets that sell pre-verified sender accounts</dd>
+      <dt>Main signals</dt><dd>Send-volume spikes, new verified sender identities, quota or policy changes, AI token spend jumps, provider abuse reports</dd>
+      <dt>Official page</dt><dd><a href="https://attack.mitre.org/techniques/T1496/004/">attack.mitre.org/techniques/T1496/004/</a></dd>
+    </dl>
+  </div>
+
+  <h3 class="sub-head"><span class="sub-num">1.1</span>The four sub-techniques at a glance</h3>
+  <p class="sub-intro">Each sub-technique has its own guide page. This page is the deep dive for T1496.004; use the other cards to cover the rest of the family.</p>
+  <div class="grid2">
+    <div class="card"><h4><span class="mono">T1496.001</span> Compute Hijacking</h4><p>Cryptocurrency mining on your servers, endpoints, and containers. <a href="https://attack.mitre.org/techniques/T1496/001/">Open the ATT&amp;CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.002</span> Bandwidth Hijacking</h4><p>Reselling your network bandwidth through proxy networks. <a href="https://attack.mitre.org/techniques/T1496/002/">Open the ATT&amp;CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.003</span> SMS Pumping</h4><p>Driving SMS traffic through OTP (one-time passcode) forms for toll fraud. <a href="https://attack.mitre.org/techniques/T1496/003/">Open the ATT&amp;CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.004</span> Cloud Service Hijacking</h4><p>This guide: spam and phishing through compromised SaaS messaging, LLMjacking of cloud AI, and abuse of service enablement and quotas. <a href="https://attack.mitre.org/techniques/T1496/004/">Open the ATT&amp;CK page</a>.</p></div>
+  </div>
+
+  <div class="callout good"><p class="callout-label">What you will learn</p><p>By the end of this guide you will be able to do five things. You can explain SES, SNS, and AI abuse to a non-technical manager. You can name the SaaS and cloud log sources that reveal it. You can write five working Sigma rules and Splunk queries (CS-01 to CS-05). You can run an identity-first triage when a bill or an abuse report arrives. And you can close the gaps that let one stolen key become a phishing operation.</p></div>
+</section>
+
+<!-- ================= SECTION 2 ================= -->
+<section class="sec" id="s2-simulation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2>Animated Simulation</h2></div>
+  <p class="sec-intro">This simulation shows a complete cloud service hijacking attack against a small SaaS company. Watch the attacker on the left, the victim's cloud tenant in the middle, and the provider and SOC (security operations center — the team that watches alerts) on the right. Every step lists what the defender can see at that moment. Press Play, or jump to any step with the buttons.</p>
+
+  <div class="card simwrap">
+    <div class="sim-top">
+      <p class="sim-title" id="simTitle">Scenario: hijacked cloud keys turn a mail platform into a spam machine</p>
+      <span class="badge sev-info" id="simStepBadge">Step 1 of 8</span>
+    </div>
+    <div class="sim-stage" id="simStage">
+      <canvas id="simCanvas" role="img" aria-label="Animated diagram of a cloud service hijacking attack: a phishing mail steals an AWS access key, the attacker verifies a sender identity in SES, raises sending quotas, launches a mass phishing wave, the provider reputation system reacts, and the SOC detects and contains the abuse. A full text description is in the written story below."></canvas>
+      <div class="sim-tip" id="simTip"></div>
+      <noscript><p style="padding:14px">JavaScript is disabled, so the animation cannot run. The written step-by-step story below describes the same attack.</p></noscript>
+    </div>
+    <div class="sim-caption">
+      <strong id="simStepTitle">Step 1 — Phish steals a cloud key</strong>
+      <p id="simCaption">The attacker sends a fake security notice to a developer and harvests a long-lived AWS access key from the fake login page.</p>
+    </div>
+    <div class="sim-hint" id="simHint"><b>Defender view:</b> <span id="simHintText">Mail gateway logs record the look-alike domain, but it is new and has no reputation yet. No cloud signal exists.</span></div>
+    <div class="sim-controls">
+      <button type="button" class="btn primary" id="simPlay">Play</button>
+      <button type="button" class="btn" id="simPause">Pause</button>
+      <button type="button" class="btn" id="simRestart">Restart</button>
+      <label>Speed
+        <select id="simSpeed">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+      <div class="sim-chips" id="simChips" role="group" aria-label="Jump to simulation step"></div>
+    </div>
+    <p class="sim-print-note">The animated simulation is replaced here by the written story below.</p>
+  </div>
+
+  <div class="card sim-story">
+    <h3>Written story of the simulation</h3>
+    <p>The list below covers the same eight steps as the animation. Screen readers and printouts get the full content here.</p>
+    <ol>
+      <li><span class="st">Step 1 — Phish steals a cloud key.</span> The attacker sends a fake "AWS security alert" to a developer. The linked page copies the login form and harvests a long-lived access key. Mail logs show the new sender domain, nothing more.</li>
+      <li><span class="st">Step 2 — Keys parked for later.</span> The stolen key is stored in the attacker's stash next to keys from many other victims. It creates no logs yet, because it has never been used. This silent pause is the best moment to catch the phish instead.</li>
+      <li><span class="st">Step 3 — Sender identity verified.</span> The attacker uses the key for the first time and verifies a new email identity in SES. CloudTrail (the AWS audit log that records API calls) records CreateEmailIdentity and PutAccountDetails from a new IP address and a new user agent.</li>
+      <li><span class="st">Step 4 — Quotas raised, service warmed.</span> The attacker requests a sending-quota increase and enables the service. Audit logs record RequestServiceQuotaIncrease. Enablement events like this are rare in normal operations, so the CS-04 rule in Section 5 is the best early signal here.</li>
+      <li><span class="st">Step 5 — SendEmail burst.</span> Hundreds of thousands of phishing emails leave through the company's trusted mail setup. SES and SendGrid dashboards spike, bounce and complaint rates climb, and SPF and DKIM (email authentication checks that prove the message really came from your domain) still pass. A budget alarm set at 80 percent may now fire and reach the SOC.</li>
+      <li><span class="st">Step 6 — Reputation damaged.</span> Recipients report spam. The provider throttles the account and writes to the abuse contact. If nobody in the SOC owns that mailbox, the remaining messages keep flowing.</li>
+      <li><span class="st">Step 7 — SOC joins the signals.</span> The SOC joins three signals into one case: cloud audit anomalies (new identity, new IP), the sending spike, and the provider abuse report. The correlation rule from Section 5 raises one high-severity case.</li>
+      <li><span class="st">Step 8 — Containment and hardening.</span> The SOC revokes the stolen keys, deletes the verified sender identity, purges queued messages, and adds budget alarms and sender allowlists. Policy now denies humans the right to verify sending identities.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ================= SECTION 3 ================= -->
+<section class="sec" id="s3-red-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2>Red Team / Hacker Perspective</h2></div>
+  <p class="sec-intro">Understanding why attackers like this technique helps you predict where they will show up. This section describes attacker thinking at a conceptual level. All commands shown later are lab-only examples for your own test accounts.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>When and why attackers use it</h3>
+      <p>Compromised cloud services solve the attacker's hardest problem: trust. A phishing email from your verified domain, with SPF, DKIM, and a warm reputation, lands in inboxes that a fresh attacker domain would never reach. The same logic applies to SMS: messages from a legitimate SNS or Twilio account arrive on real phones.</p>
+      <p>The economics are good for criminals. Underground markets sell pre-verified SES accounts and "AI access" packs, so buyers do not even need to steal keys themselves. For LLMjacking, the attacker pays nothing per query — the victim's bill pays for every token. And because no malware is installed, classic endpoint defenses see nothing at all.</p>
+    </div>
+    <div class="card">
+      <h3>How it is performed (concept)</h3>
+      <p>The pattern is four moves: get credentials, enumerate the account, enable or verify the service, and send at scale. Attackers first run a quiet "who am I and what can this key do" check, then look for SES, SNS, SendGrid, or Twilio features. If the account is new to sending, they raise quotas and warm it up to avoid instant throttling. Warming up means sending small, normal-looking volumes first, so the provider trusts the account.</p>
+      <p>For AI abuse, the attacker points a small reverse-proxy tool at the stolen cloud credentials. The proxy accepts requests from many buyers, translates them, and bills nothing to the buyers — the tokens run on the victim's account. The best operators keep volume just under the provider's anomaly thresholds and rotate accounts before reputation systems catch them.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where it applies and what it needs</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Service type</th><th>Named platforms</th><th>What the attacker needs</th></tr></thead>
+      <tbody>
+        <tr><td>Email sending</td><td>AWS SES, SendGrid</td><td>API key or console access; verified sender identity; production (non-sandbox) sending</td></tr>
+        <tr><td>SMS / messaging</td><td>AWS SNS, Twilio</td><td>API key with publish or message rights; phone number pools or topic fan-out</td></tr>
+        <tr><td>AI models</td><td>Amazon Bedrock, OpenAI, Google Vertex AI</td><td>Cloud credentials with model invoke rights; a reverse proxy to resell access; the victim's account pays for every token</td></tr>
+        <tr><td>Tenant admin</td><td>Microsoft 365, Google Workspace</td><td>Phished admin session; rights to add mail rules, apps, or connectors</td></tr>
+        <tr><td>Free tiers / trials</td><td>Any SaaS with messaging quotas</td><td>Nothing stolen — mass signups with disposable mail and bots (CS-05)</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="callout danger">
+    <p class="callout-label">Ethics and legality</p>
+    <p>Sending bulk unsolicited mail or SMS is illegal in most countries. Examples include CAN-SPAM (the US anti-spam law), GDPR (the EU General Data Protection Regulation), and national computer misuse and telecom laws. Using credentials that are not yours is a crime even "just for testing". Everything in this guide is for defenders and for safe labs you own. Run examples only inside your own sandbox accounts, and never point them at real recipients or third-party systems.</p>
+  </div>
+
+  <div class="card">
+    <h3>Lab-only example: a safe SES audit-trail drill</h3>
+    <p>This drill shows what SES abuse looks like in your own audit trail. It stays inside a throwaway AWS sandbox account: sandbox accounts cannot send at volume, and the only recipient is a mail-tester address that you generate for yourself. Arcadia Labs is a fictional company used for all teaching events in this guide.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">bash — lab only, inside your own AWS sandbox account</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code># Lab-only drill: watch SES events appear in CloudTrail.
+# Use a sandbox account that cannot reach real quotas and harms nobody.
+
+# 1) Verify a sender identity on a domain you own
+#    (replace alerts@lab-guard.test with an address you control)
+aws sesv2 create-email-identity --email-identity alerts@lab-guard.test
+
+# 2) Get the address shown at mail-tester.com for your own test run,
+#    then send exactly two plain messages from your lab identity
+aws sesv2 send-email --from-email-address alerts@lab-guard.test \
+  --destination "ToAddresses=[test-c7d9e2f4@srv1.mail-tester.com]" \
+  --content "Simple={Subject={Data=Lab audit drill},Body={Text={Data=Lab-only message 1 of 2}}}"
+
+# 3) Inspect your own trail (read-only) and see the event shape:
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=CreateEmailIdentity
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=SendEmail
+
+# 4) Clean up: delete the identity and enable MFA + budget alarms on the lab account
+aws sesv2 delete-email-identity --email-identity alerts@lab-guard.test</code></pre>
+    </figure>
+    <p>What you should observe: the trail records <code>CreateEmailIdentity</code> and <code>SendEmail</code> with the caller identity, source IP, and user agent. Volume stays at two messages. This is exactly the event shape the Section 5 rules look for — only the volume differs in a real attack.</p>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Common variations</h3>
+      <ul>
+        <li><strong>Account rotation:</strong> use one SES account until the provider throttles it, then switch to the next from the stash. Each victim sees only one quiet spike.</li>
+        <li><strong>Resale platforms:</strong> the attacker does not send at all; they sell "sending power" and "AI access" packs built on dozens of hijacked tenants.</li>
+        <li><strong>Hybrid tenant abuse:</strong> phished Microsoft 365 or Workspace admins add connectors and mail rules that hide replies, then use the tenant's own mail flow.</li>
+        <li><strong>Trial farming:</strong> mass signups with disposable mail and bots to farm free messaging credits (CS-05), no intrusion needed.</li>
+        <li><strong>Warm-up abuse:</strong> the attacker sends legitimate-looking volume for days first, so dashboards show a "healthy" sender before the malicious wave.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Mistakes attackers make</h3>
+      <ul>
+        <li>Skipping warm-up: a cold account that sends 100,000 messages in an hour gets throttled and flagged fast.</li>
+        <li>Using the stolen key from an IP range that has nothing to do with the account's history. A source IP the account has never used before stands out and is easy to alert on.</li>
+        <li>Forgetting they are in SES sandbox mode, so most sends bounce and the bounces themselves become a signal.</li>
+        <li>Reusing one access key across many victims, which lets defenders link incidents into one campaign.</li>
+        <li>Querying AI models 24 hours a day with no human pause — token use that never follows a working rhythm reveals automation.</li>
+        <li>Leaving <code>VerifyEmailIdentity</code> and quota-change events in the trail, because they almost never happen in normal operations.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SECTION 4 ================= -->
+<section class="sec" id="s4-blue-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2>Blue Team / SOC Perspective</h2></div>
+  <p class="sec-intro">Cloud service hijacking is invisible to endpoint tools but very visible in provider logs — if someone owns those logs. In the attack chain this is the Impact stage: it rides on earlier Credential Access and Privilege Escalation steps, so the identity telemetry from those stages is your earliest warning. This section shows what the abuse looks like from inside, and gives you a triage flow you can follow when the bill or the abuse report arrives.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>How defenders can see it</h3>
+      <p>Four telemetry families catch almost every variant. Cloud audit logs (AWS CloudTrail, Microsoft 365 audit, Google Workspace admin logs) answer <em>who enabled or used what, from where</em>. Service-level logs (SES sending and reputation dashboards, SendGrid event feeds, Twilio message logs, AI usage meters) answer <em>how much went out and to whom</em>. Spend telemetry (budgets, cost anomaly alerts, token meters) answers <em>what it costs</em>. Finally, human reports — the abuse mailbox, provider notices, and customer complaints — arrive first but only if someone owns them.</p>
+      <p>No single family is enough. The strong detections in Section 5 always join a volume signal with an identity signal, exactly as analytic AN0417 describes.</p>
+    </div>
+    <div class="card">
+      <h3>Artifacts it leaves behind</h3>
+      <ul>
+        <li>New verified sender identities or DKIM records nobody requested.</li>
+        <li>New IAM (Identity and Access Management — the cloud system that controls who may do what) users or access keys, often created minutes before first use.</li>
+        <li><code>PutAccountDetails</code> changes, such as mail type switched to marketing.</li>
+        <li>Sending-volume spikes of 10x to 100x over baseline, often at night.</li>
+        <li>Bounce and complaint rates climbing within the same hour.</li>
+        <li>Quota-increase requests for sending limits or model throughput.</li>
+        <li>AI token spend with no owning team, plus reverse-proxy user agents.</li>
+        <li>Provider abuse reports and blocklist entries for your sending domain.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where to look, per service</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Service</th><th>Primary log sources</th><th>What to check first</th></tr></thead>
+      <tbody>
+        <tr><td>AWS SES</td><td>CloudTrail (control plane), SES reputation dashboard, virtual deliverability logs</td><td>New identities, reputation and complaint graphs, sending volume per identity</td></tr>
+        <tr><td>AWS SNS</td><td>CloudTrail, SNS delivery logs, spend alarms</td><td>Publish counts per topic and access key, new topics, fan-out sizes</td></tr>
+        <tr><td>SendGrid</td><td>Event Webhook feed, API key audit, subuser activity</td><td>Event volume by API key, new keys, spike in "delivered" plus "bounce"</td></tr>
+        <tr><td>Twilio</td><td>Message logs, Fraud Guard alerts, usage triggers</td><td>Message bursts to single country codes, new messaging services</td></tr>
+        <tr><td>Microsoft 365</td><td>Unified audit log, transport rules, connector changes</td><td>New inbound/outbound connectors, mail-flow rules hiding messages</td></tr>
+        <tr><td>Google Workspace</td><td>Admin audit log, Gmail log search</td><td>New delegated admins, gateway or routing setting changes</td></tr>
+        <tr><td>AI platforms</td><td>Bedrock model-invocation logs, OpenAI usage API, Vertex AI audit</td><td>Token spend per principal, off-hours invocation curves, unknown user agents</td></tr>
+        <tr><td>Billing</td><td>Budget alerts, cost anomaly detection</td><td>Same-hour pairing of a spend jump with a new principal or region</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h3>Triage flow: a hijacking alert arrives</h3>
+    <ol>
+      <li><strong>Confirm the signal.</strong> Is there a volume spike, a quota change, or an abuse report? Pull the SES or SendGrid dashboard screenshot first — provider dashboards often purge history quickly.</li>
+      <li><strong>Identify the identity.</strong> Which principal, access key, or admin session is behind the activity? When was it created, who created it, and from which IP? Identity-first beats volume-first, because volume has many honest explanations.</li>
+      <li><strong>Join two signals.</strong> Pair the volume signal with the identity signal (for example, sending spike plus a key first used last night). One alone is often a false positive.</li>
+      <li><strong>Decide containment speed.</strong> For messaging abuse every minute of delay adds cost and delivers more abusive messages: disable the key, suspend the sender identity, and purge queued messages before deep investigation. For AI abuse, throttle or revoke the model permissions immediately.</li>
+      <li><strong>Preserve evidence.</strong> Export CloudTrail events, dashboards, and provider abuse emails before cleanup. You need them for scope, notification, and provider disputes.</li>
+      <li><strong>Notify the provider.</strong> Answer the abuse notice, ask for the complaint samples, and request unblocking after cleanup. Silence keeps accounts throttled for weeks.</li>
+      <li><strong>Close the entry path.</strong> Rotate every credential the identity could reach. Review MFA (multi-factor authentication — a second proof of identity at login) and session rules. Check whether the same key touched storage or data services (the SCARLETEEL pattern in Section 6).</li>
+      <li><strong>Feed detection.</strong> Turn the indicators into Sigma rules, add the missed log source, and record the campaign in your threat intel notes (Section 5.2).</li>
+    </ol>
+  </div>
+
+  <div class="callout note">
+    <p class="callout-label">Why this matters beyond money</p>
+    <p>A hijacked mailer is more than a bill. It damages deliverability for every future campaign. It can be a first step toward business email compromise (attacks that impersonate your staff to move money or data) inside your tenant. And if your SaaS processes personal data, the compromise becomes a reportable security event under GDPR Article 33. Treat the first abuse report as a full incident, not a support ticket.</p>
+  </div>
+</section>
+<!-- ================= SECTION 5 ================= -->
+<section class="sec" id="s5-detection">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2>Detection Engineering Deep Dive</h2></div>
+  <p class="sec-intro">This is the working section. It turns the theory into five building blocks. You get the rules you must satisfy, the intelligence that tells you what to expect, a ranked threat list, the logs each threat produces, and ready-to-adapt Sigma rules with matching Splunk queries. The five threats (CS-01 to CS-05) introduced in 5.3 are used consistently in 5.4 and 5.5.</p>
+
+  <h3 class="sub-head" id="s51-regulation"><span class="sub-num">5.1</span>Regulation mapping</h3>
+  <p class="sub-intro">A hijacked SaaS service rarely triggers one single clause, but it breaks control requirements about access, monitoring, and incident handling. The event becomes audit-relevant, and sometimes reportable, when the hijacked service carries personal data. Examples are a mailer that sends customer records, or a service that sends PHI (protected health information — health data covered by US law) reminders.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Framework &amp; control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+    <tbody>
+      <tr><td><strong>GDPR</strong> — Art. 32 (security of processing), Art. 33 (breach notification within 72 hours)</td><td>Your SaaS tenant is a system processing personal data. A hijacked mailer exposes customer contact data in message templates and shows Art. 32 technical measures failed. Mass phishing from your domain can also expose recipients, and Art. 33 starts its 72-hour clock from awareness.</td><td>Processor register naming each SaaS app; SaaS admin audit exports; incident record with the awareness timestamp; proof of identity controls (MFA, key rotation) on the hijacked tenant.</td></tr>
+      <tr><td><strong>HIPAA</strong> (the US law that protects health data) — Security Rule §164.308(a)(1) security management process (risk analysis), §164.308(a)(5)(ii)(B) malicious software protection, §164.312(b) audit controls</td><td>If a mailer that carries ePHI (electronic PHI — appointment reminders, lab results) is hijacked, attacker-controlled mail can carry patient data, and the audit controls must have recorded the sending activity well enough to reconstruct the event.</td><td>Audit-log retention proof for the messaging service; risk analysis covering SaaS abuse; incident analysis documenting ePHI impact; sender reputation dashboard exports showing the window of abuse.</td></tr>
+      <tr><td><strong>ISO/IEC 27001:2022</strong> — A.8.16 (monitoring activities), A.8.9 (configuration management), A.8.20 (network security)</td><td>Service enablement and quota changes are configuration changes that monitoring should catch (A.8.16); the baseline "who may enable which service" belongs to configuration management (A.8.9); A.8.20 covers the provider-facing access paths.</td><td>Monitoring policy that names SaaS and cloud audit sources; alert records from the Sigma rules in 5.5; configuration baseline for messaging services; change tickets for planned quota increases.</td></tr>
+      <tr><td><strong>SOC 2</strong> — CC6.1 (logical access), CC6.8 (prevent/detect unauthorized changes and software), CC7.2 (monitor for anomalies)</td><td>Auditors test whether SaaS admin roles are access-reviewed (CC6.1), whether enabling a service without approval is detected (CC6.8), and whether token-spend and sending spikes raise alerts (CC7.2). A hijack walkthrough is a classic SOC 2 test.</td><td>Access reviews for SaaS admin roles; alert samples with disposition notes; evidence that budget alarms route to the SOC; provider abuse-report handling records.</td></tr>
+      <tr><td><strong>PCI DSS</strong> (the payment card industry security standard) <strong>4.0</strong> — 10.2 (audit logging), 12.10 (incident response)</td><td>If cardholder-related mailers run in the compromised tenant, phishing from your trusted domain becomes a fast path to card-data phishing. Requirements demand audit logging of the events and an incident response plan that covers them.</td><td>Log retention proof for SaaS and cloud audit trails; IR runbook with a SaaS-abuse scenario tested at least yearly; records of provider communication during the incident.</td></tr>
+      <tr><td><strong>NIS2</strong> (the EU directive on network and information security) — Art. 21 (risk management measures), Art. 23 (24-hour early warning, 72-hour notification)</td><td>For essential or important entities, a mass-phishing wave sent from your infrastructure can qualify as a significant incident with impact on recipients. Early warning needs monitoring that finds the abuse within hours, not weeks.</td><td>Documented detection capabilities (rules from 5.5 count); incident classification criteria; notification drill records showing who files the 24-hour early warning.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout note"><p class="callout-label">Audit tip</p><p>Provider-side controls are often the evidence auditors accept fastest: SES reputation dashboard exports, SendGrid event archives, Twilio Fraud Guard records, and Microsoft 365 or Google Workspace admin audit exports. Keep the <code>abuse@</code> mailbox owned by the SOC, not by an unmonitored alias, and log every provider notice as an incident artifact.</p></div>
+
+  <h3 class="sub-head" id="s52-intel"><span class="sub-num">5.2</span>Threat intelligence</h3>
+  <p class="sub-intro">Cloud service abuse is well documented since 2023. Intelligence work here means keeping four lists fresh: active campaigns, their tooling, the markets where credentials and "AI access" are sold, and the provider-side signals each campaign produces. Feed those lists into your detections from 5.5.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Source types and how to use them</h3>
+      <ul>
+        <li><strong>MITRE ATT&amp;CK</strong> — the T1496.004 page lists the public references used below. Start here; it is free and vendor-neutral.</li>
+        <li><strong>Vendor reporting</strong> — Sophos, Sysdig/Lacework, Permiso, SentinelOne, and incident-response firms such as Invictus IR publish campaign write-ups with tooling and detection ideas.</li>
+        <li><strong>Provider channels</strong> — AWS, Azure, and Google security bulletins, plus the abuse and trust teams of SES, SendGrid, and Twilio; their notices are both intel and evidence.</li>
+        <li><strong>Messaging industry groups</strong> — M3AAWG best practices track sending-abuse patterns; sector ISACs share blocklist and reputation warnings.</li>
+        <li><strong>Commercial feeds</strong> — paid feeds add infrastructure age and seller-market monitoring for pre-verified sender accounts.</li>
+        <li><strong>Internal telemetry</strong> — your own SaaS admin audit logs are the best intel source for your environment; every incident adds a permanent detection.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Confidence levels, in plain words</h3>
+      <p><strong>High</strong> means multiple independent sources agree and your own telemetry confirms the pattern. Use it for blocking and alerting. <strong>Medium</strong> means the report is credible but you have not seen it locally — use it for hunts. <strong>Low</strong> means a single unverified claim — use it for awareness only. Re-score every quarter; hijacked accounts rotate fast.</p>
+      <p>Apply intel in three steps. First, enrich: tag sender identities, keys, and proxy user agents into your SIEM. Second, hunt: search 90 days of history for each campaign pattern below. Third, detect: write or tune one Sigma rule per pattern, then retire rules when a campaign dies.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Known campaigns and reports (as cited on the ATT&amp;CK page)</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Campaign / report</th><th>Source, date</th><th>What it documented</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td><strong>LLMjacking</strong></td><td>Lacework (now part of Sysdig), 6 May 2024</td><td>Stolen cloud credentials used against cloud-hosted AI models via reverse proxies such as oai-reverse-proxy; the stolen "AI access" is resold, and the victim pays for every token — over 46,000 US dollars per day in the documented case. Initial access there came from exploited SysAid servers (CVE-2023-47246) that exposed cloud OAuth tokens.</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td><strong>SES-pionage</strong></td><td>Sophos (Nathan Eades), 12 January 2023</td><td>Threat actors using compromised AWS SES accounts and sending credentials — traced back to exposed files and misconfigured services — for phishing at scale, with custom tooling documented.</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td><strong>SNS Sender</strong></td><td>Sophos (Alex Delamotte), 15 February 2024</td><td>Active campaigns abusing compromised AWS SNS to send smishing and spam; signature pattern is a new IAM user plus topic creation plus a publish burst.</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td><strong>DangerDev@protonmail.me</strong></td><td>Invictus IR, 31 January 2024</td><td>Attacker with stolen cloud credentials enabled dormant cloud services and abused them for profit, combining bold service enablement with ransom-style contact.</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td><strong>SCARLETEEL 2.0</strong></td><td>Sysdig TRT, 11 July 2023</td><td>AWS and Kubernetes intrusion combining data theft with resource-abuse attempts (campaign reported from February 2023) — the precursor pattern for full T1496.004 abuse (case study in Section 6).</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td><strong>Composite Alerts</strong></td><td>Lacework Labs, 6 June 2024</td><td>Follow-up research showing how correlating identity, usage, and spend signals into one composite alert surfaces LLMjacking early.</td><td><span class="badge sev-high">High</span></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="callout warn"><p class="callout-label">Underground markets</p><p>Public vendor and commercial-feed reporting during 2023–2024 documented sellers offering pre-verified SES accounts, warmed SendGrid tenants, and packaged "AI access" to cloud-hosted models. The practical lesson: assume every long-lived static API key is eventually for sale somewhere, and hunt on the <em>first use</em> of every key, not only on known-bad indicators.</p></div>
+
+  <h3 class="sub-head" id="s53-ranking"><span class="sub-num">5.3</span>Threats ranking and categorization</h3>
+  <p class="sub-intro">These five threats cover the sub-technique across all its named services. The IDs are used as keys in 5.4 and 5.5. Severity reflects realistic worst-case impact for a mid-sized organization, adjusted by how often the threat is seen in the wild.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>ID / threat</th><th>Platform</th><th>Severity</th><th>Preconditions</th><th>Impact</th><th>Justification</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>CS-01</strong> Mass phishing/spam through a compromised SES or SendGrid identity</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-critical">Critical</span></td>
+        <td>Stolen API key or phished console session; production (non-sandbox) sending rights</td>
+        <td>Huge send bills; blocklisting of your domain; customer trust damage; possible GDPR Art. 33 clock</td>
+        <td>Most observed form (SES-pionage, DangerDev); your good reputation is exactly what makes the phishing land</td>
+      </tr>
+      <tr>
+        <td><strong>CS-02</strong> Mass smishing/spam through compromised SNS or Twilio</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-high">High</span></td>
+        <td>API key with publish rights; phone number pools or topics; sometimes a freshly created IAM user</td>
+        <td>SMS spend spikes; smishing waves from your brand; carrier filtering of your real traffic</td>
+        <td>SNS Sender (Sophos 2024) showed a stable, repeatable pattern: new user, new topic, publish burst</td>
+      </tr>
+      <tr>
+        <td><strong>CS-03</strong> LLMjacking — stolen credentials querying cloud AI services</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-high">High</span></td>
+        <td>Cloud credentials with model invoke rights; a reverse proxy to resell access</td>
+        <td>Token bills can pass 46,000 US dollars per day if undiscovered (Lacework 2024); quota exhaustion for real AI workloads</td>
+        <td>LLMjacking (Lacework 2024) is growing with AI adoption; pure API abuse, so no malware trail exists</td>
+      </tr>
+      <tr>
+        <td><strong>CS-04</strong> Service enablement and quota/policy changes in a compromised tenant</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-high">High</span></td>
+        <td>Compromised admin identity; rights to enable services or request quota increases</td>
+        <td>Turns a quiet account into a sender or AI consumer; enables CS-01/02/03; audit noise delays response</td>
+        <td>The enablement leg of AN0417; catching it stops the attack before the first abusive message is sent</td>
+      </tr>
+      <tr>
+        <td><strong>CS-05</strong> Free-tier and trial abuse through mass registrations</td>
+        <td><span class="badge plat">SaaS</span></td>
+        <td><span class="badge sev-medium">Medium</span></td>
+        <td>No intrusion — bots, disposable mail, and rotating ASNs against a signup form</td>
+        <td>Farmed messaging credits used for spam; skewed analytics; wasted cost</td>
+        <td>Common against any SaaS with messaging quotas; lower impact but constant pressure (T1496.003 overlap)</td>
+      </tr>
+    </tbody>
+  </table></div>
+
+  <h3 class="sub-head" id="s54-logs"><span class="sub-num">5.4</span>Logs and event patterns</h3>
+  <p class="sub-intro">Each threat gets the same six-part treatment. We list the log sources to collect and the fields that matter. We contrast normal with suspicious behavior. We state the detection logic in one sentence, and we show a realistic example event. Field names follow common ingestion formats; adjust them to your pipeline. Arcadia Labs is the fictional victim company used in all examples, and ASN (autonomous system number — the network operator behind an IP address) marks where traffic came from.</p>
+
+  <div class="card">
+    <h4><span class="mono">CS-01</span> Mass phishing via SES/SendGrid — cloud audit + mail service logs</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>CloudTrail (SES control plane), SES reputation and sending dashboards, SendGrid event feed, mail blocklist monitors</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>eventSource</code>, <code>userIdentity.arn</code>, <code>userIdentity.accessKeyId</code>, <code>sourceIPAddress</code>, <code>userAgent</code>, bounce/complaint rates</td></tr>
+        <tr><td>Normal</td><td>Sends from known sender roles; steady volumes tied to business hours; stable bounce rate under a few percent; no new identities for months</td></tr>
+        <tr><td>Suspicious</td><td>Send calls from a human user or first-seen key; volume 10x baseline within an hour; sends from a never-seen source IP; complaint rate above 0.1 percent; new verified identity followed by immediate volume</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when SES send API calls come from a principal that is not an approved sender role. Raise severity when the same access key shows a 10-minute send count above your baseline.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — CloudTrail SendRawEmail (abridged, SESv2-style fields)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "eventTime": "2025-11-20T03:14:41Z",
+  "eventSource": "email.amazonaws.com",
+  "eventName": "SendRawEmail",
+  "awsRegion": "us-east-1",
+  "userIdentity": {
+    "type": "IAMUser",
+    "arn": "arn:aws:iam::441723000991:user/mkt-automation",
+    "accessKeyId": "AKIAIOSFODNN7EXAMPLE"
+  },
+  "sourceIPAddress": "203.0.113.7",
+  "userAgent": "aws-sdk-go/1.44.122",
+  "requestParameters": { "source": "billing@arcadia-labs.com" },
+  "recipientAccountId": "441723000991"
+}
+# Context: 41,880 SendRawEmail events from this access key within 40 minutes,
+# all from 203.0.113.7 - an address never seen on this account before.</code></pre>
+    </figure>
+    <div class="callout warn"><p class="callout-label">Note</p><p>This JSON is a teaching artifact. SES events from the older API can show minimal request details, and recipient addresses live in SES deliverability logs, not in the trail. The Sigma rule below matches both <code>email.amazonaws.com</code> and <code>ses.amazonaws.com</code> so a parser difference cannot hide the event; enable SESv2 event logging and virtual deliverability logs to get the full picture.</p></div>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CS-02</span> Mass smishing via SNS/Twilio — cloud audit + messaging logs</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>CloudTrail (IAM and SNS), SNS delivery logs, Twilio message logs, spend triggers</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>eventSource</code>, <code>requestParameters.userName</code>, <code>requestParameters.TopicArn</code>, <code>userIdentity.accessKeyId</code>, <code>sourceIPAddress</code></td></tr>
+        <tr><td>Normal</td><td>Topics created by infrastructure roles; publish counts matching app releases; stable per-topic fan-out; spend tracking seasonal business peaks</td></tr>
+        <tr><td>Suspicious</td><td>New IAM user followed by CreateTopic and Publish from the same key; publish bursts to thousands of endpoints; messages to single country blocks; SpendThreshold alarms crossing</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when a new IAM user or access key is followed within hours by SNS topic creation and a publish burst from the same source IP. This is the Sophos SNS Sender pattern.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example events — CloudTrail CreateUser then Publish (composite view)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "eventTime": "2025-11-20T02:51:03Z",
+  "eventSource": "iam.amazonaws.com",
+  "eventName": "CreateUser",
+  "userIdentity": { "type": "IAMUser", "arn": "arn:aws:iam::441723000991:user/ops-lead",
+                    "accessKeyId": "AKIAIOSFODNN7EXAMPLE" },
+  "sourceIPAddress": "198.51.100.201",
+  "requestParameters": { "userName": "svc-sns-relay" }
+}
+{
+  "eventTime": "2025-11-20T03:02:19Z",
+  "eventSource": "sns.amazonaws.com",
+  "eventName": "Publish",
+  "userIdentity": { "type": "IAMUser", "arn": "arn:aws:iam::441723000991:user/svc-sns-relay",
+                    "accessKeyId": "AKIAIOSFODNN7EXAMPLE" },
+  "sourceIPAddress": "198.51.100.201",
+  "requestParameters": { "TopicArn": "arn:aws:sns:us-east-1:441723000991:alerts-dispatch" }
+}
+# Between 03:02 and 03:31 the new user published 28,400 messages through topic
+# fan-out - the SNS Sender smishing pattern reported by Sophos.</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CS-03</span> LLMjacking — AI platform usage and invocation logs</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Bedrock model-invocation logs, OpenAI usage API, Vertex AI audit logs, internal AI gateway records, billing</td></tr>
+        <tr><td>Key fields</td><td><code>principal</code>, <code>model</code>, <code>invocations</code>, <code>input_tokens</code>, <code>output_tokens</code>, <code>est_cost_usd</code>, <code>top_user_agent</code>, <code>top_caller_ip</code></td></tr>
+        <tr><td>Normal</td><td>Token use tracks business hours and known pipelines; models match the owning team; cost per day is flat and budgeted</td></tr>
+        <tr><td>Suspicious</td><td>Off-hours invocation curves that never pause; models no team owns; token counts in the tens of millions per hour; reverse-proxy user agents; first-seen caller IP on a dormant principal</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when an hourly window shows model invocations far above the principal's baseline, or when the user agent matches known reverse-proxy tools. Join the alert with the token-spend meter for the same hour.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — AI usage rollup record (1h window, JSON-normalized)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "ts": "2025-11-20T01:00:00Z",
+  "window": "1h",
+  "service": "bedrock",
+  "model": "anthropic.claude-3-5-sonnet",
+  "principal": "arn:aws:iam::441723000991:user/data-svc",
+  "invocations": 18411,
+  "input_tokens": 41200000,
+  "output_tokens": 9800000,
+  "est_cost_usd": 842.15,
+  "top_caller_ip": "198.51.100.201",
+  "top_user_agent": "oai-reverse-proxy/2.4.1",
+  "note": "all traffic 00:00-06:00 UTC; no owning team for this principal"
+}</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CS-04</span> Service enablement and quota changes — admin audit logs</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>CloudTrail (SES, Service Quotas, IAM), Microsoft 365 unified audit log, Google Workspace admin audit log, change tickets</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>eventSource</code>, <code>requestParameters.MailType</code>, <code>requestParameters.serviceName</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code></td></tr>
+        <tr><td>Normal</td><td>Enablement events only during onboarding projects, from infrastructure roles, with change tickets; quota requests reviewed and rare</td></tr>
+        <tr><td>Suspicious</td><td>Identity verification or account-detail changes from a human principal at night; mail type switched to marketing; quota increase from a first-seen IP; admin audit events from new countries</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert on any event that switches the tenant into a sender — identity verification, account detail changes, service-linked role creation for SES, or sending-quota increase requests. Skip the alert only when an approved change role made the change.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — CloudTrail PutAccountDetails (abridged; eventSource may appear as ses.amazonaws.com or email.amazonaws.com depending on the SES API version)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "eventTime": "2025-11-20T03:09:55Z",
+  "eventSource": "ses.amazonaws.com",
+  "eventName": "PutAccountDetails",
+  "awsRegion": "us-east-1",
+  "userIdentity": { "type": "IAMUser", "arn": "arn:aws:iam::441723000991:user/mkt-automation",
+                    "accessKeyId": "AKIAIOSFODNN7EXAMPLE" },
+  "sourceIPAddress": "203.0.113.7",
+  "requestParameters": {
+    "MailType": "MARKETING",
+    "WebsiteURL": "https://promo-mailer.top",
+    "ContactLanguage": "EN"
+  },
+  "responseElements": null
+}
+# Same hour: RequestServiceQuotaIncrease for the account sending limit,
+# from 50,000 to 1,000,000 messages per day, same source IP.</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CS-05</span> Free-tier abuse via mass registrations — application signup logs</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Application signup service logs, identity provider signup events, WAF (web application firewall) bot scores, ASN intelligence on source networks</td></tr>
+        <tr><td>Key fields</td><td><code>event_action</code>, <code>email_domain</code>, <code>plan</code>, <code>referral_code</code>, <code>source_ip</code>, <code>asn</code>, <code>device_fingerprint</code>, <code>user_agent</code></td></tr>
+        <tr><td>Normal</td><td>Signups spread across consumer ASNs and mail providers; steady single-digit per minute; human user agents; low referral-code reuse</td></tr>
+        <tr><td>Suspicious</td><td>Hundreds of signups per 10 minutes from one ASN; disposable mail domains; headless or scripting user agents; one device fingerprint across accounts; referral codes cashing out in bursts</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when signup velocity per ASN breaks the baseline within a 10-minute window. Also alert when a successful signup uses a disposable mail domain or a scripting user agent.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — signup service record (JSON-normalized)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "ts": "2025-11-20T04:12:08Z",
+  "event_action": "signup_success",
+  "app": "notify-trial",
+  "email_domain": "mailinator.com",
+  "plan": "free_trial",
+  "referral_code": "REF-88213",
+  "source_ip": "192.0.2.44",
+  "asn": "AS64496",
+  "device_fingerprint": "fp_9c31e0a7",
+  "user_agent": "python-requests/2.31.0"
+}
+# 2,310 successful signups in one hour from AS64496; 96 percent used disposable
+# mail domains; the referral code pays a 10 dollar messaging credit per signup.</code></pre>
+    </figure>
+  </div>
+
+  <h3 class="sub-head" id="s55-sigma"><span class="sub-num">5.5</span>Sigma rules and Splunk SPL</h3>
+  <p class="sub-intro">Each threat gets one Sigma rule and one Splunk query that implement the same logic. Index and sourcetype names are common defaults, such as <code>index=cloud sourcetype=aws:cloudtrail</code>, <code>index=saas sourcetype=aws:ses</code>, <code>index=saas sourcetype=sendgrid:events</code>, or <code>index=saas sourcetype=m365:audit</code>. Adjust them to your environment, and state your own assumptions in the rule notes.</p>
+
+  <div class="card">
+    <h4><span class="mono">CS-01</span> Mass phishing via SES/SendGrid — Sigma (CloudTrail) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements the sending leg of analytic AN0417 (detection strategy DET0147): resource-intensive mass email started under anomalous identity conditions. <strong>Severity: critical.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — SES send primitives by unapproved principal</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: AWS SES Send Primitives Used by Unapproved Principal
+id: 0dd874a5-080a-4b5e-8f66-af3dc80e67ce
+status: stable
+description: Detects SES sending API calls (SendEmail, SendRawEmail, SendBulkTemplatedEmail)
+  issued by a principal that is not an approved sender role. Mass phishing from a
+  compromised identity is the core pattern of ATT&amp;CK T1496.004. Maps to analytic
+  AN0417 of detection strategy DET0147.
+references:
+  - https://attack.mitre.org/techniques/T1496/004/
+  - https://news.sophos.com/en-us/2023/01/12/ses-pionage/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: cloud
+  product: aws
+  service: cloudtrail
+detection:
+  selection_send:
+    eventSource:
+      - 'email.amazonaws.com'
+      - 'ses.amazonaws.com'
+    eventName:
+      - 'SendEmail'
+      - 'SendRawEmail'
+      - 'SendBulkTemplatedEmail'
+      - 'SendTemplatedEmail'
+  filter_approved:
+    userIdentity.arn|contains:
+      - 'assumed-role/ses-mailer'
+      - 'assumed-role/billing-mailer'
+      - 'assumed-role/ci-notifier'
+  condition: selection_send and not filter_approved
+fields:
+  - eventName
+  - userIdentity.arn
+  - userIdentity.accessKeyId
+  - sourceIPAddress
+  - awsRegion
+  - userAgent
+falsepositives:
+  - New sending microservices that were not added to the approved list yet
+  - Admins testing SES from the console during a documented change window
+level: critical
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.004</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=cloud sourcetype=aws:cloudtrail</code> for the audit view and <code>index=saas sourcetype=aws:ses</code> for the volume view; tell whoever manages the SES add-on for Splunk to extract <code>identity</code> and <code>event</code>):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CS-01</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=cloud sourcetype=aws:cloudtrail
+  eventSource IN ("email.amazonaws.com","ses.amazonaws.com")
+  eventName IN ("SendEmail","SendRawEmail","SendBulkTemplatedEmail","SendTemplatedEmail")
+  NOT userIdentity.arn IN ("*assumed-role/ses-mailer*","*assumed-role/billing-mailer*","*assumed-role/ci-notifier*")
+| bucket _time span=10m
+| stats count as send_events values(sourceIPAddress) as src_ips values(userAgent) as agents
+        by _time, userIdentity.arn, userIdentity.accessKeyId
+| where send_events &gt; 500
+| sort - send_events
+
+# Volume view from the SES service logs - confirm the spike window:
+index=saas sourcetype=aws:ses event="send"
+| bucket _time span=10m
+| stats count as sends by _time, identity
+| where sends &gt; 20000</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> product mailers ship weekly — keep the approved-role list in a lookup and review it at each onboarding. Raise the 500 threshold after two weeks of report-only mode. <strong>Severity:</strong> critical when send events and a volume spike land in the same hour; otherwise high.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CS-02</span> Mass smishing via SNS/Twilio — Sigma (CloudTrail) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements the setup leg of the SNS Sender pattern (new IAM user or topic) under analytic AN0417. The SPL adds the publish-burst join by source IP: the documented pattern creates a fresh key for publishing, while the attacker's infrastructure IP stays the same. <strong>Severity: high.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — SNS Sender setup pattern</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: New IAM User or SNS Topic Created Outside Automation
+id: 64ad4786-181b-40a2-8b58-ec22aeb6fbeb
+status: stable
+description: Detects the setup leg of the SNS Sender pattern reported by Sophos - a
+  new IAM user, access key, or SNS topic created by a principal outside approved
+  automation. Join the alert with Publish volume from the same source IP to confirm
+  a mass-smishing campaign. Maps to ATT&amp;CK T1496.004, detection strategy DET0147.
+references:
+  - https://attack.mitre.org/techniques/T1496/004/
+  - https://news.sophos.com/en-us/2024/02/15/sns-sender-active-campaigns-unleash-messaging-spam-through-the-cloud/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: cloud
+  product: aws
+  service: cloudtrail
+detection:
+  selection_new_user:
+    eventSource: 'iam.amazonaws.com'
+    eventName: 'CreateUser'
+  selection_new_key:
+    eventSource: 'iam.amazonaws.com'
+    eventName: 'CreateAccessKey'
+  selection_new_topic:
+    eventSource: 'sns.amazonaws.com'
+    eventName: 'CreateTopic'
+  filter_automation:
+    userIdentity.arn|contains:
+      - 'assumed-role/terraform'
+      - 'assumed-role/ci-deploy'
+      - 'assumed-role/org-onboarding'
+  condition: 1 of selection_* and not filter_automation
+fields:
+  - eventName
+  - userIdentity.arn
+  - userIdentity.accessKeyId
+  - sourceIPAddress
+  - requestParameters.userName
+  - requestParameters.name
+falsepositives:
+  - Joiners-movers-leavers automation that creates IAM users daily
+  - Infrastructure pipelines not yet covered by the exclusion list
+level: high
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.004</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=cloud sourcetype=aws:cloudtrail</code>; the join key is <code>sourceIPAddress</code> because the SNS Sender pattern creates a new IAM user and key for publishing, while the attacker's infrastructure keeps one IP across the setup and publish legs):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CS-02</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=cloud sourcetype=aws:cloudtrail
+  (eventSource=sns.amazonaws.com eventName IN ("Publish","PublishBatch"))
+  OR (eventSource=iam.amazonaws.com eventName IN ("CreateUser","CreateAccessKey"))
+  OR (eventSource=sns.amazonaws.com eventName="CreateTopic")
+| stats count(eval(eventSource="sns.amazonaws.com" AND eventName IN ("Publish","PublishBatch"))) as publish_calls,
+        count(eval(eventSource="iam.amazonaws.com")) as iam_calls,
+        count(eval(eventName="CreateTopic")) as topic_calls,
+        values(eventName) as events,
+        values(userIdentity.accessKeyId) as keys,
+        values(sourceIPAddress) as src_ips
+  by sourceIPAddress
+| where iam_calls &gt; 0 AND publish_calls &gt; 1000
+| sort - publish_calls</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> large fan-out apps can publish thousands of messages per minute — baseline per topic and exempt documented high-volume senders. Twilio shops should mirror this rule on <code>index=saas sourcetype=twilio:api</code> message-creation counts. <strong>Severity:</strong> high; raise to critical when the same key also shows new-region activity.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CS-03</span> LLMjacking — Sigma (CloudTrail Bedrock) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements the AI-service leg of AN0417: resource-intensive model queries under anomalous identity conditions. The Sigma rule watches direct invocations and proxy user agents; the SPL adds the token-spend join. <strong>Severity: high.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — cloud AI invocations outside approved workloads</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: Cloud AI Model Invocations Outside Approved Workloads
+id: b13eb8d4-48eb-4841-b403-093825ede35d
+status: experimental
+description: Detects direct model invocation of cloud AI services (Amazon Bedrock
+  InvokeModel or Converse) by principals that are not approved AI workloads, and
+  flags user agents linked to reverse-proxy tools used in LLMjacking. Attackers
+  resell the stolen model access and the victim pays for every token. Maps to
+  ATT&amp;CK T1496.004, analytic AN0417.
+references:
+  - https://attack.mitre.org/techniques/T1496/004/
+  - https://sysdig.com/blog/llmjacking-stolen-cloud-credentials-used-in-new-ai-attack/
+  - https://www.lacework.com/blog/detecting-ai-resource-hijacking-with-composite-alerts
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: cloud
+  product: aws
+  service: cloudtrail
+detection:
+  selection_invoke:
+    eventSource: 'bedrock.amazonaws.com'
+    eventName:
+      - 'InvokeModel'
+      - 'InvokeModelWithResponseStream'
+      - 'Converse'
+      - 'ConverseStream'
+  selection_proxy_ua:
+    userAgent|contains:
+      - 'oai-reverse-proxy'
+      - 'one-api'
+      - 'openai-forward'
+  filter_workloads:
+    userIdentity.arn|contains:
+      - 'assumed-role/ai-platform'
+      - 'assumed-role/ml-research'
+  condition: (selection_invoke or selection_proxy_ua) and not filter_workloads
+fields:
+  - eventName
+  - requestParameters.modelId
+  - userIdentity.arn
+  - userIdentity.accessKeyId
+  - sourceIPAddress
+  - userAgent
+falsepositives:
+  - AI pilots and data-science teams not yet on the approved role list
+  - Vendor tools that call Bedrock through their own user agent
+level: high
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.004</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=cloud sourcetype=aws:cloudtrail</code> for invocations and <code>index=saas sourcetype=ai:usage</code> for token rollups; adjust the usage sourcetype to your AI gateway):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CS-03</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=cloud sourcetype=aws:cloudtrail eventSource=bedrock.amazonaws.com
+  NOT userIdentity.arn IN ("*assumed-role/ai-platform*","*assumed-role/ml-research*")
+| bucket _time span=1h
+| stats count as invocations values(requestParameters.modelId) as models
+        values(userAgent) as agents values(sourceIPAddress) as src_ips
+  by _time, userIdentity.arn
+| where invocations &gt; 200
+| sort - invocations
+
+# Direct reverse-proxy hunt - any volume is worth a look:
+index=cloud sourcetype=aws:cloudtrail
+  userAgent IN ("*oai-reverse-proxy*","*one-api*","*openai-forward*")
+
+# Token-spend view from your AI gateway or provider usage export:
+index=saas sourcetype=ai:usage
+| bucket _time span=1h
+| stats sum(input_tokens) as in_tok sum(output_tokens) as out_tok
+        sum(est_cost_usd) as spend by _time, principal
+| where in_tok + out_tok &gt; 1000000
+| sort - spend</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> batch inference jobs can exceed 200 calls per hour — exempt documented pipelines by role, not by time. The proxy user-agent hunt has near-zero false positives; run it daily. <strong>Severity:</strong> high; critical when token spend crosses the account's daily budget in the same hour.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CS-04</span> Service enablement and quota changes — Sigma (CloudTrail) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements the enablement leg of AN0417 ("enables or modifies usage policies"), seen in the DangerDev incident before the abuse started. Catching this leg stops CS-01/02/03 before the first abusive message. <strong>Severity: high.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — tenant switched into a sender</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: SES Account Enablement or Sending Quota Change
+id: 54cb4645-80b3-4e9d-8b1f-5f296956667a
+status: stable
+description: Detects events that switch a tenant into a sender - SES identity creation
+  and verification, SES account detail changes such as mail type, service-linked role
+  creation for SES, and sending-quota increase requests. In the DangerDev incident the
+  attacker enabled dormant cloud services the same way before abusing them. Maps to
+  ATT&amp;CK T1496.004, analytic AN0417.
+references:
+  - https://attack.mitre.org/techniques/T1496/004/
+  - https://www.invictus-ir.com/news/the-curious-case-of-dangerdev-protonmail-me
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: cloud
+  product: aws
+  service: cloudtrail
+detection:
+  selection_ses_identity:
+    eventSource:
+      - 'email.amazonaws.com'
+      - 'ses.amazonaws.com'
+    eventName:
+      - 'CreateEmailIdentity'
+      - 'VerifyEmailIdentity'
+      - 'VerifyEmailAddress'
+      - 'PutAccountDetails'
+      - 'PutAccountSendingEnabled'
+  selection_quota:
+    eventSource: 'servicequotas.amazonaws.com'
+    eventName: 'RequestServiceQuotaIncrease'
+  selection_slr:
+    eventSource: 'iam.amazonaws.com'
+    eventName: 'CreateServiceLinkedRole'
+    requestParameters.serviceName:
+      - 'ses.amazonaws.com'
+      - 'email.amazonaws.com'
+  filter_change_mgmt:
+    userIdentity.arn|contains:
+      - 'assumed-role/terraform'
+      - 'assumed-role/mail-ops'
+  condition: 1 of selection_* and not filter_change_mgmt
+fields:
+  - eventName
+  - eventSource
+  - userIdentity.arn
+  - sourceIPAddress
+  - requestParameters.EmailIdentity
+  - requestParameters.MailType
+falsepositives:
+  - Legitimate onboarding of a new product mailer with a change ticket
+  - Planned quota increases requested by the messaging team
+level: high
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.004</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=cloud sourcetype=aws:cloudtrail</code>; for tenant-side enablement mirror the pattern on <code>index=saas sourcetype=m365:audit</code> operations like new transport rules or connectors):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CS-04</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=cloud sourcetype=aws:cloudtrail
+  (eventSource IN ("email.amazonaws.com","ses.amazonaws.com")
+     eventName IN ("CreateEmailIdentity","VerifyEmailIdentity","VerifyEmailAddress",
+                   "PutAccountDetails","PutAccountSendingEnabled"))
+  OR (eventSource=servicequotas.amazonaws.com eventName="RequestServiceQuotaIncrease")
+  OR (eventSource=iam.amazonaws.com eventName="CreateServiceLinkedRole"
+      requestParameters.serviceName IN ("ses.amazonaws.com","email.amazonaws.com"))
+| stats values(eventName) as enablement_events count as calls
+        values(sourceIPAddress) as src_ips
+  by userIdentity.arn
+| sort - calls
+
+# Microsoft 365 tenant view - admin audit operations that open mail flow:
+index=saas sourcetype=m365:audit
+  Operation IN ("New-TransportRule","New-InboundConnector","New-OutboundConnector")
+| stats values(Operation) as ops dc(UserId) as admins by OrganizationId</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> enablement events are rare by nature, so the rule stays quiet — verify every hit against a change ticket. Add the messaging team's automation role to the filter. <strong>Severity:</strong> high; escalate to critical when the requester has no prior activity in the last 90 days.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CS-05</span> Free-tier abuse via mass registrations — Sigma (application) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements the no-intrusion variant of T1496.004 seen against free tiers and trials; it overlaps T1496.003 SMS pumping when the farmed credits buy SMS. Velocity lives in the SPL; the Sigma rule catches the per-event markers. <strong>Severity: medium.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — disposable or bot signups</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: Signups from Disposable Mail Domains or Scripting User Agents
+id: 77139eb7-4b2f-4438-b4d5-0c841d040b21
+status: experimental
+description: Detects new-account signups that use disposable mail domains or headless
+  and scripting user agents - the preparation step for free-tier and messaging-quota
+  abuse. Signup velocity itself is checked in the matching SPL query, which counts
+  signups per ASN in short windows. Maps to ATT&amp;CK T1496.004, detection strategy
+  DET0147.
+references:
+  - https://attack.mitre.org/techniques/T1496/004/
+  - https://www.m3aawg.org/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: application
+  product: signup-service
+detection:
+  selection_signup:
+    event_action: 'signup_success'
+  selection_disposable:
+    email_domain|endswith:
+      - 'mailinator.com'
+      - 'guerrillamail.com'
+      - '10minutemail.com'
+      - 'tempmail.dev'
+      - 'yopmail.com'
+  selection_bot_ua:
+    user_agent|contains:
+      - 'headless'
+      - 'python-requests'
+      - 'curl/'
+  condition: selection_signup and (selection_disposable or selection_bot_ua)
+fields:
+  - event_action
+  - email_domain
+  - user_agent
+  - source_ip
+  - asn
+  - device_fingerprint
+falsepositives:
+  - Privacy-minded users who legitimately use temporary mail in low volume
+  - Internal load tests that replay the signup flow
+level: medium
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.004</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=saas sourcetype=app:signup</code> with fields extracted at ingest — tell the app team to ship <code>asn</code> from their IP enrichment):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CS-05</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=saas sourcetype=app:signup event_action="signup_success"
+| bucket _time span=10m
+| stats count as signups dc(source_ip) as ips values(asn) as asns
+        values(email_domain) as domains by _time
+| where signups &gt; 100
+| sort - signups
+
+# Disposable-domain view with referral cash-out:
+index=saas sourcetype=app:signup event_action="signup_success"
+  email_domain IN ("mailinator.com","guerrillamail.com","10minutemail.com","tempmail.dev","yopmail.com")
+| stats count as signups dc(device_fingerprint) as devices values(referral_code) as refs
+  by source_ip, asn
+| where signups &gt; 20</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> a single product launch can push honest signups past 100 per 10 minutes — pair the velocity rule with launch calendar awareness. <strong>Severity:</strong> medium; raise when referral credits or SMS quotas are involved, because that converts farming into CS-01/CS-02 material.</p>
+  </div>
+
+  <div class="callout good"><p class="callout-label">Validation habit</p><p>Test every rule monthly with the lab drill from Section 3. A sending rule that has never fired on synthetic data probably cannot fire at all. The most common reason: the SES or SendGrid source was never onboarded to the SIEM in the first place.</p></div>
+</section>
+<!-- ================= SECTION 6 ================= -->
+<section class="sec" id="s6-case-study">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2>Real-World Case Study: SCARLETEEL 2.0 (2023)</h2></div>
+  <p class="sec-intro">In July 2023 the Sysdig Threat Research Team published SCARLETEEL 2.0, an intrusion into a software organization running workloads on AWS. The case is a clear teaching example for T1496.004. The attacker moved from a stolen container credential toward both data theft and resource abuse, and every defense lesson from this guide appears somewhere in the chain.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Context</h3>
+      <p>The victim organization builds software and runs containerized workloads in self-managed Kubernetes (a system that runs containerized applications across many servers) on AWS, spread over several accounts. Sysdig observed the campaign start in February 2023. The attacker never needed malware on a laptop or a server image: everything ran through stolen credentials, cloud APIs, and short-lived tooling deployed into the victim's own services.</p>
+      <p>Sysdig's Threat Research Team published the full report, "SCARLETEEL 2.0: Fargate, Kubernetes, and Crypto", on 11 July 2023. It extended the earlier SCARLETEEL report (Sysdig, February 2023) with two new elements: abuse of AWS Fargate tasks and a fresh set of command-and-control tooling. The campaign shows the "enumerate first, monetize later" mindset that defines cloud intrusions.</p>
+    </div>
+    <div class="card">
+      <h3>Attack chain</h3>
+      <ol>
+        <li><strong>Container compromise.</strong> The attacker compromised a containerized workload in the victim's AWS environment.</li>
+        <li><strong>Credential theft.</strong> A stealer script harvested AWS access keys from the workload — credentials in containers are readable by anyone who controls the container.</li>
+        <li><strong>Role enumeration.</strong> Using the stolen identity, the attacker ran account and role discovery, then assumed roles across two AWS accounts.</li>
+        <li><strong>Data and compute goals.</strong> The attacker tried to steal proprietary data and to install cryptomining — resource hijacking in the making. The stolen data included Lambda scripts (Lambda is AWS's service for running small pieces of code) and internal tooling.</li>
+        <li><strong>Terraform state abuse.</strong> Reading Terraform state files — the files that map every resource the Terraform tool built — let the attacker map the whole infrastructure and find the path into child accounts.</li>
+        <li><strong>Fargate abuse.</strong> In the 2.0 phase, the attacker deployed tooling into Fargate tasks (AWS's service for running containers without managing servers), using the victim's own platform to run their code.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Timeline</h3>
+    <ul class="timeline">
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">February 2023</span><p>The attacker compromises a containerized workload on AWS and deploys a credential-stealer script inside it.</p></li>
+      <li><span class="tl-dot bad" aria-hidden="true"></span><span class="tl-when">Same day, minutes later</span><p>Stolen keys are used to assume roles. The attacker enumerates users, roles, and permissions across two accounts, following the access chain between them.</p></li>
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">Following days</span><p>The attacker reads Terraform state to map infrastructure, steals Lambda scripts, and attempts cryptomining installation — the resource-hijacking goal of the intrusion.</p></li>
+      <li><span class="tl-dot warn" aria-hidden="true"></span><span class="tl-when">Later phase</span><p>SCARLETEEL 2.0 tooling appears: backdoor and privilege-escalation scripts in Fargate tasks, plus new C2 (command and control — the attacker's channel to their tooling) infrastructure.</p></li>
+      <li><span class="tl-dot good" aria-hidden="true"></span><span class="tl-when">Detection and response</span><p>CloudTrail anomalies (unusual IAM calls and role-assumption chains), GuardDuty findings, and runtime alerts on Fargate tasks converge. The team revokes roles and credentials, isolates accounts, and removes the tooling.</p></li>
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">July 2023</span><p>Sysdig's Threat Research Team publishes the SCARLETEEL 2.0 report (11 July 2023) with the full chain and detections.</p></li>
+    </ul>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Detection point</h3>
+      <p>Three independent signals existed, and any one of them could have shortened the intrusion. CloudTrail showed unusual IAM calls — role assumption chains that no human workflow performs. GuardDuty (AWS's managed threat-detection service) raised findings on the suspicious API behavior. Runtime sensors flagged the attacker's tooling inside Fargate tasks. This is exactly the CS-04 plus CS-03 combination from Section 5: identity events first, resource abuse second.</p>
+    </div>
+    <div class="card">
+      <h3>Containment and eradication</h3>
+      <p>Containment meant revoking the assumed roles and credentials and isolating the affected tasks and accounts, so the attacker's identity stopped working. Eradication required removing the backdoor tooling — the stealer scripts planted in Lambda and EKS (Amazon's managed Kubernetes service) environments — and rotating every secret the compromised workloads could read. In cloud intrusions, credential rotation is the eradication step that matters most.</p>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Recovery and impact</h3>
+      <p>Recovery focused on three things. The team re-issued access with least privilege. They hardened Terraform state (the map of the estate) so it could not be read so easily again. And they extended audit coverage across all regions and accounts, so the next role chain would be visible. The reported impact combined attempted proprietary data theft with the risk of large compute bills. The SCARLETEEL goal set is data first, resource abuse second — and both arrive through the same stolen credentials.</p>
+    </div>
+    <div class="card">
+      <h3>Team response and communication</h3>
+      <p>Sysdig's team worked the case as a joint investigation with the victim and published technical detail so other teams could hunt the same pattern. The communication lesson for your IR plan: when cloud credentials are stolen, your provider relationships matter. A fast abuse notice to AWS and a clear internal timeline keep the response ordered while keys rotate and accounts re-harden.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Lessons learned</h3>
+    <ul class="checklist">
+      <li>Credentials inside containers are high-value targets for attackers — use short-lived, role-based tokens, never static keys in images or environment files.</li>
+      <li>The "enumerate first, monetize later" pattern means early IAM anomalies are your cheapest detection point, before any abuse starts.</li>
+      <li>Multi-account blast radius is real: one workload credential reached two accounts through role chains.</li>
+      <li>Terraform state is an infrastructure map — restrict who can read it and monitor access to it.</li>
+      <li>Join runtime telemetry with audit telemetry: Fargate abuse was invisible to CloudTrail alone, and the role chain was invisible to runtime tools alone.</li>
+      <li>Data theft and resource hijacking share one entry path; closing it defends against both at once.</li>
+    </ul>
+  </div>
+
+  <div class="callout note">
+    <p class="callout-label">The 2024 evolution: LLMjacking</p>
+    <p>One year later, Lacework documented the same pattern aimed at a new resource: AI models. In the LLMjacking cases, attackers exploited SysAid servers (CVE-2023-47246) to steal cloud OAuth tokens. With those stolen cloud credentials they queried cloud-hosted language models through a reverse proxy. The "AI access" was resold on underground markets, and the victim paid for every token. In the documented case the bill passed 46,000 US dollars per day while the abuse stayed hidden. SCARLETEEL showed credentials driving mining and data theft; LLMjacking showed the same credentials driving token spend. The detection answer is the same identity-first approach — CS-03 and CS-04 in Section 5.</p>
+  </div>
+</section>
+
+<!-- ================= SECTION 7 ================= -->
+<section class="sec" id="s7-mitigation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2>Mitigation and Defense</h2></div>
+  <p class="sec-intro">ATT&amp;CK's own mitigation note for the parent technique is honest: it "cannot be easily mitigated with preventive controls since it is based on the abuse of system features." For cloud services the practical answer has three layers. Make credential theft hard. Make service enablement easy to see. And make the spend stop fast.</p>
+
+  <div class="grid3">
+    <div class="card">
+      <h4>Policy &amp; people</h4>
+      <ul>
+        <li>Keep a sender inventory: every SES identity, SendGrid key, and Twilio number has a named owner.</li>
+        <li>Service enablement needs a change ticket — make "who can verify a sender" a written rule.</li>
+        <li>Train developers that API keys are credentials: no keys in repos, containers, or chat messages.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Identity</h4>
+      <ul>
+        <li>MFA and phishing-resistant login on every console and admin account — no exceptions.</li>
+        <li>Replace static API keys with short-lived role credentials wherever the platform allows it.</li>
+        <li>Least-privilege IAM: mail senders cannot read storage; AI roles cannot create identities.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Messaging services</h4>
+      <ul>
+        <li>Keep new SES accounts in sandbox until a review passes; never skip warm-up.</li>
+        <li>Set SPF, DKIM, and DMARC correctly; these standards stop others sending as your domain. DMARC tells receivers what to do when the checks fail. Watch reputation dashboards weekly.</li>
+        <li>Give dedicated (low-quota) keys to each product; one stolen key should not open every queue.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Cloud &amp; AI config</h4>
+      <ul>
+        <li>SCPs (service control policies — AWS-wide rule sets that limit what identities may do) or tenant policy that denies humans <code>ses:VerifyEmailIdentity</code> and <code>sns:CreateTopic</code> by default.</li>
+        <li>Model access on Bedrock or Vertex behind approval; per-principal token budgets.</li>
+        <li>CloudTrail and admin audit logging on everywhere, shipped to an immutable store.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Logging &amp; monitoring</h4>
+      <ul>
+        <li>Deploy the five Sigma rules from Section 5.5 with their listed log sources.</li>
+        <li>Budget alarms at 50/80/100 percent routed to the SOC, not just to finance.</li>
+        <li>Route provider abuse notices and Fraud Guard alerts into the SIEM as incidents.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Response</h4>
+      <ul>
+        <li>Keep a "sender compromise" runbook: disable keys, suspend identities, purge queues.</li>
+        <li>Save the provider abuse-desk contact and escalation path before you need it.</li>
+        <li>Rehearse the "bill spike" scenario quarterly as a tabletop with finance in the room.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Home and small-office users</h3>
+      <p>You use these services too — a free SendGrid plan, a Twilio trial, a personal AWS account. Five practical steps cut most of the risk:</p>
+      <ol>
+        <li>Turn on MFA everywhere, starting with your email and cloud consoles.</li>
+        <li>Never paste API keys into chat, screenshots, or AI prompts.</li>
+        <li>Delete keys you no longer use — an old key in a public repository is how most hijacks start.</li>
+        <li>Set a spending limit or budget alarm on every cloud account you own.</li>
+        <li>If your mail suddenly bounces or friends report strange links "from you", treat it as account compromise: change passwords and check connected apps.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>Response-ready habits</h3>
+      <p>Keep an emergency runbook for three alarms: "sender reputation drop", "messaging bill spike", and "AI token spike". Each runbook says who to call, which keys to disable first, how to suspend a sender identity, and where the provider abuse mailbox lives. Practice one runbook per quarter. The provider throttle and the blocklist clock start immediately — minutes of hesitation become weeks of poor deliverability.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Prioritized actions</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Route budget alarms and provider abuse notices into the SOC channel</td><td>Low</td><td>Cloud platform + SOC</td><td>Very high for CS-01/02/03 — the costs stop in minutes, not days</td></tr>
+        <tr><td>2</td><td>Onboard SES, SNS, SendGrid, Twilio, and admin audit logs to the SIEM; deploy the five Sigma rules</td><td>Medium</td><td>Detection engineering</td><td>High — closes the visibility gap that makes hijacks invisible</td></tr>
+        <tr><td>3</td><td>Replace static API keys with short-lived credentials; rotate the rest on a 90-day clock</td><td>Medium</td><td>Platform teams</td><td>High — removes the attacker's favorite entry (CS-01/03)</td></tr>
+        <tr><td>4</td><td>SCP/policy guardrails: deny sender verification and topic creation to humans; approval flow for quota increases</td><td>Low</td><td>Cloud platform team</td><td>High — kills the CS-04 enablement leg</td></tr>
+        <tr><td>5</td><td>Sandbox-first sender onboarding with warm-up and reputation review</td><td>Low-Medium</td><td>Messaging team</td><td>Medium — limits blast radius of a new sender identity</td></tr>
+        <tr><td>6</td><td>Token budgets and model-access approval for every AI principal</td><td>Medium</td><td>AI platform team</td><td>High for CS-03 — caps the worst-case bill</td></tr>
+        <tr><td>7</td><td>Quarterly tabletop: "hijacked mailer" scenario with finance and comms</td><td>Low</td><td>Security manager</td><td>Medium — makes the real response fast and ordered</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= SECTION 8 ================= -->
+<section class="sec" id="s8-mistakes">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2>Common Mistakes and Best Practices</h2></div>
+  <p class="sec-intro">These ten mistakes come from real SOC reviews of SaaS and cloud abuse detections. Each one lists the symptom you will notice, the root cause, the fix, and the habit that prevents it from returning.</p>
+
+  <div class="grid2">
+    <div class="card"><h4>1. Owning the bill but not the abuse mailbox</h4>
+      <ul><li><strong>Symptom:</strong> the provider throttles the account before anyone inside the company knows abuse is running.</li>
+      <li><strong>Root cause:</strong> <code>abuse@</code> points to an unmonitored alias; provider notices sit unread for days.</li>
+      <li><strong>Fix:</strong> point provider contact emails at a monitored SOC channel and add them to the alert routing.</li>
+      <li><strong>Prevention:</strong> the sender inventory (Section 7) lists the abuse contact for every provider.</li></ul></div>
+    <div class="card"><h4>2. No SaaS admin audit trail in the SIEM</h4>
+      <ul><li><strong>Symptom:</strong> "we cannot say who verified that sender identity" during the incident review.</li>
+      <li><strong>Root cause:</strong> CloudTrail exists but M365, Workspace, and SES events never reach the SIEM.</li>
+      <li><strong>Fix:</strong> onboard the admin audit exports (Table in Section 4) and deploy the CS-04 rule.</li>
+      <li><strong>Prevention:</strong> new-SaaS onboarding checklist includes "audit log source added to SIEM".</li></ul></div>
+    <div class="card"><h4>3. Long-lived static API keys everywhere</h4>
+      <ul><li><strong>Symptom:</strong> one leaked key from an old repository unlocks mail, storage, and AI at once.</li>
+      <li><strong>Root cause:</strong> keys created years ago, never rotated, shared across projects.</li>
+      <li><strong>Fix:</strong> inventory all keys, rotate, and move workloads to short-lived role credentials.</li>
+      <li><strong>Prevention:</strong> secret scanning in repos plus a 90-day key age alarm.</li></ul></div>
+    <div class="card"><h4>4. Treating sender reputation as marketing's job</h4>
+      <ul><li><strong>Symptom:</strong> campaigns fail "randomly"; blocklist entries appear with no security ticket.</li>
+      <li><strong>Root cause:</strong> reputation dashboards have no SOC owner, so abuse signals die in another team's inbox.</li>
+      <li><strong>Fix:</strong> give the SOC read access to SES/SendGrid reputation and complaint dashboards and alert on drops.</li>
+      <li><strong>Prevention:</strong> shared metric review: deliverability in the SOC's weekly report.</li></ul></div>
+    <div class="card"><h4>5. Alerting on every single send event</h4>
+      <ul><li><strong>Symptom:</strong> thousands of low-value alerts; analysts auto-close everything.</li>
+      <li><strong>Root cause:</strong> rule matches each legitimate send; no volume or identity context.</li>
+      <li><strong>Fix:</strong> require the two-signal join — unapproved principal plus volume above baseline (CS-01 rule).</li>
+      <li><strong>Prevention:</strong> every rule ships with its false-positive budget documented.</li></ul></div>
+    <div class="card"><h4>6. Trusting provider defaults for alarms</h4>
+      <ul><li><strong>Symptom:</strong> a hijack runs for a week; no internal alert fired even once.</li>
+      <li><strong>Root cause:</strong> provider default thresholds (or none) instead of your own budget and anomaly alarms.</li>
+      <li><strong>Fix:</strong> set budget alarms at 50/80/100 percent and cost anomaly alerts per service.</li>
+      <li><strong>Prevention:</strong> alarm setup is part of account creation, not a later task.</li></ul></div>
+    <div class="card"><h4>7. No sender inventory (shadow senders)</h4>
+      <ul><li><strong>Symptom:</strong> during triage nobody knows which team owns <code>no-reply7@</code> or that SendGrid subuser.</li>
+      <li><strong>Root cause:</strong> identities and keys were created ad hoc over years and never cataloged.</li>
+      <li><strong>Fix:</strong> quarterly review that lists every identity, key, owner, and quota; delete orphans.</li>
+      <li><strong>Prevention:</strong> new senders require a ticket — the inventory updates automatically.</li></ul></div>
+    <div class="card"><h4>8. Ignoring AI spend as a security signal</h4>
+      <ul><li><strong>Symptom:</strong> LLMjacking discovered by finance, weeks after the first stolen-token query.</li>
+      <li><strong>Root cause:</strong> token meters feed only cost dashboards; no security alert on spend or off-hours curves.</li>
+      <li><strong>Fix:</strong> deploy the CS-03 rule and route the AI gateway's usage rollups to the SIEM.</li>
+      <li><strong>Prevention:</strong> every AI principal gets a token budget and an owning team.</li></ul></div>
+    <div class="card"><h4>9. Skipping warm-up and sandbox reviews</h4>
+      <ul><li><strong>Symptom:</strong> legitimate new product mail bounces at launch — or a hijacked identity goes straight to 100k sends.</li>
+      <li><strong>Root cause:</strong> production sending rights granted at creation, with no review step.</li>
+      <li><strong>Fix:</strong> keep new identities in sandbox until volume and content are reviewed.</li>
+      <li><strong>Prevention:</strong> the sender-onboarding ticket includes the sandbox exit checklist.</li></ul></div>
+    <div class="card"><h4>10. Rules never tested</h4>
+      <ul><li><strong>Symptom:</strong> a rule "works" for years — because it has never matched anything, including real attacks.</li>
+      <li><strong>Root cause:</strong> no validation pipeline; field names drifted after the cloud add-on for Splunk was upgraded.</li>
+      <li><strong>Fix:</strong> replay the Section 3 lab drill monthly; review rules with zero matches in 180 days.</li>
+      <li><strong>Prevention:</strong> detection CI runs a synthetic SES event against each rule on change.</li></ul></div>
+  </div>
+
+  <div class="card">
+    <h3>Operating rhythm</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Daily</th><th>Weekly</th><th>Monthly</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Review CS-01 to CS-05 alerts with the two-signal rule; check the budget dashboard for messaging and AI; confirm the abuse mailbox has zero unread provider notices.</td>
+          <td>Walk the sender inventory for changes; check reputation and complaint graphs per identity; scan repos and containers for new exposed keys.</td>
+          <td>Replay the lab drill against all five rules; re-baseline send and token thresholds; re-score the campaign list from 5.2 and refresh the watchlists.</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= SECTION 9 ================= -->
+<section class="sec" id="s9-cheatsheet">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2>Cheat Sheet and Quick Reference</h2></div>
+  <p class="sec-intro">The one-screen version for busy shifts. Print it or keep it open beside your SIEM.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Key facts</h3>
+      <dl class="kv">
+        <dt>Technique</dt><dd>T1496.004 — Cloud Service Hijacking (Impact, SaaS)</dd>
+        <dt>Forms</dt><dd>Mass email spam/phishing · mass SMS · LLMjacking of cloud AI · service enablement abuse · trial farming</dd>
+        <dt>Named services</dt><dd>AWS SES · AWS SNS · SendGrid · Twilio · cloud AI model platforms</dd>
+        <dt>Fastest signals</dt><dd>New verified sender identity · send or token spike with a first-seen key · provider abuse notice</dd>
+        <dt>Golden rule</dt><dd>Identity first: catch the enablement leg (CS-04) before the first abusive message is sent</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h3>Top detections</h3>
+      <ol>
+        <li><strong>CS-01:</strong> SES send primitives from an unapproved principal (Sigma 5.5.1)</li>
+        <li><strong>CS-02:</strong> new IAM user or topic plus publish burst from one source IP (Sigma 5.5.2)</li>
+        <li><strong>CS-03:</strong> AI model invocations outside approved workloads, proxy user agents (Sigma 5.5.3)</li>
+        <li><strong>CS-04:</strong> SES enablement, mail-type change, or quota increase requests (Sigma 5.5.4)</li>
+        <li><strong>CS-05:</strong> disposable-domain or bot signups at anomalous velocity (Sigma 5.5.5)</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Response checklist</h3>
+    <ul class="checklist">
+      <li>Scope: which identities, keys, and services show the same indicator (source IP, access key, sender identity)?</li>
+      <li>Join: confirm the volume signal (sends, tokens) with the identity signal (new key or admin) before declaring an incident.</li>
+      <li>Contain: disable the keys, suspend the sender identity, purge queued messages — costs grow every minute.</li>
+      <li>Preserve: export CloudTrail events, dashboards, and provider abuse emails before cleanup or history expiry.</li>
+      <li>Eradicate: rotate every credential the identity could reach; remove new identities, topics, and rules the attacker created.</li>
+      <li>Notify: answer the provider abuse desk, request complaint samples, and file any GDPR/HIPAA/NIS2 obligations in time.</li>
+      <li>Verify: hunt the same indicators estate-wide for 30 days; check storage and data services for follow-on theft (SCARLETEEL pattern).</li>
+      <li>Improve: add the missed log source, tune the rule that should have fired, and update the sender inventory.</li>
+    </ul>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Official links</h3>
+      <ul class="links-list">
+        <li><span class="lt">THIS TECHNIQUE</span><a href="https://attack.mitre.org/techniques/T1496/004/">T1496.004 — Cloud Service Hijacking</a></li>
+        <li><span class="lt">PARENT</span><a href="https://attack.mitre.org/techniques/T1496/">T1496 — Resource Hijacking</a></li>
+        <li><span class="lt">SIBLING</span><a href="https://attack.mitre.org/techniques/T1496/001/">T1496.001 — Compute Hijacking</a></li>
+        <li><span class="lt">SIBLING</span><a href="https://attack.mitre.org/techniques/T1496/002/">T1496.002 — Bandwidth Hijacking</a></li>
+        <li><span class="lt">SIBLING</span><a href="https://attack.mitre.org/techniques/T1496/003/">T1496.003 — SMS Pumping</a></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Related techniques in the chain</h3>
+      <ul class="links-list">
+        <li><span class="lt">ENTRY</span><a href="https://attack.mitre.org/techniques/T1078/004/">T1078.004 — Valid Accounts: Cloud Accounts</a></li>
+        <li><span class="lt">ENTRY</span><a href="https://attack.mitre.org/techniques/T1528/">T1528 — Steal Application Access Token</a></li>
+        <li><span class="lt">ENTRY</span><a href="https://attack.mitre.org/techniques/T1190/">T1190 — Exploit Public-Facing Application</a></li>
+        <li><span class="lt">ESCALATION</span><a href="https://attack.mitre.org/techniques/T1098/001/">T1098.001 — Account Manipulation: Additional Cloud Roles</a></li>
+        <li><span class="lt">FOLLOW-ON</span><a href="https://attack.mitre.org/techniques/T1530/">T1530 — Data from Cloud Storage Object</a></li>
+      </ul>
+    </div>
+  </div>
+</section>
+<!-- ==== MAIN-CONTENT:END ==== -->
+</main>
+</div>
+
+<button type="button" class="fab fab-toc" id="mobileTocBtn" aria-expanded="false" aria-controls="toc">Contents</button>
+<button type="button" class="fab fab-top" id="backToTop" aria-label="Back to top">&#8593;</button>
+<div class="backdrop" id="backdrop"></div>
+
+<script>
+(function () {
+  'use strict';
+  var d = document;
+  var root = d.documentElement;
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ---------- theme toggle (single control; honors pre-paint choice) ---------- */
+  var themeBtn = d.getElementById('themeToggle');
+  function applyTheme(t) {
+    root.setAttribute('data-theme', t);
+    try { localStorage.setItem('atk-theme', t); } catch (e) {}
+    if (themeBtn) themeBtn.textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+    d.dispatchEvent(new CustomEvent('themechange'));
+  }
+  if (themeBtn) {
+    themeBtn.textContent = root.getAttribute('data-theme') === 'dark' ? 'Light mode' : 'Dark mode';
+    themeBtn.addEventListener('click', function () {
+      applyTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  /* ---------- TOC built from real headings (cannot drift) ---------- */
+  var tocList = d.getElementById('tocList');
+  function buildTOC() {
+    if (!tocList) return;
+    var secs = d.querySelectorAll('main#main-content > section.sec');
+    var frag = d.createDocumentFragment();
+    secs.forEach(function (sec) {
+      var h2 = sec.querySelector('.sec-head h2');
+      if (!h2) return;
+      var li = d.createElement('li');
+      var a = d.createElement('a');
+      a.href = '#' + sec.id;
+      a.textContent = (sec.querySelector('.sec-num') ? sec.querySelector('.sec-num').textContent + '. ' : '') + h2.textContent;
+      li.appendChild(a);
+      frag.appendChild(li);
+      sec.querySelectorAll('h3.sub-head[id]').forEach(function (h3) {
+        var sub = d.createElement('li');
+        var sa = d.createElement('a');
+        sa.href = '#' + h3.id;
+        sa.className = 'sub';
+        var num = h3.querySelector('.sub-num');
+        sa.textContent = (num ? num.textContent + ' ' : '') + h3.textContent.replace(num ? num.textContent : '', '').trim();
+        sub.appendChild(sa);
+        frag.appendChild(sub);
+      });
+    });
+    tocList.innerHTML = '';
+    tocList.appendChild(frag);
+  }
+  buildTOC();
+
+  /* ---------- scrollspy ---------- */
+  var links = {};
+  function cacheLinks() {
+    links = {};
+    tocList.querySelectorAll('a').forEach(function (a) {
+      links[a.getAttribute('href').slice(1)] = a;
+    });
+  }
+  cacheLinks();
+  var setActive = function (id) {
+    Object.keys(links).forEach(function (k) { links[k].classList.toggle('active', k === id); });
+  };
+  function watchSpy() {
+    var targets = [];
+    d.querySelectorAll('main#main-content > section.sec').forEach(function (s) { targets.push(s); });
+    d.querySelectorAll('main#main-content h3.sub-head[id]').forEach(function (h) { targets.push(h); });
+    if (!('IntersectionObserver' in window)) return;
+    var current = null;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) current = en.target.id;
+      });
+      if (current) setActive(current);
+    }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+    targets.forEach(function (t) { io.observe(t); });
+  }
+  watchSpy();
+
+  /* ---------- reading progress ---------- */
+  var fill = d.getElementById('progressFill');
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      var h = root.scrollHeight - window.innerHeight;
+      var p = h > 0 ? Math.min(1, window.scrollY / h) : 0;
+      if (fill) fill.style.width = (p * 100).toFixed(2) + '%';
+      var top = d.getElementById('backToTop');
+      if (top) top.classList.toggle('show', window.scrollY > 600);
+      ticking = false;
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  /* ---------- back to top ---------- */
+  var btt = d.getElementById('backToTop');
+  if (btt) btt.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: reduced.matches ? 'auto' : 'smooth' });
+  });
+
+  /* ---------- mobile contents overlay (same sidebar, off-canvas) ---------- */
+  var toc = d.getElementById('toc');
+  var openBtn = d.getElementById('mobileTocBtn');
+  var backdrop = d.getElementById('backdrop');
+  var closeBtn = d.getElementById('tocClose');
+  function setToc(open) {
+    d.body.classList.toggle('toc-open', open);
+    if (openBtn) openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && closeBtn) closeBtn.focus();
+  }
+  if (openBtn) openBtn.addEventListener('click', function () { setToc(!d.body.classList.contains('toc-open')); });
+  if (backdrop) backdrop.addEventListener('click', function () { setToc(false); });
+  if (closeBtn) closeBtn.addEventListener('click', function () { setToc(false); focusMain(); });
+  function focusMain() {
+    var m = d.getElementById('main-content');
+    if (m) m.focus({ preventScroll: false });
+  }
+  d.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && d.body.classList.contains('toc-open')) { setToc(false); if (openBtn) openBtn.focus(); }
+  });
+  tocList.addEventListener('click', function (e) {
+    if (e.target.closest('a') && d.body.classList.contains('toc-open')) setToc(false);
+  });
+
+  /* ---------- copy buttons ---------- */
+  d.addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    var pre = btn.closest('.codeblock').querySelector('pre');
+    var text = pre ? pre.innerText : '';
+    function done() {
+      btn.textContent = 'Copied';
+      btn.classList.add('ok');
+      setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () { fallback(); });
+    } else { fallback(); }
+    function fallback() {
+      var ta = d.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      d.body.appendChild(ta);
+      ta.select();
+      try { d.execCommand('copy'); done(); } catch (err) {}
+      d.body.removeChild(ta);
+    }
+  });
+
+  /* ============================================================
+     Simulation engine (shared by all technique guide pages)
+     ============================================================ */
+  var SIM_CONFIG = {
+  // ==== SIM-CONFIG:BEGIN ====
+  meta: { title: "Scenario: hijacked cloud keys turn a mail platform into a spam machine" },
+  nodes: [
+    { id: "attacker", label: "Attacker", sub: "external criminal", type: "attacker", x: 0.07, y: 0.50,
+      tip: "The attacker works from outside the company. They never install malware here - stolen credentials are their only tool." },
+    { id: "mail", label: "Phishing Mail", sub: "credential phish", type: "net", x: 0.27, y: 0.15,
+      tip: "A fake security notice that leads to a look-alike login page. The developer who enters the key hands over the cloud account." },
+    { id: "keys", label: "Stolen API Keys", sub: "attacker stash", type: "database", x: 0.27, y: 0.82,
+      tip: "Long-lived access keys collected from many victims. They create no logs until the first API call - the silent moment of the attack." },
+    { id: "console", label: "SES / SNS Console", sub: "your cloud tenant", type: "cloud", x: 0.50, y: 0.46,
+      tip: "The victim's cloud tenant. Once the attacker verifies a sender identity here, every abusive message leaves with your good reputation." },
+    { id: "targets", label: "Spam Targets", sub: "recipients worldwide", type: "user", x: 0.80, y: 0.13,
+      tip: "The people receiving the phishing wave. Some will report spam - and those reports are what burn the sender reputation." },
+    { id: "reputation", label: "Reputation", sub: "provider abuse systems", type: "net", x: 0.76, y: 0.52,
+      tip: "The provider's abuse and reputation systems. Complaint rates, bounce spikes, and blocklist entries appear here first." },
+    { id: "soc", label: "SOC", sub: "defenders", type: "defender", x: 0.50, y: 0.72,
+      tip: "The security team. They join cloud audit logs, sending dashboards, and abuse reports into one case." }
+  ],
+  flowsBase: [ ["mail", "keys"], ["keys", "console"], ["console", "soc"], ["console", "reputation"] ],
+  steps: [
+    {
+      title: "1. Phish steals a cloud key", ms: 7000,
+      caption: "The attacker sends a fake security notice to a developer and harvests a long-lived AWS access key from the fake login page.",
+      hint: "Mail gateway logs record the look-alike domain, but it is new and has no reputation yet. No cloud signal exists.",
+      flows: [ { from: "attacker", to: "mail", color: "danger", label: "credential phish", n: 4 } ],
+      states: { attacker: "active", mail: "active" },
+      evid: [ { node: "soc", text: "mail log: look-alike domain clicked" } ], focus: null
+    },
+    {
+      title: "2. Keys parked for later", ms: 6500,
+      caption: "The stolen key sits in the attacker's stash next to hundreds of others collected from many victims.",
+      hint: "The key logs nothing until first use. If no secret scanning caught it, this silent pause is the best moment to catch the phish instead.",
+      flows: [ { from: "mail", to: "keys", color: "danger", label: "stolen keys", n: 3 } ],
+      states: { keys: "compromised" },
+      evid: [], focus: ["keys"]
+    },
+    {
+      title: "3. Sender identity verified", ms: 8000,
+      caption: "The attacker uses the key for the first time and verifies a new email identity in SES, ready to send from your domain.",
+      hint: "CloudTrail records CreateEmailIdentity and PutAccountDetails from a new IP and a new user agent - the first real cloud signal.",
+      flows: [ { from: "keys", to: "console", color: "warning", label: "first use of key", n: 3 } ],
+      states: { console: "compromised" },
+      evid: [ { node: "soc", text: "CloudTrail: CreateEmailIdentity 03:12" } ], focus: ["keys", "console"]
+    },
+    {
+      title: "4. Quotas raised, service warmed", ms: 7000,
+      caption: "The attacker requests a sending-quota increase so the platform can carry a mass phishing wave.",
+      hint: "Audit logs record RequestServiceQuotaIncrease. Enablement events like this are rare, so the CS-04 rule in Section 5 is the early signal.",
+      flows: [ { from: "keys", to: "console", color: "warning", label: "quota increase", n: 2 } ],
+      states: {},
+      evid: [ { node: "soc", text: "quota request: 50k -> 1M per day" } ], focus: null
+    },
+    {
+      title: "5. SendEmail burst", ms: 9000,
+      caption: "Hundreds of thousands of phishing emails leave through the company's trusted mail setup.",
+      hint: "SES and SendGrid dashboards spike; bounce and complaint rates climb. SPF and DKIM still pass, so the mail looks legitimate. A budget alarm set at 80 percent may fire here.",
+      flows: [ { from: "console", to: "targets", color: "danger", label: "SendEmail burst", n: 6 } ],
+      states: { targets: "active" },
+      evid: [ { node: "soc", text: "SES dashboard: 184k sends in 40 min (all keys)" } ], focus: ["console", "targets"]
+    },
+    {
+      title: "6. Reputation damaged", ms: 8000,
+      caption: "Recipients report spam; the provider throttles the account and writes to the abuse contact.",
+      hint: "Provider abuse mail and reputation alerts arrive. If nobody owns that mailbox, the remaining messages keep flowing.",
+      flows: [ { from: "console", to: "reputation", color: "warning", label: "spam wave", n: 4 }, { from: "reputation", to: "console", color: "danger", label: "abuse report", n: 2 } ],
+      states: { reputation: "flagged" },
+      evid: [ { node: "soc", text: "provider: complaint rate 8.4%" } ], focus: ["reputation", "console", "targets"]
+    },
+    {
+      title: "7. SOC joins the signals", ms: 8000,
+      caption: "The SOC joins cloud audit anomalies, the sending spike, and the abuse report into one high-severity case.",
+      hint: "The CS-01 plus CS-04 correlation from Section 5 raises the case; the stolen key is disabled within minutes.",
+      flows: [ { from: "console", to: "soc", color: "accent", label: "audit anomalies", n: 3 } ],
+      states: { soc: "flagged" },
+      evid: [ { node: "soc", text: "SIEM: CS-01 + CS-04 -> case" } ], focus: ["soc", "console"]
+    },
+    {
+      title: "8. Containment and hardening", ms: 8000,
+      caption: "The SOC revokes the stolen keys, deletes the verified identity, purges queued messages, and arms budget alarms.",
+      hint: "Post-incident: policy denies humans sender verification, keys become short-lived, and the abuse mailbox is owned by the SOC.",
+      flows: [ { from: "soc", to: "console", color: "success", label: "containment", n: 3 } ],
+      states: { console: "secure", keys: "ok", reputation: "ok", soc: "ok", targets: "ok", mail: "ok", attacker: "ok" },
+      evid: [ { node: "soc", text: "keys revoked, identity deleted" } ], focus: ["soc", "console"]
+    }
+  ]
+  // ==== SIM-CONFIG:END ====
+  };
+
+  var sim = (function () {
+    var cfg = typeof SIM_CONFIG !== 'undefined' ? SIM_CONFIG : { nodes: [], flowsBase: [], steps: [] };
+    var canvas = d.getElementById('simCanvas');
+    var stage = d.getElementById('simStage');
+    if (!canvas || !cfg.nodes.length) return null;
+    var ctx = canvas.getContext('2d');
+    var W = 0, H = 0, dpr = 1;
+    var step = 0, playing = false, tIn = 0, last = 0, speed = 1;
+    var states = {}, evids = [];
+    var tip = d.getElementById('simTip');
+    var capEl = d.getElementById('simCaption');
+    var capT = d.getElementById('simStepTitle');
+    var hintEl = d.getElementById('simHintText');
+    var badge = d.getElementById('simStepBadge');
+    var chips = d.getElementById('simChips');
+    var playBtn = d.getElementById('simPlay');
+    var pauseBtn = d.getElementById('simPause');
+    var restartBtn = d.getElementById('simRestart');
+    var speedSel = d.getElementById('simSpeed');
+    var colors = {};
+
+    function readColors() {
+      var cs = getComputedStyle(root);
+      ['bg','surface','surface-2','elevated','text','muted','border','border-strong',
+       'accent','accent-2','violet','success','warning','danger','high','low'].forEach(function (k) {
+        colors[k] = cs.getPropertyValue('--' + k).trim() || '#888';
+      });
+    }
+    readColors();
+    d.addEventListener('themechange', readColors);
+
+    function resize() {
+      var w = stage.clientWidth;
+      var h = Math.max(300, Math.min(460, w * 0.55));
+      dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.height = h + 'px';
+      W = w; H = h;
+      draw();
+    }
+    if ('ResizeObserver' in window) { new ResizeObserver(resize).observe(stage); }
+    window.addEventListener('resize', resize);
+
+    function nodeById(id) {
+      for (var i = 0; i < cfg.nodes.length; i++) if (cfg.nodes[i].id === id) return cfg.nodes[i];
+      return null;
+    }
+    function applyStep(i, reset) {
+      var st = cfg.steps[i];
+      if (!st) return;
+      if (reset) { states = {}; evids = []; }
+      Object.keys(st.states || {}).forEach(function (k) { states[k] = st.states[k]; });
+      (st.evid || []).forEach(function (ev) {
+        var dup = evids.some(function (e) { return e.node === ev.node && e.text === ev.text; });
+        if (!dup) evids.push(ev);
+      });
+      if (capT) capT.textContent = 'Step ' + (i + 1) + ' — ' + st.title.replace(/^\d+\.\s*/, '');
+      if (capEl) capEl.textContent = st.caption;
+      if (hintEl) hintEl.textContent = st.hint;
+      if (badge) badge.textContent = 'Step ' + (i + 1) + ' of ' + cfg.steps.length;
+      if (chips) {
+        chips.querySelectorAll('.chip-step').forEach(function (c, j) {
+          c.classList.toggle('active', j === i);
+          c.setAttribute('aria-pressed', j === i ? 'true' : 'false');
+        });
+      }
+    }
+    function gotoStep(i) {
+      if (i < 0 || i >= cfg.steps.length) return;
+      var wasPlaying = playing;
+      step = i; tIn = 0;
+      applyStep(i, true);
+      playing = wasPlaying && i < cfg.steps.length - 1;
+      draw();
+    }
+    function buildChips() {
+      if (!chips) return;
+      cfg.steps.forEach(function (st, i) {
+        var b = d.createElement('button');
+        b.type = 'button';
+        b.className = 'chip-step';
+        b.textContent = (i + 1);
+        b.title = st.title;
+        b.setAttribute('aria-label', 'Jump to step ' + (i + 1) + ': ' + st.title);
+        b.addEventListener('click', function () { gotoStep(i); });
+        chips.appendChild(b);
+      });
+    }
+    buildChips();
+    applyStep(0, true);
+
+    if (playBtn) playBtn.addEventListener('click', function () {
+      if (step >= cfg.steps.length - 1 && !playing) { step = 0; tIn = 0; applyStep(0, true); }
+      playing = true; last = performance.now(); requestAnimationFrame(loop);
+    });
+    if (pauseBtn) pauseBtn.addEventListener('click', function () { playing = false; });
+    if (restartBtn) restartBtn.addEventListener('click', function () { gotoStep(0); });
+    if (speedSel) speedSel.addEventListener('change', function () { speed = parseFloat(speedSel.value) || 1; });
+
+    function loop(now) {
+      if (!playing) return;
+      var dt = Math.min(120, now - last); last = now;
+      tIn += dt * speed;
+      var dur = (cfg.steps[step].ms || 7000) * (reduced.matches ? 0.55 : 1);
+      if (tIn >= dur) {
+        if (step < cfg.steps.length - 1) {
+          step++; tIn = 0; applyStep(step, false);
+        } else {
+          playing = false; draw(); return;
+        }
+      }
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function rr(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    function pos(n) { return { x: n.x * W, y: n.y * H }; }
+    function stateColor(s) {
+      return s === 'compromised' ? colors.danger : s === 'flagged' ? colors.warning :
+             s === 'secure' ? colors.success : s === 'active' ? colors.accent : colors['border-strong'];
+    }
+    function drawGlyph(type, x, y, c, a) {
+      ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 1.6 * a; ctx.globalAlpha = a;
+      var s = 9;
+      if (type === 'attacker') {
+        ctx.beginPath(); ctx.moveTo(x - s, y + s * 0.7); ctx.lineTo(x - s * 0.6, y - s * 0.8);
+        ctx.lineTo(x + s * 0.6, y - s * 0.8); ctx.lineTo(x + s, y + s * 0.7); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - s * 1.4, y + s * 1.1); ctx.lineTo(x + s * 1.4, y + s * 1.1); ctx.stroke();
+      } else if (type === 'server') {
+        for (var i = 0; i < 3; i++) { ctx.strokeRect(x - s, y - s + i * (s * 0.75), s * 2, s * 0.55);
+          ctx.fillRect(x + s * 0.45, y - s + i * (s * 0.75) + s * 0.16, s * 0.35, s * 0.22); }
+      } else if (type === 'cloud') {
+        ctx.beginPath();
+        ctx.arc(x - s * 0.5, y + s * 0.2, s * 0.55, Math.PI * 0.5, Math.PI * 1.5);
+        ctx.arc(x, y - s * 0.25, s * 0.62, Math.PI, Math.PI * 1.9);
+        ctx.arc(x + s * 0.6, y + s * 0.15, s * 0.5, Math.PI * 1.4, Math.PI * 0.6);
+        ctx.closePath(); ctx.stroke();
+      } else if (type === 'defender') {
+        ctx.beginPath();
+        ctx.moveTo(x, y - s);
+        ctx.quadraticCurveTo(x + s * 0.95, y - s * 0.55, x + s * 0.95, y + s * 0.05);
+        ctx.quadraticCurveTo(x + s * 0.95, y + s * 0.75, x, y + s);
+        ctx.quadraticCurveTo(x - s * 0.95, y + s * 0.75, x - s * 0.95, y + s * 0.05);
+        ctx.quadraticCurveTo(x - s * 0.95, y - s * 0.55, x, y - s);
+        ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - s * 0.35, y); ctx.lineTo(x - s * 0.05, y + s * 0.35);
+        ctx.lineTo(x + s * 0.45, y - s * 0.35); ctx.stroke();
+      } else if (type === 'phone') {
+        rr(x - s * 0.55, y - s, s * 1.1, s * 2, 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - s * 0.2, y + s * 0.65); ctx.lineTo(x + s * 0.2, y + s * 0.65); ctx.stroke();
+      } else if (type === 'money') {
+        ctx.beginPath(); ctx.arc(x, y, s * 0.85, 0, Math.PI * 2); ctx.stroke();
+        ctx.font = 'bold ' + (s * 1.1) + 'px ' + 'sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('$', x, y + 1);
+      } else if (type === 'net') {
+        ctx.beginPath(); ctx.arc(x, y, s * 0.9, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(x, y, s * 0.9, s * 0.38, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, y - s * 0.9); ctx.lineTo(x, y + s * 0.9); ctx.stroke();
+      } else if (type === 'telco') {
+        ctx.beginPath(); ctx.moveTo(x - s * 0.6, y + s); ctx.lineTo(x, y - s); ctx.lineTo(x + s * 0.6, y + s); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y - s * 1.25, s * 0.45, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      } else { /* container / ci / ai / user / database fallback: box + dot */
+        rr(x - s * 0.8, y - s * 0.8, s * 1.6, s * 1.6, 3); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, s * 0.3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    function drawNode(n, dim) {
+      var p = pos(n);
+      var a = dim ? 0.3 : 1;
+      var st = states[n.id] || 'ok';
+      var bw = Math.max(76, ctx.measureText(n.label).width + 40);
+      var bh = 46;
+      var x = p.x - bw / 2, y = p.y - bh / 2;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = colors.surface;
+      ctx.strokeStyle = stateColor(st);
+      ctx.lineWidth = (st !== 'ok' ? 2.2 : 1.2);
+      rr(x, y, bw, bh, 10); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = colors.text;
+      ctx.font = '600 12px ' + getComputedStyle(root).fontFamily;
+      ctx.fillText(n.label, x + 34, y + 18);
+      ctx.fillStyle = colors.muted;
+      ctx.font = '10px ' + getComputedStyle(root).fontFamily;
+      ctx.fillText(n.sub, x + 34, y + 31);
+      drawGlyph(n.type, x + 17, y + bh / 2, stateColor(st) === colors['border-strong'] ? colors.accent : stateColor(st), a);
+      if (states[n.id] && states[n.id] !== 'ok') {
+        ctx.fillStyle = stateColor(st);
+        ctx.beginPath(); ctx.arc(x + bw - 6, y + 6, 3.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      n._box = { x: x, y: y, w: bw, h: bh };
+    }
+    function drawFlow(f, focus, timeMs) {
+      var a = nodeById(f.from), b = nodeById(f.to);
+      if (!a || !b) return;
+      var p1 = pos(a), p2 = pos(b);
+      var col = colors[f.color] || colors.accent;
+      var dim = focus && focus.indexOf(f.from) < 0 && focus.indexOf(f.to) < 0;
+      ctx.globalAlpha = dim ? 0.15 : 0.85;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      ctx.setLineDash([]);
+      var dx = p2.x - p1.x, dy = p2.y - p1.y, L = Math.hypot(dx, dy) || 1;
+      var ux = dx / L, uy = dy / L;
+      var nx = -uy, ny = ux;
+      var ah = 8;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(p2.x, p2.y);
+      ctx.lineTo(p2.x - ux * ah + nx * ah * 0.5, p2.y - uy * ah + ny * ah * 0.5);
+      ctx.lineTo(p2.x - ux * ah - nx * ah * 0.5, p2.y - uy * ah - ny * ah * 0.5);
+      ctx.closePath(); ctx.fill();
+      if (f.label) {
+        ctx.font = '600 10px ' + getComputedStyle(root).fontFamily;
+        ctx.fillStyle = colors.muted;
+        ctx.globalAlpha = dim ? 0.15 : 0.95;
+        var mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(f.label, mx, my - 4);
+      }
+      var count = f.n || 3;
+      for (var i = 0; i < count; i++) {
+        var t;
+        if (reduced.matches) { t = (i + 0.5) / count; }
+        else {
+          var ph = ((timeMs / 900) * speed + i / count) % 1;
+          t = ph;
+        }
+        var px = p1.x + dx * t, py = p1.y + dy * t;
+        ctx.globalAlpha = dim ? 0.12 : 0.9;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(px, py, 2.6, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    function drawBaseLink(pair, focus) {
+      var a = nodeById(pair[0]), b = nodeById(pair[1]);
+      if (!a || !b) return;
+      var p1 = pos(a), p2 = pos(b);
+      var dim = focus && focus.indexOf(pair[0]) < 0 && focus.indexOf(pair[1]) < 0;
+      ctx.globalAlpha = dim ? 0.08 : 0.35;
+      ctx.strokeStyle = colors['border-strong'];
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    function draw() {
+      var st = cfg.steps[step] || { flows: [], focus: null };
+      var focus = st.focus || null;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = colors['surface-2'];
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = colors.border;
+      ctx.lineWidth = 1;
+      for (var gx = 20; gx < W; gx += 40) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+      for (var gy = 20; gy < H; gy += 40) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      (cfg.flowsBase || []).forEach(function (pair) { drawBaseLink(pair, focus); });
+      var time = performance.now();
+      (st.flows || []).forEach(function (f) { drawFlow(f, focus, time); });
+      cfg.nodes.forEach(function (n) { drawNode(n, focus && focus.indexOf(n.id) < 0); });
+      var socEv = evids.filter(function (e) { return e.node === 'soc'; });
+      var socN = nodeById('soc');
+      if (socN && socEv.length) {
+        var p = pos(socN);
+        ctx.font = '10px ' + getComputedStyle(root).fontFamily;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        var lines = socEv.slice(-3);
+        lines.forEach(function (e, i) {
+          var tw = ctx.measureText(e.text).width + 14;
+          var ty = p.y + 30 + i * 16;
+          ctx.globalAlpha = 0.95;
+          ctx.fillStyle = colors.success;
+          rr(p.x - tw / 2, ty, tw, 13, 6);
+          ctx.globalAlpha = 0.13; ctx.fill();
+          ctx.globalAlpha = 0.95;
+          ctx.strokeStyle = colors.success; ctx.lineWidth = 0.8; ctx.stroke();
+          ctx.fillStyle = colors.success;
+          ctx.fillText(e.text, p.x, ty + 2);
+          ctx.globalAlpha = 1;
+        });
+      }
+      ctx.fillStyle = colors.muted;
+      ctx.font = '10px ' + getComputedStyle(root).fontFamily;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText('attacker space', 10, 8);
+      ctx.textAlign = 'right';
+      ctx.fillText('defender view', W - 10, 8);
+      ctx.textAlign = 'left';
+    }
+
+    /* tooltips: hover + click/tap */
+    function hitTest(mx, my) {
+      for (var i = 0; i < cfg.nodes.length; i++) {
+        var b = cfg.nodes[i]._box;
+        if (b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) return cfg.nodes[i];
+      }
+      return null;
+    }
+    function showTip(n, mx, my) {
+      if (!tip || !n) { if (tip) tip.style.display = 'none'; return; }
+      tip.innerHTML = '<b></b>';
+      tip.firstChild.textContent = n.label;
+      tip.appendChild(d.createTextNode(n.tip));
+      tip.style.display = 'block';
+      var rect = stage.getBoundingClientRect();
+      var tx = Math.min(Math.max(6, mx - rect.left + 12), rect.width - 280);
+      var ty = Math.max(6, my - rect.top - 10);
+      tip.style.left = tx + 'px';
+      tip.style.top = ty + 'px';
+    }
+    canvas.addEventListener('mousemove', function (e) {
+      var r = canvas.getBoundingClientRect();
+      var n = hitTest(e.clientX - r.left, e.clientY - r.top);
+      showTip(n, e.clientX, e.clientY);
+    });
+    canvas.addEventListener('mouseleave', function () { showTip(null, 0, 0); });
+    canvas.addEventListener('click', function (e) {
+      var r = canvas.getBoundingClientRect();
+      var n = hitTest(e.clientX - r.left, e.clientY - r.top);
+      showTip(n, e.clientX, e.clientY);
+    });
+
+    resize();
+    if (!reduced.matches) { playing = true; last = performance.now(); requestAnimationFrame(loop); }
+    return { gotoStep: gotoStep, isPlaying: function () { return playing; } };
+  })();
+})();
+</script>
+</body>
+</html>

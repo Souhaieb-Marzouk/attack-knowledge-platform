@@ -1,0 +1,2313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ==== HEAD-META:BEGIN ==== -->
+<title>T1496.001 Compute Hijacking — ATT&CK Sub-technique Guide</title>
+<meta name="description" content="Beginner-friendly detection engineering guide for MITRE ATT&CK T1496.001 Compute Hijacking: how attackers turn servers, endpoints, containers, and cloud compute into cryptocurrency miners, what it leaves in logs, and how to detect and stop it.">
+<meta name="guide-version" content="2.0">
+<!-- ==== HEAD-META:END ==== -->
+<script>
+(function(){try{var t=localStorage.getItem('atk-theme');if(!t){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+</script>
+<style>
+/* ============================================================
+   Design system — shared by all ATT&CK technique guide pages
+   ============================================================ */
+:root{
+  --bg:#0b0f1a;
+  --surface:#121a2e;
+  --surface-2:#172138;
+  --elevated:#1a2542;
+  --text:#e7edf8;
+  --muted:#9aa8c0;
+  --border:#24314e;
+  --border-strong:#2f4066;
+  --accent:#4f8cff;
+  --accent-2:#22d3ee;
+  --violet:#a78bfa;
+  --success:#34d399;
+  --warning:#fbbf24;
+  --danger:#f87171;
+  --high:#fb923c;
+  --low:#4ade80;
+  --shadow:0 10px 30px rgba(3,10,24,.35);
+  --code-bg:#0d1526;
+  --r-card:14px;
+  --r-ctl:9px;
+  --font-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+  --sidebar-w:264px;
+  --maxw:1280px;
+}
+[data-theme="light"]{
+  --bg:#f3f6fc;
+  --surface:#ffffff;
+  --surface-2:#f5f8ff;
+  --elevated:#e9eefa;
+  --text:#182238;
+  --muted:#5a6a85;
+  --border:#d9e2f2;
+  --border-strong:#c2d0ea;
+  --accent:#2f6fe4;
+  --accent-2:#0891b2;
+  --violet:#7c5ce0;
+  --success:#0d9e6e;
+  --warning:#b45309;
+  --danger:#dc2626;
+  --high:#c2410c;
+  --low:#15803d;
+  --shadow:0 10px 30px rgba(30,50,90,.10);
+  --code-bg:#f6f9ff;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-sans);
+  font-size:16.5px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{line-height:1.25;margin:0 0 .5em}
+h2{font-size:1.72rem;font-weight:750;letter-spacing:-.01em}
+h3{font-size:1.22rem;font-weight:700}
+h4{font-size:1.02rem;font-weight:700}
+p{margin:0 0 1em}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+ul,ol{margin:0 0 1em;padding-left:1.35em}
+li{margin:.3em 0}
+code,kbd,samp{font-family:var(--font-mono);font-size:.92em;background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:.08em .35em;overflow-wrap:anywhere}
+pre{margin:0}
+:focus{outline:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent);color:#fff}
+.visually-hidden{position:absolute!important;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.skip-link{position:absolute;left:12px;top:-48px;z-index:200;background:var(--accent);color:#fff;padding:8px 14px;border-radius:8px;font-weight:600;transition:top .15s ease}
+.skip-link:focus{top:12px}
+.mono{font-family:var(--font-mono)}
+
+/* ---- progress bar ---- */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:120;background:transparent;pointer-events:none}
+.progress-bar span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+/* ---- hero ---- */
+.hero{
+  position:relative;
+  padding:64px 24px 34px;
+  background:
+    radial-gradient(900px 380px at 85% -10%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+    radial-gradient(700px 320px at 8% 0%, color-mix(in srgb, var(--accent-2) 10%, transparent), transparent 55%),
+    var(--bg);
+  border-bottom:1px solid var(--border);
+}
+.hero-inner{max-width:var(--maxw);margin:0 auto}
+.kicker{
+  font-family:var(--font-mono);
+  font-size:.74rem;
+  font-weight:600;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--accent-2);
+  margin:0 0 14px;
+}
+.page-title{
+  font-size:clamp(1.9rem,4.2vw,2.9rem);
+  font-weight:800;
+  letter-spacing:-.02em;
+  margin:0 0 14px;
+  max-width:22ch;
+}
+.tid{
+  font-family:var(--font-mono);
+  font-size:.82em;
+  font-weight:700;
+  color:var(--accent);
+  background:color-mix(in srgb, var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius:10px;
+  padding:.08em .38em;
+  margin-right:.28em;
+  white-space:nowrap;
+}
+.hero-intro{max-width:72ch;color:var(--muted);font-size:1.06rem;margin:0 0 20px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:0 0 26px}
+.chips li{
+  font-family:var(--font-mono);font-size:.74rem;color:var(--muted);
+  background:var(--surface);border:1px solid var(--border);border-radius:999px;
+  padding:5px 11px;display:inline-flex;align-items:center;gap:7px;
+}
+.chips li b{color:var(--text);font-weight:600}
+.chips .dot{width:7px;height:7px;border-radius:50%;background:var(--accent-2);display:inline-block}
+.keyfacts{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;
+  max-width:1080px;
+}
+.kf{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:14px 16px;box-shadow:var(--shadow);
+}
+.kf-label{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 6px}
+.kf-value{font-weight:700;font-size:.95rem;margin:0 0 4px;line-height:1.4}
+.kf-sub{font-size:.8rem;color:var(--muted);margin:0;line-height:1.5}
+
+/* ---- two column layout ---- */
+.layout{
+  max-width:var(--maxw);
+  margin:0 auto;
+  padding:34px 24px 90px;
+  display:grid;
+  grid-template-columns:var(--sidebar-w) minmax(0,1fr);
+  gap:38px;
+  align-items:start;
+}
+main#main-content{min-width:0}
+
+/* ---- table of contents ---- */
+.toc{
+  position:sticky;top:22px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:16px 14px;box-shadow:var(--shadow);
+  max-height:calc(100vh - 44px);overflow:auto;
+}
+.toc-title{
+  font-family:var(--font-mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin:0 0 10px;padding:0 6px;display:flex;justify-content:space-between;align-items:center;gap:8px;
+}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc li{margin:1px 0}
+.toc a{
+  display:block;color:var(--muted);font-size:.86rem;line-height:1.4;
+  padding:6px 10px;border-radius:8px;border-left:2px solid transparent;
+}
+.toc a:hover{color:var(--text);background:var(--surface-2);text-decoration:none}
+.toc a.sub{padding-left:24px;font-size:.8rem}
+.toc a.active{color:var(--accent);background:color-mix(in srgb, var(--accent) 10%, transparent);border-left-color:var(--accent);font-weight:600}
+.toc-close{display:none}
+.theme-btn{
+  font:inherit;font-size:.74rem;font-weight:600;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;
+  padding:4px 10px;cursor:pointer;white-space:nowrap;
+}
+.theme-btn:hover{border-color:var(--accent)}
+
+/* ---- sections ---- */
+.sec{margin-top:54px;scroll-margin-top:22px}
+.sec:first-child{margin-top:0}
+.sec-head{display:flex;align-items:center;gap:13px;margin-bottom:10px}
+.sec-num{
+  flex:0 0 auto;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-weight:700;font-size:.95rem;color:var(--accent-2);
+  background:color-mix(in srgb, var(--accent-2) 12%, transparent);
+  border:1px solid color-mix(in srgb, var(--accent-2) 40%, transparent);
+  border-radius:11px;
+}
+.sec-head h2{margin:0}
+.sec-intro{color:var(--muted);max-width:76ch;margin-bottom:22px}
+.sub-head{display:flex;align-items:baseline;gap:10px;margin:34px 0 4px;scroll-margin-top:22px}
+.sub-num{
+  font-family:var(--font-mono);font-size:.8rem;font-weight:700;color:var(--violet);
+  background:color-mix(in srgb, var(--violet) 13%, transparent);
+  border:1px solid color-mix(in srgb, var(--violet) 40%, transparent);
+  border-radius:7px;padding:2px 8px;white-space:nowrap;
+}
+.sub-head h3{margin:0}
+.sub-intro{color:var(--muted);max-width:74ch;margin:0 0 16px}
+
+/* ---- cards & grids ---- */
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-card);
+  padding:20px 22px;box-shadow:var(--shadow);margin:0 0 16px;
+}
+.card>h3:first-child,.card>h4:first-child{margin-top:0}
+.card p:last-child,.card ul:last-child,.card ol:last-child{margin-bottom:0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.grid2 .card,.grid3 .card{margin:0}
+.stack>*+*{margin-top:12px}
+
+/* ---- callouts ---- */
+.callout{
+  border:1px solid var(--border);border-left:4px solid var(--accent);
+  background:var(--surface);border-radius:10px;padding:14px 18px;margin:0 0 16px;
+}
+.callout-label{font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin:0 0 6px}
+.callout p:last-child{margin-bottom:0}
+.callout.note{border-left-color:var(--accent)}
+.callout.note .callout-label{color:var(--accent)}
+.callout.warn{border-left-color:var(--warning)}
+.callout.warn .callout-label{color:var(--warning)}
+.callout.good{border-left-color:var(--success)}
+.callout.good .callout-label{color:var(--success)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .callout-label{color:var(--danger)}
+
+/* ---- tables ---- */
+.tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:0 0 18px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:660px;font-size:.9rem}
+th{
+  text-align:left;font-family:var(--font-mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);background:var(--surface-2);padding:10px 12px;border-bottom:1px solid var(--border-strong);
+  white-space:nowrap;
+}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:nth-child(even){background:var(--surface-2)}
+td ul{margin:0;padding-left:1.1em}
+td code{white-space:normal}
+
+/* ---- badges ---- */
+.badge{
+  display:inline-block;font-family:var(--font-mono);font-size:.7rem;font-weight:700;
+  border-radius:999px;padding:2px 9px;border:1px solid;letter-spacing:.03em;white-space:nowrap;
+}
+.badge + .badge{margin-left:4px}
+.sev-critical{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 50%,transparent);background:color-mix(in srgb,var(--danger) 12%,transparent)}
+.sev-high{color:var(--high);border-color:color-mix(in srgb,var(--high) 50%,transparent);background:color-mix(in srgb,var(--high) 12%,transparent)}
+.sev-medium{color:var(--warning);border-color:color-mix(in srgb,var(--warning) 50%,transparent);background:color-mix(in srgb,var(--warning) 12%,transparent)}
+.sev-low{color:var(--low);border-color:color-mix(in srgb,var(--low) 50%,transparent);background:color-mix(in srgb,var(--low) 12%,transparent)}
+.sev-info{color:var(--accent-2);border-color:color-mix(in srgb,var(--accent-2) 50%,transparent);background:color-mix(in srgb,var(--accent-2) 12%,transparent)}
+.plat{color:var(--muted);border-color:var(--border-strong);background:var(--surface-2);font-weight:600}
+
+/* ---- key/value lists ---- */
+.kv{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:8px 18px}
+.kv dt{
+  font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding-top:2px;
+}
+.kv dd{margin:0;font-size:.93rem;overflow-wrap:anywhere}
+@media (max-width:640px){.kv{grid-template-columns:1fr}.kv dt{padding-top:0}.kv dd{margin:0 0 8px}}
+
+/* ---- code blocks ---- */
+.codeblock{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--code-bg)}
+.code-head{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  background:var(--surface-2);border-bottom:1px solid var(--border);
+  padding:7px 12px;
+}
+.code-lang{font-family:var(--font-mono);font-size:.72rem;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;overflow-wrap:anywhere}
+.copy-btn{
+  font:inherit;font-family:var(--font-mono);font-size:.72rem;font-weight:700;color:var(--text);
+  background:var(--elevated);border:1px solid var(--border-strong);border-radius:8px;
+  padding:4px 12px;cursor:pointer;flex:0 0 auto;
+}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.copy-btn.ok{color:var(--success);border-color:var(--success)}
+.codeblock pre{overflow-x:auto;padding:14px 16px;max-height:560px}
+.codeblock code{font-family:var(--font-mono);font-size:.82rem;line-height:1.55;background:none;border:none;padding:0;color:var(--text);white-space:pre;display:block;min-width:max-content}
+
+/* ---- timeline ---- */
+.timeline{list-style:none;margin:0 0 16px;padding:0 0 0 4px;position:relative}
+.timeline::before{content:"";position:absolute;left:12px;top:6px;bottom:6px;width:2px;background:var(--border-strong)}
+.timeline li{position:relative;padding:0 0 16px 34px;margin:0}
+.timeline li:last-child{padding-bottom:0}
+.tl-dot{
+  position:absolute;left:5px;top:5px;width:16px;height:16px;border-radius:50%;
+  background:var(--surface);border:3px solid var(--accent);z-index:1;
+}
+.timeline li.warn .tl-dot{border-color:var(--warning)}
+.timeline li.bad .tl-dot{border-color:var(--danger)}
+.timeline li.good .tl-dot{border-color:var(--success)}
+.tl-when{font-family:var(--font-mono);font-size:.76rem;font-weight:700;color:var(--accent-2);display:block;margin-bottom:2px}
+.timeline p{margin:0}
+
+/* ---- checklist ---- */
+.checklist{list-style:none;padding:0;margin:0}
+.checklist li{position:relative;padding:0 0 0 30px;margin:.45em 0}
+.checklist li::before{
+  content:"";position:absolute;left:0;top:.28em;width:15px;height:15px;
+  border:2px solid var(--accent);border-radius:4px;background:var(--surface-2);
+}
+
+/* ---- simulation ---- */
+.simwrap{padding:18px}
+.sim-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.sim-title{font-family:var(--font-mono);font-size:.78rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.sim-stage{position:relative;margin-bottom:12px}
+#simCanvas{width:100%;height:auto;display:block;border:1px solid var(--border);border-radius:10px;background:var(--surface-2);touch-action:manipulation}
+.sim-tip{
+  position:absolute;display:none;max-width:270px;z-index:30;pointer-events:none;
+  background:var(--elevated);border:1px solid var(--border-strong);border-radius:9px;
+  box-shadow:var(--shadow);padding:9px 12px;font-size:.8rem;line-height:1.45;color:var(--text);
+}
+.sim-tip b{display:block;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2);margin-bottom:3px}
+.sim-caption{
+  border:1px solid var(--border);border-radius:10px;background:var(--surface);
+  padding:12px 16px;margin-bottom:10px;
+}
+.sim-caption strong{display:block;font-family:var(--font-mono);font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);margin-bottom:4px}
+.sim-caption p{margin:0;font-size:.95rem}
+.sim-hint{
+  border:1px solid color-mix(in srgb,var(--success) 35%,transparent);
+  border-left:4px solid var(--success);
+  background:color-mix(in srgb,var(--success) 8%,transparent);
+  border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:.88rem;
+}
+.sim-hint b{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--success)}
+.sim-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.btn{
+  font:inherit;font-size:.85rem;font-weight:600;color:var(--text);
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--r-ctl);
+  padding:7px 16px;cursor:pointer;
+}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.1);color:#fff}
+.sim-controls label{font-size:.8rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.sim-controls select{
+  font:inherit;font-size:.82rem;color:var(--text);background:var(--surface-2);
+  border:1px solid var(--border-strong);border-radius:8px;padding:5px 8px;cursor:pointer;
+}
+.sim-chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip-step{
+  font-family:var(--font-mono);font-size:.72rem;font-weight:600;color:var(--muted);
+  background:var(--surface-2);border:1px solid var(--border);border-radius:999px;
+  padding:4px 11px;cursor:pointer;
+}
+.chip-step:hover{color:var(--text);border-color:var(--border-strong)}
+.chip-step.active{color:#fff;background:var(--accent);border-color:var(--accent)}
+.sim-story{margin-top:18px}
+.sim-story ol{margin:0;padding-left:1.4em}
+.sim-story li{margin:.55em 0}
+.sim-story .st{font-family:var(--font-mono);font-weight:700;color:var(--accent-2)}
+.sim-print-note{display:none}
+
+/* ---- floating buttons, overlay ---- */
+.fab{
+  position:fixed;z-index:130;border:1px solid var(--border-strong);cursor:pointer;
+  background:var(--elevated);color:var(--text);box-shadow:var(--shadow);
+  border-radius:999px;font:inherit;font-weight:700;
+}
+.fab:hover{border-color:var(--accent);color:var(--accent)}
+.fab-toc{
+  display:none;left:16px;bottom:16px;font-size:.85rem;padding:11px 18px;
+}
+.fab-top{
+  right:16px;bottom:16px;width:46px;height:46px;font-size:1.15rem;line-height:1;
+  opacity:0;pointer-events:none;transition:opacity .2s ease;
+}
+.fab-top.show{opacity:1;pointer-events:auto}
+.backdrop{
+  position:fixed;inset:0;z-index:140;background:rgba(4,8,18,.55);
+  opacity:0;pointer-events:none;transition:opacity .2s ease;
+}
+body.toc-open .backdrop{opacity:1;pointer-events:auto}
+
+/* ---- links list ---- */
+.links-list{list-style:none;padding:0;margin:0}
+.links-list li{margin:.4em 0;font-size:.92rem}
+.links-list .lt{font-family:var(--font-mono);font-size:.72rem;color:var(--muted);display:block}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{
+    position:fixed;top:0;left:0;bottom:0;width:min(330px,88vw);max-height:none;z-index:150;
+    border-radius:0 var(--r-card) var(--r-card) 0;
+    transform:translateX(-104%);transition:transform .25s ease;
+  }
+  body.toc-open .toc{transform:translateX(0)}
+  .toc-close{
+    display:inline-block;font:inherit;font-size:.78rem;font-weight:700;color:var(--text);
+    background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;
+    padding:3px 11px;cursor:pointer;
+  }
+  .fab-toc{display:inline-flex;align-items:center;gap:7px}
+}
+@media (max-width:640px){
+  .hero{padding:44px 16px 26px}
+  .layout{padding:26px 16px 90px}
+  .grid2,.grid3{grid-template-columns:minmax(0,1fr)}
+  .card{padding:16px}
+  .sec{margin-top:44px}
+  .btn{flex:1 1 auto;text-align:center}
+  .sim-controls{gap:6px}
+  .sim-controls .btn{padding:8px 10px}
+  .page-title{max-width:none}
+}
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+
+/* ============================================================
+   Print
+   ============================================================ */
+@media print{
+  .toc,.fab,.progress-bar,.backdrop,.copy-btn,.sim-controls,.sim-chips,.sim-top .btn,
+  .skip-link,.theme-btn,.toc-close{display:none!important}
+  body{background:#fff;color:#111}
+  .hero{background:#fff!important;border-bottom:2px solid #333;padding:10px 0}
+  .layout{display:block;padding:0;max-width:none}
+  .card,.callout,.tablewrap,.codeblock,.kf,.simwrap{box-shadow:none;break-inside:avoid}
+  .card,.callout{border:1px solid #bbb}
+  .tablewrap{overflow:visible}
+  table{min-width:0;font-size:.8rem}
+  .codeblock{border:1px solid #bbb;background:#f6f6f6}
+  .codeblock pre{max-height:none;overflow:visible}
+  .codeblock code{color:#111;white-space:pre-wrap;min-width:0}
+  #simCanvas{display:none}
+  .sim-stage::after{content:"(Interactive simulation is not printed. Read the written step-by-step story below.)";display:block;font-size:.85rem;color:#555}
+  .sim-caption,.sim-hint{border:1px solid #bbb;background:#fff}
+  a{color:#000;text-decoration:underline}
+  .sec{break-inside:auto}
+  h2,h3,h4{break-after:avoid}
+  a[href^="http"]::after{content:" (" attr(href) ")";font-size:.75em;word-break:break-all}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<!-- ==== PLATFORM:BEGIN ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1496.001"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== PLATFORM:END ==== -->
+
+<div class="progress-bar" aria-hidden="true"><span id="progressFill"></span></div>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
+<!-- ==== HERO:BEGIN ==== -->
+<div class="hero">
+  <div class="hero-inner">
+    <p class="kicker">MITRE ATT&amp;CK · Impact Tactic · Sub-technique Guide</p>
+    <h1 class="page-title"><span class="tid">T1496.001</span> Compute Hijacking</h1>
+    <p class="hero-intro">Compute hijacking is the core of cryptojacking (using stolen computers to mine cryptocurrency): an attacker uses your processors — the CPU (central processing unit, a computer's main chip) or the GPU (graphics processing unit, the chip that renders images and powers AI math) — to mine cryptocurrency, which is digital money. Your machines do the work, the electricity and cloud time are on your bill, and the coins land in the attacker's wallet. This sub-technique guide walks through the attack on servers, endpoints, containers, and cloud compute. It shows what the attack leaves in your logs, and it gives you detections you can adapt.</p>
+    <ul class="chips">
+      <li><span class="dot"></span>Tactic: <b>Impact</b></li>
+      <li>Platforms: <b>Containers, IaaS, Linux, Windows, macOS</b></li>
+      <li>Parent: <b>T1496 Resource Hijacking</b></li>
+      <li>ATT&amp;CK <b>v20</b> · modified 15 Apr 2025</li>
+      <li>Detection strategy: <b>DET0540</b></li>
+      <li>Guide version: <b>2.0</b></li>
+    </ul>
+    <div class="keyfacts">
+      <div class="kf"><p class="kf-label">What it is</p><p class="kf-value">Your compute cycles, attacker profit</p><p class="kf-sub">Malware or abuse of cloud APIs (application programming interfaces — ways for programs to request services) turns your machines into coin-mining workers.</p></div>
+      <div class="kf"><p class="kf-label">Typical impact</p><p class="kf-value">Slow systems, big bills</p><p class="kf-sub">CPU plateaus can stall apps; hijacked GPU fleets can cost thousands per day.</p></div>
+      <div class="kf"><p class="kf-label">Where it strikes</p><p class="kf-value">Servers, containers, cloud compute</p><p class="kf-sub">Exposed Kubernetes APIs and leaked cloud keys are the most common doors.</p></div>
+      <div class="kf"><p class="kf-label">Why it is hard to catch</p><p class="kf-value">Load can look like real work</p><p class="kf-sub">Miners throttle CPU, rename files, and hide pool traffic inside TLS (the encryption that protects normal web traffic).</p></div>
+    </div>
+  </div>
+</div>
+<!-- ==== HERO:END ==== -->
+
+<div class="layout">
+<!-- ==== TOC:BEGIN ==== -->
+<nav class="toc" id="toc" aria-label="Table of contents">
+  <p class="toc-title">Contents <button type="button" class="theme-btn" id="themeToggle" aria-label="Switch between dark and light theme">Light mode</button> <button type="button" class="toc-close" id="tocClose">Close</button></p>
+  <ol id="tocList">
+    <li><a href="#s1-overview">1. Overview</a></li>
+    <li><a href="#s2-simulation">2. Animated Simulation</a></li>
+    <li><a href="#s3-red-team">3. Red Team Perspective</a></li>
+    <li><a href="#s4-blue-team">4. Blue Team Perspective</a></li>
+    <li><a href="#s5-detection">5. Detection Engineering Deep Dive</a></li>
+    <li><a class="sub" href="#s51-regulation">5.1 Regulation Mapping</a></li>
+    <li><a class="sub" href="#s52-intel">5.2 Threat Intelligence</a></li>
+    <li><a class="sub" href="#s53-ranking">5.3 Threats Ranking</a></li>
+    <li><a class="sub" href="#s54-logs">5.4 Logs and Patterns</a></li>
+    <li><a class="sub" href="#s55-sigma">5.5 Sigma Rules and Splunk SPL</a></li>
+    <li><a href="#s6-case-study">6. Real-World Case Study</a></li>
+    <li><a href="#s7-mitigation">7. Mitigation and Defense</a></li>
+    <li><a href="#s8-mistakes">8. Common Mistakes</a></li>
+    <li><a href="#s9-cheatsheet">9. Cheat Sheet</a></li>
+  </ol>
+</nav>
+<!-- ==== TOC:END ==== -->
+
+<main id="main-content">
+<!-- ==== MAIN-CONTENT:BEGIN ==== -->
+<!-- Guide v2.0: corrected & expanded edition. Audit trail: scripts/audit-v2/AUDIT-T1496.001.md -->
+
+<!-- ================= SECTION 1 ================= -->
+<section class="sec" id="s1-overview">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2>Overview</h2></div>
+  <p class="sec-intro">In this sub-technique the attacker runs their work on your computers. After getting in, they use your processors to mine cryptocurrency (this abuse is called cryptojacking) — digital money such as Monero. Your machines pay in heat, noise, power, and cloud spend, while the coins go to the attacker. Compute hijacking is the most widely reported form of resource hijacking (the parent technique T1496).</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>What the sub-technique is</h3>
+      <p>An attacker gains code execution or cloud access. Instead of stealing data or locking files, they install a miner, or they use your cloud provider's API to rent GPU machines on your card. ATT&CK (MITRE ATT&CK — the free public knowledge base of attacker techniques) describes the purpose plainly: validating cryptocurrency transactions, called mining, to earn virtual currency. The load can make machines unresponsive, so real work suffers.</p>
+      <p>Targets range from one laptop to whole clusters. Servers and cloud systems are preferred targets because they have many cores, stay online all the time, and few people watch them outside work hours. Container platforms are extra attractive because one exposed API can start dozens of miner pods in minutes.</p>
+    </div>
+    <div class="card">
+      <h3>Why it matters</h3>
+      <p>First, money. A hijacked cloud account running GPU machines can add thousands of dollars per day. A mining fleet on your servers raises power and cooling costs and shortens hardware life. Second, availability. A miner that takes 95 percent of the CPU makes applications slow or unresponsive; on laptops, fans run at full speed and batteries drain early.</p>
+      <p>Third, and most important: a miner is a <em>symptom</em>. It proves an attacker got past your patching process, found an exposed API, or stole a key. If you only delete the miner, the same door stays open. Many crews, such as 8220 Gang, started with mining and later added data theft.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where it fits in the attack chain</h3>
+    <p>Compute Hijacking sits in the <strong>Impact</strong> tactic, the last stage of the ATT&CK chain. By the time you see it, the attacker finished earlier steps: exploiting a public application (T1190), abusing valid accounts (T1078), and adding persistence such as cron jobs (T1053.003). The hijacking itself is usually the <em>only</em> step the attacker wants to keep alive, so most of their hiding effort goes here: renamed binaries, throttled CPU, and pool traffic disguised as web traffic.</p>
+  </div>
+
+  <div class="card">
+    <h3>Key facts</h3>
+    <dl class="kv">
+      <dt>ATT&CK ID</dt><dd>T1496.001 — Compute Hijacking (sub-technique of T1496; tactic: Impact)</dd>
+      <dt>Platforms</dt><dd>Containers, IaaS, Linux, Windows, macOS</dd>
+      <dt>Created / modified</dt><dd>25 September 2024 / 15 April 2025 (ATT&CK v20)</dd>
+      <dt>Detection strategy</dt><dd>DET0540 — Multi-Platform Behavioral Detection for Compute Hijacking (analytics AN1489 to AN1493)</dd>
+      <dt>Typical entry paths</dt><dd>Exposed Docker or Kubernetes APIs, unpatched web apps, leaked cloud keys, cracked software, malicious container images</dd>
+      <dt>Main signals</dt><dd>Sustained high CPU, long sessions to mining pools, new GPU instances in odd regions, anonymous pod creation, process-kill competition between miners</dd>
+      <dt>Official page</dt><dd><a href="https://attack.mitre.org/techniques/T1496/001/">attack.mitre.org/techniques/T1496/001/</a></dd>
+    </dl>
+  </div>
+
+  <h3 class="sub-head"><span class="sub-num">1.1</span>The T1496 family at a glance</h3>
+  <p class="sub-intro">This page is the deep dive for the compute form. Use these cards to jump to the official pages of the parent technique and the sibling sub-techniques.</p>
+  <div class="grid2">
+    <div class="card"><h4><span class="mono">T1496</span> Resource Hijacking (parent)</h4><p>The umbrella technique: abuse of victim resources for attacker profit in all forms. <a href="https://attack.mitre.org/techniques/T1496/">Open the ATT&CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.002</span> Bandwidth Hijacking</h4><p>Selling your bandwidth and IP address through proxyware, or using you for torrents and scanning. <a href="https://attack.mitre.org/techniques/T1496/002/">Open the ATT&CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.003</span> SMS Pumping</h4><p>Abusing your one-time password (OTP) or verification forms to send SMS to premium numbers that pay the attacker. <a href="https://attack.mitre.org/techniques/T1496/003/">Open the ATT&CK page</a>.</p></div>
+    <div class="card"><h4><span class="mono">T1496.004</span> Cloud Service Hijacking</h4><p>Using compromised cloud service accounts for mass spam, phishing, or stealing access to AI models (LLMjacking — hijacking large language models). <a href="https://attack.mitre.org/techniques/T1496/004/">Open the ATT&CK page</a>.</p></div>
+  </div>
+
+  <div class="callout good"><p class="callout-label">What you will learn</p><p>By the end of this guide you will be able to do the following:</p><ul>
+        <li>Explain cryptojacking to a non-technical manager.</li>
+        <li>Name the log sources that reveal it on each platform.</li>
+        <li>Write working Sigma rules (Sigma is an open format for detection rules) and Splunk queries (Splunk is a common log-search platform) for the five core threats (CH-01 to CH-05).</li>
+        <li>Run a triage when a CPU alert or a billing spike arrives.</li>
+        <li>Build a defense plan with owners and priorities.</li>
+      </ul></div>
+</section>
+
+<!-- ================= SECTION 2 ================= -->
+<section class="sec" id="s2-simulation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2>Animated Simulation</h2></div>
+  <p class="sec-intro">This simulation shows a complete compute hijacking attack on a Kubernetes cluster. Watch the attacker on the left, the victim systems in the middle, and the SOC (security operations center — the team that watches security alerts) on the right. Every step lists what the defender can see at that moment. Press Play, or jump to any step with the buttons.</p>
+
+  <div class="card simwrap">
+    <div class="sim-top">
+      <p class="sim-title" id="simTitle">Scenario: Kubernetes cluster hijacked for cryptomining</p>
+      <span class="badge sev-info" id="simStepBadge">Step 1 of 8</span>
+    </div>
+    <div class="sim-stage" id="simStage">
+      <canvas id="simCanvas" role="img" aria-label="Animated diagram of a compute hijacking attack: an attacker finds an exposed Kubernetes dashboard, creates a privileged pod, pulls a miner image, mines to a pool while cloud costs climb, and the SOC detects, evicts, and hardens the cluster. A full text description is in the written story below."></canvas>
+      <div class="sim-tip" id="simTip"></div>
+      <noscript><p style="padding:14px">JavaScript is disabled, so the animation cannot run. The written step-by-step story below describes the same attack.</p></noscript>
+    </div>
+    <div class="sim-caption">
+      <strong id="simStepTitle">Step 1 — Finding the exposed dashboard</strong>
+      <p id="simCaption">The attacker scans the internet for open Kubernetes dashboards and finds one that needs no login.</p>
+    </div>
+    <div class="sim-hint" id="simHint"><b>Defender view:</b> <span id="simHintText">Firewall logs show scan traffic against web ports and the kubelet port. Alone, this is normal background noise.</span></div>
+    <div class="sim-controls">
+      <button type="button" class="btn primary" id="simPlay">Play</button>
+      <button type="button" class="btn" id="simPause">Pause</button>
+      <button type="button" class="btn" id="simRestart">Restart</button>
+      <label>Speed
+        <select id="simSpeed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+        </select>
+      </label>
+      <div class="sim-chips" id="simChips" role="group" aria-label="Jump to simulation step"></div>
+    </div>
+    <p class="sim-print-note">The animated simulation is replaced here by the written story below.</p>
+  </div>
+
+  <div class="card sim-story">
+    <h3>Written story of the simulation</h3>
+    <p>The list below covers the same eight steps as the animation. Screen readers and printouts get the full content here.</p>
+    <ol>
+      <li><span class="st">Step 1 — Finding the exposed dashboard.</span> The attacker scans the internet for Kubernetes dashboards, which are web control panels for clusters. One dashboard answers without asking for a password. The firewall sees ordinary scan noise, so no alert fires.</li>
+      <li><span class="st">Step 2 — Creating a privileged pod.</span> The attacker uses the dashboard to send API calls that create a pod with full host privileges. A pod is a group of containers that runs together. The audit log records the creation, and the caller is anonymous — the first strong signal.</li>
+      <li><span class="st">Step 3 — Pulling the miner image.</span> The pod downloads a public miner image, a ready-made mining program packaged for containers. A service account with no history pulls a Monero miner at 2:41 a.m. The cluster now runs attacker code.</li>
+      <li><span class="st">Step 4 — Mining starts.</span> The miner connects to a mining pool, a server that hands out hashing jobs, and starts hashing. CPU jumps to about 94 percent and stays there. The billing curve climbs in parallel.</li>
+      <li><span class="st">Step 5 — Scaling to more pods.</span> The attacker copies the pod to every node, so all cores work for the same wallet. Twenty similar pod creations in forty minutes, all from one source IP, reveal the scale-out.</li>
+      <li><span class="st">Step 6 — Defender signals align.</span> The SOC joins three weak signals: anonymous pod creation, the CPU plateau, and egress to a pool address. The correlation rule raises one critical alert with full context. This is the CH-04 plus CH-02 join from Section 5, with node CPU metrics adding the third signal.</li>
+      <li><span class="st">Step 7 — Containment.</span> The SOC evicts the miner pods, moves the dashboard behind the VPN (virtual private network — a private remote-access path), and rotates exposed tokens. Pool sessions end and CPU returns to baseline within minutes.</li>
+      <li><span class="st">Step 8 — Hardening and lessons.</span> The team disables anonymous API access, applies pod security rules, and adds audit-based alerts. The entry path is closed, not just the symptom.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ================= SECTION 3 ================= -->
+<section class="sec" id="s3-red-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2>Red Team / Hacker Perspective</h2></div>
+  <p class="sec-intro">Understanding why attackers like this sub-technique helps you predict where they will show up. This section describes attacker thinking at a conceptual level. All commands shown later are lab-only examples for your own test systems.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>When and why attackers use it</h3>
+      <p>Mining is attractive because it pays without talking to the victim. Ransomware needs a negotiation; a miner just needs uptime. Some coins are designed to be mined with ordinary CPUs, which makes every server a candidate. Attackers pick this technique when they have broad but weak access: a foothold in a container cluster, a leaked cloud key, or a web shell on one server. It scales well — the script that mines one server mines a thousand.</p>
+      <p>Cloud accounts change the math. There is no malware to hide; the attacker just rents GPU machines from your provider using your keys. GPU families are built for machine learning work, but they are also ideal for mining, so they are the first thing abusers launch.</p>
+    </div>
+    <div class="card">
+      <h3>How it is performed (concept)</h3>
+      <p>The pattern is almost always the same four moves: get code execution, download a miner or call the compute API, point the miner at attacker infrastructure, and make it survive reboots and cleanup. Mining malware frequently kills competing miners it finds, so the strongest miner wins the CPU. That kill behavior helps defenders, because it appears in logs as one process terminating another.</p>
+      <p>On containers the moves shift one level up: create a privileged pod, mount the host, pull a public miner image, and let the scheduler spread it everywhere. On cloud accounts there may be no payload at all — only audit-log entries that show compute the attacker created.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where it applies and what it needs</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Environment</th><th>Typical entry</th><th>What the attacker needs</th></tr></thead>
+      <tbody>
+        <tr><td>Linux servers</td><td>Unpatched web apps, exposed Redis or Docker APIs, weak SSH (Secure Shell, the standard remote-login protocol) keys</td><td>Command execution plus outbound network access</td></tr>
+        <tr><td>Windows endpoints</td><td>Cracked software, malicious installers, fake download links in search results</td><td>User-level execution; admin rights for scheduled-task persistence</td></tr>
+        <tr><td>macOS devices</td><td>Pirated media apps, fake updates, malicious plists</td><td>LaunchAgent or LaunchDaemon for persistence</td></tr>
+        <tr><td>Containers / Kubernetes</td><td>Exposed dashboards, vulnerable images, missing RBAC (role-based access control) rules</td><td>API reachability; a privileged pod or hostPath mount helps a lot</td></tr>
+        <tr><td>Cloud accounts (IaaS)</td><td>Leaked access keys, no MFA (multi-factor authentication) on root, keys in code repositories</td><td>Valid keys with RunInstances or spot-fleet permissions</td></tr>
+        <tr><td>AI / ML platforms (AI — artificial intelligence; ML — machine learning)</td><td>Exposed Ray or similar cluster panels (ShadowRay campaign)</td><td>Job submission access to GPU workers</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="callout danger">
+    <p class="callout-label">Ethics and legality</p>
+    <p>Using these methods against systems you do not own is a crime in almost every country, even "just to see if it works". Mining on stolen compute is theft of services, and connecting to pools creates real traffic to real infrastructure. Everything in this guide is for defenders and for safe labs you control. Run examples only on isolated machines you own, never against production or third-party systems.</p>
+  </div>
+
+  <div class="card">
+    <h3>Lab-only example 1: a safe miner look-alike</h3>
+    <p>This snippet does not mine anything. It uses <code>stress-ng</code>, a legitimate load generator, to imitate the CPU shape of a miner, plus a loopback listener that imitates a pool endpoint. Use it to test the detections in Section 5 on your own lab VM.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">bash — lab only, run on an isolated test VM</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code># Lab-only: imitate miner load and pool traffic on your own test VM
+# 1) CPU load that mimics 8 mining threads (no real mining happens)
+stress-ng --cpu 8 --cpu-load 92 --timeout 600s --metrics-brief
+
+# 2) Fake stratum endpoint on the same VM (loopback only, goes nowhere)
+nc -l 127.0.0.1 14444 &gt; /tmp/stratum-capture.txt &amp;
+
+# 3) Send one stratum-shaped JSON line and keep the socket open for a while
+printf '{"id":1,"method":"mining.subscribe","params":["lab-client/1.0"]}\n' \
+  | nc -q 600 127.0.0.1 14444
+
+# What defenders should see during this exercise:
+#   - a process near 92% CPU for minutes, started from a shell
+#   - a TCP session to port 14444 that outlives ordinary requests
+#   - clean, correlatable events because you started both parts yourself</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h3>Lab-only example 2: the stratum protocol shape</h3>
+    <p>Miners talk to pools over a protocol called Stratum. It uses JSON lines that look like remote procedure calls. Knowing the shape helps you read payload captures and write content rules. The lines below are teaching examples on loopback, not a real exchange.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">stratum shape — teaching example, loopback only</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{"id":1,"method":"mining.subscribe","params":["lab-client/1.0"]}
+{"id":2,"method":"mining.authorize","params":["wallet48f2.rig01"]}
+{"id":3,"method":"mining.submit","params":["rig01","1a2b","0000a3f1"]}
+{"id":4,"result":true,"error":null}
+
+# A real miner repeats mining.submit thousands of times per hour.
+# Each submit is one "share" - proof of work sent back to the pool.
+# Watch for: long sessions + many small JSON messages + one wallet string.</code></pre>
+    </figure>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Common variations</h3>
+      <ul>
+        <li><strong>Container fleet mining:</strong> one exposed API, dozens of miner pods (TeamTNT and Kinsing used this method in many well-known campaigns).</li>
+        <li><strong>Cloud-native hijack:</strong> no malware at all — the attacker launches GPU or spot fleets with stolen keys.</li>
+        <li><strong>GPU cluster abuse:</strong> job-submission panels of AI platforms hijacked for mining (ShadowRay, campaign C0045).</li>
+        <li><strong>Kill-and-take-over:</strong> new miner kills the old one, so traces of several families pile up on one host.</li>
+        <li><strong>Miner plus loader:</strong> the miner earns the coins, while a second stage steals data or delivers more malware (8220 Gang's later waves).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Mistakes attackers make</h3>
+      <ul>
+        <li>Shipping stock miner binaries, so name and hash rules fire on arrival.</li>
+        <li>Using public pool addresses on default ports (3333, 4444, 14444), which egress rules block easily.</li>
+        <li>Ramping CPU to 100 percent immediately, which trips simple baselines.</li>
+        <li>Skipping the throttle on cloud GPU fleets, which triggers the billing alarm within hours.</li>
+        <li>Reusing one wallet address across victims, letting defenders link incidents.</li>
+        <li>Killing rival miners loudly, leaving a process-terminates-process trail in EDR (endpoint detection and response — security software that records what programs do) logs.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+<!-- ================= SECTION 4 ================= -->
+<section class="sec" id="s4-blue-team">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2>Blue Team / SOC Perspective</h2></div>
+  <p class="sec-intro">Compute hijacking is one of the most visible sub-techniques — if you collect the right data. This section shows what it looks like from inside your estate and gives you a triage flow you can follow on a busy shift.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>How defenders can see it</h3>
+      <p>Four telemetry families catch almost every variant: process telemetry (what runs, from where, with which command line), performance telemetry (CPU and GPU use over time), network telemetry (sessions, volumes, destinations), and audit logs (Kubernetes API calls, cloud API calls). No single source is enough. The strong detections in Section 5 all join at least two sources.</p>
+      <p>Remember the scale trick: one throttled miner is quiet, but fleets are loud. Cluster and cloud attacks create volume patterns — many pods, many instances, many similar events — that single hosts cannot produce by accident.</p>
+    </div>
+    <div class="card">
+      <h3>Artifacts it leaves behind</h3>
+      <ul>
+        <li>Miner binary in a temp path with a generic or kernel-like name, often with pool strings inside.</li>
+        <li>Cron entries, systemd services, or scheduled tasks that relaunch the payload after reboot.</li>
+        <li>Very long outbound TCP sessions (hours to days) to a small set of destinations.</li>
+        <li>CPU or GPU graphs with flat plateaus instead of normal daily waves.</li>
+        <li>Kubernetes audit entries: anonymous or unknown callers creating privileged pods.</li>
+        <li>Cloud audit entries: GPU instance types, spot fleets, regions your teams never use.</li>
+        <li>Traces of miner-versus-miner fights: one process repeatedly killing others.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Where to look, per platform</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Platform</th><th>Primary log sources</th><th>What to grep for first</th></tr></thead>
+      <tbody>
+        <tr><td>Linux</td><td>auditd, journald, EDR process events, /proc load snapshots</td><td>Binaries in /tmp, /var/tmp, or /dev/shm; cron additions; curl or wget started by web-server users</td></tr>
+        <tr><td>Windows</td><td>Sysmon (a Windows system-monitoring add-on; event IDs 1, 3, 11, 13), Security log, EDR</td><td>Processes named like system tools in wrong paths; WMI or PowerShell launching miners; long command lines with pool strings</td></tr>
+        <tr><td>macOS</td><td>launchd plists, unified log, EDR</td><td>Unknown LaunchAgents or LaunchDaemons with steady CPU; miner names such as xmrig or cpuminer</td></tr>
+        <tr><td>Containers</td><td>Kubernetes audit log, Docker events, Falco or runtime sensors</td><td>Privileged pods, miner images, anonymous callers, pulls at night</td></tr>
+        <tr><td>Cloud IaaS</td><td>CloudTrail, Azure Activity, GCP Audit, billing alerts</td><td>GPU instance types, spot fleet requests, first-seen regions, keys with no history launching fleets</td></tr>
+        <tr><td>Network</td><td>Zeek (an open-source network monitor) conn.log, NetFlow (network flow records), DNS logs, TLS SNI logs</td><td>Sessions longer than 6 hours; ports 3333, 4444, 5555, 7777, 14444; DNS for pool domains</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h3>Triage flow: a compute hijack alert arrives</h3>
+    <ol>
+      <li><strong>Confirm scope.</strong> One host or a fleet? Search your estate for the same indicators: pool domain, image name, wallet string, instance type.</li>
+      <li><strong>Join two signals.</strong> Pair the resource signal (CPU, instance, pod) with a cause signal (process, API caller, source IP). One alone is often a false positive.</li>
+      <li><strong>Decide containment speed.</strong> Miner on one app server: isolate the host now. Cloud API hijack: disable the key and set a spend throttle first, investigate after — costs grow every hour.</li>
+      <li><strong>Preserve evidence.</strong> Snapshot the host or export the audit slice before cleanup. You need the binary, image, config, and entry path later.</li>
+      <li><strong>Remove cause, not just effect.</strong> Deleting the miner is symptom work. Close the entry path, rotate exposed keys, and sweep for persistence such as cron jobs or new deployments.</li>
+      <li><strong>Feed detection.</strong> Turn the indicators into new Sigma rules and add the missed log source to your pipeline. Record the case in your threat intel notes.</li>
+    </ol>
+  </div>
+
+  <div class="callout note">
+    <p class="callout-label">Why this matters beyond money</p>
+    <p>Treat every miner as proof that the outer defenses failed. The attacker passed through the same paths ransomware crews use — exposed APIs, unpatched apps, and leaked keys. Closing those paths after a cheap mining case also protects you from a costly ransomware case later.</p>
+  </div>
+</section>
+
+<!-- ================= SECTION 5 ================= -->
+<section class="sec" id="s5-detection">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2>Detection Engineering Deep Dive</h2></div>
+  <p class="sec-intro">This is the working section. It turns theory into five building blocks: the rules you must satisfy, the intelligence that tells you what to expect, a ranked threat list, the logs each threat produces, and ready-to-adapt Sigma rules with matching Splunk queries. The five threats (CH-01 to CH-05) introduced in 5.3 are used consistently in 5.4 and 5.5, and each rule maps to an analytic of detection strategy DET0540 (AN1489 to AN1493).</p>
+
+  <h3 class="sub-head" id="s51-regulation"><span class="sub-num">5.1</span>Regulation mapping</h3>
+  <p class="sub-intro">A miner is rarely a reporting obligation by itself, but it always breaks control requirements about malware protection, monitoring, and resource integrity. When it runs on systems that handle personal or cardholder data, it becomes audit-relevant evidence that controls failed. Some auditors now treat unauthorized use of computing resources as its own review topic.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Framework &amp; control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+    <tbody>
+      <tr><td><strong>GDPR</strong> — Art. 32 (security of processing), Art. 5(1)(f) (integrity and confidentiality)</td><td>A miner on a host processing personal data shows technical measures did not stop unauthorized processing. The hijacked host can also become a stepping stone to data theft, which turns a mining case into a breach case.</td><td>Risk assessment covering malicious compute abuse; incident record with timeline; patching and monitoring proof for in-scope systems.</td></tr>
+      <tr><td><strong>HIPAA Security Rule</strong> — §164.308(a)(5)(ii)(B) protection from malicious software, §164.312(b) audit controls</td><td>A miner on a server that stores ePHI (electronic protected health information) is malicious software running unimpeded, and audit controls must record system activity well enough to reconstruct what happened.</td><td>Malware-protection coverage report for ePHI systems; audit-log retention proof; incident analysis documenting impact on ePHI availability.</td></tr>
+      <tr><td><strong>ISO/IEC 27001:2022</strong> — A.8.7 (protection against malware), A.8.16 (monitoring activities), A.8.20 (network security)</td><td>The whole cycle — download, pool connection, persistence — maps to malware, monitoring, and network controls. Annex A answers must describe detection working, not antivirus licensing.</td><td>Monitoring policy with CPU and billing baselines; alert records; SIEM rule change history; egress filtering rule sets.</td></tr>
+      <tr><td><strong>SOC 2</strong> — CC6.8 (unauthorized software), CC7.2 (anomaly monitoring), CC7.3 (event evaluation)</td><td>Auditors explicitly test whether unknown software and abnormal resource use are detected and evaluated. A hijack case is a classic walkthrough example for CC6.8.</td><td>EDR coverage dashboard; anomaly alert samples with disposition notes; post-incident evaluation records.</td></tr>
+      <tr><td><strong>PCI DSS 4.0</strong> — 5.3.1 (anti-malware), 10.2.1 (audit logging), 11.5.1 (intrusion detection)</td><td>Miners inside the cardholder data environment break anti-malware and logging expectations, and network intrusion detection is required to catch pool traffic that hides on web ports.</td><td>Anti-malware deployment evidence; IDS (intrusion detection system) alert tuning records; log retention on the CDE (cardholder data environment); IR (incident response) test scenarios including cryptojacking.</td></tr>
+      <tr><td><strong>NIS2 Directive (EU)</strong> — Art. 21 (risk measures), Art. 23 (24-hour early warning, 72-hour incident notification)</td><td>For essential and important entities, a prolonged hijack that degrades services can qualify as a significant incident. The early warning requires monitoring that finds the incident quickly, and the 72-hour notification requires a documented response process.</td><td>Documented detection capabilities; incident classification criteria; notification drill records.</td></tr>
+      <tr><td><strong>CIS Controls v8</strong> — 10.1/10.7 (malware defenses; behavior-based detection), 13.1/13.3/13.6 (network monitoring: central event alerting, network intrusion detection, traffic flow logs), 8.2 (audit log collection)</td><td>The safeguards map one-to-one to the detections in this section, which makes CIS a practical checklist for smaller teams.</td><td>Safeguard implementation status; central log inventory; network monitoring scope statement.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout note"><p class="callout-label">Audit tip</p><p>Keep three artifacts ready for every hijack scenario: a baseline document that defines normal CPU per host class, an export of the alert that fired with its disposition, and the post-incident rule change. Auditors trust artifacts that link detection to response.</p></div>
+
+  <h3 class="sub-head" id="s52-intel"><span class="sub-num">5.2</span>Threat intelligence</h3>
+  <p class="sub-intro">Mining actors are well documented, which makes intelligence work here very practical. Keep four lists fresh: active groups, their tools, their infrastructure (pools, proxies, loaders), and their current entry vectors. Feed those lists into the detections in 5.5.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Source types and how to use them</h3>
+      <ul>
+        <li><strong>MITRE ATT&CK</strong> — the technique page lists active groups and software for T1496.001 (see the table below). Start here; it is free and vendor-neutral.</li>
+        <li><strong>Vendor reporting</strong> — Trend Micro, Palo Alto Unit 42, Cado Security, and Sysdig's Threat Research team publish campaign write-ups with indicators and full kill chains.</li>
+        <li><strong>OSINT feeds</strong> — abuse.ch MalwareBazaar has an <code>xmrig</code> tag for miner samples; URLhaus tracks distribution URLs; GitHub trackers follow pool infrastructure.</li>
+        <li><strong>Commercial feeds</strong> — paid feeds add attribution and infrastructure age, useful for confidence scoring.</li>
+        <li><strong>ISACs and abuse-working groups</strong> — sector warnings from ISACs (information sharing and analysis centers) such as MS-ISAC, and from M3AAWG (the Messaging, Malware and Mobile Anti-Abuse Working Group), about mining waves hitting municipalities, schools, and hospitals.</li>
+        <li><strong>Internal telemetry</strong> — your own egress logs and DNS history are the best intel for <em>your</em> environment; every incident adds a permanent detection.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Confidence levels, in plain words</h3>
+      <p><strong>High</strong> means multiple independent sources agree and your own telemetry confirms it. Use it for blocking and alerting. <strong>Medium</strong> means the report is credible but you have not seen it locally — use it for hunts. <strong>Low</strong> means a single unverified claim — use it for awareness only. Re-score every quarter, because mining infrastructure rotates fast.</p>
+      <p>Apply intel in three steps: (1) enrich — tag pool, loader, and wallet indicators into your SIEM (a central system that collects and connects security logs); (2) hunt — search 90 days of history for each new actor's tools; (3) detect — write or tune a Sigma rule per tool family, then retire rules when a campaign dies.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Known actors, software, and campaigns (as cited by ATT&CK and public reporting)</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Actor / software</th><th>Type</th><th>Known activity</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>APT41 (G0096)</td><td>Group</td><td>Deployed a Monero miner alongside espionage operations</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>Blue Mockingbird (G0108)</td><td>Group</td><td>XMRIG deployment across many Windows systems via web application compromise</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>TeamTNT (G0139)</td><td>Group</td><td>Docker and Kubernetes cryptojacking with XMRig images (including the Hildegard malware); cloud credential theft (2020 to 2022 peak)</td><td><span class="badge sev-medium">Medium</span> largely inactive, tools recycled</td></tr>
+        <tr><td>Rocke (G0106)</td><td>Group</td><td>Early large-scale Linux miner distribution through web exploits</td><td><span class="badge sev-medium">Medium</span> historical</td></tr>
+        <tr><td>Kinsing (S0599)</td><td>Software</td><td>Container-focused miner with rootkit persistence; still active against exposed APIs</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>XMRig (S0659)</td><td>Software</td><td>Open-source miner used by most compute hijacking campaigns; the most used open-source Monero miner</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>Hildegard (S0601)</td><td>Software</td><td>Kubernetes-targeting malware using tmux to hide mining processes</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>LoudMiner (S0451)</td><td>Software</td><td>Miner bundled with pirated software on macOS and Windows, mining Monero</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>Skidmap (S0468)</td><td>Software</td><td>Linux miner with kernel-mode rootkit to hide CPU use</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>Lucifer (S0532)</td><td>Software</td><td>Windows miner plus DDoS (distributed denial-of-service) hybrid that spreads over known vulnerabilities</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>CookieMiner (S0492)</td><td>Software</td><td>macOS miner for the Koto coin; steals wallets and browser credentials</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>Bonadan (S0486) · DarkGate (S1111) · Imminent Monitor (S0434) with CoinMiner (S0344)</td><td>Software</td><td>Loaders and RATs (remote access trojans) deployed with mining modules, cited on the ATT&CK page; Imminent Monitor ships CoinMiner</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>ShadowRay (C0045)</td><td>Campaign</td><td>GPU hijacking through exposed Ray clusters used for AI workloads (Oligo Security research, 2024)</td><td><span class="badge sev-high">High</span></td></tr>
+        <tr><td>8220 Gang</td><td>Group</td><td>Oracle WebLogic exploitation and XMRig mining on Linux and Windows (2019 to 2024); also tracked as Water Sigbin; subject of Section 6</td><td><span class="badge sev-high">High</span></td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <h3 class="sub-head" id="s53-ranking"><span class="sub-num">5.3</span>Threats ranking and categorization</h3>
+  <p class="sub-intro">These five threats cover compute hijacking across all its platforms. The IDs are used as keys in 5.4 and 5.5. Severity reflects realistic worst-case impact for a mid-sized organization, adjusted by how often the threat is seen in the wild.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>ID / threat</th><th>Platform</th><th>Severity</th><th>Preconditions</th><th>Impact</th><th>Justification</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>CH-01</strong> Cryptominer execution on servers and endpoints</td>
+        <td><span class="badge plat">Linux</span><span class="badge plat">Windows</span><span class="badge plat">macOS</span></td>
+        <td><span class="badge sev-critical">Critical</span></td>
+        <td>Code execution via exploit, web shell, or malicious installer; outbound access</td>
+        <td>Slowdown or outage; power and cooling costs; proof of a real intrusion</td>
+        <td>Most observed form (8220 Gang, Kinsing, Blue Mockingbird); direct availability impact and always evidence of deeper compromise</td>
+      </tr>
+      <tr>
+        <td><strong>CH-02</strong> Sustained mining-pool connections from compute hosts</td>
+        <td><span class="badge plat">Containers</span><span class="badge plat">IaaS</span><span class="badge plat">Linux</span><span class="badge plat">Windows</span><span class="badge plat">macOS</span></td>
+        <td><span class="badge sev-high">High</span></td>
+        <td>A payload already runs somewhere on the network (or sanctioned mining exists)</td>
+        <td>Bandwidth costs; hides attacker presence; the egress channel keeps the mining alive</td>
+        <td>Network view catches hosts with no endpoint agent; 6-hour-plus sessions are a strong, tunable signal (AN1490)</td>
+      </tr>
+      <tr>
+        <td><strong>CH-03</strong> Unauthorized GPU and spot compute in cloud</td>
+        <td><span class="badge plat">IaaS</span></td>
+        <td><span class="badge sev-high">High</span></td>
+        <td>Leaked or stolen API keys with compute permissions; weak billing controls</td>
+        <td>Bills in the thousands within days; quota exhaustion for real workloads</td>
+        <td>Credential-based hijack leaves no malware; only audit logs and billing catch it (AN1493)</td>
+      </tr>
+      <tr>
+        <td><strong>CH-04</strong> Miner pods and containers via exposed cluster APIs</td>
+        <td><span class="badge plat">Containers</span><span class="badge plat">IaaS</span></td>
+        <td><span class="badge sev-critical">Critical</span></td>
+        <td>Exposed dashboard or API, missing RBAC, or anonymous access enabled; ShadowRay showed GPU job panels are targeted too</td>
+        <td>Cluster-wide mining at scale; access to cloud credentials stored in pods</td>
+        <td>One exposed API can compromise the whole cluster in minutes; highest blast radius per entry (AN1492)</td>
+      </tr>
+      <tr>
+        <td><strong>CH-05</strong> Masqueraded miner with kill-competitor behavior and persistence</td>
+        <td><span class="badge plat">Linux</span><span class="badge plat">Windows</span><span class="badge plat">macOS</span></td>
+        <td><span class="badge sev-medium">Medium</span></td>
+        <td>CH-01 already occurred; attacker wants to keep the CPU share and survive reboots</td>
+        <td>Recurrence after cleanup; wasted response effort; longer dwell time</td>
+        <td>Persistence plus rivalry kills explain why miners "come back" with new names; easy detection, high triage value (AN1489)</td>
+      </tr>
+    </tbody>
+  </table></div>
+
+  <h3 class="sub-head" id="s54-logs"><span class="sub-num">5.4</span>Logs and patterns</h3>
+  <p class="sub-intro">For each threat: the log sources to collect, the fields that matter, what normal looks like, what suspicious looks like, the detection logic in one sentence, and a realistic example event. Field names follow common ingestion formats; adjust them to your pipeline.</p>
+
+  <div class="card">
+    <h4><span class="mono">CH-01</span> Cryptominer execution — process telemetry</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Linux EDR process events, auditd execve, Sysmon EID 1 (Windows), macOS EDR</td></tr>
+        <tr><td>Key fields</td><td><code>Image</code>, <code>CommandLine</code>, <code>ParentImage</code>, <code>User</code>, <code>Hashes</code></td></tr>
+        <tr><td>Normal</td><td>Business apps from /usr or Program Files; package managers; build tools in work hours; CPU waves that follow the working day</td></tr>
+        <tr><td>Suspicious</td><td>Miner names (xmrig, minerd, kinsing, kdevtmpfsi, kswapd0 as a file), <code>stratum+tcp://</code> in the command line, binaries in /tmp or /dev/shm, system-like names from wrong paths, parent = web server process</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when a process whose name, path, or command line matches miner indicators is started by anything other than an approved admin tool — especially when the parent is a web application process.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — Linux EDR process event (Sysmon-style JSON)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "EventTime": "2025-11-20T03:14:22Z", "EventID": 1, "Computer": "web-prod-04",
+  "Image": "/dev/shm/kswapd0",
+  "CommandLine": "/dev/shm/kswapd0 -o pool.minexmr.icu:4444 -u 47hJwvQ9xBkTQ -k --donate-level=1 --cpu-max=87 --background",
+  "ParentImage": "/usr/sbin/httpd", "ParentCommandLine": "/usr/sbin/httpd -DFOREGROUND",
+  "User": "apache", "uid": "48",
+  "Hashes": "SHA256=9f2a6c51e0b7d3a1c44f18e6a2d9b5c0e7f3a81b2d4c5e6f7a8b9c0d1e2f3a4b"
+}
+# kernel-like name (kswapd0 is a real kernel thread name), temp path, web-server parent,
+# pool flag -o, throttle --cpu-max=87: every field here is a teaching signal.</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CH-02</span> Mining-pool connections — network telemetry</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Zeek conn.log, NetFlow, firewall logs, DNS query logs, TLS SNI logs</td></tr>
+        <tr><td>Key fields</td><td><code>id.orig_h</code>, <code>id.resp_h</code>, <code>id.resp_p</code>, <code>duration</code>, <code>orig_bytes</code>, <code>resp_bytes</code>, <code>query</code> (DNS), <code>server_name</code> (SNI — the website name a client announces when starting TLS)</td></tr>
+        <tr><td>Normal</td><td>Bursty sessions in work hours; destinations change; durations of minutes; upload and download roughly balanced on web ports</td></tr>
+        <tr><td>Suspicious</td><td>Sessions of 6 hours or more to one IP; ports 3333, 4444, 5555, 7777, 14444; DNS for pool domains; upload larger than download on a "web" port; steady small JSON-shaped messages</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert on outbound sessions whose duration exceeds 6 hours on pool ports, or whose destination matches pool indicators — excluding hosts tagged as sanctioned test systems.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — Zeek conn.log (TSV)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>#fields ts      uid      id.orig_h       id.orig_p       id.resp_h       id.resp_p       proto   duration        orig_bytes      resp_bytes
+1763615662.041  Ce1aXk2  10.20.4.31      52118           198.51.100.77   14444           tcp     26531.7         118042300       39125040
+# 118 MB uploaded over 7.4 hours on 14444/tcp from an app server = stratum session shape</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CH-03</span> Unauthorized cloud compute — cloud audit logs</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>CloudTrail (all regions), Azure Activity Log, GCP Audit Logs, billing anomaly alerts</td></tr>
+        <tr><td>Key fields</td><td><code>eventName</code>, <code>eventSource</code>, <code>awsRegion</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code>, <code>requestParameters.instancesSet.items.instanceType</code>, <code>resources</code></td></tr>
+        <tr><td>Normal</td><td>RunInstances from CI/CD (automated build and deployment) roles, known regions, standard instance types, weekday hours</td></tr>
+        <tr><td>Suspicious</td><td>GPU families (g4dn, g5, g6, p3, p4d) from human users; spot fleets; regions never used before; calls from VPN or Tor (an anonymity network) ranges; keys with no history suddenly launching fleets of 8 or more</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when instance creation uses GPU types or spot fleets, or when a principal's first-ever action is a compute launch — and join with billing anomaly alerts raised in the same hour.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — CloudTrail RunInstances (abridged)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "eventTime": "2025-11-20T02:58:11Z", "eventName": "RunInstances", "eventSource": "ec2.amazonaws.com",
+  "awsRegion": "af-south-1",
+  "userIdentity": { "type": "IAMUser", "arn": "arn:aws:iam::441277003312:user/ci-deploy",
+                    "accessKeyId": "AKIAIOSFODNN7EXAMPLE" },
+  "sourceIPAddress": "203.0.113.44",
+  "requestParameters": { "instancesSet": { "items": [ { "imageId": "ami-0f3a7bcd9912e4a5c",
+      "instanceType": "g4dn.xlarge", "minCount": 12, "maxCount": 12,
+      "instanceMarketOptions": { "marketType": "spot" } } ] } }
+}
+# GPU type + spot pricing + unused region + CI key from a VPN address: the full quartet.</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CH-04</span> Miner pods via exposed cluster APIs — Kubernetes audit</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>Kubernetes audit log, Docker daemon events, Falco or runtime sensors, registry pull logs</td></tr>
+        <tr><td>Key fields</td><td><code>verb</code>, <code>objectRef.resource</code>, <code>user.username</code>, <code>sourceIPs</code>, <code>requestObject.spec.containers.image</code>, <code>securityContext.privileged</code>, <code>stageTimestamp</code></td></tr>
+        <tr><td>Normal</td><td>Deployments from CI service accounts in release windows; reviewed base images; no privileged pods in app namespaces</td></tr>
+        <tr><td>Suspicious</td><td>Pod creation by anonymous or unknown users; miner images (xmrig, monero-miner, kannix); privileged mode or hostPath mounts; bursts of similar pods; pulls from unknown registries at night</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert on pod creation whose image matches miner registry paths, or whose spec requests privileged mode, when the caller is anonymous or not a CI service account.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — Kubernetes audit log (abridged)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>{
+  "kind": "Event", "apiVersion": "audit.k8s.io/v1", "stage": "ResponseComplete",
+  "verb": "create", "objectRef": { "resource": "pods", "namespace": "default" },
+  "user": { "username": "system:anonymous" },
+  "sourceIPs": ["203.0.113.88"],
+  "requestObject": { "spec": { "containers": [ {
+      "name": "pv-monitor", "image": "docker.io/kannix/monero-miner:latest",
+      "securityContext": { "privileged": true },
+      "resources": { "limits": { "cpu": "8" } } } ] } },
+  "stageTimestamp": "2025-11-20T01:42:07.882341Z"
+}
+# anonymous caller + miner image + privileged + 8 CPUs: a hijack in one line.</code></pre>
+    </figure>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CH-05</span> Masqueraded miner with rivalry kills — process and persistence telemetry</h4>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Aspect</th><th>Pattern</th></tr></thead>
+      <tbody>
+        <tr><td>Log sources</td><td>EDR process events with termination fields, auditd execve plus file writes, Sysmon EID 1 and 5 (Windows), cron and launchd changes</td></tr>
+        <tr><td>Key fields</td><td><code>Image</code>, <code>CommandLine</code>, <code>TargetImage</code> or victim process name, <code>TargetFilename</code>, <code>exe</code>, <code>name</code></td></tr>
+        <tr><td>Normal</td><td>Admins killing real malware during response; monitoring agents restarting services with change tickets</td></tr>
+        <tr><td>Suspicious</td><td>pkill or killall whose arguments name miner families (kinsing, kdevtmpfsi, kswapd0, xmrig, minerd); copies from /dev/shm to new names; <code>chattr -iae</code> before writing cron files; scheduled tasks running encoded PowerShell</td></tr>
+      </tbody>
+    </table></div>
+    <p><strong>Detection logic:</strong> alert when a process kills or renames binaries matching miner names, or when persistence locations are written right after such a kill — the rivalry pattern means a second miner took over.</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">example event — auditd execve + file write (composite)</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>type=SYSCALL msg=audit(1763615301.114:9012): arch=c000003e syscall=execve success=yes
+    exe="/usr/bin/pkill" pid=20488 ppid=19411 uid=48 (apache)
+type=EXECVE msg=audit(1763615301.114:9012): argc=3 a0="pkill" a1="-f"
+    a2="kdevtmpfsi|kswapd0|kinsing"
+type=PATH msg=audit(1763615319.550:9015): name="/etc/cron.d/net-self" inode=1180166
+type=PROCTITLE msg=audit(1763615319.550:9015): proctitle=636861747472202D696165
+    # chain: httpd -&gt; curl|bash -&gt; pkill rivals -&gt; chattr -iae -&gt; cron.d/net-self (persistence)</code></pre>
+    </figure>
+  </div>
+
+  <h3 class="sub-head" id="s55-sigma"><span class="sub-num">5.5</span>Sigma rules and Splunk SPL</h3>
+  <p class="sub-intro">Each threat gets one Sigma rule and one Splunk query in SPL (Search Processing Language — Splunk's search syntax) that implement the same logic. Index and sourcetype names are common defaults; adjust them to your environment. All queries assume fields are extracted at ingest time.</p>
+
+  <div class="card">
+    <h4><span class="mono">CH-01</span> Cryptominer execution — Sigma (process_creation, Linux) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements analytic AN1490 (long-running high-CPU processes and miner launches) on the endpoint side of DET0540. <strong>Severity: critical.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — miner execution</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: Cryptocurrency Miner Started by Web Server or From Temp Path
+id: 106b5cde-cc21-4784-9da3-5320163abbf3
+status: stable
+description: Detects Linux process creation where the image name, temp-file path, or
+  command line matches cryptocurrency miner patterns. Covers miners renamed and started
+  by web-server processes, as seen in 8220 Gang and Kinsing campaigns. Maps to ATT&amp;CK
+  T1496.001 and analytic AN1490 of detection strategy DET0540.
+references:
+  - https://attack.mitre.org/techniques/T1496/001/
+  - https://attack.mitre.org/techniques/T1496/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: process_creation
+  product: linux
+detection:
+  selection_miner_name:
+    Image|endswith:
+      - '/xmrig'
+      - '/minerd'
+      - '/cpuminer'
+      - '/kinsing'
+      - '/kdevtmpfsi'
+      - '/kswapd0'
+  selection_pool_arg:
+    CommandLine|contains:
+      - 'stratum+tcp://'
+      - 'stratum+ssl://'
+      - '--donate-level'
+      - '-o pool.'
+  selection_web_parent:
+    Image|startswith:
+      - '/tmp/'
+      - '/var/tmp/'
+      - '/dev/shm/'
+    ParentImage|endswith:
+      - '/httpd'
+      - '/apache2'
+      - '/nginx'
+      - '/java'
+      - '/php-fpm'
+  condition: 1 of selection_*
+fields:
+  - Image
+  - CommandLine
+  - ParentImage
+  - User
+  - uid
+falsepositives:
+  - Approved mining-research hosts (tag and exclude them)
+  - Build tools unpacked into /tmp by CI jobs
+level: critical
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.001</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes your Linux EDR forwards normalized process events to <code>index=edr</code>, <code>sourcetype=linux:process</code>, with fields <code>image</code>, <code>command_line</code>, <code>parent_image</code>, <code>user</code>; rename to match your TA):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CH-01</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=edr sourcetype=linux:process
+  (image IN ("/tmp/*","/var/tmp/*","/dev/shm/*","*/xmrig","*/minerd","*/cpuminer","*/kinsing","*/kdevtmpfsi","*/kswapd0")
+   OR command_line IN ("*stratum+tcp://*","*stratum+ssl://*","*--donate-level*","*-o pool.*"))
+| stats count min(_time) as first_seen max(_time) as last_seen
+        values(command_line) as commands by host, user, image, parent_image
+| sort - count</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> pin your build tools' temp paths in an allowlist lookup; exclude CI runners by hostname tag; require the web-server parent clause on shared web hosts to cut installer noise. Re-test after every EDR agent upgrade, because field names drift.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CH-02</span> Mining-pool connections — Sigma (network_connection) + Zeek SPL</h4>
+    <p><strong>Mapping note:</strong> the Sigma rule covers the endpoint socket view; the SPL covers the session-duration view from Zeek, which endpoints cannot see. Together they implement AN1490. <strong>Severity: high.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — pool ports outbound</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: Long-Lived Outbound Connection to Mining Pool Ports
+id: f52e1d2c-bda9-4ed8-9faf-286433cfdede
+status: stable
+description: Detects outbound socket connections to TCP ports commonly used by mining
+  pools and stratum proxies (3333, 4444, 5555, 7777, 14444). Network view of compute
+  hijacking for ATT&amp;CK T1496.001, analytic AN1490 of DET0540.
+references:
+  - https://attack.mitre.org/techniques/T1496/001/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: network_connection
+  product: linux
+detection:
+  selection:
+    Initiated: 'true'
+    DestinationPort:
+      - 3333
+      - 4444
+      - 5555
+      - 7777
+      - 14444
+  filter_internal:
+    DestinationIp|startswith:
+      - '10.'
+      - '192.168.'
+      - '172.16.'
+      - '172.17.'
+      - '172.18.'
+      - '172.19.'
+      - '172.20.'
+      - '172.21.'
+      - '172.22.'
+      - '172.23.'
+      - '172.24.'
+      - '172.25.'
+      - '172.26.'
+      - '172.27.'
+      - '172.28.'
+      - '172.29.'
+      - '172.30.'
+      - '172.31.'
+      - '127.'
+  condition: selection and not filter_internal
+fields:
+  - Image
+  - DestinationIp
+  - DestinationPort
+  - User
+falsepositives:
+  - Games, P2P tools, or wallet software that reuse those ports
+  - Internal services on those ports (filtered above)
+level: high
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.001</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=network sourcetype=zeek:conn</code>; Zeek <code>duration</code> is numeric seconds — the field the endpoint view lacks):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CH-02</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=network sourcetype=zeek:conn id.resp_p IN (3333,4444,5555,7777,14444)
+| search NOT id.resp_h IN ("10.0.0.0/8","192.168.0.0/16","172.16.0.0/12","127.0.0.0/8")
+| stats max(duration) as max_duration_s sum(orig_bytes) as uploaded_b
+        values(id.resp_h) as destinations count as sessions by id.orig_h, id.resp_p
+| where max_duration_s &gt; 21600 OR sessions &gt; 30 OR uploaded_b &gt; 1073741824
+| rename id.orig_h as src_ip, id.resp_p as dst_port
+| sort - max_duration_s
+# 21600 s = 6 h; 1073741824 B = 1 GB uploaded. Add per-host baselines before rollout.</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> pools hide behind CDNs (content delivery networks — services that front websites with shared addresses), so pair the port rule with a DNS and SNI watchlist of pool domains (<code>pool.supportxmr.com</code>, <code>xmrpool.net</code>, <code>minexmr</code> variants). Long sessions to legitimate cloud software APIs are normal; keep the port filter strict and document your false-positive budget.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CH-03</span> Unauthorized cloud compute — Sigma (CloudTrail) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements AN1493 (unauthorized instance creation, spot bursts, unused regions). The Sigma rule watches GPU launches and spot fleet requests; the SPL adds the per-principal rollup for review. <strong>Severity: high.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — GPU and spot fleet compute via CloudTrail</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: GPU or Spot Fleet Compute Created Outside Approved Pipelines
+id: 21a99a6a-f624-49cc-84c5-539eae1b749e
+status: experimental
+description: Detects EC2 RunInstances calls that launch GPU instance families and
+  spot fleet requests, which are typical for cloud cryptomining but rare in normal
+  operations. Excludes documented CI and ML roles. Maps to ATT&amp;CK T1496.001,
+  analytic AN1493 of DET0540.
+references:
+  - https://attack.mitre.org/techniques/T1496/001/
+  - https://attack.mitre.org/techniques/T1496/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: cloud
+  product: aws
+  service: cloudtrail
+detection:
+  selection_run:
+    eventName: 'RunInstances'
+    eventSource: 'ec2.amazonaws.com'
+  selection_spot:
+    eventName: 'RequestSpotFleet'
+  selection_gpu:
+    requestParameters.instancesSet.items.instanceType|startswith:
+      - 'g4dn.'
+      - 'g5.'
+      - 'g6.'
+      - 'p3.'
+      - 'p4d.'
+  filter_roles:
+    userIdentity.arn|contains:
+      - 'assumed-role/ci-deploy'
+      - 'assumed-role/ml-training'
+      - 'assumed-role/render-farm'
+  condition: (selection_run and selection_gpu or selection_spot) and not 1 of filter_*
+fields:
+  - eventName
+  - awsRegion
+  - userIdentity.arn
+  - sourceIPAddress
+  - requestParameters.instancesSet.items.instanceType
+falsepositives:
+  - Legitimate GPU training or rendering jobs outside the excluded roles
+  - Spot fleets used by approved batch systems
+level: high
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.001</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=cloud sourcetype=aws:cloudtrail</code>):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CH-03</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=cloud sourcetype=aws:cloudtrail
+  (eventName=RunInstances eventSource=ec2.amazonaws.com) OR eventName=RequestSpotFleet
+| spath path=requestParameters.instancesSet.items{}.instanceType output=itype
+| eval itype=coalesce(itype, eventName)
+| mvexpand itype
+| search itype IN ("g4dn.*","g5.*","g6.*","p3.*","p4d.*","RequestSpotFleet")
+| search NOT userIdentity.arn IN ("*assumed-role/ci-deploy*","*assumed-role/ml-training*","*assumed-role/render-farm*")
+| stats count values(awsRegion) as regions values(itype) as types
+        values(sourceIPAddress) as src_ips first(_time) as first_call by userIdentity.arn
+| sort - count</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> join results with a billing anomaly alert raised in the same window to raise confidence; add an unused-region clause (<code>awsRegion NOT IN ($business_regions$)</code> macro); exclude rendering and training queues with change-ticket references. If your teams use g4dn for transcoding, move that job to a dedicated role and exclude it.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CH-04</span> Miner pods via exposed APIs — Sigma (Kubernetes audit) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements AN1492 (ephemeral unauthorized containers from public images with high CPU, K8s API abuse). Relies on Kubernetes API audit logging at Metadata level or higher. <strong>Severity: critical.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — miner or privileged pod by anonymous caller</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: Miner Pod or Privileged Pod Created by Anonymous Caller
+id: 13269ff5-c82e-4521-8245-0e568f6cabcc
+status: stable
+description: Detects pod creation in the Kubernetes audit log where the image matches
+  known miner images, the pod requests privileged mode, or the caller is an anonymous
+  or unauthenticated identity. Exposed dashboards and APIs produce exactly this
+  pattern. Maps to ATT&amp;CK T1496.001, analytic AN1492 of DET0540.
+references:
+  - https://attack.mitre.org/techniques/T1496/001/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: cloud
+  product: kubernetes
+  service: audit
+detection:
+  selection_create:
+    verb: 'create'
+    objectRef.resource: 'pods'
+  selection_image:
+    requestObject.spec.containers.image|contains:
+      - 'xmrig'
+      - 'monero-miner'
+      - 'cryptominer'
+      - 'minergate'
+      - 'kannix'
+  selection_privileged:
+    requestObject.spec.containers.securityContext.privileged: true
+  selection_anon:
+    user.username:
+      - 'system:anonymous'
+      - 'system:unauthenticated'
+  condition: selection_create and (selection_image or selection_privileged or selection_anon)
+fields:
+  - verb
+  - user.username
+  - sourceIPs
+  - objectRef.namespace
+  - requestObject.spec.containers.image
+falsepositives:
+  - Internal tools that create sandbox pods anonymously (rare; document them)
+  - Approved workloads that truly need privileged mode
+level: critical
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.001</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=containers sourcetype=kubernetes:audit</code>; the TA must extract <code>requestObject</code> JSON — the <code>spath</code> call below handles inline JSON for images, and <code>privileged</code> is assumed extracted at ingest):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CH-04</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=containers sourcetype=kubernetes:audit verb=create objectRef.resource=pods
+| spath path=requestObject.spec.containers{}.image output=image
+| mvexpand image
+| eval privileged=lower(coalesce(privileged, "false"))
+| search image IN ("*xmrig*","*monero-miner*","*cryptominer*","*minergate*","*kannix*")
+    OR user.username IN ("system:anonymous","system:unauthenticated")
+    OR privileged="true"
+| stats count values(image) as images values(user.username) as callers
+        max(privileged) as any_privileged first(stageTimestamp) as first_seen
+        by sourceIPs, objectRef.namespace
+| sort - count</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> in a healthy cluster, anonymous pod creation should not exist at all — treat every hit as a finding, and tune only by namespace if you truly run sandbox tooling. Add a registry allowlist for the image match to reduce churn from renamed images.</p>
+  </div>
+
+  <div class="card">
+    <h4><span class="mono">CH-05</span> Masqueraded miner with rivalry kills — Sigma (process_creation, Linux) + SPL</h4>
+    <p><strong>Mapping note:</strong> implements AN1489 (masqueraded binaries) plus the kill-competitor behavior noted on the ATT&CK page. Windows equivalents watch <code>taskkill</code> and scheduled-task creation. Relates to masquerading, T1036. <strong>Severity: medium.</strong></p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">sigma — miner rivalry kills and masquerade prep</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>title: Process Killing or Masquerade Prep Linked to Miner Rivalry
+id: a52bb233-3176-4600-9b82-e9f526cb935d
+status: experimental
+description: Detects process creation where a kill operation targets known miner
+  process names, or where files are copied or attribute-protected in temp paths in
+  preparation for a renamed miner. Mining malware kills competing miners to take over
+  CPU. Maps to ATT&amp;CK T1496.001 with T1036, analytics AN1489 / AN1490 of DET0540.
+references:
+  - https://attack.mitre.org/techniques/T1496/001/
+  - https://attack.mitre.org/techniques/T1036/
+author: SOC Detection Engineering Guild
+date: 2025-11-20
+logsource:
+  category: process_creation
+  product: linux
+detection:
+  selection_kill:
+    Image|endswith:
+      - '/pkill'
+      - '/killall'
+      - '/kill'
+  selection_targets:
+    CommandLine|contains:
+      - 'kinsing'
+      - 'kdevtmpfsi'
+      - 'kswapd0'
+      - 'xmrig'
+      - 'minerd'
+      - 'monero'
+  selection_masq:
+    CommandLine|contains:
+      - 'cp /dev/shm/'
+      - 'mv /dev/shm/'
+      - 'chattr -iae'
+  condition: (selection_kill and selection_targets) or selection_masq
+fields:
+  - Image
+  - CommandLine
+  - ParentImage
+  - User
+falsepositives:
+  - Administrators removing real malware during incident response
+  - Monitoring scripts that clean or restart process trees
+level: medium
+tags:
+  - attack.impact
+  - attack.t1496
+  - attack.t1496.001
+  - attack.defense-evasion
+  - attack.t1036</code></pre>
+    </figure>
+    <p><strong>Splunk SPL equivalent</strong> (assumes <code>index=edr sourcetype=linux:process</code>, same normalized fields as CH-01):</p>
+    <figure class="codeblock">
+      <figcaption class="code-head"><span class="code-lang">spl — CH-05</span><button type="button" class="copy-btn" aria-label="Copy code to clipboard">Copy</button></figcaption>
+      <pre><code>index=edr sourcetype=linux:process
+  ((image IN ("*/pkill","*/killall","*/kill")
+    command_line IN ("*kinsing*","*kdevtmpfsi*","*kswapd0*","*xmrig*","*minerd*","*monero*"))
+   OR command_line IN ("*cp /dev/shm/*","*mv /dev/shm/*","*chattr -iae*"))
+| stats count values(command_line) as commands first(_time) as first_seen
+        by host, user, image, parent_image
+| sort - count</code></pre>
+    </figure>
+    <p><strong>False positives and tuning:</strong> incident responders generate this pattern on purpose, so tag IR (incident response) workstations and admin accounts. Pivot from every hit to what happened next: a kill followed by a file write to <code>/etc/cron.d</code> within minutes is the full CH-05 story.</p>
+  </div>
+
+  <div class="callout good"><p class="callout-label">Validation habit</p><p>Test every rule monthly with a lab event (Section 3 shows how to produce one safely). A rule that has never fired on synthetic data probably cannot fire at all — usually because a field name drifted.</p></div>
+</section>
+
+<!-- ================= SECTION 6 ================= -->
+<section class="sec" id="s6-case-study">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2>Real-World Case Study: 8220 Gang vs Oracle WebLogic</h2></div>
+  <p class="sec-intro">Public reporting describes the "8220 Gang" as a Chinese-speaking criminal crew tracked since 2019; newer tracking also uses the name "Water Sigbin". Its signature move: scan the internet for Oracle WebLogic servers, exploit a known flaw, and turn the host into a Monero miner. Unit 42 reported the first waves in May 2019; Trend Micro documented evolved tactics in May 2023, with follow-up reports in December 2023 and June 2024. The case is a clear teaching example because every detection from Section 5 applies to it.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Context</h3>
+      <p>Oracle WebLogic is a Java application server that many companies run on the internet. It has had several serious flaws that allow remote code execution without credentials. A flaw that lets attackers run code without a password is very valuable to them. The 8220 Gang built an automated pipeline around those flaws: scan, exploit, download, mine, repeat. The name comes from the port 8220 used in early campaigns.</p>
+      <p>Public reporting includes Unit 42 (May 2019, first WebLogic XMRig waves), Trend Micro (May 2023, "8220 Gang Evolves With New Strategies"), Help Net Security (December 2023), and The Hacker News (June 2024). Later public reporting also links the crew to attempts against Atlassian Confluence, Log4Shell, RocketMQ (CVE-2023-33246), and misconfigured Docker servers. Over the years the crew widened targeting to Linux cloud hosts and added information stealers to the payload mix.</p>
+    </div>
+    <div class="card">
+      <h3>Attack chain</h3>
+      <ol>
+        <li>Scan the internet for Oracle WebLogic servers on default ports.</li>
+        <li>Exploit known deserialization or authentication-bypass flaws — a CVE (a public ID for a known software flaw) is one such flaw. Examples: CVE-2020-14882, CVE-2020-14883, and later attempts against CVE-2023-21839.</li>
+        <li>Use the server's own download tools (<code>curl</code>, <code>wget</code>, PowerShell) to fetch a loader and the XMRig miner.</li>
+        <li>Kill competing miners found on the host, so their process keeps the CPU.</li>
+        <li>Connect to Monero mining pools, hiding pool traffic behind CDNs and ordinary-looking ports.</li>
+        <li>In later waves: steal cloud credentials with an information stealer, opening the door to CH-03 cloud compute hijack as well.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Timeline (from public reporting)</h3>
+    <ul class="timeline">
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">May 2019</span><p>Unit 42 documents the first 8220 Gang campaigns exploiting Oracle WebLogic servers to run the XMRig miner. The group name comes from the port 8220 the crew used.</p></li>
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">2019 to 2022</span><p>The crew automates scanning and exploitation, adds Linux targets, and rotates loader domains and pool addresses to survive blocking.</p></li>
+      <li><span class="tl-dot bad" aria-hidden="true"></span><span class="tl-when">November 2022 onward</span><p>Attack intensity grows. Trend Micro later links this period to expanded tooling, CDN-fronted pool traffic, and information-stealer payloads.</p></li>
+      <li><span class="tl-dot bad" aria-hidden="true"></span><span class="tl-when">May 2023</span><p>Trend Micro publishes "8220 Gang Evolves With New Strategies" (16 May 2023), documenting attempts against the WebLogic flaw CVE-2023-21839 and new evasion behavior.</p></li>
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">December 2023</span><p>Public reporting (Help Net Security and other outlets) reports continued mining waves against unpatched servers worldwide.</p></li>
+      <li><span class="tl-dot" aria-hidden="true"></span><span class="tl-when">June 2024</span><p>Public reporting (The Hacker News) says the crew is still active, now mixing miners with information stealers on both Linux and Windows hosts.</p></li>
+    </ul>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Detection point</h3>
+      <p>This attack chain is easy to see if you log process parents: a Java application server should never spawn <code>curl</code>, <code>wget</code>, or a miner. The moment WebLogic's <code>java</code> process becomes a parent to download tools or unknown binaries, you have a high-confidence alert (the CH-01 web-parent clause). Minutes later, the host shows a CPU plateau and a long stratum session (CH-02). Organizations that watched process lineage caught this campaign at step 3 of 6 — before serious cost accrued.</p>
+    </div>
+    <div class="card">
+      <h3>Containment and eradication</h3>
+      <p>Containment: isolate the server, kill the miner tree, and block the loader and pool addresses at the firewall. Eradication: patch WebLogic (the CVE-2020-14882 class is fixed by Oracle's critical patch updates), remove loader artifacts and cron or systemd persistence, rotate any credentials the host held, and check for the information-stealer payload in later waves. The kill-competitor behavior makes eradication checkable: if your CH-05 rule stays quiet for a week, the rivalry cycle is gone.</p>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Recovery and impact</h3>
+      <p>Recovery is usually quick for this crew's mining-only waves: return the host to service with egress rules in place and monitor for one week. Impact adds up quietly: days of full CPU on an application server, higher power costs, degraded response times for real users, and — in the later waves — the risk that stolen credentials led to deeper access. The cost of the Monero mined was modest per host; the cost of the exposure was not.</p>
+    </div>
+    <div class="card">
+      <h3>Team response and communication</h3>
+      <p>Responders who wrote up these incidents emphasize one communication point: a miner is a perimeter failure, so the report should go to the application owner and the platform team, not only to security. Frame it as "an unpatched internet-facing service was weaponized", not "we had a virus". That framing helped security teams get patching budgets and exposure reviews approved in the documented cases.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Lessons learned</h3>
+    <ul class="checklist">
+      <li>Internet-facing application servers need a patch SLA measured in days — WebLogic flaws were exploited within days of disclosure.</li>
+      <li>Process lineage is the cheapest strong detection: java spawning curl or a miner should be a critical alert on every platform.</li>
+      <li>Egress control starves the attack: default-deny outbound makes pool connections and loader downloads fail loudly.</li>
+      <li>The kill-competitor pattern is easy to detect — watch for one process repeatedly terminating miner-named processes.</li>
+      <li>Assume credential theft in later waves: rotate host-held secrets even when the payload "only" mined.</li>
+      <li>Report the entry path, not the symptom, so the organization fixes the door, not just the payload.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= SECTION 7 ================= -->
+<section class="sec" id="s7-mitigation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2>Mitigation and Defense</h2></div>
+  <p class="sec-intro">ATT&CK's own mitigation note for this sub-technique is honest: it "cannot be easily mitigated with preventive controls since it is based on the abuse of system features." Mining uses the same CPU instructions your applications use. The practical answer is layered defense: make entry hard, make hijacking loud, and make the bill stop fast.</p>
+
+  <div class="grid3">
+    <div class="card">
+      <h4>Policy &amp; people</h4>
+      <ul>
+        <li>Asset policy: no internet-reachable admin panels or cluster APIs; exception process with expiry dates.</li>
+        <li>Cloud spend policy: budgets with alerts at 50, 80, and 100 percent of forecast, routed to security too.</li>
+        <li>Training on secret hygiene: no keys in pods, repositories, or build logs.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Identity</h4>
+      <ul>
+        <li>MFA on all cloud root and admin accounts — no exceptions.</li>
+        <li>Least privilege in IAM (identity and access management); separate roles for CI, humans, and workloads; no wildcard compute permissions for human users.</li>
+        <li>Short-lived credentials for workloads instead of static keys.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Endpoint</h4>
+      <ul>
+        <li>EDR with behavioral mining detection on all servers and endpoints.</li>
+        <li>Block binaries executing from temp paths; application allowlisting where possible.</li>
+        <li>Patch internet-facing applications within days: WebLogic, Confluence, and peers are proven miner doors.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Network</h4>
+      <ul>
+        <li>Default-deny egress; allowlists for required destinations only.</li>
+        <li>Block or alert on pool ports 3333, 4444, 5555, 7777, and 14444 outbound.</li>
+        <li>DNS filtering for known pool, loader, and proxy domains, refreshed monthly.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Cloud &amp; containers</h4>
+      <ul>
+        <li>Kubernetes API and dashboard behind VPN or identity proxy; anonymous auth off; RBAC least privilege.</li>
+        <li>Pod security standards: no privileged pods by default; scan images for miners before they enter the registry.</li>
+        <li>Quotas and instance-type restrictions on GPU families; spot-fleet requests need approval.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Logging &amp; monitoring</h4>
+      <ul>
+        <li>Deploy the five Sigma rules from Section 5.5 with their listed log sources.</li>
+        <li>CPU and GPU baselines per host class; alert on plateaus above baseline.</li>
+        <li>Kubernetes and cloud audit logs to an immutable store; billing alerts reach the SOC, not just finance.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Home and small-office users</h3>
+      <p>You are a target too — mostly through cracked software and fake installers that carry miners. Five practical steps help:</p>
+      <ol>
+        <li>Never install cracked or "free" versions of paid software.</li>
+        <li>Keep your operating system and router updated.</li>
+        <li>If a computer gets slow, hot, or noisy for no reason, open Task Manager or <code>top</code> and look for unknown processes using most of the CPU.</li>
+        <li>Use the built-in malware protection and let it update.</li>
+        <li>Do not trust browser extensions that promise free content.</li>
+      </ol>
+      <p>If your computer is loud while you sleep, investigate.</p>
+    </div>
+    <div class="card">
+      <h3>Response-ready habits</h3>
+      <p>Keep an emergency runbook for the two classic pages: "unknown process at 95 percent CPU" and "cloud bill spike". It should name who to call, which keys to disable first, how to isolate a host, and where the audit logs live. Practice it once a quarter as a tabletop. The 8220 Gang case shows why speed matters: their pipeline exploits new targets within days, so your patch SLA and your egress rules are the real defense.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Prioritized actions</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Take Kubernetes dashboards and cluster APIs off the internet; disable anonymous access</td><td>Low</td><td>Platform team</td><td>Very high for CH-04 — removes the single highest-blast-radius entry point</td></tr>
+        <tr><td>2</td><td>Enable all-region cloud audit logging plus billing anomaly alerts to the SOC</td><td>Low</td><td>Cloud platform team</td><td>Very high for CH-03 — turns days of dwell time into minutes</td></tr>
+        <tr><td>3</td><td>Default-deny egress with pool-port and pool-domain filtering</td><td>Medium</td><td>Network team</td><td>High — breaks CH-01/CH-02 monetization even when a miner lands</td></tr>
+        <tr><td>4</td><td>EDR on all servers with the CH-01 and CH-05 rules deployed</td><td>Medium</td><td>Security engineering</td><td>High — catches execution, rivalry kills, and persistence</td></tr>
+        <tr><td>5</td><td>Patch SLA for internet-facing apps (WebLogic class); weekly exposure review</td><td>Medium</td><td>IT operations</td><td>High over time — starves the attack chain, as the 8220 Gang case shows</td></tr>
+        <tr><td>6</td><td>Quarterly detection validation with the lab simulation from Section 3</td><td>Low</td><td>Detection engineering</td><td>Medium — keeps the rules real against field drift</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= SECTION 8 ================= -->
+<section class="sec" id="s8-mistakes">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2>Common Mistakes and Best Practices</h2></div>
+  <p class="sec-intro">These ten mistakes come from real SOC reviews of cryptojacking detections. Each one lists the symptom you will notice, the root cause, the fix, and the habit that prevents it from returning.</p>
+
+  <div class="grid2">
+    <div class="card"><h4>1. Watching CPU only</h4>
+      <ul><li><strong>Symptom:</strong> incidents found by users (loud fans) or by bills, not by alerts.</li>
+      <li><strong>Root cause:</strong> detection logic stops at "high CPU", so throttled miners that cap at 80 to 90 percent pass.</li>
+      <li><strong>Fix:</strong> join CPU signals with process and network signals (CH-01 plus CH-02).</li>
+      <li><strong>Prevention:</strong> require two data sources for every hijacking rule.</li></ul></div>
+    <div class="card"><h4>2. Trusting antivirus names</h4>
+      <ul><li><strong>Symptom:</strong> "no malware found" verdicts on hosts that are clearly mining.</li>
+      <li><strong>Root cause:</strong> miners arrive renamed (kswapd0, kdevtmpfsi look-alikes), so name-based antivirus misses them.</li>
+      <li><strong>Fix:</strong> detect behavior and context — temp paths, pool strings, web-server parents — not just names.</li>
+      <li><strong>Prevention:</strong> keep the CH-01 rule in the SIEM, not only in the antivirus console.</li></ul></div>
+    <div class="card"><h4>3. Ignoring Linux servers</h4>
+      <ul><li><strong>Symptom:</strong> strong Windows coverage, yet miners live on Linux web hosts.</li>
+      <li><strong>Root cause:</strong> no auditd or EDR agent on Linux; "it is just a web server" thinking.</li>
+      <li><strong>Fix:</strong> ship auditd plus EDR to every Linux host; deploy CH-01 and CH-05 for Linux.</li>
+      <li><strong>Prevention:</strong> coverage matrix per platform, reviewed quarterly.</li></ul></div>
+    <div class="card"><h4>4. Leaving cluster APIs open</h4>
+      <ul><li><strong>Symptom:</strong> miner pods appear with names and images nobody in the team knows.</li>
+      <li><strong>Root cause:</strong> dashboard or API reachable from the internet, anonymous access on, RBAC wide open.</li>
+      <li><strong>Fix:</strong> move the API behind VPN, disable anonymous auth, enforce RBAC and pod security standards.</li>
+      <li><strong>Prevention:</strong> cloud baseline check at onboarding for every new cluster.</li></ul></div>
+    <div class="card"><h4>5. Deleting the miner and closing the ticket</h4>
+      <ul><li><strong>Symptom:</strong> the same host reappears with a new miner name next week.</li>
+      <li><strong>Root cause:</strong> symptom-only response; the entry path and persistence stay.</li>
+      <li><strong>Fix:</strong> mandatory persistence sweep (CH-05) plus entry-path review before closing.</li>
+      <li><strong>Prevention:</strong> closure checklist in the ticket template.</li></ul></div>
+    <div class="card"><h4>6. Egress allow-all</h4>
+      <ul><li><strong>Symptom:</strong> weeks of mining before anyone notices; loaders update freely.</li>
+      <li><strong>Root cause:</strong> servers can reach any address on any port, including pools on 443.</li>
+      <li><strong>Fix:</strong> default-deny egress; allowlists; DNS filtering for pool domains.</li>
+      <li><strong>Prevention:</strong> treat new outbound destinations as change requests.</li></ul></div>
+    <div class="card"><h4>7. Alerting on single pool-port packets</h4>
+      <ul><li><strong>Symptom:</strong> hundreds of low-value alerts; analysts auto-close them.</li>
+      <li><strong>Root cause:</strong> one-packet port matches with no duration, volume, or allowlist context.</li>
+      <li><strong>Fix:</strong> require 6-hour-plus sessions, repeat hits, or upload volume (the CH-02 SPL does this).</li>
+      <li><strong>Prevention:</strong> every rule ships with its false-positive budget documented.</li></ul></div>
+    <div class="card"><h4>8. Billing alerts never reach the SOC</h4>
+      <ul><li><strong>Symptom:</strong> finance reports a bill over 10,000 dollars days after the fact.</li>
+      <li><strong>Root cause:</strong> cost alerts route to finance only; security has no visibility of spend.</li>
+      <li><strong>Fix:</strong> route budget and anomaly alerts to the SOC channel; add CH-03 as a saved search.</li>
+      <li><strong>Prevention:</strong> asset inventory includes every cloud account with a security contact.</li></ul></div>
+    <div class="card"><h4>9. Static thresholds forever</h4>
+      <ul><li><strong>Symptom:</strong> alert floods after a legitimate batch job, or silence after infrastructure growth.</li>
+      <li><strong>Root cause:</strong> "90 percent CPU" thresholds written once, never re-baselined.</li>
+      <li><strong>Fix:</strong> per-host-class baselines with scheduled re-learning windows.</li>
+      <li><strong>Prevention:</strong> quarterly threshold review tied to the change calendar.</li></ul></div>
+    <div class="card"><h4>10. Rules never tested</h4>
+      <ul><li><strong>Symptom:</strong> a rule "works" for years — because it has never matched anything, including real attacks.</li>
+      <li><strong>Root cause:</strong> no validation pipeline; field names drifted after an agent upgrade.</li>
+      <li><strong>Fix:</strong> replay the Section 3 lab events monthly; review rules with zero matches in 180 days.</li>
+      <li><strong>Prevention:</strong> detection CI: every rule change runs a synthetic event test.</li></ul></div>
+  </div>
+
+  <div class="card">
+    <h3>Operating rhythm</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Daily</th><th>Weekly</th><th>Monthly</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Review compute-hijack alerts with the two-signal rule; check the cloud spend dashboard; confirm EDR agents are healthy on servers.</td>
+          <td>Walk CH-05 persistence hits; refresh pool and loader watchlists; scan new container images for miner patterns; verify cluster APIs are still off the internet.</td>
+          <td>Replay lab events against all five rules; re-baseline CPU and instance thresholds; update the actor list from 5.2 with confidence re-scoring.</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </div>
+</section>
+
+<!-- ================= SECTION 9 ================= -->
+<section class="sec" id="s9-cheatsheet">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2>Cheat Sheet and Quick Reference</h2></div>
+  <p class="sec-intro">This page holds the one-screen version of the whole guide, for busy shifts. It collects the key facts, the strongest detections, and the response checklist in one place. Print it, or keep it open beside your SIEM while you work an alert. When you need the detail behind an item, the section numbers point back to it.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Key facts</h3>
+      <dl class="kv">
+        <dt>Sub-technique</dt><dd>T1496.001 — Compute Hijacking (Impact), child of T1496 Resource Hijacking</dd>
+        <dt>What it is</dt><dd>Attacker uses your CPU or GPU to mine cryptocurrency, on hosts or via cloud APIs</dd>
+        <dt>Platforms</dt><dd>Containers, IaaS, Linux, Windows, macOS</dd>
+        <dt>Detection strategy</dt><dd>DET0540 with analytics AN1489 to AN1493</dd>
+        <dt>Fastest signals</dt><dd>CPU plateau + pool session · anonymous privileged pod · GPU fleet in an odd region</dd>
+        <dt>Golden rule</dt><dd>Join two signals before alerting; remove the cause, not just the payload</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h3>Top detections</h3>
+      <ol>
+        <li><strong>CH-01:</strong> miner names, pool args, or temp-path binaries with web-server parents (Sigma 5.5.1)</li>
+        <li><strong>CH-02:</strong> 6-hour-plus sessions or pool ports outbound (Sigma 5.5.2 + Zeek SPL)</li>
+        <li><strong>CH-03:</strong> GPU or spot-fleet compute via CloudTrail outside approved roles (Sigma 5.5.3)</li>
+        <li><strong>CH-04:</strong> miner image, privileged pod, or anonymous caller in the Kubernetes audit log (Sigma 5.5.4)</li>
+        <li><strong>CH-05:</strong> kills or renames targeting miner-named processes, then persistence writes (Sigma 5.5.5)</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Response checklist</h3>
+    <ul class="checklist">
+      <li>Scope: which hosts, pods, or accounts show the same indicator (pool, image, wallet, instance type)?</li>
+      <li>Join: confirm resource signal + cause signal before declaring an incident.</li>
+      <li>Contain: isolate the host, or disable cloud keys and set a spend throttle first.</li>
+      <li>Preserve: snapshot or export logs before cleanup; keep the binary or image for analysis.</li>
+      <li>Eradicate: remove the miner AND the persistence (cron, units, tasks, deployments).</li>
+      <li>Fix entry: patch the web app, close the exposed API, rotate leaked keys.</li>
+      <li>Verify: hunt for the same indicators estate-wide for 30 days; the rivalry kill should stay silent.</li>
+      <li>Improve: add the missed log source and a new Sigma rule from this incident.</li>
+    </ul>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Official links</h3>
+      <ul class="links-list">
+        <li><span class="lt">THIS SUB-TECHNIQUE</span><a href="https://attack.mitre.org/techniques/T1496/001/">T1496.001 — Compute Hijacking</a></li>
+        <li><span class="lt">PARENT</span><a href="https://attack.mitre.org/techniques/T1496/">T1496 — Resource Hijacking</a></li>
+        <li><span class="lt">SIBLING</span><a href="https://attack.mitre.org/techniques/T1496/002/">T1496.002 — Bandwidth Hijacking</a></li>
+        <li><span class="lt">SIBLING</span><a href="https://attack.mitre.org/techniques/T1496/003/">T1496.003 — SMS Pumping</a></li>
+        <li><span class="lt">SIBLING</span><a href="https://attack.mitre.org/techniques/T1496/004/">T1496.004 — Cloud Service Hijacking</a></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Related techniques in the chain</h3>
+      <ul class="links-list">
+        <li><span class="lt">ENTRY</span><a href="https://attack.mitre.org/techniques/T1190/">T1190 — Exploit Public-Facing Application</a></li>
+        <li><span class="lt">ENTRY</span><a href="https://attack.mitre.org/techniques/T1078/">T1078 — Valid Accounts</a></li>
+        <li><span class="lt">PERSISTENCE</span><a href="https://attack.mitre.org/techniques/T1053/003/">T1053.003 — Cron</a></li>
+        <li><span class="lt">EVASION</span><a href="https://attack.mitre.org/techniques/T1036/">T1036 — Masquerading</a></li>
+        <li><span class="lt">CONTAINERS</span><a href="https://attack.mitre.org/techniques/T1610/">T1610 — Deploy Container</a></li>
+        <li><span class="lt">DEFENSE EVASION</span><a href="https://attack.mitre.org/techniques/T1562/001/">T1562.001 — Impair Defenses</a></li>
+      </ul>
+    </div>
+  </div>
+</section>
+<!-- ==== MAIN-CONTENT:END ==== -->
+</main>
+</div>
+
+<button type="button" class="fab fab-toc" id="mobileTocBtn" aria-expanded="false" aria-controls="toc">Contents</button>
+<button type="button" class="fab fab-top" id="backToTop" aria-label="Back to top">&#8593;</button>
+<div class="backdrop" id="backdrop"></div>
+
+<script>
+(function () {
+  'use strict';
+  var d = document;
+  var root = d.documentElement;
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  /* ---------- theme toggle (single control; honors pre-paint choice) ---------- */
+  var themeBtn = d.getElementById('themeToggle');
+  function applyTheme(t) {
+    root.setAttribute('data-theme', t);
+    try { localStorage.setItem('atk-theme', t); } catch (e) {}
+    if (themeBtn) themeBtn.textContent = t === 'dark' ? 'Light mode' : 'Dark mode';
+    d.dispatchEvent(new CustomEvent('themechange'));
+  }
+  if (themeBtn) {
+    themeBtn.textContent = root.getAttribute('data-theme') === 'dark' ? 'Light mode' : 'Dark mode';
+    themeBtn.addEventListener('click', function () {
+      applyTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+  }
+
+  /* ---------- TOC built from real headings (cannot drift) ---------- */
+  var tocList = d.getElementById('tocList');
+  function buildTOC() {
+    if (!tocList) return;
+    var secs = d.querySelectorAll('main#main-content > section.sec');
+    var frag = d.createDocumentFragment();
+    secs.forEach(function (sec) {
+      var h2 = sec.querySelector('.sec-head h2');
+      if (!h2) return;
+      var li = d.createElement('li');
+      var a = d.createElement('a');
+      a.href = '#' + sec.id;
+      a.textContent = (sec.querySelector('.sec-num') ? sec.querySelector('.sec-num').textContent + '. ' : '') + h2.textContent;
+      li.appendChild(a);
+      frag.appendChild(li);
+      sec.querySelectorAll('h3.sub-head[id]').forEach(function (h3) {
+        var sub = d.createElement('li');
+        var sa = d.createElement('a');
+        sa.href = '#' + h3.id;
+        sa.className = 'sub';
+        var num = h3.querySelector('.sub-num');
+        sa.textContent = (num ? num.textContent + ' ' : '') + h3.textContent.replace(num ? num.textContent : '', '').trim();
+        sub.appendChild(sa);
+        frag.appendChild(sub);
+      });
+    });
+    tocList.innerHTML = '';
+    tocList.appendChild(frag);
+  }
+  buildTOC();
+
+  /* ---------- scrollspy ---------- */
+  var links = {};
+  function cacheLinks() {
+    links = {};
+    tocList.querySelectorAll('a').forEach(function (a) {
+      links[a.getAttribute('href').slice(1)] = a;
+    });
+  }
+  cacheLinks();
+  var setActive = function (id) {
+    Object.keys(links).forEach(function (k) { links[k].classList.toggle('active', k === id); });
+  };
+  function watchSpy() {
+    var targets = [];
+    d.querySelectorAll('main#main-content > section.sec').forEach(function (s) { targets.push(s); });
+    d.querySelectorAll('main#main-content h3.sub-head[id]').forEach(function (h) { targets.push(h); });
+    if (!('IntersectionObserver' in window)) return;
+    var current = null;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) current = en.target.id;
+      });
+      if (current) setActive(current);
+    }, { rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+    targets.forEach(function (t) { io.observe(t); });
+  }
+  watchSpy();
+
+  /* ---------- reading progress ---------- */
+  var fill = d.getElementById('progressFill');
+  var ticking = false;
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () {
+      var h = root.scrollHeight - window.innerHeight;
+      var p = h > 0 ? Math.min(1, window.scrollY / h) : 0;
+      if (fill) fill.style.width = (p * 100).toFixed(2) + '%';
+      var top = d.getElementById('backToTop');
+      if (top) top.classList.toggle('show', window.scrollY > 600);
+      ticking = false;
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  /* ---------- back to top ---------- */
+  var btt = d.getElementById('backToTop');
+  if (btt) btt.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: reduced.matches ? 'auto' : 'smooth' });
+  });
+
+  /* ---------- mobile contents overlay (same sidebar, off-canvas) ---------- */
+  var toc = d.getElementById('toc');
+  var openBtn = d.getElementById('mobileTocBtn');
+  var backdrop = d.getElementById('backdrop');
+  var closeBtn = d.getElementById('tocClose');
+  function setToc(open) {
+    d.body.classList.toggle('toc-open', open);
+    if (openBtn) openBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open && closeBtn) closeBtn.focus();
+  }
+  if (openBtn) openBtn.addEventListener('click', function () { setToc(!d.body.classList.contains('toc-open')); });
+  if (backdrop) backdrop.addEventListener('click', function () { setToc(false); });
+  if (closeBtn) closeBtn.addEventListener('click', function () { setToc(false); focusMain(); });
+  function focusMain() {
+    var m = d.getElementById('main-content');
+    if (m) m.focus({ preventScroll: false });
+  }
+  d.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && d.body.classList.contains('toc-open')) { setToc(false); if (openBtn) openBtn.focus(); }
+  });
+  tocList.addEventListener('click', function (e) {
+    if (e.target.closest('a') && d.body.classList.contains('toc-open')) setToc(false);
+  });
+
+  /* ---------- copy buttons ---------- */
+  d.addEventListener('click', function (e) {
+    var btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    var pre = btn.closest('.codeblock').querySelector('pre');
+    var text = pre ? pre.innerText : '';
+    function done() {
+      btn.textContent = 'Copied';
+      btn.classList.add('ok');
+      setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function () { fallback(); });
+    } else { fallback(); }
+    function fallback() {
+      var ta = d.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      d.body.appendChild(ta);
+      ta.select();
+      try { d.execCommand('copy'); done(); } catch (err) {}
+      d.body.removeChild(ta);
+    }
+  });
+
+  /* ============================================================
+     Simulation engine (shared by all technique guide pages)
+     ============================================================ */
+  var SIM_CONFIG = {
+  // ==== SIM-CONFIG:BEGIN ====
+meta: { title: "Scenario: Kubernetes cluster hijacked for cryptomining" },
+nodes: [
+  { id: "attacker", label: "Attacker", sub: "external host", type: "attacker", x: 0.09, y: 0.32,
+    tip: "The attacker works from outside the network. They hunt for admin panels and APIs that are reachable from the internet without a password." },
+  { id: "dashboard", label: "K8s Dashboard", sub: "exposed container", type: "container", x: 0.32, y: 0.15,
+    tip: "The Kubernetes dashboard is a web control panel for the cluster. If it is exposed without login, anyone can create workloads inside the cluster." },
+  { id: "cluster", label: "K8s Cluster", sub: "compute nodes", type: "cloud", x: 0.53, y: 0.42,
+    tip: "The cluster runs the company's containers. Its audit log records every API call, which makes it the best evidence source for this attack." },
+  { id: "miner", label: "Miner Pod", sub: "unauthorized workload", type: "container", x: 0.30, y: 0.72,
+    tip: "The miner pod runs a cryptomining program. It burns CPU that the company pays for and sends the results to the attacker's pool." },
+  { id: "pool", label: "Mining Pool", sub: "attacker income", type: "server", x: 0.83, y: 0.15,
+    tip: "The mining pool hands out hashing jobs and pays out coins. Pool servers are often rented or hidden behind content delivery networks." },
+  { id: "billing", label: "Cloud Billing", sub: "cost meter", type: "money", x: 0.86, y: 0.70,
+    tip: "The cloud billing account shows the cost of the stolen compute. A sudden spike is often the first sign that managers notice." },
+  { id: "soc", label: "SOC", sub: "defenders", type: "defender", x: 0.62, y: 0.72,
+    tip: "The security team sees cluster audit logs, node metrics, and network flow records in their SIEM, a central alert console." }
+],
+flowsBase: [ ["dashboard", "cluster"], ["miner", "cluster"], ["cluster", "soc"], ["cluster", "billing"] ],
+steps: [
+  {
+    title: "1. Finding the exposed dashboard", ms: 7000,
+    caption: "The attacker scans the internet for open Kubernetes dashboards and finds one that needs no login.",
+    hint: "Firewall logs show scan traffic against web ports and the kubelet port. Alone, this is normal background noise.",
+    flows: [ { from: "attacker", to: "dashboard", color: "danger", label: "port scan + probe", n: 4 } ],
+    states: { attacker: "active" }, evid: [], focus: null
+  },
+  {
+    title: "2. Creating a privileged pod", ms: 7000,
+    caption: "Through the dashboard the attacker sends API calls to create a pod with full host privileges.",
+    hint: "The Kubernetes audit log records pod creation by an anonymous user. This is the first strong signal.",
+    flows: [ { from: "attacker", to: "dashboard", color: "danger", label: "dashboard session", n: 3 },
+             { from: "dashboard", to: "cluster", color: "warning", label: "create pod API call", n: 3 } ],
+    states: { dashboard: "compromised", cluster: "active" },
+    evid: [ { node: "soc", text: "k8s audit: create pod by system:anonymous" } ], focus: null
+  },
+  {
+    title: "3. Pulling the miner image", ms: 7000,
+    caption: "The new pod pulls a public miner image from a container registry and starts. The cluster now runs attacker code.",
+    hint: "Registry pull logs show a monero-miner image pulled at 02:41 by a service account with no prior history.",
+    flows: [ { from: "dashboard", to: "cluster", color: "warning", label: "pod spec with miner image", n: 2 },
+             { from: "cluster", to: "miner", color: "accent", label: "pod scheduled", n: 2 } ],
+    states: { miner: "active" },
+    evid: [ { node: "soc", text: "image pull: docker.io/kannix/monero-miner" } ], focus: ["miner", "cluster"]
+  },
+  {
+    title: "4. Mining starts", ms: 8000,
+    caption: "The miner connects to a mining pool and starts hashing. CPU jumps to 94 percent and the billing curve climbs.",
+    hint: "A flat CPU plateau on the node plus a long outbound session to a new IP on port 4444. Two weak signals on their own.",
+    flows: [ { from: "miner", to: "pool", color: "violet", label: "stratum jobs / shares", n: 5 },
+             { from: "cluster", to: "billing", color: "warning", label: "compute cost", n: 2 } ],
+    states: { miner: "compromised", pool: "active" },
+    evid: [ { node: "soc", text: "metrics: node CPU 94% for 40 min" } ], focus: null
+  },
+  {
+    title: "5. Scaling to more pods", ms: 7000,
+    caption: "The attacker copies the pod across all nodes, so every core in the cluster works for the same wallet.",
+    hint: "Audit log shows 20 similar pod creations in 40 minutes, all from the same source IP. Volume gives it away.",
+    flows: [ { from: "dashboard", to: "cluster", color: "warning", label: "scale pods", n: 4 },
+             { from: "miner", to: "pool", color: "violet", label: "more shares", n: 3 } ],
+    states: {},
+    evid: [ { node: "soc", text: "k8s audit: 20 pods from 203.0.113.88" } ], focus: null
+  },
+  {
+    title: "6. Defender signals align", ms: 8000,
+    caption: "The SOC joins three weak signals: anonymous pod creation, the CPU plateau, and egress to a pool address.",
+    hint: "A correlation rule (CH-04 + CH-01 + CH-02 joined) raises one critical alert with full context.",
+    flows: [ { from: "cluster", to: "soc", color: "accent", label: "audit + metrics", n: 3 },
+             { from: "miner", to: "pool", color: "violet", label: "still mining", n: 2 } ],
+    states: { soc: "flagged" },
+    evid: [ { node: "soc", text: "SIEM: CH-04 + CH-01 join -> critical" } ], focus: ["soc", "cluster", "miner"]
+  },
+  {
+    title: "7. Containment", ms: 7000,
+    caption: "The SOC evicts the miner pods, moves the dashboard behind the VPN, and rotates the exposed tokens.",
+    hint: "Audit log records the pod deletions; pool sessions end; CPU returns to baseline within minutes.",
+    flows: [ { from: "soc", to: "cluster", color: "success", label: "evict pods + fix access", n: 3 } ],
+    states: { miner: "flagged", dashboard: "flagged", pool: "ok" },
+    evid: [ { node: "soc", text: "pods evicted - dashboard behind VPN" } ], focus: ["soc", "cluster"]
+  },
+  {
+    title: "8. Hardening and lessons", ms: 7000,
+    caption: "The team disables anonymous API access, sets pod security rules, and adds audit-based alerts for good.",
+    hint: "Post-incident adds permanent detections. The entry path is closed, not just the symptom.",
+    flows: [ { from: "cluster", to: "soc", color: "success", label: "baseline green", n: 2 } ],
+    states: { miner: "secure", dashboard: "secure", cluster: "secure", soc: "ok", attacker: "ok" },
+    evid: [ { node: "soc", text: "RBAC + pod security + egress policy" } ], focus: null
+  }
+]
+  // ==== SIM-CONFIG:END ====
+  };
+
+  var sim = (function () {
+    var cfg = typeof SIM_CONFIG !== 'undefined' ? SIM_CONFIG : { nodes: [], flowsBase: [], steps: [] };
+    var canvas = d.getElementById('simCanvas');
+    var stage = d.getElementById('simStage');
+    if (!canvas || !cfg.nodes.length) return null;
+    var ctx = canvas.getContext('2d');
+    var W = 0, H = 0, dpr = 1;
+    var step = 0, playing = false, tIn = 0, last = 0, speed = 1;
+    var states = {}, evids = [];
+    var tip = d.getElementById('simTip');
+    var capEl = d.getElementById('simCaption');
+    var capT = d.getElementById('simStepTitle');
+    var hintEl = d.getElementById('simHintText');
+    var badge = d.getElementById('simStepBadge');
+    var chips = d.getElementById('simChips');
+    var playBtn = d.getElementById('simPlay');
+    var pauseBtn = d.getElementById('simPause');
+    var restartBtn = d.getElementById('simRestart');
+    var speedSel = d.getElementById('simSpeed');
+    var colors = {};
+
+    function readColors() {
+      var cs = getComputedStyle(root);
+      ['bg','surface','surface-2','elevated','text','muted','border','border-strong',
+       'accent','accent-2','violet','success','warning','danger','high','low'].forEach(function (k) {
+        colors[k] = cs.getPropertyValue('--' + k).trim() || '#888';
+      });
+    }
+    readColors();
+    d.addEventListener('themechange', readColors);
+
+    function resize() {
+      var w = stage.clientWidth;
+      var h = Math.max(300, Math.min(460, w * 0.55));
+      dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      canvas.style.height = h + 'px';
+      W = w; H = h;
+      draw();
+    }
+    if ('ResizeObserver' in window) { new ResizeObserver(resize).observe(stage); }
+    window.addEventListener('resize', resize);
+
+    function nodeById(id) {
+      for (var i = 0; i < cfg.nodes.length; i++) if (cfg.nodes[i].id === id) return cfg.nodes[i];
+      return null;
+    }
+    function applyStep(i, reset) {
+      var st = cfg.steps[i];
+      if (!st) return;
+      if (reset) { states = {}; evids = []; }
+      Object.keys(st.states || {}).forEach(function (k) { states[k] = st.states[k]; });
+      (st.evid || []).forEach(function (ev) {
+        var dup = evids.some(function (e) { return e.node === ev.node && e.text === ev.text; });
+        if (!dup) evids.push(ev);
+      });
+      if (capT) capT.textContent = 'Step ' + (i + 1) + ' — ' + st.title.replace(/^\d+\.\s*/, '');
+      if (capEl) capEl.textContent = st.caption;
+      if (hintEl) hintEl.textContent = st.hint;
+      if (badge) badge.textContent = 'Step ' + (i + 1) + ' of ' + cfg.steps.length;
+      if (chips) {
+        chips.querySelectorAll('.chip-step').forEach(function (c, j) {
+          c.classList.toggle('active', j === i);
+          c.setAttribute('aria-pressed', j === i ? 'true' : 'false');
+        });
+      }
+    }
+    function gotoStep(i) {
+      if (i < 0 || i >= cfg.steps.length) return;
+      var wasPlaying = playing;
+      step = i; tIn = 0;
+      applyStep(i, true);
+      playing = wasPlaying && i < cfg.steps.length - 1;
+      draw();
+    }
+    function buildChips() {
+      if (!chips) return;
+      cfg.steps.forEach(function (st, i) {
+        var b = d.createElement('button');
+        b.type = 'button';
+        b.className = 'chip-step';
+        b.textContent = (i + 1);
+        b.title = st.title;
+        b.setAttribute('aria-label', 'Jump to step ' + (i + 1) + ': ' + st.title);
+        b.addEventListener('click', function () { gotoStep(i); });
+        chips.appendChild(b);
+      });
+    }
+    buildChips();
+    applyStep(0, true);
+
+    if (playBtn) playBtn.addEventListener('click', function () {
+      if (step >= cfg.steps.length - 1 && !playing) { step = 0; tIn = 0; applyStep(0, true); }
+      playing = true; last = performance.now(); requestAnimationFrame(loop);
+    });
+    if (pauseBtn) pauseBtn.addEventListener('click', function () { playing = false; });
+    if (restartBtn) restartBtn.addEventListener('click', function () { gotoStep(0); });
+    if (speedSel) speedSel.addEventListener('change', function () { speed = parseFloat(speedSel.value) || 1; });
+
+    function loop(now) {
+      if (!playing) return;
+      var dt = Math.min(120, now - last); last = now;
+      tIn += dt * speed;
+      var dur = (cfg.steps[step].ms || 7000) * (reduced.matches ? 0.55 : 1);
+      if (tIn >= dur) {
+        if (step < cfg.steps.length - 1) {
+          step++; tIn = 0; applyStep(step, false);
+        } else {
+          playing = false; draw(); return;
+        }
+      }
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function rr(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+    function pos(n) { return { x: n.x * W, y: n.y * H }; }
+    function stateColor(s) {
+      return s === 'compromised' ? colors.danger : s === 'flagged' ? colors.warning :
+             s === 'secure' ? colors.success : s === 'active' ? colors.accent : colors['border-strong'];
+    }
+    function drawGlyph(type, x, y, c, a) {
+      ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 1.6 * a; ctx.globalAlpha = a;
+      var s = 9;
+      if (type === 'attacker') {
+        ctx.beginPath(); ctx.moveTo(x - s, y + s * 0.7); ctx.lineTo(x - s * 0.6, y - s * 0.8);
+        ctx.lineTo(x + s * 0.6, y - s * 0.8); ctx.lineTo(x + s, y + s * 0.7); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - s * 1.4, y + s * 1.1); ctx.lineTo(x + s * 1.4, y + s * 1.1); ctx.stroke();
+      } else if (type === 'server') {
+        for (var i = 0; i < 3; i++) { ctx.strokeRect(x - s, y - s + i * (s * 0.75), s * 2, s * 0.55);
+          ctx.fillRect(x + s * 0.45, y - s + i * (s * 0.75) + s * 0.16, s * 0.35, s * 0.22); }
+      } else if (type === 'cloud') {
+        ctx.beginPath();
+        ctx.arc(x - s * 0.5, y + s * 0.2, s * 0.55, Math.PI * 0.5, Math.PI * 1.5);
+        ctx.arc(x, y - s * 0.25, s * 0.62, Math.PI, Math.PI * 1.9);
+        ctx.arc(x + s * 0.6, y + s * 0.15, s * 0.5, Math.PI * 1.4, Math.PI * 0.6);
+        ctx.closePath(); ctx.stroke();
+      } else if (type === 'defender') {
+        ctx.beginPath();
+        ctx.moveTo(x, y - s);
+        ctx.quadraticCurveTo(x + s * 0.95, y - s * 0.55, x + s * 0.95, y + s * 0.05);
+        ctx.quadraticCurveTo(x + s * 0.95, y + s * 0.75, x, y + s);
+        ctx.quadraticCurveTo(x - s * 0.95, y + s * 0.75, x - s * 0.95, y + s * 0.05);
+        ctx.quadraticCurveTo(x - s * 0.95, y - s * 0.55, x, y - s);
+        ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - s * 0.35, y); ctx.lineTo(x - s * 0.05, y + s * 0.35);
+        ctx.lineTo(x + s * 0.45, y - s * 0.35); ctx.stroke();
+      } else if (type === 'phone') {
+        rr(x - s * 0.55, y - s, s * 1.1, s * 2, 3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - s * 0.2, y + s * 0.65); ctx.lineTo(x + s * 0.2, y + s * 0.65); ctx.stroke();
+      } else if (type === 'money') {
+        ctx.beginPath(); ctx.arc(x, y, s * 0.85, 0, Math.PI * 2); ctx.stroke();
+        ctx.font = 'bold ' + (s * 1.1) + 'px ' + 'sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('$', x, y + 1);
+      } else if (type === 'net') {
+        ctx.beginPath(); ctx.arc(x, y, s * 0.9, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.ellipse(x, y, s * 0.9, s * 0.38, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, y - s * 0.9); ctx.lineTo(x, y + s * 0.9); ctx.stroke();
+      } else if (type === 'telco') {
+        ctx.beginPath(); ctx.moveTo(x - s * 0.6, y + s); ctx.lineTo(x, y - s); ctx.lineTo(x + s * 0.6, y + s); ctx.closePath(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y - s * 1.25, s * 0.45, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      } else { /* container / ci / ai / user / database fallback: box + dot */
+        rr(x - s * 0.8, y - s * 0.8, s * 1.6, s * 1.6, 3); ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, s * 0.3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    function drawNode(n, dim) {
+      var p = pos(n);
+      var a = dim ? 0.3 : 1;
+      var st = states[n.id] || 'ok';
+      var bw = Math.max(76, ctx.measureText(n.label).width + 40);
+      var bh = 46;
+      var x = p.x - bw / 2, y = p.y - bh / 2;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = colors.surface;
+      ctx.strokeStyle = stateColor(st);
+      ctx.lineWidth = (st !== 'ok' ? 2.2 : 1.2);
+      rr(x, y, bw, bh, 10); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = colors.text;
+      ctx.font = '600 12px ' + getComputedStyle(root).fontFamily;
+      ctx.fillText(n.label, x + 34, y + 18);
+      ctx.fillStyle = colors.muted;
+      ctx.font = '10px ' + getComputedStyle(root).fontFamily;
+      ctx.fillText(n.sub, x + 34, y + 31);
+      drawGlyph(n.type, x + 17, y + bh / 2, stateColor(st) === colors['border-strong'] ? colors.accent : stateColor(st), a);
+      if (states[n.id] && states[n.id] !== 'ok') {
+        ctx.fillStyle = stateColor(st);
+        ctx.beginPath(); ctx.arc(x + bw - 6, y + 6, 3.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      n._box = { x: x, y: y, w: bw, h: bh };
+    }
+    function drawFlow(f, focus, timeMs) {
+      var a = nodeById(f.from), b = nodeById(f.to);
+      if (!a || !b) return;
+      var p1 = pos(a), p2 = pos(b);
+      var col = colors[f.color] || colors.accent;
+      var dim = focus && focus.indexOf(f.from) < 0 && focus.indexOf(f.to) < 0;
+      ctx.globalAlpha = dim ? 0.15 : 0.85;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      ctx.setLineDash([]);
+      var dx = p2.x - p1.x, dy = p2.y - p1.y, L = Math.hypot(dx, dy) || 1;
+      var ux = dx / L, uy = dy / L;
+      var nx = -uy, ny = ux;
+      var ah = 8;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(p2.x, p2.y);
+      ctx.lineTo(p2.x - ux * ah + nx * ah * 0.5, p2.y - uy * ah + ny * ah * 0.5);
+      ctx.lineTo(p2.x - ux * ah - nx * ah * 0.5, p2.y - uy * ah - ny * ah * 0.5);
+      ctx.closePath(); ctx.fill();
+      if (f.label) {
+        ctx.font = '600 10px ' + getComputedStyle(root).fontFamily;
+        ctx.fillStyle = colors.muted;
+        ctx.globalAlpha = dim ? 0.15 : 0.95;
+        var mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+        ctx.fillText(f.label, mx, my - 4);
+      }
+      var count = f.n || 3;
+      for (var i = 0; i < count; i++) {
+        var t;
+        if (reduced.matches) { t = (i + 0.5) / count; }
+        else {
+          var ph = ((timeMs / 900) * speed + i / count) % 1;
+          t = ph;
+        }
+        var px = p1.x + dx * t, py = p1.y + dy * t;
+        ctx.globalAlpha = dim ? 0.12 : 0.9;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(px, py, 2.6, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    function drawBaseLink(pair, focus) {
+      var a = nodeById(pair[0]), b = nodeById(pair[1]);
+      if (!a || !b) return;
+      var p1 = pos(a), p2 = pos(b);
+      var dim = focus && focus.indexOf(pair[0]) < 0 && focus.indexOf(pair[1]) < 0;
+      ctx.globalAlpha = dim ? 0.08 : 0.35;
+      ctx.strokeStyle = colors['border-strong'];
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    function draw() {
+      var st = cfg.steps[step] || { flows: [], focus: null };
+      var focus = st.focus || null;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = colors['surface-2'];
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = colors.border;
+      ctx.lineWidth = 1;
+      for (var gx = 20; gx < W; gx += 40) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+      for (var gy = 20; gy < H; gy += 40) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      (cfg.flowsBase || []).forEach(function (pair) { drawBaseLink(pair, focus); });
+      var time = performance.now();
+      (st.flows || []).forEach(function (f) { drawFlow(f, focus, time); });
+      cfg.nodes.forEach(function (n) { drawNode(n, focus && focus.indexOf(n.id) < 0); });
+      var socEv = evids.filter(function (e) { return e.node === 'soc'; });
+      var socN = nodeById('soc');
+      if (socN && socEv.length) {
+        var p = pos(socN);
+        ctx.font = '10px ' + getComputedStyle(root).fontFamily;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        var lines = socEv.slice(-3);
+        lines.forEach(function (e, i) {
+          var tw = ctx.measureText(e.text).width + 14;
+          var ty = p.y + 30 + i * 16;
+          ctx.globalAlpha = 0.95;
+          ctx.fillStyle = colors.success;
+          rr(p.x - tw / 2, ty, tw, 13, 6);
+          ctx.globalAlpha = 0.13; ctx.fill();
+          ctx.globalAlpha = 0.95;
+          ctx.strokeStyle = colors.success; ctx.lineWidth = 0.8; ctx.stroke();
+          ctx.fillStyle = colors.success;
+          ctx.fillText(e.text, p.x, ty + 2);
+          ctx.globalAlpha = 1;
+        });
+      }
+      ctx.fillStyle = colors.muted;
+      ctx.font = '10px ' + getComputedStyle(root).fontFamily;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.fillText('attacker space', 10, 8);
+      ctx.textAlign = 'right';
+      ctx.fillText('defender view', W - 10, 8);
+      ctx.textAlign = 'left';
+    }
+
+    /* tooltips: hover + click/tap */
+    function hitTest(mx, my) {
+      for (var i = 0; i < cfg.nodes.length; i++) {
+        var b = cfg.nodes[i]._box;
+        if (b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) return cfg.nodes[i];
+      }
+      return null;
+    }
+    function showTip(n, mx, my) {
+      if (!tip || !n) { if (tip) tip.style.display = 'none'; return; }
+      tip.innerHTML = '<b></b>';
+      tip.firstChild.textContent = n.label;
+      tip.appendChild(d.createTextNode(n.tip));
+      tip.style.display = 'block';
+      var rect = stage.getBoundingClientRect();
+      var tx = Math.min(Math.max(6, mx - rect.left + 12), rect.width - 280);
+      var ty = Math.max(6, my - rect.top - 10);
+      tip.style.left = tx + 'px';
+      tip.style.top = ty + 'px';
+    }
+    canvas.addEventListener('mousemove', function (e) {
+      var r = canvas.getBoundingClientRect();
+      var n = hitTest(e.clientX - r.left, e.clientY - r.top);
+      showTip(n, e.clientX, e.clientY);
+    });
+    canvas.addEventListener('mouseleave', function () { showTip(null, 0, 0); });
+    canvas.addEventListener('click', function (e) {
+      var r = canvas.getBoundingClientRect();
+      var n = hitTest(e.clientX - r.left, e.clientY - r.top);
+      showTip(n, e.clientX, e.clientY);
+    });
+
+    resize();
+    if (!reduced.matches) { playing = true; last = performance.now(); requestAnimationFrame(loop); }
+    return { gotoStep: gotoStep, isPlaying: function () { return playing; } };
+  })();
+})();
+</script>
+</body>
+</html>

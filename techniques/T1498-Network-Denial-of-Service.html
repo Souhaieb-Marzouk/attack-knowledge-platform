@@ -1,0 +1,2924 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1498 — Network Denial of Service | MITRE ATT&CK Detection Guide v2.0</title>
+<meta name="description" content="Beginner-friendly detection engineering guide for MITRE ATT&CK T1498 Network Denial of Service: animated simulation, red and blue team views, Sigma rules, Splunk SPL, and a real case study. Audit-corrected version 2.0.">
+<script>
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('atk-theme'); } catch (e) {}
+  if (t !== 'dark' && t !== 'light') {
+    t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+<style>
+/* ============================================================
+   ATT&CK Detection Guide — shared design system
+   Single design system for all technique pages.
+   ============================================================ */
+
+/* ---------- tokens: dark (default) ---------- */
+:root,
+[data-theme="dark"] {
+  --bg: #0b0f1a;
+  --surface: #121a2e;
+  --surface-2: #172138;
+  --elevated: #1a2542;
+  --text: #e7edf8;
+  --muted: #9aa8c0;
+  --border: #24314e;
+  --border-strong: #2f4066;
+  --accent: #4f8cff;
+  --accent-2: #22d3ee;
+  --violet: #a78bfa;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --high: #fb923c;
+  --low: #4ade80;
+  --tint-accent: rgba(79, 140, 255, 0.14);
+  --tint-accent2: rgba(34, 211, 238, 0.13);
+  --tint-violet: rgba(167, 139, 250, 0.15);
+  --tint-success: rgba(52, 211, 153, 0.13);
+  --tint-warning: rgba(251, 191, 36, 0.13);
+  --tint-danger: rgba(248, 113, 113, 0.14);
+  --tint-high: rgba(251, 146, 60, 0.14);
+  --tint-low: rgba(74, 222, 128, 0.13);
+  --shadow-soft: 0 6px 24px rgba(3, 8, 20, 0.35);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+/* ---------- tokens: light ---------- */
+[data-theme="light"] {
+  --bg: #f3f6fc;
+  --surface: #ffffff;
+  --surface-2: #f5f8ff;
+  --elevated: #e9eefa;
+  --text: #182238;
+  --muted: #5a6a85;
+  --border: #d9e2f2;
+  --border-strong: #c2d0ea;
+  --accent: #2f6fe4;
+  --accent-2: #0891b2;
+  --violet: #7c5ce0;
+  --success: #0d9e6e;
+  --warning: #b45309;
+  --danger: #dc2626;
+  --high: #c2410c;
+  --low: #15803d;
+  --tint-accent: rgba(47, 111, 228, 0.10);
+  --tint-accent2: rgba(8, 145, 178, 0.10);
+  --tint-violet: rgba(124, 92, 224, 0.10);
+  --tint-success: rgba(13, 158, 110, 0.10);
+  --tint-warning: rgba(180, 83, 9, 0.10);
+  --tint-danger: rgba(220, 38, 38, 0.08);
+  --tint-high: rgba(194, 65, 12, 0.09);
+  --tint-low: rgba(21, 128, 61, 0.09);
+  --shadow-soft: 0 6px 24px rgba(24, 34, 56, 0.10);
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 84px;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16.5px;
+  line-height: 1.65;
+  overflow-x: clip;
+  -webkit-text-size-adjust: 100%;
+}
+body.no-scroll { overflow: hidden; }
+p { margin: 0 0 12px; }
+.sec p { max-width: 75ch; }
+a { color: var(--accent); }
+a:hover { color: var(--accent-2); }
+strong { color: var(--text); }
+code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+::selection { background: var(--tint-accent); }
+
+.shell { max-width: 1280px; margin: 0 auto; padding: 0 clamp(16px, 3vw, 28px); }
+
+/* ---------- progress bar ---------- */
+.progress {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: 3px; z-index: 80; pointer-events: none;
+  background: color-mix(in srgb, var(--border) 45%, transparent);
+}
+.progress span {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
+/* ---------- hero ---------- */
+.hero { padding: 42px 0 6px; }
+.hero-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px; margin-bottom: 14px;
+}
+.kicker {
+  font-size: 0.76rem; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--accent-2); font-weight: 700; margin: 0;
+  padding-top: 8px;
+}
+.hero h1 {
+  font-size: clamp(1.9rem, 4.2vw, 2.9rem);
+  line-height: 1.12; letter-spacing: -0.01em;
+  margin: 0 0 14px; font-weight: 800;
+}
+.tid {
+  font-family: var(--font-mono);
+  font-size: 0.68em; font-weight: 700;
+  color: var(--accent);
+  background: var(--tint-accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  padding: 0.08em 0.4em; border-radius: 0.38em;
+  vertical-align: middle; margin-right: 0.4em;
+  white-space: nowrap;
+}
+.lede { color: var(--muted); max-width: 74ch; font-size: 1.04rem; }
+.chips {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  list-style: none; padding: 0; margin: 4px 0 24px;
+}
+.chips li {
+  font-family: var(--font-mono); font-size: 0.74rem;
+  padding: 4px 11px; border: 1px solid var(--border);
+  border-radius: 999px; background: var(--surface-2); color: var(--muted);
+}
+.kfacts {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+  margin-bottom: 8px;
+}
+.kcard {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px 16px;
+  box-shadow: var(--shadow-soft);
+}
+.kcard dt {
+  font-size: 0.7rem; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--muted); font-weight: 700; margin-bottom: 6px;
+}
+.kcard dd { margin: 0; font-size: 0.92rem; font-weight: 600; line-height: 1.45; }
+.kcard dd .dim { color: var(--muted); font-weight: 500; }
+
+/* ---------- two-column layout ---------- */
+.layout {
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  gap: 36px; align-items: start;
+  padding-bottom: 90px;
+}
+.toc {
+  position: sticky; top: 20px;
+  max-height: calc(100vh - 40px); overflow: auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px 12px;
+  box-shadow: var(--shadow-soft);
+}
+.toc-head {
+  font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted); font-weight: 800; padding: 0 8px 10px;
+}
+.toc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.toc-list a {
+  display: block; padding: 6px 10px; border-radius: 8px;
+  color: var(--muted); text-decoration: none; font-size: 0.87rem;
+  border-left: 3px solid transparent;
+}
+.toc-list a:hover { color: var(--text); background: var(--surface-2); }
+.toc-list a.active {
+  color: var(--accent); background: var(--tint-accent);
+  border-left-color: var(--accent); font-weight: 600;
+}
+.toc-list a.sub {
+  margin-left: 16px; padding-left: 12px; font-size: 0.8rem;
+  border-left: 2px solid var(--border);
+}
+.toc-list a.sub.active { border-left-color: var(--accent); }
+.toc-note { font-size: 0.7rem; color: var(--muted); opacity: 0.75; padding: 10px 8px 0; margin: 0; }
+.main { min-width: 0; }
+
+/* ---------- sections ---------- */
+.sec { margin: 56px 0; scroll-margin-top: 84px; }
+.sec-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.sec-num {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 11px;
+  display: grid; place-items: center;
+  font-family: var(--font-mono); font-weight: 700; font-size: 1.05rem;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #fff;
+  box-shadow: 0 3px 10px var(--tint-accent);
+}
+.sec h2 { font-size: clamp(1.35rem, 2.4vw, 1.8rem); line-height: 1.2; margin: 0; }
+.sec-intro { color: var(--muted); max-width: 76ch; margin: 0 0 22px; }
+.sec h3 {
+  font-size: 1.18rem; margin: 30px 0 12px;
+  display: flex; align-items: center; gap: 10px; line-height: 1.3;
+  scroll-margin-top: 90px;
+}
+.h3-num {
+  font-family: var(--font-mono); font-size: 0.72rem; font-weight: 700;
+  color: var(--accent); background: var(--tint-accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  padding: 2px 9px; border-radius: 7px; white-space: nowrap;
+}
+.subsec-gap { height: 10px; }
+
+/* ---------- cards and grids ---------- */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 20px; margin: 0 0 16px;
+  box-shadow: var(--shadow-soft);
+}
+.card h4 { margin: 0 0 10px; font-size: 1.02rem; }
+.card p:last-child { margin-bottom: 0; }
+.card > *:first-child { margin-top: 0; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+.grid-2 > *, .grid-3 > * { min-width: 0; } /* prevent grid blowout from wide inner tables */
+.grid-2 .card, .grid-3 .card { margin: 0; height: 100%; }
+
+/* ---------- callouts ---------- */
+.callout {
+  border: 1px solid var(--border); border-left-width: 4px;
+  border-radius: 12px; background: var(--surface-2);
+  padding: 14px 16px; margin: 16px 0;
+}
+.callout::before {
+  display: block; font-size: 0.7rem; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 5px;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout.note { border-left-color: var(--accent); }
+.callout.note::before { content: "Note"; color: var(--accent); }
+.callout.warn { border-left-color: var(--warning); }
+.callout.warn::before { content: "Warning"; color: var(--warning); }
+.callout.danger { border-left-color: var(--danger); }
+.callout.danger::before { content: "Danger"; color: var(--danger); }
+.callout.good { border-left-color: var(--success); }
+.callout.good::before { content: "Good practice"; color: var(--success); }
+
+/* ---------- tables ---------- */
+.tbl-wrap {
+  overflow-x: auto; border: 1px solid var(--border);
+  border-radius: 12px; margin: 0 0 16px;
+  background: var(--surface);
+}
+table { width: 100%; border-collapse: collapse; min-width: 640px; font-size: 0.88rem; }
+table.wide { min-width: 840px; }
+th {
+  background: var(--surface-2); text-align: left;
+  font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--border-strong);
+  white-space: nowrap;
+}
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: var(--surface-2); }
+td ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* ---------- badges ---------- */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 10px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; border: 1px solid;
+  white-space: nowrap; font-family: var(--font-sans);
+}
+.sev-critical { background: var(--tint-danger); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.sev-high { background: var(--tint-high); color: var(--high); border-color: color-mix(in srgb, var(--high) 45%, transparent); }
+.sev-medium { background: var(--tint-warning); color: var(--warning); border-color: color-mix(in srgb, var(--warning) 45%, transparent); }
+.sev-low { background: var(--tint-low); color: var(--low); border-color: color-mix(in srgb, var(--low) 45%, transparent); }
+.cat {
+  display: inline-block; padding: 2px 9px; border-radius: 7px;
+  font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600;
+  background: var(--surface-2); color: var(--muted);
+  border: 1px solid var(--border-strong); white-space: nowrap;
+}
+.cat-net { background: var(--tint-accent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.cat-cloud { background: var(--tint-violet); color: var(--violet); border-color: color-mix(in srgb, var(--violet) 40%, transparent); }
+.cat-web { background: var(--tint-accent2); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 40%, transparent); }
+.cat-win { background: var(--tint-accent); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.cat-linux { background: var(--tint-success); color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, transparent); }
+.cat-id { background: var(--tint-warning); color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
+.cat-mac { background: var(--tint-accent2); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 40%, transparent); }
+.lab {
+  display: inline-block; color: var(--warning);
+  border: 1px dashed var(--warning); padding: 1px 7px;
+  border-radius: 6px; font-size: 0.68rem; font-weight: 800;
+  letter-spacing: 0.07em; white-space: nowrap;
+}
+
+/* ---------- code blocks ---------- */
+.code {
+  border: 1px solid var(--border); border-radius: 12px;
+  overflow: hidden; margin: 0 0 16px; background: var(--elevated);
+}
+.code-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.code-head .lang {
+  font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted);
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.copy-btn {
+  border: 1px solid var(--border-strong); background: var(--surface);
+  color: var(--muted); border-radius: 8px; padding: 4px 12px;
+  font-size: 0.74rem; font-weight: 700; cursor: pointer;
+  font-family: var(--font-sans);
+}
+.copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+.copy-btn.ok { color: var(--success); border-color: var(--success); }
+.code pre {
+  margin: 0; padding: 14px 16px; overflow-x: auto;
+  font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.55;
+  color: var(--text);
+}
+.code pre .cm { color: var(--muted); }
+
+/* ---------- key/value lists ---------- */
+.kv {
+  display: grid; grid-template-columns: max-content 1fr;
+  gap: 8px 18px; margin: 0;
+}
+.kv dt { font-weight: 700; color: var(--muted); font-size: 0.85rem; padding-top: 1px; }
+.kv dd { margin: 0; font-size: 0.92rem; }
+
+/* ---------- timeline and steps ---------- */
+.tl { list-style: none; margin: 0 0 16px; padding: 0 0 0 6px; }
+.tl li {
+  position: relative; padding: 0 0 18px 26px;
+  border-left: 2px solid var(--border); margin-left: 8px;
+}
+.tl li:last-child { border-left-color: transparent; }
+.tl li::before {
+  content: ""; position: absolute; left: -8px; top: 4px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg);
+}
+.tl .tl-when { font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent-2); font-weight: 700; display: block; }
+.steps { counter-reset: st; list-style: none; padding: 0; margin: 0 0 16px; }
+.steps li {
+  counter-increment: st; position: relative;
+  padding: 10px 14px 10px 52px; margin: 0 0 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+}
+.steps li::before {
+  content: counter(st);
+  position: absolute; left: 12px; top: 12px;
+  width: 26px; height: 26px; border-radius: 8px;
+  display: grid; place-items: center;
+  background: var(--tint-accent); color: var(--accent);
+  font-family: var(--font-mono); font-weight: 700; font-size: 0.85rem;
+}
+
+/* ---------- flow diagrams (HTML) ---------- */
+.flow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 14px 0 18px; }
+.fnode {
+  border: 1px solid var(--border-strong); border-radius: 10px;
+  padding: 9px 14px; background: var(--surface-2);
+  font-size: 0.84rem; line-height: 1.4; min-width: 0;
+}
+.fnode b { display: block; font-size: 0.88rem; }
+.fnode span { color: var(--muted); font-size: 0.76rem; }
+.farr { color: var(--muted); font-weight: 800; font-size: 1.05rem; padding: 0 2px; }
+.farr small { display: block; font-size: 0.66rem; font-family: var(--font-mono); text-align: center; font-weight: 600; }
+.fnode.bad { border-color: color-mix(in srgb, var(--danger) 55%, transparent); background: var(--tint-danger); }
+.fnode.okay { border-color: color-mix(in srgb, var(--success) 55%, transparent); background: var(--tint-success); }
+
+/* ---------- simulation ---------- */
+.sim-shell {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 16px; padding: 16px; margin-bottom: 20px;
+  box-shadow: var(--shadow-soft);
+}
+.sim-legend {
+  display: flex; flex-wrap: wrap; gap: 14px; margin: 2px 2px 10px;
+  font-size: 0.78rem; color: var(--muted);
+}
+.sim-legend span { display: inline-flex; align-items: center; }
+.dot {
+  width: 10px; height: 10px; border-radius: 3px;
+  display: inline-block; margin-right: 6px;
+}
+.sim-canvas-wrap {
+  position: relative; border: 1px solid var(--border);
+  border-radius: 12px; background: var(--surface-2); overflow: hidden;
+}
+.sim-canvas-wrap canvas { display: block; width: 100%; touch-action: pan-y; }
+.sim-canvas-wrap canvas:focus-visible { outline-offset: -3px; }
+.sim-noscript { padding: 14px 16px; color: var(--muted); font-size: 0.85rem; margin: 0; }
+.sim-tip {
+  position: absolute; z-index: 5; display: none;
+  pointer-events: none; max-width: 250px;
+  background: var(--elevated); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 9px;
+  padding: 8px 11px; font-size: 0.78rem; line-height: 1.45;
+  box-shadow: var(--shadow-soft);
+}
+.sim-tip b { display: block; margin-bottom: 2px; font-size: 0.8rem; }
+.sim-controls {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center;
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text);
+  cursor: pointer; font-weight: 600; font-size: 0.85rem;
+  font-family: var(--font-sans);
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); color: #fff; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.speed-label {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 0.8rem; color: var(--muted); font-weight: 600;
+}
+.speed-label select {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 8px;
+  padding: 7px 8px; font-size: 0.8rem; font-family: var(--font-sans);
+}
+.step-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.schip {
+  min-width: 36px; padding: 6px 10px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--muted); font-family: var(--font-mono);
+  font-size: 0.76rem; cursor: pointer; font-weight: 700;
+}
+.schip:hover { color: var(--accent); border-color: var(--accent); }
+.schip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sim-caption { margin-top: 14px; display: grid; gap: 10px; }
+.cap-box {
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 15px; background: var(--surface-2);
+}
+.cap-box h5 {
+  margin: 0 0 6px; font-size: 0.72rem; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--muted);
+}
+.cap-box p { margin: 0; font-size: 0.92rem; }
+.defender-box { border-left: 4px solid var(--success); }
+.defender-box h5 + h5 { margin-top: 12px; }
+.sim-evidence { margin: 4px 0 0; padding-left: 18px; font-size: 0.86rem; }
+.sim-evidence li { margin-bottom: 3px; }
+.story-list { padding-left: 20px; margin: 10px 0 0; }
+.story-list li { margin-bottom: 10px; font-size: 0.92rem; }
+.story-list em { color: var(--muted); font-style: normal; font-weight: 600; }
+
+/* ---------- checklists ---------- */
+.checklist { list-style: none; padding: 0; margin: 8px 0 0; }
+.checklist li {
+  position: relative; padding: 5px 0 5px 30px; font-size: 0.9rem;
+}
+.checklist li::before {
+  content: ""; position: absolute; left: 2px; top: 0.55em;
+  width: 13px; height: 13px;
+  border: 2px solid var(--border-strong); border-radius: 4px;
+  background: var(--surface-2);
+}
+
+/* ---------- floating controls ---------- */
+.fab {
+  position: fixed; z-index: 60; border-radius: 999px;
+  padding: 11px 16px; border: 1px solid var(--border-strong);
+  background: var(--elevated); color: var(--text);
+  font-weight: 700; font-size: 0.82rem; cursor: pointer;
+  box-shadow: var(--shadow-soft); font-family: var(--font-sans);
+}
+.fab:hover { border-color: var(--accent); color: var(--accent); }
+.back-top { right: 18px; bottom: 18px; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+.back-top.show { opacity: 1; pointer-events: auto; }
+.fab-toc { left: 18px; bottom: 18px; display: none; }
+
+/* ---------- mobile overlay ---------- */
+.overlay { position: fixed; inset: 0; z-index: 90; display: flex; }
+.overlay[hidden] { display: none; }
+.overlay-backdrop { position: absolute; inset: 0; background: rgba(4, 8, 18, 0.62); }
+.overlay-panel {
+  position: relative; margin: auto; width: min(92vw, 420px);
+  max-height: 82vh; overflow: auto;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: 16px; padding: 16px; box-shadow: var(--shadow-soft);
+}
+.overlay-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--muted); font-weight: 800; margin-bottom: 10px;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 1040px) {
+  .layout { grid-template-columns: 1fr; gap: 0; }
+  .toc { display: none; }
+  .fab-toc { display: inline-flex; }
+}
+@media (max-width: 900px) {
+  .kfacts { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .hero { padding-top: 30px; }
+  .kfacts { grid-template-columns: 1fr; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .sec { margin: 42px 0; }
+  .sec-head { gap: 10px; }
+  .sec-num { width: 34px; height: 34px; border-radius: 9px; font-size: 0.95rem; }
+  .sim-shell { padding: 12px; }
+  .sim-controls .btn { flex: 1 1 auto; justify-content: center; }
+  .kv { grid-template-columns: 1fr; gap: 2px 0; }
+  .kv dt { margin-top: 8px; }
+  .code pre { font-size: 0.76rem; }
+  table { min-width: 560px; }
+}
+@media (max-width: 380px) {
+  .chips li { font-size: 0.68rem; padding: 3px 8px; }
+  .fab { padding: 10px 13px; font-size: 0.76rem; }
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- print ---------- */
+@media print {
+  :root, [data-theme="dark"], [data-theme="light"] {
+    --bg: #ffffff; --surface: #ffffff; --surface-2: #f4f4f4;
+    --elevated: #f4f4f4; --text: #000000; --muted: #444444;
+    --border: #bbbbbb; --border-strong: #888888;
+    --accent: #1a4fa0; --accent-2: #0a5a72; --violet: #4d3a9e;
+    --success: #0a6e4c; --warning: #8a5200; --danger: #a51c1c;
+    --high: #93400e; --low: #14602f;
+    --tint-accent: rgba(26, 79, 160, 0.08); --tint-danger: rgba(165, 28, 28, 0.07);
+    --tint-success: rgba(10, 110, 76, 0.08); --tint-warning: rgba(138, 82, 0, 0.08);
+    --tint-violet: rgba(77, 58, 158, 0.08); --tint-high: rgba(147, 64, 14, 0.08);
+    --tint-low: rgba(20, 96, 47, 0.08); --tint-accent2: rgba(10, 90, 114, 0.08);
+    --shadow-soft: none;
+  }
+  html { scroll-behavior: auto; }
+  body { font-size: 11.5pt; overflow: visible; }
+  .progress, .toc, .fab, .overlay, .sim-controls, .step-chips,
+  .copy-btn, .sim-tip, .toc-note, #themeToggle { display: none !important; }
+  .sim-canvas-wrap { display: none; }
+  .sim-shell { border: none; padding: 0; box-shadow: none; }
+  .card, .callout, .code, .tbl-wrap, .sim-shell { box-shadow: none; break-inside: avoid; }
+  .sec { margin: 26pt 0; break-inside: auto; }
+  a { color: #1a4fa0; text-decoration: underline; }
+  .tid { background: none; border-color: #1a4fa0; }
+  .code pre { white-space: pre-wrap; }
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1498"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<div class="progress" role="progressbar" aria-label="Reading progress" aria-valuemin="0" aria-valuemax="100" aria-hidden="true"><span id="progressFill"></span></div>
+<header class="hero shell">
+  <div class="hero-top">
+    <p class="kicker">MITRE ATT&amp;CK · Impact tactic · Technique guide · Version 2.0</p>
+    <button class="btn" id="themeToggle" type="button" aria-label="Switch color theme">Light theme</button>
+  </div>
+  <h1 id="pageTitle"><span class="tid">T1498</span> Network Denial of Service</h1>
+  <p class="lede">
+    An attacker floods a network or a service with so much traffic that normal users cannot use it.
+    This guide explains the technique in plain words, shows an animated attack story, and gives you
+    ready-to-use detections, Sigma rules, Splunk queries, and a defense checklist.
+  </p>
+  <ul class="chips">
+    <li>Tactic: Impact (TA0040)</li>
+    <li>Platforms: Containers, IaaS, Linux, Windows, macOS</li>
+    <li>Sub-techniques: 2</li>
+    <li>Data sources: Network traffic flow and content</li>
+    <li>ATT&amp;CK data v20.0 — created 17 April 2019, updated 24 October 2025</li>
+  </ul>
+  <dl class="kfacts">
+    <div class="kcard"><dt>ATT&amp;CK ID</dt><dd>T1498 <span class="dim">— Impact</span></dd></div>
+    <div class="kcard"><dt>Sub-techniques</dt><dd>T1498.001 Direct Network Flood<br>T1498.002 Reflection Amplification</dd></div>
+    <div class="kcard"><dt>Target</dt><dd>Availability of networks and services</dd></div>
+    <div class="kcard"><dt>MITRE mitigation</dt><dd>M1037 Filter Network Traffic — filter attack traffic upstream (ISP, CDN, or DDoS service)</dd></div>
+    <div class="kcard"><dt>Documented use</dt><dd>APT28 (2016, WADA), Lucifer, NKAbuse — see section 5.2</dd></div>
+  </dl>
+</header>
+<div class="shell">
+  <div class="layout">
+    <nav class="toc" id="tocNav" aria-label="Table of contents">
+      <div class="toc-head">Contents</div>
+      <ol class="toc-list" id="tocList">
+        <li><a href="#sec-overview">1 Overview</a></li>
+        <li><a href="#sec-simulation">2 Animated simulation</a></li>
+        <li><a href="#sec-red-team">3 Red team and hacker perspective</a></li>
+        <li><a href="#sec-blue-team">4 Blue team and SOC perspective</a></li>
+        <li><a href="#sec-detection">5 Detection engineering deep dive</a></li>
+        <li><a class="sub" href="#sec-detection-reg">5.1 Regulation mapping</a></li>
+        <li><a class="sub" href="#sec-detection-intel">5.2 Threat intelligence</a></li>
+        <li><a class="sub" href="#sec-detection-ranking">5.3 Threats ranking and categorization</a></li>
+        <li><a class="sub" href="#sec-detection-logs">5.4 Logs and patterns</a></li>
+        <li><a class="sub" href="#sec-detection-sigma">5.5 Sigma rules and Splunk SPL</a></li>
+        <li><a href="#sec-case-study">6 Real-world case study</a></li>
+        <li><a href="#sec-mitigation">7 Mitigation and defense</a></li>
+        <li><a href="#sec-mistakes">8 Common mistakes and best practices</a></li>
+        <li><a href="#sec-cheat-sheet">9 Cheat sheet and quick reference</a></li>
+      </ol>
+      <p class="toc-note">The list above is rebuilt from the real page headings.</p>
+    </nav>
+    <main id="mainContent" class="main">
+<section id="sec-overview" class="sec">
+  <div class="sec-head"><span class="sec-num">1</span><h2>Overview</h2></div>
+  <p class="sec-intro">
+    Network Denial of Service is an attack on availability. The attacker does not steal data.
+    Instead, the attacker sends so much unwanted network traffic that the target becomes slow or stops working.
+  </p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>What the technique is</h4>
+      <p>
+        A <strong>denial of service (DoS)</strong> attack makes a service unavailable. A
+        <strong>distributed denial of service (DDoS)</strong> uses many machines at the same time, usually a
+        <strong>botnet</strong> — a large group of infected devices that the attacker controls.
+        The traffic can be volumetric (raw bandwidth), protocol-based (half-open connections), or
+        application-based (many real-looking requests). All three share one goal: use up a resource the victim needs.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Why it matters</h4>
+      <p>
+        When a shop, hospital system, bank portal, or game server goes offline, the business stops earning and
+        customers lose trust. Recovery costs money, and staff lose hours. Some groups also use DDoS as a
+        distraction while they try a quieter intrusion, or as extortion ("pay us or we take you offline again").
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Where it fits in the attack chain</h4>
+    <p>
+      T1498 belongs to the <strong>Impact</strong> tactic in MITRE ATT&amp;CK. It usually appears in one of
+      three places: as the final destructive step after an intrusion, as the main goal itself (for example,
+      a rented botnet attacking a competitor), or as a cover for another, quieter attack. Some attackers do
+      not need access to the victim at all — they only need enough machines and bandwidth to send the flood.
+    </p>
+    <div class="flow" aria-label="Attack chain position">
+      <div class="fnode"><b>Resource development</b><span>rent or build a botnet (T1583.005)</span></div>
+      <span class="farr">→</span>
+      <div class="fnode"><b>Reconnaissance</b><span>learn what the target runs</span></div>
+      <span class="farr">→</span>
+      <div class="fnode bad"><b>Impact: T1498</b><span>network availability destroyed</span></div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>What you will learn in this guide</h4>
+      <ul>
+        <li>How the attack works step by step, with an animated simulation.</li>
+        <li>How attackers prepare and launch it, from a defensive teaching view.</li>
+        <li>Which logs show the attack and how to write detections.</li>
+        <li>Complete Sigma rules and Splunk SPL queries you can adapt.</li>
+        <li>How to mitigate, respond, and avoid ten common blue-team mistakes.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Key facts at a glance</h4>
+      <dl class="kv">
+        <dt>ATT&amp;CK ID</dt><dd>T1498</dd>
+        <dt>Tactic</dt><dd>Impact</dd>
+        <dt>Sub-techniques</dt><dd>T1498.001 (Direct Network Flood), T1498.002 (Reflection Amplification)</dd>
+        <dt>Platforms</dt><dd>Containers, IaaS, Linux, Windows, macOS</dd>
+        <dt>Permissions needed</dt><dd>None — floods come from outside</dd>
+        <dt>ATT&amp;CK record</dt><dd>Created 17 April 2019 — last modified 24 October 2025 (ATT&amp;CK v20.0)</dd>
+        <dt>Documented users</dt><dd>APT28, Lucifer (S0532), NKAbuse (S1107) — see section 5.2</dd>
+        <dt>MITRE mitigation</dt><dd>M1037 Filter Network Traffic</dd>
+        <dt>Cost to attacker</dt><dd>Low (rented booters start at a few dollars)</dd>
+        <dt>Best detection sources</dt><dd>NetFlow, firewall, CDN or WAF logs</dd>
+        <dt>Related techniques</dt><dd>T1499 Endpoint Denial of Service, T1583.005 Botnet</dd>
+      </dl>
+    </div>
+  </div>
+
+  <div class="callout note">
+    <p>
+      Words you will meet in this guide: <strong>bandwidth</strong> is the data-carrying capacity of a link;
+      a <strong>packet</strong> is a small unit of network data; <strong>NetFlow</strong> is a record of who
+      talked to whom, with how many bytes and packets; a <strong>reflector</strong> is a server that answers
+      requests sent to a spoofed address. One scope note: if a flood targets the host system itself (for
+      example, only its web server processes), MITRE assigns it to <strong>T1499 Endpoint Denial of
+      Service</strong>, not T1498. This guide stays on the network-path side. Each term is explained again
+      the first time it matters.
+    </p>
+  </div>
+</section>
+
+<section id="sec-simulation" class="sec">
+  <div class="sec-head"><span class="sec-num">2</span><h2>Animated simulation</h2></div>
+  <p class="sec-intro">
+    The story below shows a full attack from start to finish: the attacker's botnet, the victim's network,
+    and the SOC view at the same time. Press Play, or jump to any step with the chips.
+    A written version of every step follows below the canvas.
+  </p>
+
+  <div class="sim-shell">
+    <div class="sim-legend" aria-hidden="true">
+      <span><i class="dot" style="background:var(--danger)"></i>Attack traffic</span>
+      <span><i class="dot" style="background:var(--accent)"></i>Normal traffic</span>
+      <span><i class="dot" style="background:var(--success)"></i>Defense action</span>
+      <span><i class="dot" style="background:var(--violet)"></i>Control commands</span>
+      <span><i class="dot" style="background:var(--warning)"></i>Recon and probes</span>
+    </div>
+    <div class="sim-canvas-wrap">
+      <canvas id="simCanvas" width="1000" height="520" tabindex="0" role="img"
+        aria-label="Animated diagram of a network denial of service attack. The same story is written out step by step below the diagram."></canvas>
+      <div class="sim-tip" id="simTip" role="tooltip"></div>
+      <noscript><p class="sim-noscript">The animated diagram needs JavaScript. The same story is written out in full below the diagram.</p></noscript>
+    </div>
+    <div class="sim-controls" role="group" aria-label="Simulation controls">
+      <button class="btn primary" id="simPlay" type="button">Play</button>
+      <button class="btn" id="simPause" type="button">Pause</button>
+      <button class="btn" id="simRestart" type="button">Restart</button>
+      <button class="btn" id="simPrev" type="button">Prev step</button>
+      <button class="btn" id="simNext" type="button">Next step</button>
+      <label class="speed-label" for="simSpeed">Speed
+        <select id="simSpeed">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+      </label>
+    </div>
+    <div class="step-chips" id="simChips" role="group" aria-label="Jump to a step"></div>
+    <div class="sim-caption" aria-live="polite">
+      <div class="cap-box">
+        <h5 id="simStepTitle">Step 1 of 8 — The attacker gives the order</h5>
+        <p id="simCaption">
+          The attacker tells the botnet which target to hit and when to start. Thousands of infected
+          devices receive the same command and wait for the start time.
+        </p>
+      </div>
+      <div class="cap-box defender-box">
+        <h5>What the defender sees</h5>
+        <p id="simDefender">
+          Usually nothing yet. Sometimes outbound command traffic from infected devices on your own network
+          is the first clue that machines around you are part of a botnet.
+        </p>
+        <h5>Evidence to capture</h5>
+        <ul class="sim-evidence" id="simEvidence"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Written version of the simulation</h4>
+    <p>
+      Every animated step is described here in text. This is the accessible version of the story,
+      and it is the same story the diagram tells.
+    </p>
+    <ol class="story-list">
+      <li><strong>Step 1 — The attacker gives the order.</strong> The bot herder sends a command to thousands of infected devices. <em>Defender:</em> usually silent; rare outbound patterns from infected hosts can be an early clue.</li>
+      <li><strong>Step 2 — Quick reconnaissance.</strong> A few bots probe the target's public services to see which ports answer. <em>Defender:</em> short scans to many ports from few sources; rate-limit and log them.</li>
+      <li><strong>Step 3 — The flood starts.</strong> The bots send a huge, mixed stream of packets at the target edge. <em>Defender:</em> link load rises fast; deny counts on the firewall spike.</li>
+      <li><strong>Step 4 — The link saturates.</strong> The internet link and edge queues fill up. Even valid packets are dropped. <em>Defender:</em> interface counters, NetFlow volume, and connection-table alerts fire.</li>
+      <li><strong>Step 5 — Real users are locked out.</strong> Normal customers time out and see errors. <em>Defender:</em> synthetic checks from outside fail first; support tickets rise.</li>
+      <li><strong>Step 6 — The SOC detects the attack.</strong> Flow analytics and firewall alerts confirm a volumetric DDoS. <em>Defender:</em> open the DDoS runbook; call the ISP and CDN contacts.</li>
+      <li><strong>Step 7 — Upstream scrubbing starts.</strong> The ISP or CDN routes traffic through a scrubbing center and forwards only clean traffic. <em>Defender:</em> watch clean-traffic graphs and confirm the service recovers.</li>
+      <li><strong>Step 8 — Recovery and review.</strong> Traffic returns to baseline. The team writes the timeline and improves thresholds. <em>Defender:</em> keep packets, flow records, and ISP reports for the post-incident review.</li>
+    </ol>
+  </div>
+</section>
+<section id="sec-red-team" class="sec">
+  <div class="sec-head"><span class="sec-num">3</span><h2>Red team and hacker perspective</h2></div>
+  <p class="sec-intro">
+    This section explains how attackers think and prepare. It is written for defenders who need to
+    understand how attackers work. Every command example is for a lab you own — never test these techniques
+    against systems you do not have written permission to touch.
+  </p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>When and why an attacker uses it</h4>
+      <p>
+        Network DoS is cheap, loud, and fast. Criminal groups use it for extortion; competitors and
+        hacktivists use it to damage reputation; state-linked groups use it to disrupt services or to force
+        the victim's defenders to look at noise while something quieter happens elsewhere. Because rented
+        <strong>booter services</strong> (paid DDoS-for-hire sites) cost only a few dollars, almost anyone
+        can order an attack without owning a single bot.
+      </p>
+    </div>
+    <div class="card">
+      <h4>How it is performed</h4>
+      <p>
+        The attacker needs three things: enough senders (a botnet, a rented stresser, or a cloud burst),
+        a target that is reachable (an IP address, a domain, or an origin server hidden behind a CDN),
+        and a flood type the target cannot absorb. Volumetric floods fill the pipe, protocol floods fill
+        state tables, and application floods fill worker threads and databases with expensive requests.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Prerequisites and conditions</h4>
+    <ul>
+      <li><strong>Firepower:</strong> a botnet, a rented stresser, or many cheap cloud instances.</li>
+      <li><strong>Reachability:</strong> the true IP of the target, or a way to bypass CDN protection.</li>
+      <li><strong>Timing:</strong> attacks often follow public events, payment deadlines, or rival product launches.</li>
+      <li><strong>Knowledge:</strong> knowing whether the target's DNS, game server, or API is the weakest link.</li>
+    </ul>
+  </div>
+
+  <div class="callout danger">
+    <p>
+      <strong>Legal and ethical line:</strong> launching a DoS attack against systems you do not own or do not
+      have written authorization to test is a crime in most countries, even "just to see if it works".
+      Use only isolated lab networks and your own hardware or virtual machines.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Lab-only teaching examples</h4>
+    <p>
+      The commands below are safe only inside an isolated lab, for example a virtual network with two
+      machines: one attack box and one test server. They generate load so you can watch how sensors react.
+    </p>
+    <div class="code">
+      <div class="code-head"><span class="lang">Bash — lab only</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre># LAB ONLY: run against a test server you own, on an isolated network.
+# Gentle TCP connection load to exercise SYN-rate detections:
+hping3 -S -p 443 --rate 500 --rand-source 10.20.0.50
+
+# Baseline bandwidth with iperf3 (run the server side first):
+iperf3 -s                    # on the test server
+iperf3 -c 10.20.0.50 -u -b 50M    # client: UDP load, 50 Mbit/s
+
+# Local HTTP load to exercise web-rate detections:
+ab -n 2000 -c 200 http://10.20.0.50/prices</pre>
+    </div>
+    <div class="callout warn">
+      <p>
+        Even the commands above can crash weak lab equipment. Start with low rates, watch the target,
+        and stop as soon as the effect is visible. The goal is to generate sensor events, not to break things.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Common variations</h4>
+      <ul>
+        <li><strong>Volumetric:</strong> raw UDP or ICMP floods measured in Gbit/s (see T1498.001).</li>
+        <li><strong>Reflection:</strong> third-party servers reply to the victim with amplified answers (T1498.002).</li>
+        <li><strong>Protocol:</strong> SYN floods that fill half-open connection tables.</li>
+        <li><strong>Application:</strong> floods of valid-looking HTTP requests — cheap for the attacker, expensive for the server.</li>
+        <li><strong>Multi-vector:</strong> several flood types at once, so the victim cannot block one pattern.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Mistakes attackers make</h4>
+      <ul>
+        <li>Flooding from one or two sources — easy to block at the edge.</li>
+        <li>Using botnet nodes that are also on the victim's customer list, so C2 traffic shows up first.</li>
+        <li>Announcing the attack on social media before starting, which gives defenders warning time.</li>
+        <li>Reusing the same booter account, which law enforcement can trace across campaigns.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="sec-blue-team" class="sec">
+  <div class="sec-head"><span class="sec-num">4</span><h2>Blue team and SOC perspective</h2></div>
+  <p class="sec-intro">
+    Defenders cannot stop packets at the attack source, but they can see the attack early, react fast,
+    and keep the service available. This section shows what to watch, what the attack leaves behind,
+    and how to triage the first minutes.
+  </p>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>How defenders can see it</h4>
+      <p>
+        Three vantage points work best: <strong>upstream</strong> (ISP or CDN dashboards show the attack
+        before it lands), <strong>edge</strong> (firewall and router counters show deny spikes and queue
+        drops), and <strong>inside</strong> (server metrics show connection backlogs and error rates).
+        A view from only one place hides half the story.
+      </p>
+    </div>
+    <div class="card">
+      <h4>What artifacts it leaves</h4>
+      <ul>
+        <li>NetFlow records with extreme packet-per-second counts to one destination.</li>
+        <li>Firewall deny logs from thousands of unique source addresses.</li>
+        <li>Router interface counters near line rate, with output drops.</li>
+        <li>CDN or WAF logs showing request floods with odd user agents or paths.</li>
+        <li>Synthetic monitoring failures from outside regions while internal checks pass.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Why it matters to the SOC</h4>
+      <p>
+        A DDoS is not a malware event: there is no host to isolate. The response is network engineering plus
+        communication. The SOC that only knows "restart the server" will fail. The SOC with a tested DDoS
+        runbook, ISP contacts, and clear thresholds keeps the outage to minutes instead of hours.
+      </p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Fits into the attack chain — defender view</h4>
+    <p>
+      Treat a DDoS as both an incident and a signal. Ask two questions at once: is this the whole attack,
+      or is it cover for something quieter such as a phishing wave or an exploit attempt against a distracted
+      team? Check other alert queues during any DDoS, and verify that authentication and VPN logs show no
+      unusual success rates while the noise runs.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>First-minutes triage flow</h4>
+    <ol class="steps">
+      <li><strong>Confirm it is real.</strong> Compare current traffic with the 30-day baseline for the same hour and weekday. A launch-day spike is not always an attack.</li>
+      <li><strong>Classify the flood.</strong> Which port and protocol? How many sources? Volumetric, protocol, or application layer? This decides who you call.</li>
+      <li><strong>Check blast radius.</strong> Is one service down or the whole edge? Are other alert queues (IDS, auth, WAF) busy with a second event?</li>
+      <li><strong>Engage mitigation.</strong> Enable scrubbing, rate limits, or geo/ASN filters per the runbook. Never invent the plan during the attack.</li>
+      <li><strong>Communicate.</strong> Tell leadership, support, and customers what is happening and what to expect. Update every 30 minutes until stable.</li>
+      <li><strong>Preserve evidence.</strong> Save flow records, firewall logs, and PCAPs before rotation. You will need them for the report and for the ISP.</li>
+    </ol>
+  </div>
+</section>
+<section id="sec-detection" class="sec">
+  <div class="sec-head"><span class="sec-num">5</span><h2>Detection engineering deep dive</h2></div>
+  <p class="sec-intro">
+    This is the working section of the guide. It maps the technique to regulations, connects it to threat
+    intelligence, ranks the realistic threats, shows the logs that matter, and ends with complete Sigma
+    rules and matching Splunk SPL queries.
+  </p>
+
+  <h3 id="sec-detection-reg"><span class="h3-num">5.1</span>Regulation mapping</h3>
+  <p class="sec-intro">
+    Network DoS attacks availability. These frameworks require you to protect availability, monitor
+    networks, and rehearse incident response. Use the "expected evidence" column to prepare for audits.
+  </p>
+  <div class="tbl-wrap">
+    <table class="wide">
+      <thead>
+        <tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>GDPR</td>
+          <td>Art. 32(1)(b) and (c) — security of processing, availability and resilience</td>
+          <td>Personal data services must resist accidental or deliberate destruction and loss of availability. A successful DDoS that stops processing can become a reportable risk.</td>
+          <td>DDoS risk assessment, mitigation architecture notes, incident register with timelines, processor agreements that cover availability.</td>
+        </tr>
+        <tr>
+          <td>HIPAA Security Rule</td>
+          <td>§164.306(a)(1) and (a)(2) — availability of e-PHI and protection from anticipated threats; §164.308(a)(7) contingency planning</td>
+          <td>Electronic protected health information must stay available, and covered entities must guard against reasonably anticipated threats such as network floods, with tested contingency procedures.</td>
+          <td>Risk analysis listing DoS scenarios, contingency plan test records, availability monitoring configs for e-PHI systems.</td>
+        </tr>
+        <tr>
+          <td>ISO/IEC 27001:2022</td>
+          <td>A.8.20 network security; A.8.21 security of network services; A.8.14 redundancy of information processing facilities; A.5.29/5.30 continuity of ICT</td>
+          <td>The ISMS must protect networks, agree capacity and availability levels for network services, and be ready for business-continuity events.</td>
+          <td>Network service agreements with DDoS clauses, capacity management records, continuity exercise reports, incident logs.</td>
+        </tr>
+        <tr>
+          <td>SOC 2 (Availability)</td>
+          <td>A1.1 capacity management, A1.2 and A1.3 recovery; CC7.2 anomaly monitoring</td>
+          <td>The trust services criteria for availability require capacity planning, recovery, and monitoring for deviations from normal operation.</td>
+          <td>Monitoring dashboards, uptime and SLA reports, post-incident reviews, scrubbing service contracts.</td>
+        </tr>
+        <tr>
+          <td>PCI DSS v4.0</td>
+          <td>Req 12.10 incident response; Req 10.7.1 detect failure of critical security controls</td>
+          <td>Cardholder data environments need a tested response plan and alerts when critical controls (edge protection) fail or are overwhelmed.</td>
+          <td>IR plan with a DDoS scenario, alert configs for control failures, ISP or CDN contracts, quarterly test evidence.</td>
+        </tr>
+        <tr>
+          <td>NIST CSF 2.0</td>
+          <td>DE.CM-01 networks monitored; RS.MA incident management; PR.IR resilience</td>
+          <td>Continuous network monitoring, managed response, and infrastructure resilience map directly to DoS defense.</td>
+          <td>Flow monitoring coverage report, incident management metrics, resilience improvements after exercises.</td>
+        </tr>
+        <tr>
+          <td>CIS Controls v8</td>
+          <td>Control 12 (Network Infrastructure Management, incl. 12.2 secure architecture); Control 13 (Network Monitoring and Defense, incl. 13.1 centralized alerting)</td>
+          <td>Enterprise network monitoring and defense controls are the direct home of DDoS detection and mitigation.</td>
+          <td>Architecture diagrams, flow collector coverage, deployed rate-limit and filtering configs.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 id="sec-detection-intel"><span class="h3-num">5.2</span>Threat intelligence</h3>
+  <p class="sec-intro">
+    Good DDoS intelligence tells you who attacks whom, with which flood types, and at what scale.
+    Feed that knowledge into detections, exposure checks, and stakeholder briefings.
+  </p>
+  <div class="grid-2">
+    <div class="card">
+      <h4>Sources and collection</h4>
+      <ul>
+        <li><strong>MITRE ATT&amp;CK:</strong> T1498 and its sub-techniques give a shared language for reports and detections.</li>
+        <li><strong>Vendor reporting:</strong> quarterly DDoS trend reports from Cloudflare, Akamai, Radware, and NETSCOUT describe sizes, vectors, and targets.</li>
+        <li><strong>OSINT:</strong> CERT advisories, Shadowserver reports about your exposed or abused services, and BGP or DNS telemetry communities.</li>
+        <li><strong>Commercial feeds:</strong> botnet C2 lists and reflector lists help you find infected machines inside your network and open services on it.</li>
+        <li><strong>ISACs:</strong> sector information sharing communities warn about active campaigns against peers.</li>
+        <li><strong>Internal telemetry:</strong> your own NetFlow baselines and honeypots show what an attack looks like on your specific edge.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Analysis and confidence</h4>
+      <p>
+        Tag every intel item with a confidence level and an action. High confidence: flood families such as
+        Mirai and its variants, and public incident reports such as the 2016 Dyn DNS attack. Medium:
+        attributions to named groups, which vendors often infer from infrastructure reuse. Low: motive
+        claims posted on social media by attack groups. A claim is not proof until another source supports it.
+      </p>
+      <dl class="kv">
+        <dt>ATT&amp;CK procedure examples</dt><dd>APT28 (G0007) — DDoS against the World Anti-Doping Agency in 2016; Lucifer (S0532) — TCP, UDP, and HTTP DoS capability; NKAbuse (S1107) — multi-protocol network DoS after install</dd>
+        <dt>Botnet families</dt><dd>Mirai and its variants remain the reference case for consumer-device floods</dd>
+        <dt>Hacktivist waves</dt><dd>collective-driven multi-target DDoS campaigns against government, health, and retail sites — claims are public, proof varies</dd>
+        <dt>Extortion (RDDoS)</dt><dd>groups send a demand note, prove power with a short burst, then threaten a longer attack</dd>
+        <dt>Campaign signals</dt><dd>extortion emails before the flood; multi-vector waves; peak sizes above 1 Tbit/s</dd>
+        <dt>Typical action</dt><dd>enrich detections with reflector lists; verify your own assets are not open amplifiers</dd>
+      </dl>
+      <p>
+        Confidence discipline: the ATT&amp;CK procedure examples above are high confidence, because MITRE
+        cites public reporting for each one. Attribution of hacktivist waves to named sponsors is usually
+        medium or low confidence, because evidence often rests on infrastructure reuse. A claim posted on
+        social media is not proof until a second source supports it.
+      </p>
+    </div>
+  </div>
+  <div class="callout good">
+    <p>
+      Application routine: every month, check Shadowserver and similar scanners for your external IP ranges.
+      Finding your own misused DNS or NTP servers before attackers do removes you from the weapon pool and
+      from future abuse reports.
+    </p>
+  </div>
+
+  <h3 id="sec-detection-ranking"><span class="h3-num">5.3</span>Threats ranking and categorization</h3>
+  <p class="sec-intro">
+    The table ranks the realistic ways this technique hits an organization. Severity reflects impact and
+    likelihood combined. The platform column shows where the threat lives, and all ATT&amp;CK platforms for
+    this technique are covered: network, cloud, Windows, Linux, macOS, and identity services.
+  </p>
+  <div class="tbl-wrap">
+    <table class="wide">
+      <thead>
+        <tr><th>#</th><th>Threat</th><th>Severity</th><th>Platform</th><th>Description and preconditions</th><th>Impact and justification</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Multi-vector volumetric DDoS from a rented botnet</td>
+          <td><span class="badge sev-critical">Critical</span></td>
+          <td><span class="cat cat-net">Network</span> <span class="cat cat-cloud">Cloud</span></td>
+          <td>Mixed floods (UDP, SYN, DNS) from tens of thousands of bots. Needs only a rented stresser and the target's public address.</td>
+          <td>Total service outage and saturated links. Highest likelihood and impact combination for internet-facing organizations; mitigation needs upstream capacity.</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>DNS reflection amplification</td>
+          <td><span class="badge sev-critical">Critical</span></td>
+          <td><span class="cat cat-net">Network</span></td>
+          <td>Open resolvers reply to a spoofed victim address with large answers. Needs spoofable senders and open resolvers (see T1498.002).</td>
+          <td>Extreme amplification from few attacker machines; can saturate even 100 Gbit/s edges without any botnet.</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>TCP SYN protocol flood</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="cat cat-net">Network</span></td>
+          <td>Half-open connections fill server and firewall state tables (see T1498.001). Needs spoofed sources or a mid-size botnet.</td>
+          <td>New connections fail while established ones survive; hits stateful devices hardest.</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>Cloud edge saturation with cost shock</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="cat cat-cloud">Cloud</span></td>
+          <td>Flood traffic lands on cloud load balancers and public IPs; auto-scaling adds instances against a flood. Needs a cloud-hosted public service.</td>
+          <td>Service degradation plus a sudden large cloud bill; autoscaling alone cannot beat a volumetric flood.</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>Ransom DDoS (RDDoS) campaign</td>
+          <td><span class="badge sev-high">High</span></td>
+          <td><span class="cat cat-net">Network</span></td>
+          <td>Group sends a demand note, proves power with a short burst, then threatens a longer attack. Needs a credible stresser platform.</td>
+          <td>Business pressure and payment dilemmas; historical campaigns hit finance, travel, and e-commerce sectors.</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td>Flood exhausts Windows server connection tables</td>
+          <td><span class="badge sev-medium">Medium</span></td>
+          <td><span class="cat cat-win">Windows</span></td>
+          <td>SYN or UDP floods target Windows servers running IIS, RRAS, or other public services; the nonpaged pool and half-open queue fill. Needs a reachable Windows service.</td>
+          <td>The Windows service stops accepting new connections before the link is full; event 5157 block storms and SYN-RECV growth are the visible traces.</td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td>Flood exhausts Linux host network stack</td>
+          <td><span class="badge sev-medium">Medium</span></td>
+          <td><span class="cat cat-linux">Linux</span></td>
+          <td>SYN backlog and conntrack tables fill on Linux servers and appliances. Needs a reachable Linux service and enough flood volume.</td>
+          <td>Kernel logs the "possible SYN flooding" message, ListenDrops climb, new connections stall; containers share the same host stack and fail together.</td>
+        </tr>
+        <tr>
+          <td>8</td>
+          <td>Auth-portal flood causes lockouts and login downtime</td>
+          <td><span class="badge sev-medium">Medium</span></td>
+          <td><span class="cat cat-id">Identity</span></td>
+          <td>Floods against VPN concentrators or SSO login pages keep authentication services busy or unreachable. Needs a public login endpoint.</td>
+          <td>Staff cannot log in during the attack, which blocks all other response work; recovery is usually quick after filtering.</td>
+        </tr>
+        <tr>
+          <td>9</td>
+          <td>macOS-hosted internal services overwhelmed</td>
+          <td><span class="badge sev-low">Low</span></td>
+          <td><span class="cat cat-mac">macOS</span></td>
+          <td>Build servers, file shares, or dev tools on macOS are flooded from inside the network. Needs an internal attacker or infected host.</td>
+          <td>Rare and low impact: most macOS systems sit behind the edge and never face the raw flood; include it so asset coverage is complete.</td>
+        </tr>
+        <tr>
+          <td>10</td>
+          <td>Legitimate flash crowd mistaken for attack</td>
+          <td><span class="badge sev-low">Low</span></td>
+          <td><span class="cat cat-net">Network</span> <span class="cat cat-cloud">Cloud</span></td>
+          <td>A marketing event or news spike looks like a flood in raw graphs. Preconditions: weak baselines and missing business calendar.</td>
+          <td>Wrong mitigations block real customers. Low harm if baselines and communication exist; include it to avoid false positives.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <p>
+      <strong>Scope boundary — T1498 versus T1499.</strong> A flood of valid-looking HTTP requests that
+      exhausts application workers is an <em>endpoint</em> DoS in ATT&amp;CK: MITRE maps application
+      exhaustion floods to <a href="https://attack.mitre.org/techniques/T1499/003/" target="_blank" rel="noopener">T1499.003</a>
+      and service exhaustion floods to <a href="https://attack.mitre.org/techniques/T1499/002/" target="_blank" rel="noopener">T1499.002</a>.
+      T1498 covers attacks that exhaust the <em>network path</em> — bandwidth, state tables, and edge devices.
+      In practice both can arrive together, so monitor the WAF path as well, but tag detections with the
+      technique ID that matches the resource being exhausted.
+    </p>
+  </div>
+  <h3 id="sec-detection-logs"><span class="h3-num">5.4</span>Logs and patterns</h3>
+  <p class="sec-intro">
+    Each card below matches a threat from 5.3. It lists the log sources, the fields that matter, what
+    normal looks like, what suspicious looks like, and one realistic event example you can test your
+    parser against.
+  </p>
+
+  <div class="card">
+    <h4>Threat 1 — Multi-vector flood: firewall deny spike</h4>
+    <p>
+      <strong>Sources:</strong> perimeter firewall traffic logs, router ACL logs.
+      <strong>Key fields:</strong> action, srcip, dstip, dstport, proto, sentbyte, rcvdbyte, count of events.
+      <strong>Normal:</strong> a steady few hundred denies per minute from scanners and expired sessions.
+      <strong>Suspicious:</strong> thousands of denies per minute, thousands of unique sources, and inbound
+      byte counts far above the same-hour baseline.
+    </p>
+    <div class="code">
+      <div class="code-head"><span class="lang">JSON — firewall traffic log (FortiGate style)</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>{"date":"2026-10-22","time":"09:41:17","devid":"FGT-edge-01","vd":"root",
+ "action":"deny","proto":"17","srcip":"203.0.113.44","srcport":"40012",
+ "dstip":"198.51.100.10","dstport":"443","service":"HTTPS",
+ "sentbyte":1420,"rcvdbyte":0,"duration":0,"crlevel":"medium","craction":"65536"}</pre>
+    </div>
+    <p>
+      <strong>Detection logic:</strong> count deny events in a five-minute window; alert when the count is
+      ten times the 30-day baseline for that hour. The zero reply bytes with nonzero sent bytes are typical
+      for one-way flood traffic.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Threat 2 — Reflection flood seen from the victim edge</h4>
+    <p>
+      <strong>Sources:</strong> ISP NetFlow exports, firewall logs, router interface counters.
+      <strong>Key fields:</strong> src_ip diversity, src_port (53, 123, 11211, 1900, 19), proto, packets, bytes.
+      <strong>Normal:</strong> DNS replies from your known resolvers only; few other UDP services.
+      <strong>Suspicious:</strong> inbound UDP from thousands of different source IPs on reflector ports,
+      with reply bytes far larger than any request you sent.
+    </p>
+    <div class="code">
+      <div class="code-head"><span class="lang">CSV — NetFlow v5 record</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>2026-10-22 09:41:20,192.0.2.77,198.51.100.10,53,44120,17,0,1428,1,PKTS=1
+2026-10-22 09:41:20,192.0.2.78,198.51.100.10,53,44121,17,0,1428,1,PKTS=1
+2026-10-22 09:41:20,192.0.2.79,198.51.100.10,123,44122,17,0,468,1,PKTS=1
+# fields: time, src_ip, dst_ip, src_port, dst_port, proto, tos, bytes, packets, flags</pre>
+    </div>
+    <p>
+      <strong>Detection logic:</strong> count inbound flows per destination port per minute and count unique
+      sources. Many sources plus reflector ports plus high bytes-per-flow equals reflection. Full detection
+      details are in the T1498.002 guide.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Threat 3 — SYN flood: flow records and state tables</h4>
+    <p>
+      <strong>Sources:</strong> Zeek conn.log, firewall session logs, load-balancer SYN proxy counters.
+      <strong>Key fields:</strong> proto, conn_state, id.orig_h, id.resp_h, id.resp_p, half-open count.
+      <strong>Normal:</strong> most TCP flows reach complete handshakes (conn_state SF) within seconds.
+      <strong>Suspicious:</strong> thousands of flows stuck in S0 or REJ to one port in one minute, and the
+      device's half-open table climbing to its maximum.
+    </p>
+    <div class="code">
+      <div class="code-head"><span class="lang">TSV — Zeek conn.log (tab separated)</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>#fields ts      uid     id.orig_h       id.orig_p  id.resp_h     id.resp_p  proto  service  duration  orig_bytes  resp_bytes  conn_state
+1761122481.302    CAbcde1  203.0.113.77   51204      198.51.100.10  443       tcp    -        0.000000  0           0           S0
+1761122481.310    CAbcde2  203.0.113.78   51205      198.51.100.10  443       tcp    -        0.000000  0           0           S0
+1761122481.318    CAbcde3  203.0.113.79   51206      198.51.100.10  443       tcp    -        0.000000  0           0           REJ</pre>
+    </div>
+    <p>
+      <strong>Detection logic:</strong> count conn_state S0 and REJ per destination per minute. Above two
+      thousand in one minute to a business port is a flood signal, not a scan. Scans spread across many
+      ports; floods concentrate on one.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Threat 4 — Cloud edge saturation: load balancer and CDN metrics</h4>
+    <p>
+      <strong>Sources:</strong> load-balancer access logs, CDN edge metrics, cloud monitoring alarms.
+      <strong>Key fields:</strong> elb_status_code, healthy host count, processed bytes, requests per second, p99 latency.
+      <strong>Normal:</strong> balancer-generated 5xx share below 0.5 percent; healthy host count stable; p99 latency flat.
+      <strong>Suspicious:</strong> a wave of 502 to 504 responses, healthy host count falling, and bytes-in rising
+      much faster than requests-in.
+    </p>
+    <div class="code">
+      <div class="code-head"><span class="lang">JSON — cloud load-balancer alarm events</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>{"ts":"2026-10-22T09:41:30Z","metric":"HealthyHostCount","lb":"prod-web-alb",
+ "target_group":"tg-web-01","value":1,"previous":4,"state":"ALARM",
+ "reason":"targets failed health checks"}
+{"ts":"2026-10-22T09:41:30Z","metric":"HTTPCode_ELB_5XX_Count","lb":"prod-web-alb",
+ "value":11842,"period_seconds":60,"note":"5xx made by the balancer, not the app"}</pre>
+    </div>
+    <p>
+      <strong>Detection logic:</strong> alert when balancer-generated 5xx responses pass their baseline and
+      the healthy host count falls in the same minute. Compare bytes-in with requests-in: floods raise bytes
+      far faster than request counts, while real campaigns do the opposite.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Threats 6 to 8 — Host and identity signals during the flood</h4>
+    <p>
+      <strong>Sources:</strong> Windows security event log, Linux kernel and firewall logs, VPN or SSO gateway logs,
+      plus synthetic monitoring. <strong>Normal:</strong> block events spread across many ports and stay near baseline;
+      logins succeed within a second.
+      <strong>Suspicious:</strong> block storms aimed at one port, kernel SYN-flood messages, and login timeouts
+      that start and stop with the network event.
+    </p>
+    <div class="code">
+      <div class="code-head"><span class="lang">JSON — Windows event 5157 (blocked connection), Windows servers</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>{"EventTime":"2026-10-22 09:41:12","Channel":"Security","EventID":5157,
+ "Application":"System","SourceAddress":"203.0.113.88","SourcePort":"51233",
+ "DestAddress":"198.51.100.10","DestPort":"443","Protocol":"6",
+ "Direction":"Inbound","Action":"Blocked"}
+# tells: thousands of 5157 blocks to one port per minute during the flood window</pre>
+    </div>
+    <div class="code">
+      <div class="code-head"><span class="lang">Text — Linux kernel and firewall log lines</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>2026-10-22 09:41:10 web01 kernel: [UFW BLOCK] IN=eth0 SRC=203.0.113.51 DST=198.51.100.10 PROTO=TCP SPT=51200 DPT=443
+2026-10-22 09:41:10 web01 kernel: TCP: request_sock_TCP: Possible SYN flooding on port 443. Sending cookies.  Check SNMP counters.
+# tells: kernel SYN-flood message plus a block storm to one port; also watch ListenDrops in /proc/net/netstat.
+# macOS note: macOS systems rarely face the raw flood. Watch them from synthetic checks instead —
+# for example, a build server or file share that becomes unreachable during an internal flood.</pre>
+    </div>
+    <div class="code">
+      <div class="code-head"><span class="lang">JSON — VPN or SSO gateway log, identity services</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>{"ts":"2026-10-22T09:41:25Z","gateway":"vpn-edge-01","user":"-","src_ip":"203.0.113.204",
+ "result":"timeout","reason":"portal overloaded","attempts_in_window":18477}
+# tells: login attempts time out at the portal itself — staff cannot sign in while the flood runs</pre>
+    </div>
+    <p>
+      <strong>Detection logic:</strong> for hosts, alert when block events to one destination port pass twenty
+      times baseline, or when the kernel logs SYN-flood messages. For identity, alert when failed or timed-out
+      logins on the gateway pass their five-minute baseline. Correlate both with the edge rules so the SOC sees
+      one incident, not five alerts.
+    </p>
+  </div>
+
+  <h3 id="sec-detection-sigma"><span class="h3-num">5.5</span>Sigma rules and Splunk SPL</h3>
+  <p class="sec-intro">
+    Six complete rules cover the main paths for T1498: the edge view (Rules 1 to 3), the reflector and
+    cloud view (Rules 4 and 5), and the identity view (Rule 6). Each rule has a matching Splunk query, a
+    mapping note, false positives, and tuning guidance. Field names follow the log sources named in each
+    logsource; the mapping notes state what to change in your environment.
+  </p>
+
+  <div class="card">
+    <h4>Rule 1 — Firewall deny spike (volumetric flood indicator)</h4>
+    <div class="code">
+      <div class="code-head"><span class="lang">Sigma — YAML</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>title: Spike of Denied Firewall Sessions Indicates Possible Network Flood
+id: 7c1e4a2f-9b3d-4e6f-8a5c-1d2f3a4b5c60
+status: stable
+description: |
+  Detects an abnormal number of denied or blocked sessions at the network
+  edge within a short window. A network denial of service sends traffic the
+  edge must drop, so a sharp deny-count rise is a strong early indicator
+  for T1498 and its sub-techniques T1498.001 and T1498.002.
+references:
+  - https://attack.mitre.org/techniques/T1498/
+  - https://www.cisa.gov/uscert/ncas/alerts/TA14-017A
+author: Detection Engineering Team
+date: 2026-10-22
+logsource:
+  category: firewall
+detection:
+  selection:
+    action|contains:
+      - 'deny'
+      - 'block'
+      - 'drop'
+  timeframe: 5m
+  condition: selection | count() > 5000
+fields:
+  - action
+  - src_ip
+  - dst_ip
+  - dst_port
+  - proto
+falsepositives:
+  - Busy internet edges drop many packets during normal traffic peaks
+  - Large scheduled backup or replication jobs crossing the firewall
+  - Vulnerability scanners hitting many hosts at once
+level: high
+tags:
+  - attack.impact
+  - attack.t1498
+  - attack.t1498.001
+  - attack.t1498.002</pre>
+    </div>
+    <div class="code">
+      <div class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>index=netfw sourcetype=fortigate_traffic action IN ("deny","block","drop")
+| bin _time span=5m
+| stats count AS denied_sessions, dc(src_ip) AS unique_sources,
+        sum(eval(coalesce(src_bytes,0)+coalesce(dest_bytes,0))) AS bytes_seen by _time
+| where denied_sessions &gt; 5000
+| eval est_gbit = round(bytes_seen * 8 / 1000000000, 2)
+| sort - denied_sessions</pre>
+    </div>
+    <p>
+      <strong>Mapping note:</strong> assumes the FortiGate App for Splunk with Common Information Model
+      aliases. The add-on stores raw names <code>srcip</code>, <code>dstip</code>, <code>sentbyte</code>,
+      <code>rcvdbyte</code>; either alias them to <code>src_ip</code>, <code>dst_ip</code>,
+      <code>src_bytes</code>, <code>dest_bytes</code>, or replace the field names in the query.
+      <strong>False positives:</strong> patch-server floods on Tuesday nights; a data-center migration.
+      <strong>Tuning:</strong> raise the threshold to ten times your measured 30-day hourly baseline, and
+      exclude trusted internal subnets from the source count. <strong>Severity:</strong> high.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Rule 2 — Inbound UDP flow spike to one host</h4>
+    <div class="code">
+      <div class="code-head"><span class="lang">Sigma — YAML</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>title: High Volume of Inbound UDP Flows to a Single Host
+id: 2f8b6d1c-4a7e-49b3-9d2f-6c8a1e3f5b70
+status: stable
+description: |
+  Detects a large number of UDP flow records toward one destination in a
+  five-minute window. Volumetric UDP floods and many reflection attacks
+  produce this shape: thousands of short flows to one public service.
+references:
+  - https://attack.mitre.org/techniques/T1498/
+  - https://attack.mitre.org/techniques/T1498/002/
+author: Detection Engineering Team
+date: 2026-10-22
+logsource:
+  product: zeek
+  service: conn
+detection:
+  selection:
+    proto: 'udp'
+  timeframe: 5m
+  condition: selection | count() by id.resp_h &gt; 8000
+fields:
+  - id.orig_h
+  - id.resp_h
+  - id.resp_p
+  - proto
+falsepositives:
+  - Large DNS or media servers under legitimate heavy load
+  - NTP pools or game servers with real high player counts
+level: high
+tags:
+  - attack.impact
+  - attack.t1498</pre>
+    </div>
+    <div class="code">
+      <div class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>index=netids sourcetype=zeek:conn proto=udp
+| bin _time span=5m
+| stats count AS udp_flows, dc(id.orig_h) AS unique_sources,
+        sum(eval(orig_bytes + resp_bytes)) AS total_bytes by id.resp_h, _time
+| where udp_flows &gt; 8000
+| sort - udp_flows</pre>
+    </div>
+    <p>
+      <strong>Mapping note:</strong> uses raw Zeek field names as kept by the Splunk TA for Zeek.
+      <code>id.resp_h</code> is the destination host; <code>id.orig_h</code> is the sender.
+      <strong>False positives:</strong> your own public DNS resolvers and media servers; add them to an
+      allowlist. <strong>Tuning:</strong> start with 8000 flows per five minutes per host, then adjust per
+      server class; keep a per-asset threshold table. <strong>Severity:</strong> high.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Rule 3 — Edge interface saturation (NetFlow / IPFIX)</h4>
+    <div class="code">
+      <div class="code-head"><span class="lang">Sigma — YAML</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>title: Edge Interface Saturates With One-Way Inbound Flow Volume
+id: f2a4d7c9-5b1e-4c8f-9a6d-3e7b2c4f1a90
+status: stable
+description: |
+  Detects near-line-rate inbound volume concentrated on one destination,
+  measured with flow records (NetFlow, IPFIX, or Zeek conn). When inbound
+  bytes to one public host stay far above normal while replies stay small,
+  the network path itself is the target — the core condition of T1498.
+references:
+  - https://attack.mitre.org/techniques/T1498/
+  - https://attack.mitre.org/techniques/T1498/001/
+author: Detection Engineering Team
+date: 2026-10-22
+logsource:
+  category: network
+  service: netflow
+detection:
+  selection:
+    proto:
+      - 'udp'
+      - 'tcp'
+      - 'icmp'
+  timeframe: 1m
+  condition: selection | sum(bytes) by dst_ip &gt; 2000000000
+fields:
+  - dst_ip
+  - src_ip
+  - dst_port
+  - proto
+  - bytes
+  - packets
+falsepositives:
+  - Nightly backups and bulk file transfers to one data center
+  - Software distribution or OS image pulls behind one cache
+level: high
+tags:
+  - attack.impact
+  - attack.t1498
+  - attack.t1498.001
+  - attack.t1498.002</pre>
+    </div>
+    <div class="code">
+      <div class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>index=netflow sourcetype=netflow:records (proto=udp OR proto=tcp OR proto=icmp)
+| bin _time span=1m
+| stats sum(bytes) AS inbound_bytes, sum(packets) AS packets_in,
+        dc(src_ip) AS unique_sources, values(dst_port) AS target_ports by dst_ip, _time
+| where inbound_bytes &gt; 2000000000
+| eval est_gbit = round(inbound_bytes * 8 / 1000000000, 2)
+| sort - est_gbit</pre>
+    </div>
+    <p>
+      <strong>Mapping note:</strong> two billion bytes per minute is about 267 Mbit/s sustained — replace it
+      with 60 percent of your measured 30-day same-hour peak, per destination. <strong>False positives:</strong>
+      backup windows and release file distribution — exclude their schedules and destinations.
+      <strong>Tuning:</strong> if your flow device does not log <code>bytes</code>, compute it from packets
+      times average packet size. <strong>Severity:</strong> high.
+    </p>
+  </div>
+  <div class="card">
+    <h4>Rule 4 — Internal server used as a flood reflector</h4>
+    <div class="code">
+      <div class="code-head"><span class="lang">Sigma — YAML</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>title: Internal DNS Server Answering Large Queries for External Clients
+id: 1a6c8f3d-2b9e-4c7a-a4d5-3f6b9e2c1d40
+status: stable
+description: |
+  Detects an internal DNS server that answers large query types (ANY or
+  TXT) at a high rate. This is the reflector side of amplification attacks:
+  your server is being used as a weapon against someone else, which creates
+  abuse reports and legal exposure even though your own service is up.
+references:
+  - https://attack.mitre.org/techniques/T1498/
+  - https://attack.mitre.org/techniques/T1498/002/
+  - https://www.cisa.gov/uscert/ncas/alerts/TA14-017A
+author: Detection Engineering Team
+date: 2026-10-22
+logsource:
+  product: zeek
+  service: dns
+detection:
+  selection:
+    qtype_name:
+      - 'ANY'
+      - '*'
+      - 'TXT'
+  timeframe: 5m
+  condition: selection | count() by id.resp_h &gt; 500
+fields:
+  - id.orig_h
+  - id.resp_h
+  - query
+  - qtype_name
+  - rcode_name
+falsepositives:
+  - Public recursive resolvers that intentionally serve the internet
+  - Bulk DNS lookups from security scanners inside your network
+level: high
+tags:
+  - attack.impact
+  - attack.t1498
+  - attack.t1498.002</pre>
+    </div>
+    <div class="code">
+      <div class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>index=netids sourcetype=zeek:dns qtype_name IN ("ANY","TXT","*")
+| bin _time span=5m
+| stats count AS large_queries, dc(id.orig_h) AS distinct_askers,
+        values(id.resp_h) AS dns_servers by id.resp_h, _time
+| where large_queries &gt; 500
+| sort - large_queries</pre>
+    </div>
+    <p>
+      <strong>Mapping note:</strong> Zeek represents the ANY query type as <code>*</code>, so the rule checks
+      all three spellings. The count is grouped per DNS server (<code>id.resp_h</code>), and
+      <code>distinct_askers</code> shows how many different clients are involved.
+      <strong>False positives:</strong> a deliberate public resolver, which should be a documented
+      exception with strict rate limits. <strong>Tuning:</strong> for authoritative-only servers, any ANY
+      query from outside deserves a look; lower the threshold to 50. <strong>Severity:</strong> high.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Rule 5 — Cloud load balancer rejects an abnormal share of requests</h4>
+    <div class="code">
+      <div class="code-head"><span class="lang">Sigma — YAML</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>title: Cloud Load Balancer Returns an Abnormal Number of 5xx Responses
+id: c8b3e6a2-7f4d-49c5-b1e8-6d2a9f4c3b70
+status: stable
+description: |
+  Detects cloud edge saturation from the application side: the load
+  balancer returns many 502 to 504 responses or drops connection attempts
+  during a flood. This is often the first customer-visible symptom of a
+  network denial of service in cloud environments, and it pairs with the
+  traffic-based rules above.
+references:
+  - https://attack.mitre.org/techniques/T1498/
+author: Detection Engineering Team
+date: 2026-10-22
+logsource:
+  category: cloud
+  product: aws
+  service: elb
+detection:
+  selection:
+    elb_status_code|startswith:
+      - '50'
+  timeframe: 5m
+  condition: selection | count() by elb &gt; 3000
+fields:
+  - elb
+  - elb_status_code
+  - client_ip
+  - request_url
+  - target_ip
+falsepositives:
+  - A genuine backend deployment or a failing application release
+  - Scheduled health-check failures during maintenance windows
+level: high
+tags:
+  - attack.impact
+  - attack.t1498</pre>
+    </div>
+    <div class="code">
+      <div class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>index=cloud sourcetype=aws:elb_logs elb_status_code=5*
+| bin _time span=5m
+| stats count AS balancer_5xx, dc(client_ip) AS unique_clients,
+        values(elb) AS affected_balancers by _time
+| where balancer_5xx &gt; 3000
+| sort - balancer_5xx</pre>
+    </div>
+    <p>
+      <strong>Mapping note:</strong> assumes Application Load Balancer access logs in
+      <code>aws:elb_logs</code>. For Azure, use Front Door or Application Gateway W3C logs
+      (<code>sc_status</code>); for Google Cloud, use load-balancer request logs
+      (<code>status</code>) — the logic stays the same. <strong>False positives:</strong> releases and
+      backend failures also make 5xx; check the <code>unique_clients</code> spread, because floods come
+      from thousands of sources. <strong>Tuning:</strong> alert only when the 5xx wave and the flow rules
+      fire in the same five-minute window. <strong>Severity:</strong> high.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Rule 6 — Login portal flooded with failed authentication attempts</h4>
+    <div class="code">
+      <div class="code-head"><span class="lang">Sigma — YAML</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>title: Login Portal Flooded With Failed or Timed-Out Authentication Attempts
+id: d5a7c1f3-9e2b-4d6a-8f4c-1b3e7d5a2c40
+status: stable
+description: |
+  Detects a flood aimed at the authentication front door: very high counts
+  of failed or timed-out logins on VPN or SSO gateways within minutes. A
+  network DoS on the login path blocks staff sign-in even when every other
+  service still works, so it deserves its own alert.
+references:
+  - https://attack.mitre.org/techniques/T1498/
+author: Detection Engineering Team
+date: 2026-10-22
+logsource:
+  category: authentication
+  product: vpn
+detection:
+  selection:
+    action:
+      - 'failure'
+      - 'timeout'
+  timeframe: 5m
+  condition: selection | count() by dst_host &gt; 2000
+fields:
+  - user
+  - src_ip
+  - dst_host
+  - action
+falsepositives:
+  - A company-wide password reset after an email outage
+  - One misconfigured service account retrying in a loop
+  - Approved red-team password-spray tests
+level: high
+tags:
+  - attack.impact
+  - attack.t1498</pre>
+    </div>
+    <div class="code">
+      <div class="code-head"><span class="lang">Splunk SPL</span><button class="copy-btn" type="button">Copy</button></div>
+      <pre>index=auth sourcetype=vpn:gateway action IN ("failure","timeout")
+| bin _time span=5m
+| stats count AS failed_logins, dc(src_ip) AS unique_sources,
+        dc(user) AS unique_users by dst_host, _time
+| where failed_logins &gt; 2000
+| sort - failed_logins</pre>
+    </div>
+    <p>
+      <strong>Mapping note:</strong> assumes VPN gateway logs in <code>vpn:gateway</code> with an
+      <code>action</code> field; map your product's <code>result</code> or <code>status</code> values to
+      <code>failure</code> and <code>timeout</code> at ingest. <strong>False positives:</strong> a big
+      password reset wave looks similar — check <code>unique_users</code>, because a DoS flood usually
+      shows many attempts per user account. <strong>Tuning:</strong> raise the threshold for Monday
+      mornings and the first workday after holidays, when real login pressure peaks.
+      <strong>Severity:</strong> high.
+    </p>
+  </div>
+</section>
+
+<section id="sec-case-study" class="sec">
+  <div class="sec-head"><span class="sec-num">6</span><h2>Real-world case study</h2></div>
+  <p class="sec-intro">
+    On 21 October 2016, the DNS provider Dyn was hit by one of the largest DDoS attacks seen up to that
+    time. Because Dyn resolved names for many major websites, the outage reached far beyond one company.
+    Times below are approximate, as reported publicly.
+  </p>
+
+  <div class="card">
+    <h4>Context</h4>
+    <p>
+      Dyn operated authoritative DNS for platforms such as Twitter, Netflix, Reddit, Spotify, and GitHub.
+      Weeks earlier, the Mirai botnet source code had been published, and Mirai had already attacked
+      security blogger Brian Krebs and the hosting company OVH. Mirai scanned the internet for cameras,
+      routers, and recorders that still used factory passwords, then enrolled them in a botnet of roughly
+      one hundred thousand devices.
+    </p>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Time (ET, reported)</th><th>What happened</th><th>Source of record</th></tr></thead>
+      <tbody>
+        <tr><td>~07:00</td><td>First flood wave hits Dyn DNS infrastructure, mainly US East Coast; users cannot resolve major sites.</td><td>Dyn public updates</td></tr>
+        <tr><td>~09:30</td><td>Service partially restored; attackers adjust flood types.</td><td>Dyn public updates</td></tr>
+        <tr><td>~11:52</td><td>Second wave arrives with global impact; resolution fails again for many providers.</td><td>Dyn public updates</td></tr>
+        <tr><td>~13:20</td><td>Filtering and rate limiting reduce impact; teams work with ISPs and vendors to block botnet traffic.</td><td>Dyn public updates</td></tr>
+        <tr><td>~15:11</td><td>Third wave; partially mitigated by the day's new filters.</td><td>Dyn public updates</td></tr>
+        <tr><td>Afterward</td><td>Service stable; investigation confirms the Mirai botnet and millions of malicious DNS queries.</td><td>Dyn incident report</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Attack chain</h4>
+      <ol class="steps">
+        <li>IoT devices with default passwords were infected with Mirai across many countries.</li>
+        <li>The bot herder pointed the botnet at Dyn's DNS anycast addresses.</li>
+        <li>Bots flooded DNS ports with several protocols, including malformed queries.</li>
+        <li>Resolver infrastructure slowed; cache misses cascaded to dependent websites.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h4>Detection point</h4>
+      <p>
+        The detection was operational telemetry: abnormal DNS query volume from millions of unique source
+        addresses, latency growth, and failing health checks. Dyn's monitoring saw the pattern quickly;
+        the challenge was capacity and filtering, not visibility. This is typical for T1498: you usually
+        detect the flood itself, but the real work is absorbing it.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Containment and eradication</h4>
+      <p>
+        Dyn rate-limited and filtered malicious query patterns, and worked with ISPs and technology partners
+        to block botnet traffic upstream. There was nothing to "eradicate" inside Dyn's own systems because
+        the malicious code lived on IoT devices worldwide; the cleanup happened at network boundaries and on
+        other people's devices over following months.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Recovery</h4>
+      <p>
+        Service returned in stages as filters tightened; by early afternoon the platform was stable. Because
+        DNS answers are cached, many users recovered before the attack fully ended. Dyn published a detailed
+        incident report, which became a reference for DNS resilience planning.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Impact and consequences</h4>
+      <ul>
+        <li>Hours of degraded access to dozens of major consumer platforms across Europe and North America.</li>
+        <li>No data breach — the damage was availability and trust, which is the signature of T1498.</li>
+        <li>Industry-wide push for IoT password rules and for multi-provider DNS designs.</li>
+        <li>Increased sales for scrubbing and CDN vendors as boards asked "could this happen to us?".</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Team response and communication</h4>
+      <p>
+        Dyn posted status updates during the attack and a full report afterward. The visible, regular
+        communication kept customers from guessing. For your own playbooks, copy this pattern: short updates
+        every 30 minutes, one named incident commander, and one public status channel.
+      </p>
+    </div>
+  </div>
+
+  <div class="callout good">
+    <h4 style="margin-bottom:6px">Lessons learned</h4>
+    <ul>
+      <li>DNS is a single point of failure for everything else — use at least two independent DNS providers.</li>
+      <li>Botnets built from default-password IoT devices remain effective; patch and change credentials everywhere.</li>
+      <li>Upstream coordination (ISPs, anycast, scrubbing) decides recovery speed, not on-premises tools.</li>
+      <li>Publish post-incident reports; they help the whole community harden against the next attack.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="sec-mitigation" class="sec">
+  <div class="sec-head"><span class="sec-num">7</span><h2>Mitigation and defense</h2></div>
+  <p class="sec-intro">
+    You cannot stop the packets from arriving, but you can decide where they are dropped. The controls
+    below are ordered by network layer, and the priority table at the end tells you what to do first.
+    The core control is the one MITRE lists for this technique: <strong>M1037 Filter Network Traffic</strong> —
+    intercept the incoming flood upstream, at the ISP, CDN, or a DDoS mitigation service, and forward only clean traffic.
+  </p>
+
+  <div class="tbl-wrap">
+    <table class="wide">
+      <thead><tr><th>Layer</th><th>Control</th><th>What to do</th><th>How to verify</th></tr></thead>
+      <tbody>
+        <tr><td><span class="cat cat-net">Network</span></td><td>Upstream scrubbing and CDN</td><td>Route inbound traffic through an ISP scrubbing service or a CDN with DDoS protection; hide origin servers.</td><td>Test-mode activation; attack simulation with the provider; origin not reachable by direct IP.</td></tr>
+        <tr><td><span class="cat cat-net">Network</span></td><td>Edge rate limits and SYN cookies</td><td>Enable SYN-flood protection and per-source rate limits on firewalls and load balancers.</td><td>Lab flood against a test VIP shows limits working; config review each quarter.</td></tr>
+        <tr><td><span class="cat cat-net">Network</span></td><td>BCP 38 egress filtering</td><td>Drop packets leaving your network with source addresses you do not own; this shrinks the global reflection problem.</td><td>Send a test packet with a spoofed source to an external reflection-detection service.</td></tr>
+        <tr><td><span class="cat cat-cloud">Cloud</span></td><td>Anycast and multi-provider DNS</td><td>Use anycast DNS with at least two independent providers so one flood cannot take down all name resolution.</td><td>Second provider answers a test zone when the first is disabled in staging.</td></tr>
+        <tr><td><span class="cat cat-cloud">Cloud</span></td><td>Capacity and autoscaling review</td><td>Right-size edge links and enable autoscaling, but remember autoscaling alone cannot beat volumetric floods.</td><td>Load tests at 2x expected peak; document the scaling ceiling.</td></tr>
+        <tr><td><span class="cat cat-web">Policy</span></td><td>Exposed UDP service inventory</td><td>Keep an inventory of every UDP service reachable from the internet; close or restrict DNS, NTP, memcached, SSDP, CharGEN.</td><td>Monthly external scans; Shadowserver reports show zero findings.</td></tr>
+        <tr><td><span class="cat">Logging</span></td><td>Flow monitoring and dashboards</td><td>Collect NetFlow or Zeek data at the edge; build a DDoS dashboard with baseline bands.</td><td>A test flood in the lab fires the dashboard alert within one minute.</td></tr>
+        <tr><td><span class="cat">Backup</span></td><td>Backup and restore discipline</td><td>DDoS pairs with extortion; tested backups remove the second ransom pressure.</td><td>Quarterly restore drill with measured recovery time.</td></tr>
+        <tr><td><span class="cat">Response</span></td><td>DDoS runbook and contacts</td><td>Write a one-page runbook: thresholds, who calls the ISP, how to enable scrubbing, customer message templates.</td><td>Semi-annual tabletop exercise using the runbook only.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Home and small-office advice</h4>
+      <ul>
+        <li>Update router and camera firmware; change every factory password.</li>
+        <li>Turn off router administration from the internet (WAN) side.</li>
+        <li>Put smart devices on a guest Wi-Fi network, separate from laptops and phones.</li>
+        <li>Do not run public services (DNS, game servers) from a home connection.</li>
+        <li>If your business is small, use a hosted CDN or your hosting provider's DDoS protection instead of defending alone.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Prioritized actions</h4>
+      <div class="tbl-wrap" style="margin-bottom:0">
+        <table style="min-width:420px">
+          <thead><tr><th>Priority</th><th>Action</th><th>Effort</th><th>Owner</th><th>Risk cut</th></tr></thead>
+          <tbody>
+            <tr><td>P1 — now</td><td>Enable ISP/CDN scrubbing in always-on or trigger mode</td><td>Medium</td><td>Network lead</td><td>Very high</td></tr>
+            <tr><td>P1 — now</td><td>Write the one-page DDoS runbook with ISP contacts</td><td>Low</td><td>SOC lead</td><td>High</td></tr>
+            <tr><td>P2 — 30 days</td><td>Deploy flow monitoring dashboard with baselines</td><td>Medium</td><td>SOC engineer</td><td>High</td></tr>
+            <tr><td>P2 — 30 days</td><td>Inventory and close exposed UDP services</td><td>Low</td><td>Infrastructure</td><td>High</td></tr>
+            <tr><td>P3 — 90 days</td><td>Second DNS provider and anycast review</td><td>Medium</td><td>Architecture</td><td>High</td></tr>
+            <tr><td>P3 — 90 days</td><td>Tabletop exercise and restore drill</td><td>Low</td><td>SOC + IT</td><td>Medium</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+<section id="sec-mistakes" class="sec">
+  <div class="sec-head"><span class="sec-num">8</span><h2>Common mistakes and best practices</h2></div>
+  <p class="sec-intro">
+    Ten mistakes blue teams make again and again with network DoS defense. Each one lists the symptom you
+    will notice, the root cause, the fix, and how to prevent it from returning. After the table you will
+    find the habits that keep the defenses alive.
+  </p>
+
+  <div class="tbl-wrap">
+    <table class="wide">
+      <thead><tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Watching only ingress bandwidth</td><td>Attack detected late, when users already call</td><td>One graph, one vantage point</td><td>Add upstream CDN/ISP views plus edge deny counters</td><td>Dashboard review as a daily habit</td></tr>
+        <tr><td>2</td><td>No ISP relationship before the attack</td><td>First scrubbing activation takes hours</td><td>Contracts and contacts never set up</td><td>Sign a scrubbing service, store escalation numbers</td><td>Call the ISP contact once per quarter, on purpose</td></tr>
+        <tr><td>3</td><td>Alerting on raw packet counts</td><td>Alert fatigue; real floods ignored as noise</td><td>Thresholds without baselines</td><td>Baseline per hour and weekday; alert on deviation</td><td>Re-tune thresholds monthly from new data</td></tr>
+        <tr><td>4</td><td>Blocking whole countries</td><td>Real customers complain after mitigation</td><td>Blunt filters used under pressure</td><td>Use ASN and rate limits instead of blanket blocks</td><td>Pre-approve filter tiers in the runbook</td></tr>
+        <tr><td>5</td><td>Writing the runbook during the incident</td><td>Chaotic first hour, unclear owners</td><td>No rehearsal culture</td><td>Write it now; one page with steps and contacts</td><td>Semi-annual tabletop using only the runbook</td></tr>
+        <tr><td>6</td><td>Keeping only deny logs, no flow records</td><td>Cannot reconstruct the attack for the report</td><td>Flow export not enabled</td><td>Enable NetFlow on edge devices; retain 90 days</td><td>Restore-test the flow archive quarterly</td></tr>
+        <tr><td>7</td><td>Rate limits tuned to average, not peak</td><td>Legit users blocked during sales events</td><td>Business calendar unknown to the SOC</td><td>Share the campaign calendar; pre-raise limits</td><td>Joint SOC-marketing review before big events</td></tr>
+        <tr><td>8</td><td>Assuming the cloud provider handles everything</td><td>Origin server taken down by direct-IP flood</td><td>Origin reachable without the CDN</td><td>Firewall origin to accept only CDN/scrubber ranges</td><td>Monthly check that the origin IP stays hidden</td></tr>
+        <tr><td>9</td><td>Only volumetric defenses, no L7 plan</td><td>Site slow or down while bandwidth looks fine</td><td>No WAF rate rules or bot management</td><td>Add per-path request limits and JS challenges</td><td>Load-test the WAF rules with a lab flood</td></tr>
+        <tr><td>10</td><td>Skipping the post-incident review</td><td>The same attack hurts twice next quarter</td><td>No blameless review process</td><td>Run a review within five working days; assign fixes</td><td>Review checklist attached to the incident ticket</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout warn">
+    <p>
+      The most expensive mistake is silent ownership. When nobody owns the DDoS runbook, every attack
+      starts with "who do we even call?". Give one person the owner role and one deputy, and put both names
+      in the runbook.
+    </p>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Daily habits</h4>
+      <ul>
+        <li>Check the DDoS dashboard and edge deny trend at shift start.</li>
+        <li>Confirm synthetic monitoring from outside regions is green.</li>
+        <li>Read any ISP or abuse reports received overnight.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Weekly habits</h4>
+      <ul>
+        <li>Review deny-rate and flow-volume trends against the 30-day baseline.</li>
+        <li>Check that new public services entered the asset inventory.</li>
+        <li>Scan for newly exposed UDP services on your ranges.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Monthly habits</h4>
+      <ul>
+        <li>Re-tune one alert threshold from fresh data.</li>
+        <li>Verify scrubbing contact lists and escalation paths.</li>
+        <li>Read one vendor DDoS trend report and update the threat map.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="sec-cheat-sheet" class="sec">
+  <div class="sec-head"><span class="sec-num">9</span><h2>Cheat sheet and quick reference</h2></div>
+  <p class="sec-intro">
+    Everything important from this guide in one place. Print this section for the SOC wall.
+  </p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Key facts</h4>
+      <dl class="kv">
+        <dt>Technique</dt><dd>T1498 — Network Denial of Service (Impact)</dd>
+        <dt>Sub-techniques</dt><dd>T1498.001 Direct Network Flood, T1498.002 Reflection Amplification</dd>
+        <dt>Goal</dt><dd>Make a network service unavailable to real users</dd>
+        <dt>Attacker needs</dt><dd>Botnet, booter rental, or open reflectors — no victim access</dd>
+        <dt>Victim evidence</dt><dd>Flow spikes, deny storms, half-open tables, saturated edge interfaces</dd>
+        <dt>Best detections</dt><dd>Deny-count spike, UDP flow spike, edge byte saturation, reflector abuse, cloud 5xx wave</dd>
+        <dt>Fastest mitigation</dt><dd>Upstream scrubbing plus edge rate limits</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h4>Top detections</h4>
+      <ul class="checklist">
+        <li><strong>Firewall deny spike:</strong> more than 5000 denied sessions in 5 minutes (Rule 1).</li>
+        <li><strong>UDP flow spike:</strong> more than 8000 inbound UDP flows to one host in 5 minutes (Rule 2).</li>
+        <li><strong>Edge saturation:</strong> inbound flow bytes to one destination far above baseline (Rule 3).</li>
+        <li><strong>Reflector abuse:</strong> internal DNS answering ANY or TXT at high rate (Rule 4).</li>
+        <li><strong>Cloud signal:</strong> load-balancer 5xx wave with falling healthy host count (Rule 5).</li>
+        <li><strong>Identity signal:</strong> VPN or SSO login failures and timeouts in a storm (Rule 6).</li>
+        <li><strong>Human signal:</strong> support tickets and synthetic checks fail while bandwidth graphs explode.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Response checklist</h4>
+    <ul class="checklist">
+      <li>Confirm against the same-hour baseline; rule out a marketing spike.</li>
+      <li>Classify: protocol, port, unique sources, estimated volume.</li>
+      <li>Open the DDoS runbook; name the incident commander.</li>
+      <li>Call the ISP or CDN; request scrubbing activation.</li>
+      <li>Apply pre-approved edge filters; never invent blocks live.</li>
+      <li>Watch other alert queues for a second, quieter attack.</li>
+      <li>Save flow records, firewall logs, and PCAPs before rotation.</li>
+      <li>Send customer updates every 30 minutes until stable.</li>
+      <li>Close with a blameless review and assigned follow-ups.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>Official links and related techniques</h4>
+    <ul>
+      <li><a href="https://attack.mitre.org/techniques/T1498/" target="_blank" rel="noopener">T1498 — Network Denial of Service (official ATT&amp;CK page)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1498/001/" target="_blank" rel="noopener">T1498.001 — Direct Network Flood</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1498/002/" target="_blank" rel="noopener">T1498.002 — Reflection Amplification</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1499/" target="_blank" rel="noopener">T1499 — Endpoint Denial of Service (related)</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1583/005/" target="_blank" rel="noopener">T1583.005 — Acquire Infrastructure: Botnet (related)</a></li>
+    </ul>
+  </div>
+</section>
+    </main>
+  </div>
+</div>
+
+<div class="overlay" id="mobileOverlay" hidden>
+  <div class="overlay-backdrop" data-close></div>
+  <div class="overlay-panel" role="dialog" aria-modal="true" aria-label="Table of contents">
+    <div class="overlay-head">
+      <span>Contents</span>
+      <button class="btn" id="overlayClose" type="button">Close</button>
+    </div>
+    <nav id="overlayToc" aria-label="Table of contents links"></nav>
+  </div>
+</div>
+
+<button class="fab fab-toc" id="mobileTocBtn" type="button" aria-haspopup="dialog" aria-controls="mobileOverlay">Contents</button>
+<button class="fab back-top" id="backTop" type="button" aria-label="Back to top">Top</button>
+
+<noscript>
+  <style>
+    .fab, .overlay, .progress { display: none !important; }
+    .sim-tip { display: none !important; }
+  </style>
+</noscript>
+
+<script>
+(function () {
+  'use strict';
+
+  var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ============================================================
+     Theme toggle (single page-level toggle; the platform shell
+     may also provide one, in which case both write the same
+     localStorage key 'atk-theme' and the same data-theme value).
+     ============================================================ */
+  var themeBtn = document.getElementById('themeToggle');
+  function themeLabel() {
+    if (!themeBtn) return;
+    var t = document.documentElement.getAttribute('data-theme') || 'dark';
+    themeBtn.textContent = t === 'dark' ? 'Light theme' : 'Dark theme';
+  }
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function () {
+      var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      try { localStorage.setItem('atk-theme', t); } catch (e) { /* storage blocked */ }
+      themeLabel();
+      window.dispatchEvent(new CustomEvent('atk:theme'));
+    });
+    themeLabel();
+  }
+
+  /* ============================================================
+     Reading progress bar + back-to-top visibility
+     ============================================================ */
+  var bar = document.getElementById('progressFill');
+  var topBtn = document.getElementById('backTop');
+
+  function onScroll() {
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - doc.clientHeight;
+    var y = window.scrollY || doc.scrollTop || 0;
+    if (bar) bar.style.width = (max > 0 ? (y / max) * 100 : 0) + '%';
+    if (topBtn) topBtn.classList.toggle('show', y > 500);
+    spy();
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+
+  if (topBtn) {
+    topBtn.addEventListener('click', function () {
+      window.scrollTo({ top: 0, behavior: reducedMotion ? 'auto' : 'smooth' });
+    });
+  }
+
+  /* ============================================================
+     Table of contents built from the real page headings
+     ============================================================ */
+  var tocList = document.getElementById('tocList');
+
+  function buildToc() {
+    if (!tocList) return [];
+    var frag = document.createDocumentFragment();
+    var targets = [];
+    var secs = document.querySelectorAll('#mainContent > section[id]');
+    Array.prototype.forEach.call(secs, function (sec) {
+      var h2 = sec.querySelector('h2');
+      if (!h2) return;
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '#' + sec.id;
+      a.textContent = h2.textContent.trim().replace(/\s+/g, ' ');
+      li.appendChild(a);
+      frag.appendChild(li);
+      targets.push({ el: sec, link: a });
+      if (sec.id === 'sec-detection') {
+        Array.prototype.forEach.call(sec.querySelectorAll('h3[id]'), function (h3) {
+          var li2 = document.createElement('li');
+          var a2 = document.createElement('a');
+          a2.href = '#' + h3.id;
+          a2.className = 'sub';
+          a2.textContent = h3.textContent.trim().replace(/\s+/g, ' ').replace(/^(\d+\.\d+)\s*(?=\S)/, '$1 ');
+          li2.appendChild(a2);
+          frag.appendChild(li2);
+          targets.push({ el: h3, link: a2 });
+        });
+      }
+    });
+    tocList.innerHTML = '';
+    tocList.appendChild(frag);
+    return targets;
+  }
+  var spyTargets = buildToc();
+
+  /* ============================================================
+     Scroll spy: highlight the active TOC link
+     ============================================================ */
+  var activeLink = null;
+  function spy() {
+    if (!spyTargets.length) return;
+    var offset = 140;
+    var current = spyTargets[0];
+    for (var i = 0; i < spyTargets.length; i++) {
+      if (spyTargets[i].el.getBoundingClientRect().top - offset <= 0) {
+        current = spyTargets[i];
+      }
+    }
+    if (activeLink !== current.link) {
+      if (activeLink) activeLink.classList.remove('active');
+      if (current.link) current.link.classList.add('active');
+      activeLink = current.link;
+    }
+  }
+
+  /* ============================================================
+     Mobile contents overlay
+     ============================================================ */
+  var overlay = document.getElementById('mobileOverlay');
+  var tocBtn = document.getElementById('mobileTocBtn');
+  var overlayToc = document.getElementById('overlayToc');
+  var lastFocus = null;
+
+  function openOverlay() {
+    if (!overlay) return;
+    lastFocus = document.activeElement;
+    if (overlayToc && tocList) overlayToc.innerHTML = tocList.innerHTML;
+    overlay.hidden = false;
+    document.body.classList.add('no-scroll');
+    var first = overlayToc ? overlayToc.querySelector('a') : null;
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    if (!overlay || overlay.hidden) return;
+    overlay.hidden = true;
+    document.body.classList.remove('no-scroll');
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  if (tocBtn) tocBtn.addEventListener('click', openOverlay);
+  var ocBtn = document.getElementById('overlayClose');
+  if (ocBtn) ocBtn.addEventListener('click', closeOverlay);
+  if (overlay) {
+    overlay.addEventListener('click', function (e) {
+      if (e.target.hasAttribute && e.target.hasAttribute('data-close')) closeOverlay();
+      if (e.target.closest && e.target.closest('a')) closeOverlay();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !overlay.hidden) closeOverlay();
+    });
+  }
+
+  /* ============================================================
+     Copy buttons for code blocks (no alert/confirm/prompt)
+     ============================================================ */
+  Array.prototype.forEach.call(document.querySelectorAll('.copy-btn'), function (btn) {
+    btn.addEventListener('click', function () {
+      var block = btn.closest('.code');
+      var pre = block ? block.querySelector('pre') : null;
+      if (!pre) return;
+      var text = pre.textContent;
+      var oldLabel = btn.textContent;
+      function done(ok) {
+        btn.textContent = ok ? 'Copied' : 'Copy failed';
+        btn.classList.toggle('ok', !!ok);
+        setTimeout(function () {
+          btn.textContent = oldLabel;
+          btn.classList.remove('ok');
+        }, 1600);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(
+          function () { done(true); },
+          function () { done(false); }
+        );
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        if (ta.focus) ta.focus();
+        ta.setSelectionRange(0, text.length);
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+        document.body.removeChild(ta);
+        done(ok);
+      }
+    });
+  });
+
+  /* ============================================================
+     Simulation engine (HTML5 Canvas, vanilla JS)
+     Public API: window.initSim(cfg)
+     cfg = {
+       canvas, tip, stepMs,
+       steps: [{ title, caption, defender, evidence:[...],
+                 links:[{from,to,kind,dash,alpha,label}],
+                 flows:[{from,to,kind,interval,ps,size,burst}],
+                 fx: { nodeId: { glow, status, fill, drops } } }],
+       scene: { W, H, nodes:[{ id, x, y, w, h, shape, label, sub, desc }] }
+     }
+     ============================================================ */
+  window.initSim = function (cfg) {
+    var cv = document.getElementById(cfg.canvas);
+    if (!cv || !cv.getContext) return;
+    var ctx = cv.getContext('2d');
+    var wrap = cv.parentElement;
+    var tip = document.getElementById(cfg.tip);
+
+    var scene = cfg.scene;
+    var W = scene.W;
+    var H = scene.H;
+    var nodes = scene.nodes;
+    var steps = cfg.steps;
+    var STEP_MS = cfg.stepMs || 7000;
+
+    var capTitle = document.getElementById('simStepTitle');
+    var capText = document.getElementById('simCaption');
+    var defText = document.getElementById('simDefender');
+    var evText = document.getElementById('simEvidence');
+    var chips = document.getElementById('simChips');
+    var btnPlay = document.getElementById('simPlay');
+    var btnPause = document.getElementById('simPause');
+    var btnRestart = document.getElementById('simRestart');
+    var btnPrev = document.getElementById('simPrev');
+    var btnNext = document.getElementById('simNext');
+    var speedSel = document.getElementById('simSpeed');
+
+    var cur = 0, playing = false, speed = 1, stepT = 0, lastTs = 0, raf = null;
+    var packets = [], flowAcc = [];
+    var dpr = 1, scale = 1;
+    var tokenCache = null, tokenTs = 0;
+
+    function tokens() {
+      var now = Date.now();
+      if (!tokenCache || now - tokenTs > 800) {
+        var cs = getComputedStyle(document.documentElement);
+        function v(name, fb) {
+          var val = cs.getPropertyValue(name).trim();
+          return val || fb;
+        }
+        tokenCache = {
+          text: v('--text', '#e7edf8'),
+          muted: v('--muted', '#9aa8c0'),
+          border: v('--border', '#24314e'),
+          border2: v('--border-strong', '#2f4066'),
+          surface: v('--surface', '#121a2e'),
+          surface2: v('--surface-2', '#172138'),
+          attack: v('--danger', '#f87171'),
+          normal: v('--accent', '#4f8cff'),
+          defense: v('--success', '#34d399'),
+          control: v('--violet', '#a78bfa'),
+          recon: v('--warning', '#fbbf24')
+        };
+        tokenTs = now;
+      }
+      return tokenCache;
+    }
+
+    function nodeById(id) {
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].id === id) return nodes[i];
+      }
+      return null;
+    }
+    function center(n) { return { x: n.x + n.w / 2, y: n.y + n.h / 2 }; }
+    function curStep() { return steps[cur]; }
+
+    /* ---------- canvas sizing ---------- */
+    function fit() {
+      var w = wrap.clientWidth;
+      if (!w) return;
+      scale = w / W;
+      dpr = Math.max(1, Math.min(2.5, window.devicePixelRatio || 1));
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(H * scale * dpr);
+      cv.style.height = Math.round(H * scale) + 'px';
+      draw();
+    }
+
+    /* ---------- drawing helpers ---------- */
+    function rr(x, y, w, h, r) {
+      var rad = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rad, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rad);
+      ctx.arcTo(x + w, y + h, x, y + h, rad);
+      ctx.arcTo(x, y + h, x, y, rad);
+      ctx.arcTo(x, y, x + w, y, rad);
+      ctx.closePath();
+    }
+    function arrow(x1, y1, x2, y2, color, alpha) {
+      var a = Math.atan2(y2 - y1, x2 - x1);
+      var s = 9;
+      ctx.globalAlpha = alpha == null ? 0.75 : alpha;
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - s * Math.cos(a - Math.PI / 7), y2 - s * Math.sin(a - Math.PI / 7));
+      ctx.lineTo(x2 - s * Math.cos(a + Math.PI / 7), y2 - s * Math.sin(a + Math.PI / 7));
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    function drawLink(l, C) {
+      var a = nodeById(l.from), b = nodeById(l.to);
+      if (!a || !b) return;
+      var p1 = center(a), p2 = center(b);
+      var col = C[l.kind] || C.normal;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = l.w || 1.6;
+      if (l.dash) ctx.setLineDash([7, 6]);
+      ctx.globalAlpha = l.alpha || 0.45;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      arrow(p1.x, p1.y, p2.x, p2.y, col, 0.55);
+      if (l.label) {
+        var mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+        ctx.font = '700 12px ' + getComputedStyle(document.body).getPropertyValue('--font-mono');
+        var tw = ctx.measureText(l.label).width + 14;
+        ctx.fillStyle = C.surface2;
+        rr(mx - tw / 2, my - 22, tw, 17, 8);
+        ctx.fill();
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = 0.7;
+        ctx.lineWidth = 1;
+        rr(mx - tw / 2, my - 22, tw, 17, 8);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = col;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(l.label, mx, my - 13);
+      }
+    }
+
+    /* ---------- nodes ---------- */
+    function drawNode(n, fx, C, nowMs) {
+      var x = n.x, y = n.y, w = n.w, h = n.h;
+      var glow = fx && fx.glow ? C[fx.glow] : null;
+      ctx.lineWidth = 1.6;
+      ctx.font = '700 14px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      var baseFill = C.surface2;
+      var baseStroke = glow || C.border2;
+      var labelY = y + h - 26, subY = y + h - 10;
+
+      if (n.shape === 'cloud') {
+        ctx.fillStyle = baseFill;
+        ctx.strokeStyle = baseStroke;
+        ctx.beginPath();
+        ctx.ellipse(x + w * 0.28, y + h * 0.42, w * 0.24, h * 0.3, 0, 0, Math.PI * 2);
+        ctx.ellipse(x + w * 0.52, y + h * 0.3, w * 0.26, h * 0.34, 0, 0, Math.PI * 2);
+        ctx.ellipse(x + w * 0.74, y + h * 0.46, w * 0.22, h * 0.27, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (n.shape === 'user') {
+        ctx.fillStyle = baseFill;
+        ctx.strokeStyle = baseStroke;
+        ctx.beginPath();
+        ctx.arc(x + w / 2, y + 26, 13, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x + w * 0.28, y + 62);
+        ctx.quadraticCurveTo(x + w / 2, y + 30, x + w * 0.72, y + 62);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+      } else if (n.shape === 'bots') {
+        ctx.fillStyle = baseFill;
+        ctx.strokeStyle = baseStroke;
+        var bw = 38, bh = 28;
+        var spots = [[0.05, 0.06], [0.36, 0.0], [0.67, 0.06]];
+        for (var i = 0; i < spots.length; i++) {
+          rr(x + spots[i][0] * w, y + spots[i][1] * h, bw, bh, 5);
+          ctx.fill(); ctx.stroke();
+          ctx.fillStyle = glow || C.muted;
+          ctx.beginPath();
+          ctx.arc(x + spots[i][0] * w + bw - 7, y + spots[i][1] * h + 7, 2.4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = baseFill;
+        }
+      } else if (n.shape === 'server') {
+        rr(x, y, w, h, 10);
+        ctx.fillStyle = baseFill;
+        ctx.strokeStyle = baseStroke;
+        ctx.fill(); ctx.stroke();
+        var slots = 6, sw = 13, gap = 5;
+        var total = slots * sw + (slots - 1) * gap;
+        var sx = x + (w - total) / 2, sy = y + h - 24;
+        var filled = fx && fx.fill != null ? Math.round(fx.fill * slots) : 0;
+        for (var s = 0; s < slots; s++) {
+          rr(sx + s * (sw + gap), sy, sw, sw, 3);
+          if (s < filled) {
+            ctx.fillStyle = C.attack;
+            ctx.fill();
+          } else {
+            ctx.strokeStyle = C.border2;
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+          }
+        }
+        labelY = y + 30;
+        subY = y + 48;
+      } else if (n.shape === 'firewall') {
+        rr(x, y, w, h, 10);
+        ctx.fillStyle = baseFill;
+        ctx.strokeStyle = baseStroke;
+        ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = C.border2;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(x + 10, y + h * 0.34); ctx.lineTo(x + w - 10, y + h * 0.34);
+        ctx.moveTo(x + 10, y + h * 0.62); ctx.lineTo(x + w - 10, y + h * 0.62);
+        ctx.moveTo(x + w * 0.34, y + h * 0.34); ctx.lineTo(x + w * 0.34, y + h * 0.62);
+        ctx.moveTo(x + w * 0.67, y + 10); ctx.lineTo(x + w * 0.67, y + h * 0.34);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (n.shape === 'monitor') {
+        rr(x, y, w, h - 16, 8);
+        ctx.fillStyle = baseFill;
+        ctx.strokeStyle = baseStroke;
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = baseFill;
+        ctx.strokeStyle = baseStroke;
+        rr(x + w / 2 - 14, y + h - 18, 28, 12, 3);
+        ctx.fill(); ctx.stroke();
+        rr(x + w / 2 - 26, y + h - 8, 52, 4, 2);
+        ctx.fill();
+        if (glow) {
+          ctx.fillStyle = glow;
+          ctx.beginPath();
+          ctx.arc(x + w - 12, y + 12, 5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        rr(x, y, w, h, 10);
+        ctx.fillStyle = baseFill;
+        ctx.strokeStyle = baseStroke;
+        ctx.fill(); ctx.stroke();
+      }
+
+      /* pulse ring while an attack glow is active */
+      if (glow && fx.glow === 'attack' && playing && !reducedMotion) {
+        var pulse = 0.5 + 0.5 * Math.sin(nowMs / 300);
+        ctx.globalAlpha = 0.10 + 0.12 * pulse;
+        ctx.strokeStyle = glow;
+        ctx.lineWidth = 5;
+        rr(x - 5, y - 5, w + 10, h + 10, 13);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
+      /* label + sublabel */
+      ctx.fillStyle = C.text;
+      ctx.font = '700 14px system-ui, sans-serif';
+      ctx.fillText(n.label, x + w / 2, n.ly || labelY);
+      if (n.sub) {
+        ctx.fillStyle = C.muted;
+        ctx.font = '500 11px system-ui, sans-serif';
+        ctx.fillText(n.sub, x + w / 2, n.sy || subY);
+      }
+
+      /* status pill */
+      if (fx && fx.status) {
+        var scol = glow || C.normal;
+        ctx.font = '700 11px ui-monospace, Menlo, Consolas, monospace';
+        var pw = ctx.measureText(fx.status).width + 16;
+        var px = x + w / 2 - pw / 2, py = y + h + 9;
+        ctx.fillStyle = C.surface;
+        rr(px, py, pw, 17, 8);
+        ctx.fill();
+        ctx.strokeStyle = scol;
+        ctx.lineWidth = 1.2;
+        rr(px, py, pw, 17, 8);
+        ctx.stroke();
+        ctx.fillStyle = scol;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(fx.status, x + w / 2, py + 9);
+      }
+
+      /* drop marker */
+      if (fx && fx.drops) {
+        var dxp = x + w - 4, dyp = y - 4;
+        ctx.strokeStyle = C.attack;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(dxp - 8, dyp - 8); ctx.lineTo(dxp + 8, dyp + 8);
+        ctx.moveTo(dxp + 8, dyp - 8); ctx.lineTo(dxp - 8, dyp + 8);
+        ctx.stroke();
+      }
+    }
+
+    /* ---------- packets ---------- */
+    function spawn(flow) {
+      var a = nodeById(flow.from), b = nodeById(flow.to);
+      if (!a || !b) return;
+      var p1 = center(a), p2 = center(b);
+      var count = flow.burst || 1;
+      for (var i = 0; i < count; i++) {
+        if (packets.length > 400) return;
+        packets.push({
+          x0: p1.x, y0: p1.y, tx: p2.x, ty: p2.y,
+          p: -Math.random() * 0.08,
+          v: flow.ps || 300,
+          size: flow.size || 4.5,
+          kind: flow.kind
+        });
+      }
+    }
+    function stepPackets(dt) {
+      for (var i = packets.length - 1; i >= 0; i--) {
+        var pk = packets[i];
+        var len = Math.hypot(pk.tx - pk.x0, pk.ty - pk.y0) || 1;
+        pk.p += (pk.v * dt * speed) / 1000 / len;
+        if (pk.p >= 1) packets.splice(i, 1);
+      }
+    }
+    function drawPackets(C) {
+      for (var i = 0; i < packets.length; i++) {
+        var pk = packets[i];
+        if (pk.p < 0) continue;
+        var x = pk.x0 + (pk.tx - pk.x0) * pk.p;
+        var y = pk.y0 + (pk.ty - pk.y0) * pk.p;
+        var col = C[pk.kind] || C.normal;
+        var dx = pk.tx - pk.x0, dy = pk.ty - pk.y0;
+        var len = Math.hypot(dx, dy) || 1;
+        ctx.strokeStyle = col;
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = pk.size * 0.9;
+        ctx.beginPath();
+        ctx.moveTo(x - (dx / len) * 11, y - (dy / len) * 11);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(x, y, pk.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    /* ---------- main draw ---------- */
+    function draw(nowMs) {
+      var C = tokens();
+      ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+
+      /* subtle grid */
+      ctx.strokeStyle = C.border;
+      ctx.globalAlpha = 0.16;
+      ctx.lineWidth = 1;
+      for (var gx = 50; gx < W; gx += 50) {
+        ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
+      }
+      for (var gy = 50; gy < H; gy += 50) {
+        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      var st = curStep();
+      var links = st.links || [];
+      for (var i = 0; i < links.length; i++) drawLink(links[i], C);
+      drawPackets(C);
+
+      var fxMap = st.fx || {};
+      for (var j = 0; j < nodes.length; j++) {
+        drawNode(nodes[j], fxMap[nodes[j].id], C, nowMs);
+      }
+
+      ctx.fillStyle = C.muted;
+      ctx.font = '700 11px ui-monospace, Menlo, Consolas, monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('STEP ' + (cur + 1) + ' / ' + steps.length, 14, 22);
+    }
+
+    /* ---------- animation loop ---------- */
+    function updateSpawns(dt) {
+      var st = curStep();
+      var flows = st.flows || [];
+      if (flowAcc.length !== flows.length) flowAcc = flows.map(function () { return 0; });
+      for (var i = 0; i < flows.length; i++) {
+        flowAcc[i] += dt * speed;
+        var interval = flows[i].interval || 380;
+        while (flowAcc[i] >= interval) {
+          flowAcc[i] -= interval;
+          spawn(flows[i]);
+        }
+      }
+    }
+    function frame(ts) {
+      raf = null;
+      var dt = lastTs ? Math.min(64, ts - lastTs) : 16;
+      lastTs = ts;
+      if (playing) {
+        stepT += dt * speed;
+        updateSpawns(dt);
+        stepPackets(dt);
+        if (stepT >= STEP_MS) {
+          if (cur < steps.length - 1) {
+            goTo(cur + 1);
+          } else {
+            pause();
+          }
+        }
+        draw(ts);
+        raf = requestAnimationFrame(frame);
+      } else {
+        draw(ts);
+      }
+    }
+    function ensureLoop() {
+      if (!raf) { lastTs = 0; raf = requestAnimationFrame(frame); }
+    }
+
+    /* ---------- captions and controls ---------- */
+    function renderCaption() {
+      var st = steps[cur];
+      if (capTitle) capTitle.textContent = 'Step ' + (cur + 1) + ' of ' + steps.length + ' — ' + st.title;
+      if (capText) capText.textContent = st.caption;
+      if (defText) defText.textContent = st.defender;
+      if (evText) {
+        evText.innerHTML = '';
+        (st.evidence || []).forEach(function (item) {
+          var li = document.createElement('li');
+          li.textContent = item;
+          evText.appendChild(li);
+        });
+      }
+      if (chips) {
+        Array.prototype.forEach.call(chips.children, function (c, i) {
+          c.classList.toggle('active', i === cur);
+          c.setAttribute('aria-current', i === cur ? 'step' : 'false');
+        });
+      }
+    }
+    function goTo(i) {
+      cur = Math.max(0, Math.min(steps.length - 1, i));
+      stepT = 0;
+      packets = [];
+      flowAcc = [];
+      renderCaption();
+      if (!raf) draw();
+    }
+    function play() {
+      if (playing) return;
+      playing = true;
+      ensureLoop();
+    }
+    function pause() {
+      playing = false;
+    }
+
+    if (btnPlay) btnPlay.addEventListener('click', play);
+    if (btnPause) btnPause.addEventListener('click', pause);
+    if (btnRestart) btnRestart.addEventListener('click', function () { pause(); goTo(0); });
+    if (btnPrev) btnPrev.addEventListener('click', function () { goTo(cur - 1); });
+    if (btnNext) btnNext.addEventListener('click', function () { goTo(cur + 1); });
+    if (speedSel) speedSel.addEventListener('change', function () { speed = parseFloat(speedSel.value) || 1; });
+
+    if (chips) {
+      steps.forEach(function (s, i) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'schip';
+        b.textContent = i + 1;
+        b.title = s.title;
+        b.setAttribute('aria-label', 'Go to step ' + (i + 1) + ': ' + s.title);
+        b.addEventListener('click', function () { goTo(i); });
+        chips.appendChild(b);
+      });
+    }
+
+    /* keyboard support on the canvas */
+    cv.setAttribute('tabindex', '0');
+    cv.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') { goTo(cur + 1); e.preventDefault(); }
+      if (e.key === 'ArrowLeft') { goTo(cur - 1); e.preventDefault(); }
+    });
+
+    /* node tooltips (hover / click) */
+    function showTip(e) {
+      if (!tip) return;
+      var rect = cv.getBoundingClientRect();
+      var mx = (e.clientX - rect.left) / scale;
+      var my = (e.clientY - rect.top) / scale;
+      var hit = null;
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (mx >= n.x - 8 && mx <= n.x + n.w + 8 && my >= n.y - 8 && my <= n.y + n.h + 8) { hit = n; break; }
+      }
+      if (hit) {
+        tip.innerHTML = '';
+        var b = document.createElement('b');
+        b.textContent = hit.label;
+        tip.appendChild(b);
+        tip.appendChild(document.createTextNode(hit.desc || ''));
+        tip.style.display = 'block';
+        var wrapRect = wrap.getBoundingClientRect();
+        var tx = e.clientX - wrapRect.left + 14;
+        var ty = e.clientY - wrapRect.top + 14;
+        if (tx + 260 > wrapRect.width) tx = e.clientX - wrapRect.left - 264;
+        if (ty + 120 > wrapRect.height) ty = Math.max(4, wrapRect.height - 124);
+        tip.style.left = tx + 'px';
+        tip.style.top = ty + 'px';
+      } else {
+        tip.style.display = 'none';
+      }
+    }
+    cv.addEventListener('mousemove', showTip);
+    cv.addEventListener('click', showTip);
+    cv.addEventListener('mouseleave', function () { if (tip) tip.style.display = 'none'; });
+
+    /* theme change + resize */
+    window.addEventListener('atk:theme', function () { tokenCache = null; draw(); });
+    var resizeTimer = null;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(fit, 120);
+    });
+
+    /* init */
+    goTo(0);
+    fit();
+    /* do not autoplay when the user prefers reduced motion */
+    if (!reducedMotion) {
+      setTimeout(function () { play(); }, 700);
+    }
+  };
+
+  /* ============================================================
+     Start
+     ============================================================ */
+  onScroll();
+})();
+
+</script>
+
+<script>
+/* T1498 — Network Denial of Service: animated attack story.
+   Generic multi-vector DDoS: botnet -> victim edge -> service, with SOC and
+   upstream scrubbing. Rendered by the shared canvas engine (initSim). */
+(function () {
+  'use strict';
+
+  initSim({
+    canvas: 'simCanvas',
+    tip: 'simTip',
+    stepMs: 7000,
+    scene: {
+      W: 1000,
+      H: 520,
+      nodes: [
+        { id: 'attacker', x: 55, y: 55, w: 165, h: 92, shape: 'user',
+          label: 'Attacker', sub: 'Bot herder',
+          desc: 'Controls the botnet. Orders the flood, picks the target and the timing.' },
+        { id: 'botnet', x: 55, y: 215, w: 180, h: 160, shape: 'bots',
+          label: 'Botnet', sub: '100k infected devices',
+          desc: 'Infected routers, cameras, and recorders. They send the flood traffic.' },
+        { id: 'scrub', x: 400, y: 52, w: 185, h: 92, shape: 'cloud',
+          label: 'Scrubbing center', sub: 'ISP or CDN clean pipe',
+          desc: 'Upstream service that filters attack traffic and forwards only clean packets.' },
+        { id: 'edge', x: 430, y: 235, w: 175, h: 105, shape: 'firewall',
+          label: 'Edge firewall', sub: 'Target network border',
+          desc: 'The victim edge. Rate limits, deny counters, and the first drop point.' },
+        { id: 'srv', x: 705, y: 235, w: 160, h: 115, shape: 'server',
+          label: 'Public service', sub: 'Web and API',
+          desc: 'The service real users want. Dies when the link or workers are exhausted.' },
+        { id: 'users', x: 830, y: 55, w: 155, h: 92, shape: 'user',
+          label: 'Legit users', sub: 'Customers',
+          desc: 'Real people trying to reach the service during the attack.' },
+        { id: 'soc', x: 705, y: 415, w: 185, h: 92, shape: 'monitor',
+          label: 'SOC', sub: 'Monitoring and response',
+          desc: 'Defenders watching flow analytics, deny counts, and synthetic checks.' }
+      ]
+    },
+    steps: [
+      {
+        title: 'The attacker gives the order',
+        caption: 'The bot herder sends the attack order: target address, start time, and flood types. Thousands of infected devices receive the same command and wait.',
+        defender: 'Usually silent on the victim side. If any botnet node sits on your own network, its outbound command traffic is the rare early clue.',
+        evidence: ['Outbound C2 patterns from infected internal hosts', 'Threat intel matches on known botnet channels'],
+        links: [{ from: 'attacker', to: 'botnet', kind: 'control', dash: true, label: 'C2 attack order' }],
+        flows: [{ from: 'attacker', to: 'botnet', kind: 'control', interval: 480, size: 3.5, ps: 260 }],
+        fx: {}
+      },
+      {
+        title: 'Quick reconnaissance',
+        caption: 'A few bots probe the target edge to see which ports answer. The attacker learns where the service listens and which filters exist.',
+        defender: 'Short scans to many ports from a handful of sources. Rate-limit probes and log them; they often precede the real attack by minutes.',
+        evidence: ['Firewall probes on ports 443, 53, 123', 'Scan pattern from 3 to 10 unique sources'],
+        links: [{ from: 'botnet', to: 'edge', kind: 'recon', dash: true, label: 'port probes' }],
+        flows: [{ from: 'botnet', to: 'edge', kind: 'recon', interval: 640, size: 3, ps: 300 }],
+        fx: { edge: { glow: 'recon', status: 'Probes blocked and logged' } }
+      },
+      {
+        title: 'The flood starts',
+        caption: 'The bots launch a mixed flood: UDP packets and TCP connection attempts together. The mix is intentional, so one filter cannot stop everything.',
+        defender: 'Link load climbs far above the same-hour baseline. Firewall deny counts jump from hundreds to thousands per minute.',
+        evidence: ['NetFlow volume 20x baseline', 'Deny count rising on the edge'],
+        links: [{ from: 'botnet', to: 'edge', kind: 'attack', label: 'multi-vector flood' }],
+        flows: [{ from: 'botnet', to: 'edge', kind: 'attack', interval: 150, burst: 2, size: 5, ps: 330 }],
+        fx: { edge: { glow: 'attack', status: 'Link load 88%' } }
+      },
+      {
+        title: 'The link saturates',
+        caption: 'The internet link and the edge queues fill up. The firewall starts dropping even packets that would be legal on a calm day.',
+        defender: 'Interface counters near line rate with output drops. Connection tables fill. Alerts fire from several sensors at once.',
+        evidence: ['Router output drops', 'Firewall queue utilization 97%', 'Flow records to one destination'],
+        links: [
+          { from: 'botnet', to: 'edge', kind: 'attack', label: 'saturating flood' },
+          { from: 'edge', to: 'srv', kind: 'normal', alpha: 0.2 }
+        ],
+        flows: [{ from: 'botnet', to: 'edge', kind: 'attack', interval: 110, burst: 3, size: 5.5, ps: 340 }],
+        fx: {
+          edge: { glow: 'attack', status: 'Link load 97% — queues full', drops: true },
+          srv: { glow: 'attack', status: 'Connections dropped' }
+        }
+      },
+      {
+        title: 'Real users are locked out',
+        caption: 'Customers see timeouts and error pages. Their requests arrive, but the saturated edge discards most of them.',
+        defender: 'Synthetic checks from outside regions fail first. Support tickets spike. Compare internal health (fine) with external reachability (broken).',
+        evidence: ['Synthetic transaction failures', 'Support ticket spike', 'Status 503 at the edge'],
+        links: [
+          { from: 'botnet', to: 'edge', kind: 'attack', label: 'flood continues' },
+          { from: 'users', to: 'edge', kind: 'normal', label: 'real requests' }
+        ],
+        flows: [
+          { from: 'botnet', to: 'edge', kind: 'attack', interval: 120, burst: 2, size: 5, ps: 330 },
+          { from: 'users', to: 'edge', kind: 'normal', interval: 900, size: 4, ps: 300 }
+        ],
+        fx: {
+          edge: { glow: 'attack', status: 'Dropping 90% of traffic', drops: true },
+          users: { glow: 'attack', status: 'Requests time out' }
+        }
+      },
+      {
+        title: 'The SOC detects the attack',
+        caption: 'Flow analytics and edge alerts confirm a volumetric DDoS. The SOC opens the runbook and calls the ISP scrubbing contact.',
+        defender: 'This is the pivot from watching to acting. Name the incident commander, classify the flood, and start upstream mitigation now.',
+        evidence: ['DDoS dashboard alert', 'Runbook opened, ISP called', 'Other queues checked for cover activity'],
+        links: [{ from: 'edge', to: 'soc', kind: 'control', dash: true, label: 'flow records + alerts' }],
+        flows: [{ from: 'edge', to: 'soc', kind: 'control', interval: 520, size: 3.5, ps: 300 }],
+        fx: {
+          edge: { glow: 'attack', status: 'Attack in progress', drops: true },
+          soc: { glow: 'defense', status: 'Alert: volumetric DDoS' }
+        }
+      },
+      {
+        title: 'Upstream scrubbing starts',
+        caption: 'The ISP or CDN routes inbound traffic through a scrubbing center. Attack traffic dies there; only clean packets reach the edge.',
+        defender: 'Watch the clean-traffic graph recover while the scrubbing center absorbs the flood. Confirm the origin stays hidden.',
+        evidence: ['Scrubbing service active', 'Clean traffic forwarded', 'Origin IP not exposed'],
+        links: [
+          { from: 'botnet', to: 'scrub', kind: 'attack', label: 'routed via scrubbing' },
+          { from: 'scrub', to: 'edge', kind: 'defense', label: 'clean traffic only' },
+          { from: 'edge', to: 'soc', kind: 'control', dash: true, alpha: 0.3 }
+        ],
+        flows: [
+          { from: 'botnet', to: 'scrub', kind: 'attack', interval: 220, size: 4.5, ps: 300 },
+          { from: 'scrub', to: 'edge', kind: 'defense', interval: 480, size: 4, ps: 300 }
+        ],
+        fx: {
+          edge: { glow: 'defense', status: 'Upstream filtering active' },
+          soc: { glow: 'defense', status: 'Scrubbing confirmed' }
+        }
+      },
+      {
+        title: 'Recovery and review',
+        caption: 'Traffic returns to baseline and customers get through again. The team writes the timeline and tunes thresholds from the fresh data.',
+        defender: 'Keep flow records, deny logs, and the ISP report. Update the runbook with what you learned while memory is fresh.',
+        evidence: ['Baselines normal again', 'Incident timeline saved', 'Thresholds re-tuned'],
+        links: [
+          { from: 'users', to: 'edge', kind: 'normal', label: 'real requests' },
+          { from: 'edge', to: 'srv', kind: 'normal', label: 'served' },
+          { from: 'edge', to: 'soc', kind: 'control', dash: true, alpha: 0.3 }
+        ],
+        flows: [
+          { from: 'users', to: 'edge', kind: 'normal', interval: 650, size: 4, ps: 300 },
+          { from: 'edge', to: 'srv', kind: 'normal', interval: 650, size: 4, ps: 300 }
+        ],
+        fx: {
+          edge: { glow: 'defense', status: 'Stable — baseline normal' },
+          srv: {},
+          soc: { glow: 'defense', status: 'Post-incident review' }
+        }
+      }
+    ]
+  });
+})();
+
+</script>
+
+</body>
+</html>
