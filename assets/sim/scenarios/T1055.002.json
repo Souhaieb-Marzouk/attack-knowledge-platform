@@ -1,0 +1,284 @@
+{
+  "id": "T1055.002",
+  "title": "T1055.002 — Process Injection - Portable Executable Injection",
+  "subtitle": "Interactive walkthrough of Process Injection - Portable Executable Injection with the technique-specific attack path and defender evidence.",
+  "aria": "Animated diagram of portable executable injection: a packed dropper copies a full PE image into the memory of explorer.exe, a remote thread starts it, and the SOC analyst captures memory to confirm the implant.",
+  "renderer": "process-tree",
+  "theme": "endpoint",
+  "transcript": true,
+  "zones": [],
+  "nodes": [
+    {
+      "id": "attacker",
+      "x": 5,
+      "y": 10,
+      "w": 16,
+      "h": 12,
+      "kind": "attacker",
+      "label": "Attacker",
+      "sub": "Operator",
+      "tip": "Attacker - Operator"
+    },
+    {
+      "id": "dropper",
+      "x": 27,
+      "y": 26,
+      "w": 18,
+      "h": 12,
+      "kind": "process",
+      "label": "Dropper / loader",
+      "sub": "Initial payload",
+      "tip": "Dropper / loader - Initial payload"
+    },
+    {
+      "id": "target",
+      "x": 50,
+      "y": 10,
+      "w": 18,
+      "h": 12,
+      "kind": "process",
+      "label": "Target process",
+      "sub": "Hijacked host",
+      "tip": "Target process - Hijacked host"
+    },
+    {
+      "id": "edr",
+      "x": 73,
+      "y": 28,
+      "w": 17,
+      "h": 12,
+      "kind": "defender",
+      "label": "EDR sensor",
+      "sub": "Endpoint telemetry",
+      "tip": "EDR sensor - Endpoint telemetry"
+    },
+    {
+      "id": "soc",
+      "x": 43,
+      "y": 58,
+      "w": 16,
+      "h": 12,
+      "kind": "defender",
+      "label": "SOC analyst",
+      "sub": "Correlation",
+      "tip": "SOC analyst - Correlation"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "attacker",
+      "to": "dropper",
+      "color": "accent",
+      "bend": 0.12
+    },
+    {
+      "id": "f2",
+      "from": "dropper",
+      "to": "target",
+      "color": "accent",
+      "bend": 0.12
+    },
+    {
+      "id": "f3",
+      "from": "target",
+      "to": "soc",
+      "color": "accent2",
+      "bend": -0.1
+    }
+  ],
+  "steps": [
+    {
+      "title": "Foothold",
+      "caption": "A user opens a fake installer from a phishing email. The packed dropper starts, shows a normal setup screen, and quietly prepares its hidden payload.",
+      "defender": "Sysmon EID 1 logs a new process in a user-writable folder with an unusual parent chain; a fresh or missing signature is another hint.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.foothold",
+          "fields": {
+            "technique": "T1055.002",
+            "detail": "A user opens a fake installer from a phishing email. The packed dropper starts, shows a normal setup"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Read payload",
+      "caption": "The dropper decrypts its own resources and unpacks a complete hidden PE image into a private memory buffer.",
+      "defender": "EDR (endpoint detection and response) sees unusual section activity - large executable-looking regions appear inside the dropper before it touches other processes.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.read_payload",
+          "fields": {
+            "technique": "T1055.002",
+            "detail": "The dropper decrypts its own resources and unpacks a complete hidden PE image into a private memory "
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Open + allocate",
+      "caption": "The dropper opens the trusted explorer.exe with OpenProcess and reserves fresh read-write (RW) memory inside it with VirtualAllocEx.",
+      "defender": "Sysmon EID 10 records cross-process access with sensitive rights, and an EDR rule flags the new writable region in a trusted process.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.open_allocate",
+          "fields": {
+            "technique": "T1055.002",
+            "detail": "The dropper opens the trusted explorer.exe with OpenProcess and reserves fresh read-write (RW) memor"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Write full PE image",
+      "caption": "WriteProcessMemory copies the PE headers and all sections into the new region, relocation fixups adjust the image for its new base address, and VirtualProtectEx raises the memory protection to executable.",
+      "defender": "the region now holds image-like bytes that start with an MZ header and run executable, but no file backs them - an unbacked image region.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.write_full_pe_image",
+          "fields": {
+            "technique": "T1055.002",
+            "detail": "WriteProcessMemory copies the PE headers and all sections into the new region, relocation fixups adj"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Start execution",
+      "caption": "CreateRemoteThread starts a new thread in the target at the PE entry offset. No LoadLibrary call happens at any point.",
+      "defender": "Sysmon EID 8 shows a remote thread whose StartModule and StartFunction are empty, because the start address belongs to no module.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.start_execution",
+          "fields": {
+            "technique": "T1055.002",
+            "detail": "CreateRemoteThread starts a new thread in the target at the PE entry offset. No LoadLibrary call hap"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Implant runs",
+      "caption": "The implant finishes initializing inside explorer.exe. It is now a complete, memory-only program living inside a trusted process.",
+      "defender": "EDR memory scanning finds unsigned executable code running inside a signed, trusted process.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.implant_runs",
+          "fields": {
+            "technique": "T1055.002",
+            "detail": "The implant finishes initializing inside explorer.exe. It is now a complete, memory-only program liv"
+          }
+        }
+      ],
+      "detection": {
+        "state": "partial",
+        "label": "Partial signal",
+        "detail": "A weak signal exists but is not yet a confirmed alert."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Hidden activity",
+      "caption": "From inside the trusted process, the implant polls the C2 server over HTTPS and waits for tasks.",
+      "defender": "network monitoring sees a periodic beacon flow from a process that never spoke like this before; egress baselines make it stand out.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.hidden_activity",
+          "fields": {
+            "technique": "T1055.002",
+            "detail": "From inside the trusted process, the implant polls the C2 server over HTTPS and waits for tasks. net"
+          }
+        }
+      ],
+      "detection": {
+        "state": "alert",
+        "label": "Alert raised",
+        "detail": "The SOC has enough evidence to open an incident."
+      },
+      "duration": 6
+    },
+    {
+      "title": "SOC triage",
+      "caption": "The SOC analyst captures triage memory. Scanners reveal the in-memory PE, and the host is isolated from the network.",
+      "defender": "the alert chain lines up - new process, cross-process write, unbacked thread, beacon flow - and memory forensics confirms a full PE image.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.soc_triage",
+          "fields": {
+            "technique": "T1055.002",
+            "detail": "The SOC analyst captures triage memory. Scanners reveal the in-memory PE, and the host is isolated f"
+          }
+        }
+      ],
+      "detection": {
+        "state": "clear",
+        "label": "Contained",
+        "detail": "The activity is contained and the lesson is captured."
+      },
+      "duration": 6
+    }
+  ]
+}

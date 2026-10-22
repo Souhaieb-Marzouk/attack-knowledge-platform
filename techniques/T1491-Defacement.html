@@ -1,0 +1,2882 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<script>
+/* Pre-paint theme setup: runs before the first paint so the page never flashes. */
+(function () {
+  try {
+    var stored = null;
+    try { stored = window.localStorage.getItem('atk-theme'); } catch (e) { stored = null; }
+    if (!stored) {
+      var prefersLight = false;
+      try { prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches; } catch (e2) { prefersLight = false; }
+      stored = prefersLight ? 'light' : 'dark';
+    }
+    document.documentElement.dataset.theme = stored;
+  } catch (err) {
+    document.documentElement.dataset.theme = 'dark';
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="MITRE ATT&amp;CK T1491 - Defacement detection guide, v2.0: internal vs external defacement, red team and blue team views, regulation mapping, threat intel, logs, Sigma rules, Splunk SPL, a real case study, and an animated attack simulation.">
+<title>T1491 - Defacement | ATT&amp;CK Detection Guide (v2.0)</title>
+<style>
+/* ================= Design tokens ================= */
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0b0f1a; --surface: #121a2e; --surface-2: #172138; --elevated: #1a2542;
+  --text: #e7edf8; --muted: #9aa8c0; --border: #24314e; --border-strong: #2f4066;
+  --accent: #4f8cff; --accent-2: #22d3ee; --violet: #a78bfa; --success: #34d399;
+  --warning: #fbbf24; --danger: #f87171; --high: #fb923c; --low: #4ade80;
+  --shadow: 0 10px 30px rgba(0,0,0,.18);
+  --radius: 14px; --radius-sm: 9px;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f3f6fc; --surface: #ffffff; --surface-2: #f5f8ff; --elevated: #e9eefa;
+  --text: #182238; --muted: #5a6a85; --border: #d9e2f2; --border-strong: #c2d0ea;
+  --accent: #2f6fe4; --accent-2: #0891b2; --violet: #7c5ce0; --success: #0d9e6e;
+  --warning: #b45309; --danger: #dc2626; --high: #c2410c; --low: #15803d;
+}
+
+/* ================= Reset and base ================= */
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 16.5px;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+h1, h2, h3, h4, h5 { line-height: 1.22; margin: 0 0 .6em; color: var(--text); font-weight: 700; }
+h2 { font-size: clamp(22px, 2.6vw, 30px); }
+h3 { font-size: 21px; margin-top: 2em; }
+h4 { font-size: 17.5px; margin-top: 1.6em; }
+p { margin: 0 0 1em; max-width: 72ch; }
+ul, ol { max-width: 72ch; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+strong { color: var(--text); }
+img, svg { vertical-align: middle; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 2.2em 0; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+::selection { background: color-mix(in srgb, var(--accent) 32%, transparent); }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.skip-link {
+  position: absolute; left: 12px; top: -60px; z-index: 100;
+  background: var(--accent); color: var(--bg);
+  padding: 10px 16px; border-radius: var(--radius-sm); font-weight: 600;
+  transition: top .15s ease;
+}
+.skip-link:focus { top: 12px; }
+
+/* ================= Page progress bar ================= */
+#page-progress {
+  position: fixed; top: 0; left: 0; height: 3px; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  z-index: 60; pointer-events: none;
+}
+
+/* ================= Layout wrappers ================= */
+.wrap { max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+.layout {
+  display: flex; align-items: flex-start; gap: 36px;
+  max-width: 1280px; margin: 0 auto; padding: 0 24px 64px;
+}
+main#main { flex: 1 1 auto; min-width: 0; }
+section { margin: 56px 0; scroll-margin-top: 84px; }
+section > * { max-width: none; }
+
+/* ================= Hero ================= */
+.hero {
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(900px 380px at 12% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 65%),
+    radial-gradient(700px 320px at 88% 0%, color-mix(in srgb, var(--violet) 12%, transparent), transparent 60%);
+  padding: 44px 0 36px;
+}
+.hero .wrap { position: relative; }
+.kicker {
+  font-family: var(--font-mono); font-size: 12.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent-2); margin-bottom: 14px;
+}
+.hero h1 {
+  font-size: clamp(28px, 4vw, 40px); line-height: 1.14; margin: 0 0 14px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 14px;
+}
+.tid {
+  font-family: var(--font-mono); font-size: .62em; font-weight: 700;
+  background: var(--accent); color: var(--bg);
+  border-radius: 9px; padding: 6px 12px; letter-spacing: .06em;
+  white-space: nowrap;
+}
+.hero-intro { color: var(--muted); font-size: 17.5px; max-width: 66ch; }
+.chip-row { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 18px 0 22px; max-width: none; }
+.chip {
+  font-family: var(--font-mono); font-size: 12.5px;
+  background: var(--surface-2); color: var(--muted);
+  border: 1px solid var(--border-strong); border-radius: 999px;
+  padding: 4px 12px; white-space: nowrap;
+}
+.kfact-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; max-width: none;
+}
+.kfact {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.kfact-label {
+  font-family: var(--font-mono); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .12em; color: var(--muted); margin: 0 0 6px;
+}
+.kfact-value { font-weight: 700; margin: 0 0 4px; font-size: 15.5px; }
+.kfact-note { color: var(--muted); font-size: 13.5px; margin: 0; }
+.theme-toggle {
+  position: absolute; top: 0; right: 24px; z-index: 10;
+  width: 42px; height: 42px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px solid var(--border-strong); color: var(--text);
+  cursor: pointer; transition: border-color .15s ease, transform .15s ease;
+}
+.theme-toggle:hover { border-color: var(--accent); transform: translateY(-1px); }
+.theme-toggle svg { width: 20px; height: 20px; }
+[data-theme="dark"] .icon-sun { display: block; }
+[data-theme="dark"] .icon-moon { display: none; }
+[data-theme="light"] .icon-sun { display: none; }
+[data-theme="light"] .icon-moon { display: block; }
+
+/* ================= Sidebar and TOC ================= */
+.sidebar { width: 250px; flex: 0 0 250px; position: sticky; top: 24px; }
+.toc {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 14px;
+}
+.toc-title {
+  font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted); margin: 0 0 10px;
+}
+.toc ol, .toc .toc-sub { list-style: none; margin: 0; padding: 0; }
+.toc li { margin: 2px 0; }
+.toc a {
+  display: block; color: var(--muted); font-size: 13.5px; line-height: 1.45;
+  padding: 5px 9px; border-radius: var(--radius-sm); border-left: 2px solid transparent;
+}
+.toc a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+.toc a.active {
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-left-color: var(--accent); font-weight: 600;
+}
+.toc .toc-sub { margin: 2px 0 4px; padding-left: 12px; border-left: 1px solid var(--border); margin-left: 9px; }
+.toc .toc-sub a { font-size: 12.5px; padding: 4px 8px; }
+
+/* ================= Section headers ================= */
+.section-head { margin-bottom: 22px; display: flex; flex-direction: column; }
+.section-head h2 { margin: 0; }
+.section-num {
+  font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 999px; padding: 3px 12px; margin-bottom: 12px; align-self: flex-start;
+}
+.section-intro { color: var(--muted); margin: 8px 0 0; max-width: 72ch; }
+.section-head h2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.section-head .section-num { margin-bottom: 0; }
+</style>
+<style>
+/* ================= Cards and grids ================= */
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 18px 20px; margin: 0 0 16px;
+}
+.card > :last-child { margin-bottom: 0; }
+.card h3, .card h4 { margin-top: 0; }
+.card-hover { transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+.card-hover:hover { transform: translateY(-2px); border-color: var(--border-strong); box-shadow: var(--shadow); }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: none; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: none; }
+.grid-2 .card, .grid-3 .card { margin: 0; }
+
+/* ================= Callouts ================= */
+.callout {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--surface-2); border: 1px solid var(--border); border-left-width: 4px;
+  border-radius: var(--radius); padding: 14px 16px; margin: 18px 0;
+}
+.callout svg { width: 20px; height: 20px; flex: 0 0 20px; margin-top: 2px; }
+.callout-body { min-width: 0; }
+.callout-label {
+  display: block; font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: .12em; margin: 0 0 4px; font-weight: 700;
+}
+.callout p { margin: 0; }
+.callout p + p { margin-top: 8px; }
+.callout-note { border-left-color: var(--accent); }
+.callout-note .callout-label, .callout-note svg { color: var(--accent); fill: var(--accent); }
+.callout-warning { border-left-color: var(--warning); }
+.callout-warning .callout-label, .callout-warning svg { color: var(--warning); fill: var(--warning); }
+.callout-danger { border-left-color: var(--danger); }
+.callout-danger .callout-label, .callout-danger svg { color: var(--danger); fill: var(--danger); }
+.callout-success { border-left-color: var(--success); }
+.callout-success .callout-label, .callout-success svg { color: var(--success); fill: var(--success); }
+
+/* ================= Badges ================= */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 11.5px; font-weight: 700;
+  letter-spacing: .06em; text-transform: uppercase;
+  border-radius: 999px; padding: 3px 11px; white-space: nowrap;
+}
+.badge-critical { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent); }
+.badge-high { background: color-mix(in srgb, var(--high) 16%, transparent); color: var(--high); border: 1px solid color-mix(in srgb, var(--high) 45%, transparent); }
+.badge-medium { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning); border: 1px solid color-mix(in srgb, var(--warning) 45%, transparent); }
+.badge-low { background: color-mix(in srgb, var(--low) 16%, transparent); color: var(--low); border: 1px solid color-mix(in srgb, var(--low) 45%, transparent); }
+.badge-neutral { background: transparent; color: var(--muted); border: 1px solid var(--border-strong); font-weight: 600; }
+.badge-accent { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent); }
+
+/* ================= Code blocks ================= */
+figure.code {
+  margin: 18px 0; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+figure.code figcaption {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.code-lang { font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+.copy-btn {
+  font-family: var(--font-mono); font-size: 12px; cursor: pointer;
+  background: var(--elevated); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  padding: 4px 12px; transition: border-color .15s ease;
+}
+.copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+.copy-btn.copied { color: var(--success); border-color: var(--success); }
+figure.code pre {
+  margin: 0; padding: 14px 16px; overflow-x: auto;
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.55;
+  color: var(--text);
+}
+figure.code code { font-family: var(--font-mono); }
+code {
+  font-family: var(--font-mono); font-size: .88em;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 1px 5px;
+}
+figure.code code, pre code { background: none; border: 0; padding: 0; font-size: 1em; }
+
+/* ================= Key/value lists ================= */
+dl.kv { margin: 12px 0; display: grid; grid-template-columns: minmax(120px, 190px) 1fr; gap: 6px 16px; }
+dl.kv dt {
+  font-family: var(--font-mono); font-size: 12.5px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em; padding-top: 2px;
+}
+dl.kv dd { margin: 0; font-size: 14.5px; }
+dl.kv dd + dd, dl.kv dt + dd { margin: 0; }
+
+/* ================= Tables ================= */
+.table-wrap { overflow-x: auto; margin: 18px 0; border: 1px solid var(--border); border-radius: var(--radius); }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 14.5px; }
+caption.sr-only { position: absolute; width: 1px; height: 1px; clip: rect(0 0 0 0); }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+thead th {
+  font-family: var(--font-mono); font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); background: var(--surface-2); border-bottom: 1px solid var(--border-strong);
+}
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+td code, th code { white-space: nowrap; }
+
+/* ================= Timeline ================= */
+ol.timeline { list-style: none; margin: 18px 0; padding: 0 0 0 30px; position: relative; max-width: 72ch; }
+ol.timeline::before {
+  content: ""; position: absolute; left: 9px; top: 8px; bottom: 8px; width: 2px;
+  background: var(--border-strong);
+}
+ol.timeline li { position: relative; padding: 0 0 20px 16px; }
+ol.timeline li:last-child { padding-bottom: 4px; }
+ol.timeline li::before {
+  content: ""; position: absolute; left: -26px; top: 7px; width: 11px; height: 11px;
+  border-radius: 50%; background: var(--accent); border: 2px solid var(--bg);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.tl-date {
+  display: inline-block; font-family: var(--font-mono); font-size: 12.5px; font-weight: 700;
+  color: var(--accent-2); margin-right: 8px; white-space: nowrap;
+}
+
+/* ================= Simulation ================= */
+.sim-wrap { position: relative; margin: 18px 0 10px; }
+#sim-canvas {
+  display: block; width: 100%; height: auto; aspect-ratio: 16 / 9;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.sim-controls {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0 8px;
+}
+.sim-controls label { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+.btn, .sim-controls select {
+  font-family: var(--font-sans); font-size: 14px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  padding: 8px 14px; cursor: pointer; transition: border-color .15s ease, color .15s ease;
+}
+.btn:hover, .sim-controls select:hover { border-color: var(--accent); }
+.btn-primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+.btn-primary:hover { color: var(--bg); border-color: var(--accent); }
+.step-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+.step-chip {
+  font-family: var(--font-mono); font-size: 12.5px; cursor: pointer;
+  background: var(--surface-2); color: var(--muted);
+  border: 1px solid var(--border); border-radius: 999px; padding: 5px 13px;
+  transition: border-color .15s ease, color .15s ease;
+}
+.step-chip:hover { border-color: var(--accent); color: var(--text); }
+.step-chip[aria-current="true"] {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent); border-color: var(--accent); font-weight: 700;
+}
+.sim-caption, .sim-hint { margin: 10px 0 0; max-width: 80ch; }
+.field-note { font-size: 14px; color: var(--muted); }
+#sim-caption { font-size: 15.5px; }
+#sim-hint { color: var(--muted); font-size: 14px; }
+.sim-tip {
+  position: absolute; z-index: 40; max-width: 300px;
+  background: var(--elevated); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow); padding: 10px 13px; font-size: 13.5px; line-height: 1.5;
+  pointer-events: none; display: none;
+}
+.sim-tip.show { display: block; }
+.sim-tip .tip-name { font-weight: 700; margin: 0 0 3px; font-size: 13.5px; }
+.sim-tip .tip-desc { margin: 0; color: var(--muted); }
+
+/* ================= Floating controls ================= */
+#toc-fab {
+  display: none; position: fixed; right: 16px; bottom: 16px; z-index: 50;
+  align-items: center; gap: 8px;
+  background: var(--accent); color: var(--bg); border: 0; border-radius: 999px;
+  font-family: var(--font-sans); font-size: 14.5px; font-weight: 600;
+  padding: 12px 18px; cursor: pointer; box-shadow: var(--shadow);
+}
+#toc-fab svg { width: 18px; height: 18px; fill: currentColor; }
+#back-to-top {
+  display: flex; align-items: center; justify-content: center;
+  position: fixed; right: 18px; bottom: 78px; z-index: 50;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border-strong);
+  cursor: pointer; box-shadow: var(--shadow);
+  opacity: 0; visibility: hidden; transform: translateY(8px);
+  transition: opacity .2s ease, transform .2s ease, visibility .2s;
+}
+#back-to-top.show { opacity: 1; visibility: visible; transform: translateY(0); }
+#back-to-top svg { width: 20px; height: 20px; fill: currentColor; }
+
+/* ================= Mobile overlay ================= */
+#toc-overlay {
+  position: fixed; inset: 0; z-index: 70;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+}
+.overlay-panel {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(330px, 88vw);
+  background: var(--surface); border-left: 1px solid var(--border);
+  box-shadow: var(--shadow); padding: 18px; overflow-y: auto;
+}
+.overlay-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.overlay-title { font-family: var(--font-mono); font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.overlay-close {
+  width: 38px; height: 38px; border-radius: 50%; cursor: pointer;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border-strong);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.overlay-close svg { width: 16px; height: 16px; }
+.overlay-panel .toc a { padding: 7px 9px; font-size: 14px; }
+
+/* ================= IR checklist ================= */
+ul.checklist { list-style: none; padding: 0; margin: 0 0 16px; max-width: 72ch; }
+ul.checklist li { position: relative; padding: 8px 0 8px 34px; border-bottom: 1px dashed var(--border); }
+ul.checklist li:last-child { border-bottom: 0; }
+ul.checklist li::before {
+  content: ""; position: absolute; left: 2px; top: 13px; width: 13px; height: 13px;
+  border: 2px solid var(--accent); border-radius: 4px; background: transparent;
+}
+
+/* ================= Responsive ================= */
+@media (max-width: 1040px) {
+  .sidebar { display: none; }
+  #toc-fab { display: inline-flex; }
+  .kfact-grid { grid-template-columns: repeat(2, 1fr); }
+  .layout { padding: 0 24px 48px; }
+}
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .wrap, .layout { padding-left: 16px; padding-right: 16px; }
+  .layout { gap: 0; }
+  section { margin: 32px 0; }
+  .hero { padding: 30px 0 26px; }
+  .theme-toggle { right: 16px; top: -6px; }
+  .grid-2, .grid-3, .kfact-grid { grid-template-columns: 1fr; }
+  dl.kv { grid-template-columns: 1fr; gap: 2px 0; }
+  dl.kv dt { margin-top: 10px; }
+  .btn, .sim-controls select { flex: 1 1 auto; }
+  .sim-controls { display: flex; }
+  .sim-controls label { width: 100%; }
+  #back-to-top { bottom: 84px; right: 16px; }
+  figure.code pre { font-size: 12px; }
+}
+
+/* ================= Print ================= */
+@media print {
+  #page-progress, .sidebar, #toc-fab, #toc-overlay, #back-to-top,
+  .theme-toggle, .copy-btn, .sim-controls, #sim-canvas, .sim-tip, .step-chips { display: none !important; }
+  html, body { background: #ffffff !important; color: #111111 !important; }
+  body, h1, h2, h3, h4, p, li, td, th { color: #111111 !important; }
+  a { color: #111111 !important; }
+  .hero { background: none !important; border-bottom: 1px solid #ddd !important; }
+  .card, .callout, .kfact, .toc, figure.code, .table-wrap, ol.timeline li, .overlay-panel {
+    background: #ffffff !important; border-color: #ddd !important;
+    box-shadow: none !important; page-break-inside: avoid; break-inside: avoid;
+  }
+  table, figure.code, .card, .callout { page-break-inside: avoid; break-inside: avoid; }
+  thead th, td, th { border-color: #ddd !important; }
+  section { scroll-margin-top: 0; }
+}
+
+/* ================= Reduced motion ================= */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ================= v2.0 additions (appended) ================= */
+.chip-version {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  border-color: var(--accent);
+  font-weight: 700;
+}
+.vernote {
+  margin: 18px 0 0; max-width: 72ch;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.vernote summary { cursor: pointer; padding: 12px 16px; font-weight: 600; color: var(--accent); }
+.vernote ul { margin: 0; padding: 2px 18px 14px 38px; color: var(--muted); }
+.vernote li { margin: 4px 0; font-size: 14px; }
+.toc-meta {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 12px; margin: 10px 0 0;
+  letter-spacing: .04em; text-align: center;
+}
+.mistake { border-left: 3px solid var(--warning); }
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1491"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<a class="skip-link" href="#main">Skip to main content</a>
+<div id="page-progress" aria-hidden="true"></div>
+
+<header class="hero">
+  <div class="wrap">
+    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch color theme" title="Switch color theme">
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"/></svg>
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+    <p class="kicker">MITRE ATT&amp;CK · TACTIC: IMPACT</p>
+    <h1><span class="tid">T1491</span> Defacement</h1>
+    <p class="hero-intro">Defacement is an attack that changes the visible content of a website or an internal application. Attackers swap pages, templates, or database content for their own messages. This page explains how the attack works, how it looks from both the attacker and defender side, and how to detect it with logs, Sigma rules, and Splunk searches.</p>
+    <ul class="chip-row" role="list">
+      <li class="chip">Tactic: Impact</li>
+      <li class="chip">Platforms: Linux, Windows, macOS</li>
+      <li class="chip">Sub-techniques: T1491.001 · T1491.002</li>
+      <li class="chip chip-version">Version: v2.0</li>
+    </ul>
+    <div class="kfact-grid">
+      <div class="kfact card-hover">
+        <p class="kfact-label">ATT&amp;CK ID</p>
+        <p class="kfact-value">T1491 · Impact tactic</p>
+        <p class="kfact-note">T1491.001 Internal · T1491.002 External</p>
+      </div>
+      <div class="kfact card-hover">
+        <p class="kfact-label">Two variants</p>
+        <p class="kfact-value">Internal vs External</p>
+        <p class="kfact-note">.001 changes pages users see inside the network; .002 changes public websites.</p>
+      </div>
+      <div class="kfact card-hover">
+        <p class="kfact-label">Typical preconditions</p>
+        <p class="kfact-value">Write access to web or app content</p>
+        <p class="kfact-note">Stolen CMS credentials, an unpatched public app, or destructive malware on an internal host.</p>
+      </div>
+      <div class="kfact card-hover">
+        <p class="kfact-label">Main data sources</p>
+        <p class="kfact-value">Web logs, FIM, DB audit</p>
+        <p class="kfact-note">Plus process creation, WAF and CDN logs, and CMS audit trails.</p>
+      </div>
+    </div>
+    <details class="vernote">
+      <summary>What changed in v2.0</summary>
+      <ul>
+        <li>Corrected the platform list to Linux, Windows, and macOS, matching the official ATT&amp;CK page for T1491.</li>
+        <li>Added threats TH-06 and TH-07: subdomain takeover serving fake content, and defacement used as a distraction during a deeper intrusion.</li>
+        <li>Added a sixth Sigma rule and a matching Splunk SPL query for subdomain takeover, and set every rule to status stable.</li>
+        <li>Expanded the Ubuntu Forums 2013 case study with response team roles and tools, and labeled public record vs illustrative detail.</li>
+        <li>Added links to the v2.0 pages for T1491.001 and T1491.002, which now sit in the same folder as this page.</li>
+        <li>Checked the regulation table against ISO/IEC 27001:2022 and PCI DSS v4.0 numbers, and added PCI DSS 6.4.3.</li>
+        <li>Softened the GDPR Art. 33 wording: a defacement without a personal data breach may not start the 72-hour clock.</li>
+        <li>Shortened long sentences in the hero, overview, and section intros for B1 English readers.</li>
+      </ul>
+    </details>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar" id="toc-sidebar">
+    <nav class="toc" aria-label="Table of contents">
+      <p class="toc-title">Contents</p>
+      <ol id="toc-list">
+        <li><a href="#sec-1-overview">1. Overview</a></li>
+        <li><a href="#sec-2-simulation">2. Animated Simulation</a></li>
+        <li><a href="#sec-3-red-team">3. Red Team Perspective</a></li>
+        <li><a href="#sec-4-blue-team">4. Blue Team Perspective</a></li>
+        <li>
+          <a href="#sec-5-detection">5. Detection Engineering Deep Dive</a>
+          <ol class="toc-sub">
+            <li><a href="#sec-5-1-regulations">5.1 Regulation mapping</a></li>
+            <li><a href="#sec-5-2-threat-intel">5.2 Threat intelligence</a></li>
+            <li><a href="#sec-5-3-threat-ranking">5.3 Threats ranking</a></li>
+            <li><a href="#sec-5-4-logs-patterns">5.4 Logs and patterns</a></li>
+            <li><a href="#sec-5-5-sigma-spl">5.5 Sigma rules and Splunk SPL</a></li>
+          </ol>
+        </li>
+        <li><a href="#sec-6-case-study">6. Real-World Case Study</a></li>
+        <li><a href="#sec-7-mitigation">7. Mitigation and Defense</a></li>
+        <li><a href="#sec-8-mistakes">8. Common Mistakes and Best Practices</a></li>
+        <li><a href="#sec-9-cheat-sheet">9. Cheat Sheet and Quick Reference</a></li>
+      </ol>
+    </nav>
+    <p class="toc-meta">Version 2.0 · Reviewed 2026-10-22</p>
+  </aside>
+
+  <main id="main">
+<section id="sec-1-overview">
+  <header class="section-head">
+    <span class="section-num">1</span>
+    <h2>Overview</h2>
+    <p class="section-intro">What defacement is, how the two sub-techniques differ, and why this loud attack is still a valuable detection target.</p>
+  </header>
+
+  <p><strong>Defacement</strong> is an attack that changes the visible content of an application. The attacker does not break the software itself. Instead, the attacker changes what people <em>see</em>: page text, images, templates, or database rows that feed a page. MITRE ATT&amp;CK places T1491 in the <strong>Impact</strong> tactic, because the goal is to change or damage what the victim delivers to its users. T1491 is the parent technique. Its two sub-techniques split by audience: T1491.001 Internal Defacement for pages visible only inside the network, and T1491.002 External Defacement for public websites.</p>
+  <p>The term <strong>CMS</strong> means Content Management System, a tool such as WordPress, Drupal, or vBulletin that lets people publish web content without writing code. Many defacements happen through a CMS, because a CMS stores content in files or in a database and renders it for every visitor. If an attacker can change that stored content, every visitor sees the change.</p>
+  <p>Defacement is often seen as a "loud" attack. It does not hide. That makes it look less dangerous than quiet data theft, but it is still a serious signal: an attacker had enough access to write content. The same access is often enough to plant a <strong>web shell</strong> (a hidden page that gives the attacker remote commands) or to steal data. Treat every defacement as proof of a breach, not just as graffiti.</p>
+
+  <div class="grid-2">
+    <div class="card card-hover">
+      <h3>T1491.001 - Internal Defacement</h3>
+      <p><span class="badge badge-neutral">Internal targets</span> <span class="badge badge-neutral">Often ransomware-adjacent</span></p>
+      <p>The attacker changes pages that users see <strong>inside</strong> the victim network. Examples: a staff intranet portal, a desktop wallpaper changed across workstations, an internal wiki home page, or a login page of an internal tool. This variant often appears during destructive attacks, where malware also wipes data or changes system images.</p>
+      <p>Detection leans on file integrity monitoring on internal web roots and shares, EDR on workstations, and network shares audit logs.</p>
+      <p><a href="T1491.001-Internal-Defacement-v2.0.html">Open the T1491.001 v2.0 page</a></p>
+    </div>
+    <div class="card card-hover">
+      <h3>T1491.002 - External Defacement</h3>
+      <p><span class="badge badge-neutral">Public websites</span> <span class="badge badge-neutral">Most common variant</span></p>
+      <p>The attacker changes content on a <strong>public</strong> website. Visitors see an attacker banner, a political message, or "hacked by" text. The change may be a file (HTML, template), a database row (article or product text), a third-party script the site loads, or even the DNS record that points the domain somewhere else.</p>
+      <p>Detection leans on web access logs, WAF and CDN logs, file integrity monitoring of the web root, and external monitoring services.</p>
+      <p><a href="T1491.002-External-Defacement-v2.0.html">Open the T1491.002 v2.0 page</a></p>
+    </div>
+  </div>
+
+  <aside class="callout callout-note">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.4 1 2.3v.5h6v-.5c0-.9.4-1.8 1-2.3A7 7 0 0 0 12 2zm-3 18h6v1a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-1z"/></svg>
+    <div class="callout-body">
+      <span class="callout-label">Note</span>
+      <p>Defacement is the visible tip. After you confirm it, always hunt for deeper activity on the same host: new admin users, web shells, odd scheduled jobs, and large database reads.</p>
+    </div>
+  </aside>
+
+  <h3>What attackers change, and how they get in</h3>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Common defacement targets and the entry points that lead to them</caption>
+      <thead>
+        <tr><th scope="col">Changed content</th><th scope="col">Typical entry point</th><th scope="col">ATT&amp;CK link</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Static HTML files and page templates in the web root</td><td>Exploited CMS or plugin, uploaded file, exposed admin panel</td><td><a href="https://attack.mitre.org/techniques/T1190/">T1190</a></td></tr>
+        <tr><td>Database rows that store article or product text</td><td>SQL injection (a trick that sends database commands through a web form)</td><td><a href="https://attack.mitre.org/techniques/T1190/">T1190</a></td></tr>
+        <tr><td>Third-party JavaScript that the site loads for every visitor</td><td>Compromised vendor script (supply chain attack)</td><td><a href="https://attack.mitre.org/techniques/T1195/">T1195</a></td></tr>
+        <tr><td>DNS records that point the domain to attacker content</td><td>Registrar account takeover or DNS hijack</td><td><a href="https://attack.mitre.org/techniques/T1584/">T1584</a></td></tr>
+        <tr><td>Internal portal pages and workstation images</td><td>Insider access or destructive malware already inside</td><td><a href="https://attack.mitre.org/techniques/T1491/001/">T1491.001</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Fast facts</h3>
+  <dl class="kv">
+    <dt>ATT&amp;CK tactic</dt><dd>Impact</dd>
+    <dt>Sub-techniques</dt><dd>T1491.001 Internal Defacement, T1491.002 External Defacement</dd>
+    <dt>Platforms</dt><dd>Linux, Windows, macOS (the current ATT&amp;CK page also lists ESXi and IaaS hosts)</dd>
+    <dt>Access level</dt><dd>Write access: user level for content, administrator level for system-wide changes such as wallpapers</dd>
+    <dt>Typical pre-techniques</dt><dd><a href="https://attack.mitre.org/techniques/T1190/">T1190 Exploit Public-Facing Application</a>, <a href="https://attack.mitre.org/techniques/T1078/">T1078 Valid Accounts</a></dd>
+    <dt>Detection value</dt><dd>High - the change is visible, timestamped, and leaves file, log, and database evidence</dd>
+  </dl>
+</section>
+
+<section id="sec-2-simulation">
+  <header class="section-head">
+    <span class="section-num">2</span>
+    <h2>Animated Simulation</h2>
+    <p class="section-intro">A step-by-step canvas simulation of an external web defacement, from first scan to full recovery. Watch the attacker path on the left and the SOC view on the right.</p>
+  </header>
+
+  <p>The story below follows one realistic path: an old CMS plugin, a SQL injection probe, a stolen admin session, a changed template, and the moment the SOC finally sees it. Each step updates the diagram, the caption, and the defender hint.</p>
+
+  <div class="sim-wrap" id="sim-wrap">
+    <canvas id="sim-canvas" width="960" height="540" role="img" aria-label="Animated simulation of a website defacement attack: an attacker probes a web server, defaces it through a stolen admin session, and the SOC detects and recovers the site."></canvas>
+    <div id="sim-tip" class="sim-tip" role="status"><p class="tip-name"></p><p class="tip-desc"></p></div>
+  </div>
+
+  <div class="sim-controls" role="group" aria-label="Simulation controls">
+    <button id="sim-play" class="btn btn-primary" type="button">Play</button>
+    <button id="sim-restart" class="btn" type="button">Restart</button>
+    <label for="sim-speed">Speed</label>
+    <select id="sim-speed" aria-label="Simulation speed">
+      <option value="0.5">0.5x</option>
+      <option value="1" selected>1x</option>
+      <option value="2">2x</option>
+    </select>
+    <label for="sim-step">Jump to step</label>
+    <select id="sim-step" aria-label="Jump to simulation step">
+      <option value="1">1 · Recon</option>
+      <option value="2">2 · Probe</option>
+      <option value="3">3 · Breach</option>
+      <option value="4">4 · Stage</option>
+      <option value="5">5 · Deface</option>
+      <option value="6">6 · Expose</option>
+      <option value="7">7 · Triage</option>
+      <option value="8">8 · Recover</option>
+    </select>
+  </div>
+  <div class="step-chips" id="sim-chips" role="group" aria-label="Simulation step buttons">
+    <button class="step-chip" type="button" data-step="1" aria-current="true">1 Recon</button>
+    <button class="step-chip" type="button" data-step="2" aria-current="false">2 Probe</button>
+    <button class="step-chip" type="button" data-step="3" aria-current="false">3 Breach</button>
+    <button class="step-chip" type="button" data-step="4" aria-current="false">4 Stage</button>
+    <button class="step-chip" type="button" data-step="5" aria-current="false">5 Deface</button>
+    <button class="step-chip" type="button" data-step="6" aria-current="false">6 Expose</button>
+    <button class="step-chip" type="button" data-step="7" aria-current="false">7 Triage</button>
+    <button class="step-chip" type="button" data-step="8" aria-current="false">8 Recover</button>
+  </div>
+
+  <p id="sim-caption" aria-live="polite">The attacker scans the public website and finds an outdated CMS with a vulnerable plugin.</p>
+  <p id="sim-hint">SOC view: Nothing fires yet. Internet scanners are common, so this traffic looks like normal background noise.</p>
+
+  <h3>Written story (text alternative)</h3>
+  <p>The list below is the same story in text form. Screen readers and printed copies use this instead of the canvas.</p>
+  <ol class="sim-story">
+    <li><strong>Recon.</strong> The attacker scans the public site and finds an outdated CMS with a vulnerable plugin. Defenders see: nothing yet. Scanning blends into normal internet noise, so there is no alert at this point.</li>
+    <li><strong>Probe.</strong> Crafted SQL injection requests hit the plugin. The WAF (web application firewall) sees odd encoded queries and starts counting them. Defenders see: WAF counter events that alone do not cross a threshold.</li>
+    <li><strong>Breach.</strong> The injection returns the CMS admin password hash. The attacker cracks it offline and logs in as an admin. Defenders see: a successful admin login from a new network, visible only if admin logins are logged.</li>
+    <li><strong>Stage.</strong> The attacker uploads a modified template file into the web root (the folder the website serves). Defenders see: a file integrity monitoring event about a new or changed file, often queued as low priority.</li>
+    <li><strong>Deface.</strong> The homepage HTML is replaced with the attacker's banner. Visitors see the defaced page, and the CDN (content delivery network) caches it. Defenders see: a CDN cache refresh and rising page views of the changed page.</li>
+    <li><strong>Expose.</strong> A monitoring user and the file-integrity system flag the changed web root. The SOC receives the first alert. Defenders see: a correlated alert that joins the FIM change with the CDN refresh and a user report.</li>
+    <li><strong>Triage.</strong> The SOC reviews access logs and finds the admin session and the SQL injection pattern from a new network. Defenders see: the full chain in logs - probe, login, upload - and they freeze the admin account.</li>
+    <li><strong>Recover.</strong> The team restores the homepage from a clean backup, patches the plugin, rotates credentials, and purges the CDN cache. Defenders see: a verified clean web root, a patched plugin, and repeat-attempt monitoring in place.</li>
+  </ol>
+</section>
+<section id="sec-3-red-team">
+  <header class="section-head">
+    <span class="section-num">3</span>
+    <h2>Red Team Perspective</h2>
+    <p class="section-intro">How attackers think about defacement: why they do it, what they need, which paths they pick, and where they slip up.</p>
+  </header>
+
+  <h3>When and why attackers deface</h3>
+  <p>Defacement is one of the oldest public attacks, and attackers pick it for clear reasons. Public reporting groups the motives into a few clusters:</p>
+  <ul>
+    <li><strong>Hacktivism.</strong> The attacker wants to send a political or ideological message. The message only works if many people see it, so visibility is the goal, not secrecy.</li>
+    <li><strong>Bragging rights.</strong> Some attackers collect "hacked by" screenshots like trophies. Defacement archives and social posts prove the win to their peers.</li>
+    <li><strong>Protest.</strong> A group may deface a company site during a dispute, a war, or a public controversy to cause reputational harm.</li>
+    <li><strong>Proving access.</strong> In extortion, the attacker changes one visible page or publishes a screenshot as evidence that the network is truly breached, before or instead of stealing data.</li>
+    <li><strong>Distraction.</strong> A loud, visible change pulls defenders and managers toward the website while quieter work continues elsewhere: data theft, web shell persistence, or lateral movement. Section 5.3 tracks this as TH-07.</li>
+  </ul>
+
+  <h3>How it is performed: a staged pattern</h3>
+  <p>Most defacements follow three stages. First, <strong>access</strong>: the attacker gains a foothold, often by exploiting a public-facing application or by using valid accounts (a real username and password, stolen or guessed). Second, <strong>persist</strong>: the attacker keeps a way back in, for example a second admin account or a web shell, because they expect the page to be restored quickly. Third, <strong>alter</strong>: the attacker changes the content, either once or on a schedule, and sometimes mirrors the change across many sites they control.</p>
+
+  <h3>Where it applies and what it needs</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h4>Common target surfaces</h4>
+      <ul>
+        <li>Public web roots: the folder on the server that holds the site files.</li>
+        <li>CMS admin panels and their template or theme editors.</li>
+        <li>Templates and plugins that render pages for all visitors.</li>
+        <li>Database content tables (articles, product pages, menu items).</li>
+        <li>DNS records at the domain registrar.</li>
+        <li>Internal portals, wikis, and login pages inside the network.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Typical prerequisites</h4>
+      <ul>
+        <li>Write access to web content: a file upload path, an editor role, or shell access.</li>
+        <li>CMS or admin credentials, often reused from another breach or left at default values.</li>
+        <li>An unpatched public application, plugin, or server module.</li>
+        <li>For DNS defacement: access to the registrar account or a weak domain lock setting.</li>
+        <li>For internal defacement: a foothold on an internal host or an insider role.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Common variations</h3>
+  <p>There are four main ways to change what visitors see. <strong>File change</strong> writes new HTML or template files to the web root. <strong>Database-driven change</strong> updates the rows that feed the page, which survives template restores and can be harder to notice. <strong>Third-party script injection</strong> changes a script that the site loads from a vendor, so every site using that script shows attacker content; this is the supply chain variant. <strong>DNS takeover</strong> points the whole domain at attacker infrastructure, so the real server is never touched at all.</p>
+
+  <h3>Where attackers slip up</h3>
+  <ul>
+    <li>They leave shells, tools, and new accounts behind, which turns a content change into a full-compromise investigation.</li>
+    <li>They touch many files at once, which multiplies the file integrity events and makes the change stand out from normal publishing.</li>
+    <li>They forget caches: search engines, CDNs, and web archives keep copies of the defaced page, which preserves the evidence and the timestamps.</li>
+    <li>They reuse infrastructure (usernames, ASNs, hosting providers) across campaigns, which links incidents together.</li>
+    <li>They log in through the normal admin panel, so the access is fully recorded in audit logs if those logs exist.</li>
+  </ul>
+
+  <aside class="callout callout-danger">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 1 21h22L12 2zm1 14h-2v2h2v-2zm0-7h-2v5h2V9z"/></svg>
+    <div class="callout-body">
+      <span class="callout-label">Danger - Lab only - never run against systems you do not own</span>
+      <p>The commands below are shown in their simplest, lab-shaped form so defenders recognize them in logs. They are safe only against a test machine you own, such as a deliberately vulnerable lab VM on an isolated network.</p>
+    </div>
+  </aside>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">bash · reconnaissance and probing (lab only)</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code># Benign header check against your own lab host (no exploit content)
+curl -I https://lab.example-vm.test/
+
+# Known-tools web scanners pointed at a lab VM
+nikto -h http://10.10.10.50 -p 80,443
+wapiti -u http://10.10.10.50/vulnapp/ --scope page
+
+# SQL injection test tool against a deliberately vulnerable lab app
+sqlmap -u "http://10.10.10.50/vulnapp/item.php?id=1" --batch --level=1 --risk=1</code></pre>
+  </figure>
+
+  <p>What defenders should take from this view: defacement needs <em>write</em> access. Every control that limits write paths removes an attacker path before any detection is needed. The strongest controls are patching, upload filters, editor roles, and admin MFA - Multi-Factor Authentication.</p>
+</section>
+
+<section id="sec-4-blue-team">
+  <header class="section-head">
+    <span class="section-num">4</span>
+    <h2>Blue Team Perspective</h2>
+    <p class="section-intro">How the SOC actually learns about a defacement, which artifacts the attacker leaves, and a triage flow that keeps the incident under control.</p>
+  </header>
+
+  <h3>How defenders find out</h3>
+  <p>In real incidents, defacement is discovered in four common ways. A <strong>user report</strong> arrives first surprisingly often: a customer or employee says "the site looks hijacked". <strong>File integrity monitoring</strong> (software that checks whether protected files changed) flags the web root. <strong>WAF and CDN alerts</strong> show odd traffic or a sudden cache refresh. And <strong>third-party trackers</strong> - public defacement archives, zone listings, or brand-monitoring feeds - may tell the victim before their own tools do. That last path is the painful one: it means an outsider knew first.</p>
+
+  <h3>Artifacts the attacker leaves behind</h3>
+  <div class="grid-2">
+    <div class="card">
+      <h4>On the server</h4>
+      <ul>
+        <li>Modified files with odd modification times (for example 03:41 on Sunday) and a mismatched owner.</li>
+        <li>New files in the web root that no deployment created: backup copies of templates, uploader pages, web shell remnants.</li>
+        <li>Changed database rows with an <code>updated_by</code> or audit value pointing to an unusual session.</li>
+        <li>New admin sessions in CMS audit logs, often right before the content change.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Around the server</h4>
+      <ul>
+        <li>Web access log lines showing the exploit request, the admin login, and the upload POST.</li>
+        <li>WAF events with encoded payloads that were counted but not blocked.</li>
+        <li>CDN logs showing a purge and refill of the defaced URL.</li>
+        <li>DNS query logs, if the domain itself was redirected, showing the new answer IP.</li>
+      </ul>
+    </div>
+  </div>
+
+  <aside class="callout callout-warning">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 1 21h22L12 2zm1 14h-2v2h2v-2zm0-7h-2v5h2V9z"/></svg>
+    <div class="callout-body">
+      <span class="callout-label">Warning</span>
+      <p>If WAF or web access logs were rotated away before triage, you lose the entry point evidence. Keep at least 90 days of web, WAF, and CMS audit logs in cold storage so an incident can be reconstructed.</p>
+    </div>
+  </aside>
+
+  <h3>Where to look, in order</h3>
+  <ol>
+    <li><strong>Web access logs</strong> (nginx, Apache, IIS): find the exploit request, the admin login, and the upload.</li>
+    <li><strong>CMS audit logs</strong>: which account changed which content, from which address.</li>
+    <li><strong>File integrity monitoring</strong> (AIDE, OSSEC, Wazuh): the exact file list and timestamps of the change.</li>
+    <li><strong>Database audit</strong>: which rows changed and through which SQL session.</li>
+    <li><strong>WAF and CDN logs</strong>: what was blocked, what passed, and what got cached.</li>
+    <li><strong>DNS and registrar logs</strong>: whether the domain itself was moved.</li>
+  </ol>
+
+  <h3>Why it matters</h3>
+  <p>Defacement hurts in four ways at once. It is a <strong>breach indicator</strong>: someone had write access. It can accompany <strong>data theft</strong>, since the same exploit often dumps data before or after the visible change. It creates <strong>regulatory exposure</strong>, because it is hard to argue that a defaced public site was no incident. And it damages <strong>trust</strong>: customers who saw the banner, or a screenshot of it, now question every part of the service.</p>
+
+  <h3>Where it fits the attack chain</h3>
+  <p>Defacement rarely stands alone. It usually follows <a href="https://attack.mitre.org/techniques/T1190/">T1190 Exploit Public-Facing Application</a> or <a href="https://attack.mitre.org/techniques/T1078/">T1078 Valid Accounts</a>. While triaging, actively check for the neighbors: <a href="https://attack.mitre.org/techniques/T1505/003/">T1505.003 Web Shell</a> (persistence on the same host), <a href="https://attack.mitre.org/techniques/T1565/">T1565 Data Manipulation</a> (more changed content or records), and <a href="https://attack.mitre.org/techniques/T1567/">T1567 Exfiltration Over Web Service</a> (data leaving through allowed channels). A defacement ticket that closes without these checks is a missed breach investigation.</p>
+
+  <h3>Six-step triage flow</h3>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Defacement triage flow from confirmation to review</caption>
+      <thead>
+        <tr><th scope="col">Step</th><th scope="col">Goal</th><th scope="col">Key actions</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge badge-accent">1 Confirm</span></td><td>Prove the change is real and unauthorized</td><td>Compare the live page with the last known-good version; check FIM baseline; rule out planned maintenance or a marketing change.</td></tr>
+        <tr><td><span class="badge badge-accent">2 Scope</span></td><td>Find the blast radius</td><td>Diff the whole web root, list changed DB rows, check other sites on the same host, pull the full admin session history.</td></tr>
+        <tr><td><span class="badge badge-accent">3 Contain</span></td><td>Stop further changes</td><td>Freeze admin accounts and rotate credentials, take the site or host offline if needed, block the attacker addresses, hold the CDN cache.</td></tr>
+        <tr><td><span class="badge badge-accent">4 Evict</span></td><td>Remove attacker footholds</td><td>Delete web shells and unknown files, remove rogue accounts, close the exploited path (patch or disable the plugin).</td></tr>
+        <tr><td><span class="badge badge-accent">5 Recover</span></td><td>Return to known-good</td><td>Restore from a clean backup, verify hashes, purge all CDN caches, re-enable the site and watch closely for repeats.</td></tr>
+        <tr><td><span class="badge badge-accent">6 Review</span></td><td>Learn and harden</td><td>Write the timeline, update the detections that should have caught it, brief stakeholders, feed indicators to monitoring.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<section id="sec-5-detection">
+  <header class="section-head">
+    <span class="section-num">5</span>
+    <h2>Detection Engineering Deep Dive</h2>
+    <p class="section-intro">The longest section: regulations, threat intelligence, a ranked threat model, the logs that matter, and ready-to-adapt Sigma and Splunk detections for each threat.</p>
+  </header>
+
+  <p>This section is written for detection engineers. It moves from "what the law and frameworks expect" down to "the exact rule you can paste into your SIEM". The seven threats defined in 5.3 are carried through 5.4 and 5.5, so the mapping from threat to log source to rule stays traceable.</p>
+
+  <h3 id="sec-5-1-regulations">5.1 Regulation mapping</h3>
+  <p>Defacement rarely maps to one neat control, because it is both a security failure and often a reportable incident. The table below shows the frameworks that most commonly apply, why each one cares, and the evidence an auditor expects to see.</p>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Regulation and framework controls that relate to defacement prevention, detection, and response</caption>
+      <thead>
+        <tr><th scope="col">Framework</th><th scope="col">Control</th><th scope="col">Why it applies</th><th scope="col">Expected evidence</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>GDPR</td><td>Art. 32 - Security of processing</td>
+          <td>A defaced public site shows that processing systems lacked appropriate technical safeguards.</td>
+          <td>Hardening records for the CMS, patch history, WAF configuration, risk assessment for public web services.</td>
+        </tr>
+        <tr>
+          <td>GDPR</td><td>Art. 33 - Breach notification (72 h)</td>
+          <td>If personal data was also taken, the 72-hour clock starts at awareness. A defacement with no personal data breach may not trigger Art. 33 at all.</td>
+          <td>Incident tickets with detection time, decision log, and any regulator notification with timestamps.</td>
+        </tr>
+        <tr>
+          <td>GDPR</td><td>Art. 5(1)(f) - Integrity and confidentiality</td>
+          <td>Changed content proves the integrity principle was not upheld for the affected service.</td>
+          <td>Integrity controls on web content, change records, restore and verification evidence.</td>
+        </tr>
+        <tr>
+          <td>ISO/IEC 27001:2022</td><td>A.8.15 - Logging</td>
+          <td>You cannot reconstruct a defacement without web, CMS, and database logs.</td>
+          <td>Log inventory showing web, WAF, CMS audit, and DB audit sources with retention times.</td>
+        </tr>
+        <tr>
+          <td>ISO/IEC 27001:2022</td><td>A.8.16 - Monitoring activities</td>
+          <td>Defacement detection is exactly "monitor for anomalous behavior on public services".</td>
+          <td>Alert rules for web root changes, admin logins, and WAF thresholds; SOC triage records.</td>
+        </tr>
+        <tr>
+          <td>ISO/IEC 27001:2022</td><td>A.8.13 - Information backup</td>
+          <td>Fast recovery from defacement depends on verified backups of content and databases.</td>
+          <td>Backup job records, restore test results, backup immutability settings.</td>
+        </tr>
+        <tr>
+          <td>SOC 2</td><td>CC7.2 - CC7.5</td>
+          <td>Trust Services criteria require monitoring for anomalies and a working incident response process.</td>
+          <td>Detection rule documentation, alert-to-response timelines, post-incident reviews.</td>
+        </tr>
+        <tr>
+          <td>SOC 2</td><td>CC8.1 - Change management</td>
+          <td>Unauthorized content change is the exact failure mode change management exists to prevent.</td>
+          <td>Publishing workflow records, approval trails, unauthorized-change incident reports.</td>
+        </tr>
+        <tr>
+          <td>PCI DSS v4.0</td><td>6.4.3 - Payment page script integrity</td>
+          <td>Every script that a payment page loads must be written down, authorized, and checked for integrity.</td>
+          <td>Script inventory with owners, written authorization, and hash or SRI checks for third-party scripts.</td>
+        </tr>
+        <tr>
+          <td>PCI DSS v4.0</td><td>11.5.2 - Detect unauthorized modification of payment-page scripts</td>
+          <td>If the site takes payments, script changes are a card-skimming risk, not just vandalism.</td>
+          <td>Script integrity checks (hashes of loaded JavaScript), change alerts, response evidence.</td>
+        </tr>
+        <tr>
+          <td>PCI DSS v4.0</td><td>10.2 / 12.10 - Audit logging and incident response</td>
+          <td>Cardholder-data environments must log access and rehearse incident response.</td>
+          <td>Access logs with user attribution, IR plan, test records for web compromise scenarios.</td>
+        </tr>
+        <tr>
+          <td>HIPAA Security Rule</td><td>164.308(a)(6) - Security incident procedures</td>
+          <td>A defaced patient portal is a security incident requiring identifiable response steps.</td>
+          <td>Written procedures, incident reports, evidence of detection and containment times.</td>
+        </tr>
+        <tr>
+          <td>HIPAA Security Rule</td><td>164.312(b) - Audit controls</td>
+          <td>Systems handling ePHI must record and examine activity, including content changes.</td>
+          <td>Enabled audit logging on web and portal systems, periodic log review records.</td>
+        </tr>
+        <tr>
+          <td>NIST CSF 2.0</td><td>DE.CM (Continuous monitoring) / RS.MI (Mitigation)</td>
+          <td>DE.CM covers watching public services for defacement; RS.MI covers containing and restoring.</td>
+          <td>Monitoring scope documents, containment playbooks, restore procedures with owners.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Two lessons stand out from the table. First, almost every framework expects <em>evidence</em>, not intention: logs, timestamps, approvals, and restore tests. Second, the 72-hour GDPR clock makes detection latency a compliance metric. A defacement found by a customer two days later is very different from one caught by your own FIM alert in minutes.</p>
+
+  <h3 id="sec-5-2-threat-intel">5.2 Threat intelligence</h3>
+  <p>Threat intelligence for defacement answers three questions: who defaces sites like ours, what do their campaigns look like, and how would we know early? Build it from several sources and apply it in a simple loop.</p>
+
+  <div class="grid-3">
+    <div class="card card-hover">
+      <h4>Public and community sources</h4>
+      <ul>
+        <li><strong>MITRE ATT&amp;CK</strong> site and its STIX/TAXII feeds for technique and group data.</li>
+        <li><strong>ISACs</strong> (Information Sharing and Analysis Centers) for sector-specific warnings.</li>
+        <li><strong>Vendor blogs</strong> from security companies tracking hacktivist waves.</li>
+        <li><strong>OSINT</strong>: public defacement archives and news reports of campaigns.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Commercial feeds</h4>
+      <ul>
+        <li>Brand and domain monitoring services that watch for hijacks and look-alike sites.</li>
+        <li>Digital risk protection platforms that alert when your brand appears on attacker channels.</li>
+        <li>Curated indicator feeds with actor attribution and confidence scores.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Internal telemetry</h4>
+      <ul>
+        <li>Your own web, WAF, CMS, and DNS logs - the highest-value source you own.</li>
+        <li>Past incident tickets, which show which attack paths actually hit you.</li>
+        <li>External scan results showing what an attacker sees first.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h4>The collect - analyze - apply loop</h4>
+  <ol>
+    <li><strong>Collect.</strong> Pull technique updates (T1491 and its neighbors), actor names, and campaign indicators into one place, on a schedule.</li>
+    <li><strong>Analyze.</strong> Ask: does this apply to our stack? A vBulletin plugin story matters only if you run vBulletin; a domain-hijack wave matters if your registrar security is weak.</li>
+    <li><strong>Apply.</strong> Turn findings into detection content (rules in 5.5), hardening tasks (section 7), and hunt hypotheses for the SOC.</li>
+  </ol>
+
+  <h4>Actors and campaigns relevant to defacement</h4>
+  <p>All entries below rely on public reporting; treat confidence ratings as a starting point for your own review, not as settled fact.</p>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Actors and campaigns with documented defacement activity, per public reporting</caption>
+      <thead>
+        <tr><th scope="col">Actor or campaign</th><th scope="col">Relevance to defacement</th><th scope="col">Confidence</th><th scope="col">Source type</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Ghostwriter (G0128)</td>
+          <td>Activity cluster linked in public reporting to defacing or altering media websites in Eastern Europe, sometimes to spread narratives rather than pure vandalism.</td>
+          <td><span class="badge badge-medium">Moderate</span></td>
+          <td>Vendor reporting, ATT&amp;CK group page</td>
+        </tr>
+        <tr>
+          <td>UNC1151</td>
+          <td>Cluster that Microsoft, in public reporting, linked to the January 2022 website defacements of Ukrainian government sites, shortly before destructive attacks in the same country.</td>
+          <td><span class="badge badge-medium">Moderate</span></td>
+          <td>Vendor reporting (Microsoft, 2022)</td>
+        </tr>
+        <tr>
+          <td>Syrian Electronic Army</td>
+          <td>Historic campaign group documented for website and domain hijacks against media organizations, combining phishing and registrar-level access.</td>
+          <td><span class="badge badge-high">High (historic)</span></td>
+          <td>Vendor reporting, court records</td>
+        </tr>
+        <tr>
+          <td>Iranian-aligned hacktivist networks</td>
+          <td>Public reporting describes waves in 2023-2024 of defacements against utility, industrial, and government sites in several countries, often through exposed services and default credentials.</td>
+          <td><span class="badge badge-medium">Moderate</span></td>
+          <td>Vendor blogs, national CERT advisories</td>
+        </tr>
+        <tr>
+          <td>Anonymous-aligned opportunistic hacktivists</td>
+          <td>Loose collections documented over many years for opportunistic defacements of government and corporate sites during social conflicts; skill level varies widely.</td>
+          <td><span class="badge badge-high">High (historic)</span></td>
+          <td>Open reporting, defacement archives</td>
+        </tr>
+        <tr>
+          <td>No dedicated "defacement group" in ATT&amp;CK</td>
+          <td>ATT&amp;CK lists no group whose sole trade is defacement; the activity is mostly low-sophistication or politically motivated, which shapes realistic threat modeling.</td>
+          <td><span class="badge badge-high">High</span></td>
+          <td>ATT&amp;CK framework itself</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <aside class="callout callout-success">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg>
+    <div class="callout-body">
+      <span class="callout-label">Best practice</span>
+      <p>Watch ATT&amp;CK version updates and vendor reporting on a fixed cadence - for example monthly. When ATT&amp;CK renames or regroups a cluster such as Ghostwriter, update your own notes and rules so your intelligence stays aligned with the framework.</p>
+    </div>
+  </aside>
+
+  <h3 id="sec-5-3-threat-ranking">5.3 Threats ranking and categorization</h3>
+  <p>The seven threats below are the defacement paths that matter for most organizations. They are ranked by a mix of frequency and impact. The same IDs (TH-01 to TH-07) are used in 5.4 for log sources and in 5.5 for detection rules, so every rule traces back to one threat.</p>
+
+  <div class="grid-2">
+    <div class="card card-hover" id="th-01">
+      <h4>TH-01 - Exploit of a public web application <span class="badge badge-critical">Critical</span></h4>
+      <p><span class="badge badge-neutral">Network</span> <span class="badge badge-neutral">External defacement</span></p>
+      <dl class="kv">
+        <dt>Description</dt><dd>SQL injection or remote code execution in a CMS or plugin on a public site leads directly to external defacement.</dd>
+        <dt>Preconditions</dt><dd>An unpatched public application, a reachable admin endpoint, and writable web content.</dd>
+        <dt>Impact</dt><dd>Public defacement, possible simultaneous data theft, and a visible breach of customer trust.</dd>
+        <dt>Rank justification</dt><dd>The highest-frequency real-world path - most defacements in public reporting start here.</dd>
+      </dl>
+    </div>
+
+    <div class="card card-hover" id="th-02">
+      <h4>TH-02 - Compromised CMS or admin credentials <span class="badge badge-high">High</span></h4>
+      <p><span class="badge badge-neutral">Identity</span> <span class="badge badge-neutral">External defacement</span></p>
+      <dl class="kv">
+        <dt>Description</dt><dd>Phishing, password reuse, or a default account hands the attacker a real CMS admin session, which is then used to alter published content.</dd>
+        <dt>Preconditions</dt><dd>Weak or reused credentials, no MFA on the admin panel, and admin sessions that are not monitored.</dd>
+        <dt>Impact</dt><dd>Defacement through the front door; the attacker may also read private content with the same rights.</dd>
+        <dt>Rank justification</dt><dd>Very common in practice, but usually caught by credential controls if they exist, so slightly below TH-01.</dd>
+      </dl>
+    </div>
+
+    <div class="card card-hover" id="th-03">
+      <h4>TH-03 - Compromised third-party script (supply chain) <span class="badge badge-high">High</span></h4>
+      <p><span class="badge badge-neutral">Network</span> <span class="badge badge-neutral">Rendered-page change</span></p>
+      <dl class="kv">
+        <dt>Description</dt><dd>A malicious or compromised vendor script changes the rendered page for all visitors, without any change on your own servers.</dd>
+        <dt>Preconditions</dt><dd>The site loads third-party JavaScript, and script integrity is not verified (no hashes, no strict CSP).</dd>
+        <dt>Impact</dt><dd>High blast radius: every visitor of every site using that script is affected at once.</dd>
+        <dt>Rank justification</dt><dd>Rare compared to TH-01, but a single event affects far more users, so it stays High.</dd>
+      </dl>
+    </div>
+
+    <div class="card card-hover" id="th-04">
+      <h4>TH-04 - DNS or registrar hijack <span class="badge badge-medium">Medium</span></h4>
+      <p><span class="badge badge-neutral">Network</span> <span class="badge badge-neutral">Domain-level</span></p>
+      <dl class="kv">
+        <dt>Description</dt><dd>The attacker takes over the registrar account or poisons DNS records, so the whole domain resolves to attacker content.</dd>
+        <dt>Preconditions</dt><dd>Weak registrar security, no registrar lock, or a compromised account with DNS rights.</dd>
+        <dt>Impact</dt><dd>Strong impact on availability and trust; mail and other services on the domain can break too.</dd>
+        <dt>Rank justification</dt><dd>Lower frequency, but the impact reaches beyond the website, so it ranks Medium with high attention.</dd>
+      </dl>
+    </div>
+
+    <div class="card card-hover" id="th-05">
+      <h4>TH-05 - Insider misuses publishing rights <span class="badge badge-medium">Medium</span></h4>
+      <p><span class="badge badge-neutral">Identity</span> <span class="badge badge-neutral">Internal or external</span></p>
+      <dl class="kv">
+        <dt>Description</dt><dd>An employee or contractor with publishing rights alters content for personal, ideological, or fraudulent reasons.</dd>
+        <dt>Preconditions</dt><dd>Broad publishing rights, no approval workflow, no review of unusual edit patterns.</dd>
+        <dt>Impact</dt><dd>Smaller blast radius, but the insider bypasses most outer controls and knows what hurts.</dd>
+        <dt>Rank justification</dt><dd>Low frequency and contained blast radius keep it Medium, but it defeats many perimeter assumptions.</dd>
+      </dl>
+    </div>
+
+    <div class="card card-hover" id="th-06">
+      <h4>TH-06 - Subdomain takeover serving fake content <span class="badge badge-high">High</span></h4>
+      <p><span class="badge badge-neutral">Network</span> <span class="badge badge-neutral">External content</span></p>
+      <dl class="kv">
+        <dt>Description</dt><dd>A forgotten DNS record still points a subdomain at a retired cloud service. The attacker claims that empty slot on the service and serves fake pages on your subdomain.</dd>
+        <dt>Preconditions</dt><dd>A dangling subdomain record, no watch on DNS answers, and no claim check on the cloud service.</dd>
+        <dt>Impact</dt><dd>Fake login pages or fake content on a trusted domain name, with no change on your own servers.</dd>
+        <dt>Rank justification</dt><dd>High - it needs one mistake (a dangling record), but public scanners hunt for it constantly, and the fake content is very convincing.</dd>
+      </dl>
+    </div>
+
+    <div class="card card-hover" id="th-07">
+      <h4>TH-07 - Defacement as distraction during a deeper intrusion <span class="badge badge-high">High</span></h4>
+      <p><span class="badge badge-neutral">Cross-platform</span> <span class="badge badge-neutral">Internal or external</span></p>
+      <dl class="kv">
+        <dt>Description</dt><dd>The attacker uses a loud defacement to pull all attention to one website while quieter work continues elsewhere: data theft, web shells, or lateral movement.</dd>
+        <dt>Preconditions</dt><dd>Two goals at once - a visible message, and time to work undisturbed on other systems.</dd>
+        <dt>Impact</dt><dd>The response team spends its best hours on the visible page while deeper damage grows on other hosts.</dd>
+        <dt>Rank justification</dt><dd>High - lower frequency, but very high cost, because it attacks the response process itself, not just a site.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <aside class="callout callout-note">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.4 1 2.3v.5h6v-.5c0-.9.4-1.8 1-2.3A7 7 0 0 0 12 2zm-3 18h6v1a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-1z"/></svg>
+    <div class="callout-body">
+      <span class="callout-label">Note</span>
+      <p>Rankings are context-dependent. A news publisher under political pressure may rank TH-04 above TH-01; a payments site may treat TH-03 as Critical because of card-skimming risk. Re-rank for your own environment.</p>
+    </div>
+  </aside>
+  <h3 id="sec-5-4-logs-patterns">5.4 Logs and patterns</h3>
+  <p>Each threat below lists the log sources that will actually contain the evidence, the key fields, what normal looks like, what suspicious looks like, and the detection logic in one to three sentences. After the seven blocks, four realistic log examples show the raw shape of the events.</p>
+
+  <h4>TH-01 - Exploit of a public web application</h4>
+  <dl class="kv">
+    <dt>Log sources</dt><dd>Web access logs (nginx, Apache, IIS), WAF logs, CDN logs, file integrity monitoring, process creation on the web host.</dd>
+    <dt>Key fields</dt><dd><code>clientip</code>, <code>uri_path</code>, <code>uri_query</code>, <code>status</code>, <code>useragent</code>, <code>file_path</code>, <code>file_hash</code>, <code>process_name</code></dd>
+    <dt>Normal behavior</dt><dd>Steady traffic with typical user agents, 200 and 404 responses, deploy-time file changes from CI pipelines.</dd>
+    <dt>Suspicious behavior</dt><dd>Encoded SQL keywords in query strings, tool user agents (sqlmap, nikto), bursts of 500 errors from one client, then a POST to an upload endpoint, then web-root file changes from a non-deploy process.</dd>
+    <dt>Detection logic</dt><dd>Match SQL injection syntax in URLs and flag the same client if it later succeeds on an upload or admin route. Correlate WAF "counted" events with web-root file changes within an hour.</dd>
+  </dl>
+
+  <h4>TH-02 - Compromised CMS or admin credentials</h4>
+  <dl class="kv">
+    <dt>Log sources</dt><dd>CMS audit logs, web access logs for the login route, VPN or SSO logs, file integrity monitoring.</dd>
+    <dt>Key fields</dt><dd><code>user</code>, <code>role</code>, <code>source_ip</code>, <code>source_asn</code>, <code>session_id</code>, <code>action</code>, <code>object</code></dd>
+    <dt>Normal behavior</dt><dd>Admin logins from known office or VPN ranges during work hours; content edits by editor roles in a steady pattern.</dd>
+    <dt>Suspicious behavior</dt><dd>Admin login from a new ASN or country, password spray before it, then template or theme edits and file uploads within minutes of login.</dd>
+    <dt>Detection logic</dt><dd>Alert on high-risk CMS actions (template edit, plugin install, user create) when the session's network differs from the user's history. Chain login to content change by <code>session_id</code>.</dd>
+  </dl>
+
+  <h4>TH-03 - Compromised third-party script</h4>
+  <dl class="kv">
+    <dt>Log sources</dt><dd>Proxy or CDN logs for script fetches, browser monitoring (CSP violation reports, script hash checks), vendor status feeds, synthetic browser checks.</dd>
+    <dt>Key fields</dt><dd><code>url_path</code>, <code>cs_host</code>, <code>response_bytes</code>, <code>content_hash</code>, <code>cache_status</code></dd>
+    <dt>Normal behavior</dt><dd>Third-party scripts fetched with stable sizes and stable hashes between vendor releases.</dd>
+    <dt>Suspicious behavior</dt><dd>A script's size or hash changes outside a release window; a new script host appears; CSP reports show blocked inline scripts on payment pages.</dd>
+    <dt>Detection logic</dt><dd>Compare observed script hashes and sizes against a baseline table. Any drift outside a change window is an alert, since your own servers never changed.</dd>
+  </dl>
+
+  <h4>TH-04 - DNS or registrar hijack</h4>
+  <dl class="kv">
+    <dt>Log sources</dt><dd>Internal DNS query logs, external DNS monitoring, passive DNS feeds, registrar account audit logs, certificate transparency feeds.</dd>
+    <dt>Key fields</dt><dd><code>query</code>, <code>answer</code>, <code>ttl</code>, <code>nameserver</code>, <code>registrar_user</code>, <code>record_type</code></dd>
+    <dt>Normal behavior</dt><dd>Your domain resolves to your known address ranges and nameservers; registrar changes happen through named administrators.</dd>
+    <dt>Suspicious behavior</dt><dd>The domain resolves to an unknown address range, nameservers change, a new record appears with a long TTL, or the registrar logs an unexpected transfer request.</dd>
+    <dt>Detection logic</dt><dd>Alert when your own domains resolve outside approved address ranges, or when registrar audit events occur without a matching change ticket.</dd>
+  </dl>
+
+  <h4>TH-05 - Insider misuses publishing rights</h4>
+  <dl class="kv">
+    <dt>Log sources</dt><dd>CMS audit logs, publishing workflow logs, database audit, DLP alerts on content export.</dd>
+    <dt>Key fields</dt><dd><code>user</code>, <code>action</code>, <code>object</code>, <code>objects_changed</code>, <code>source_ip</code>, <code>timestamp</code></dd>
+    <dt>Normal behavior</dt><dd>Editors change a handful of pages per day inside working hours through the approval workflow.</dd>
+    <dt>Suspicious behavior</dt><dd>Bulk edits or publishes (dozens of pages in minutes), edits outside the approval workflow, changes to high-visibility pages by rarely active accounts.</dd>
+    <dt>Detection logic</dt><dd>Count content-changing actions per user per short window and alert above a baseline threshold. Flag publishes that skip the approval state.</dd>
+  </dl>
+
+  <h4>TH-06 - Subdomain takeover serving fake content</h4>
+  <dl class="kv">
+    <dt>Log sources</dt><dd>DNS record monitoring, passive DNS feeds, certificate transparency logs, external synthetic checks of every subdomain, registrar change logs.</dd>
+    <dt>Key fields</dt><dd><code>query</code>, <code>record_type</code>, <code>cname_target</code>, <code>answer</code>, <code>http_status</code>, <code>response_body</code></dd>
+    <dt>Normal behavior</dt><dd>Every subdomain resolves to a record you can match to a live service, and each service answers with your content or a redirect you control.</dd>
+    <dt>Suspicious behavior</dt><dd>A CNAME to a service you no longer use, a new certificate issued for a subdomain nobody uses, or synthetic checks showing vendor error pages such as a hosting service "site not found" message.</dd>
+    <dt>Detection logic</dt><dd>Alert when a CNAME target is unclaimed on the service, and when your own subdomains return vendor error fingerprints in HTTP responses.</dd>
+  </dl>
+
+  <h4>TH-07 - Defacement as distraction during a deeper intrusion</h4>
+  <dl class="kv">
+    <dt>Log sources</dt><dd>EDR on servers and admin workstations, authentication logs across the estate, proxy and DLP egress logs, web shell and persistence detections.</dd>
+    <dt>Key fields</dt><dd><code>user</code>, <code>host</code>, <code>process_name</code>, <code>destination_ip</code>, <code>bytes_out</code>, <code>event_time</code></dd>
+    <dt>Normal behavior</dt><dd>Steady background egress, logins from expected hosts, and few new services or admin sessions.</dd>
+    <dt>Suspicious behavior</dt><dd>During the defacement incident window, other hosts show new admin logins, unusual database reads, or upload bursts to external addresses.</dd>
+    <dt>Detection logic</dt><dd>When a defacement alert opens, pivot the same 24 to 48 hour window across authentication and egress logs. Alert on any second, unrelated host doing admin actions or large transfers in that window.</dd>
+  </dl>
+
+  <h4>Four log examples with field explanations</h4>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">nginx access log · SQL injection probe (TH-01)</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>203.0.113.7 - - [22/Oct/2026:09:14:07 +0000] "GET /index.php?option=com_example&amp;view=1' OR '1'='1 HTTP/1.1" 500 512 "-" "sqlmap/1.7"
+203.0.113.7 - - [22/Oct/2026:09:14:11 +0000] "GET /index.php?option=com_example&amp;view=1' UNION SELECT user,password FROM users-- HTTP/1.1" 200 4311 "-" "sqlmap/1.7"</code></pre>
+  </figure>
+  <ul>
+    <li><code>203.0.113.7</code> - client address (documentation range used here for the example).</li>
+    <li><code>[22/Oct/2026:09:14:07 +0000]</code> - request time; a burst of similar lines within seconds is the tool signature.</li>
+    <li><code>option=com_example&amp;view=1' OR '1'='1</code> - the injected SQL in the query string; quotes and <code>OR 1=1</code> are classic markers.</li>
+    <li><code>500</code> then <code>200</code> - the first probe crashed the query, the second succeeded; a successful response after errors is the moment to correlate.</li>
+    <li><code>sqlmap/1.7</code> - the user agent openly names a SQL injection tool; tools can spoof it, so also match the payload patterns.</li>
+  </ul>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">Sysmon Event ID 11 · unexpected write to the web root (TH-01, TH-02)</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon" Guid="{5770385f-c22a-43e0-bf4c-06f5698ffbd9}"/&gt;
+    &lt;EventID&gt;11&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2026-10-22T09:31:02.114Z"/&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="UtcTime"&gt;2026-10-22 09:31:02.114&lt;/Data&gt;
+    &lt;Data Name="ProcessGuid"&gt;{a1b2c3d4-0000-11eb-b7a1-0242ac110002}&lt;/Data&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\Temp\w3wp_child.exe&lt;/Data&gt;
+    &lt;Data Name="TargetFilename"&gt;C:\inetpub\wwwroot\templates\footer.php&lt;/Data&gt;
+    &lt;Data Name="CreationUtcTime"&gt;2026-10-22 09:31:02.114&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+  </figure>
+  <ul>
+    <li><code>EventID 11</code> - Sysmon file-create event; file writes to protected paths are its main value here.</li>
+    <li><code>Image</code> - the process that wrote the file. A web server worker (w3wp, httpd, php-fpm) writing template files is normal; a child process from Temp doing it is not.</li>
+    <li><code>TargetFilename</code> - inside the web root; match this path against your deploy process allowlist.</li>
+    <li><code>TimeCreated</code> - compare with CMS audit log times to link the upload request to the file change.</li>
+  </ul>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">CMS / database audit · template row update from an unusual session (TH-02, TH-05)</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>[2026-10-22T09:21:44Z] cms.audit action=template.update user=admin1 session=8f3ac1d2e4b5 source_ip=203.0.113.7 source_asn=64512 object=templates/footer.php rows=1 result=success
+[2026-10-22T09:21:45Z] db.audit UPDATE templates SET body='...' WHERE id=442 -- app_user@cms-db-01 rows=1 duration=0.012s session=8f3ac1d2e4b5</code></pre>
+  </figure>
+  <ul>
+    <li><code>action=template.update</code> - a content-changing action; these are the events that feed the TH-02 and TH-05 rules.</li>
+    <li><code>user=admin1</code> with <code>source_asn=64512</code> - the admin's sessions normally come from office or VPN networks; a new ASN is the anomaly.</li>
+    <li><code>session=8f3ac1d2e4b5</code> - the shared session ID links the CMS action and the SQL statement into one chain.</li>
+    <li><code>rows=1</code> - a single-row template update is quiet; bulk updates (<code>rows</code> in the hundreds) shift suspicion toward TH-05.</li>
+  </ul>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">AIDE file integrity · new file in the web root (TH-01, TH-02)</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>AIDE found differences between database and filesystem!!
+added: /var/www/html/templates/footer.php
+added: mtime=2026-10-22T09:31:02 inode=1183452 uid=33 gid=33
+added_sha256: 9f2b7c41ae35d80b6c1f4a7e2d95b0c834ea6f17d2b8a501c9e3f6a4d7b2c158</code></pre>
+  </figure>
+  <ul>
+    <li><code>added:</code> - AIDE (a file integrity tool) reports the file is new; the baseline did not contain it.</li>
+    <li><code>uid=33 gid=33</code> - the web server user owns the file, so the write happened through the web application, not through a deploy pipeline.</li>
+    <li><code>added_sha256</code> - the hash lets you compare the file against the clean backup and against malware repositories.</li>
+    <li><code>mtime</code> - pairs with the Sysmon 11 event and the CMS audit entry to build one timeline.</li>
+  </ul>
+  <h3 id="sec-5-5-sigma-spl">5.5 Sigma rules and Splunk SPL</h3>
+  <p>Below are six complete Sigma rules and six matching Splunk SPL queries. Rules TH-01 to TH-05 map one to one to the first five threats, and rule TH-06 covers subdomain takeover. TH-07 is a response-discipline threat; the triage flow in section 4 and the pivot logic in 5.4 cover it. The Sigma rules are written in valid YAML with spaces only and can be converted with any Sigma tooling. The SPL queries use realistic sourcetypes; adjust index names and field names to your deployment. Every query carries a "Field assumptions" note so you know exactly what must be true for it to run.</p>
+
+  <h4 id="rule-th01">TH-01 - SQL injection probes against the public web application</h4>
+  <p>Intent: catch the probe phase before the defacement happens. This rule watches for SQL injection syntax and known tool user agents in web requests.</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">sigma · webserver · TH-01</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>title: SQL Injection Probes Against Public Web Application (Defacement Pre-Stage)
+id: 7c1f2a34-9e5b-4d8c-a1d2-3f4b5c6d7e8f
+status: stable
+description: Detects SQL injection syntax in query strings and known injection tool
+    user agents in web server traffic. This is the primary access path that leads
+    to external defacement (threat TH-01).
+references:
+    - https://attack.mitre.org/techniques/T1491/
+    - https://attack.mitre.org/techniques/T1190/
+author: SOC Detection Engineering
+date: 2026-10-22
+logsource:
+    category: webserver
+detection:
+    selection_sqli:
+        cs-uri-query|re: '(?i)(union(\s|\+|%20)+select|(\s|%20)or(\s|%20)1(=|%3d)1|sleep\(|benchmark\(|information_schema)'
+    selection_tools:
+        User-Agent|contains:
+            - 'sqlmap'
+            - 'nikto'
+            - 'w3af'
+            - 'havij'
+    condition: selection_sqli or selection_tools
+fields:
+    - c-ip
+    - cs-method
+    - cs-uri-stem
+    - cs-uri-query
+    - sc-status
+    - User-Agent
+falsepositives:
+    - Approved security scanners run by your own team or an external test provider
+    - Legitimate application URLs that contain words such as select or benchmark
+level: critical
+tags:
+    - attack.impact
+    - attack.t1491
+    - attack.t1491.002
+    - attack.initial_access
+    - attack.t1190</code></pre>
+  </figure>
+
+  <p><strong>Sigma to SPL field mapping:</strong> <code>c-ip</code> -&gt; <code>clientip</code>, <code>cs-uri-query</code> -&gt; <code>uri_query</code>, <code>cs-uri-stem</code> -&gt; <code>uri_path</code>, <code>sc-status</code> -&gt; <code>status</code>, <code>User-Agent</code> -&gt; <code>useragent</code> (standard Splunk access_combined extractions).</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">spl · index=web · TH-01</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>index=web sourcetype=access_combined
+| regex uri_query="(?i)(union(\s|\+|%20)+select|(\s|\+|%20)or(\s|\+|%20)1(=|%3d)1|sleep\(|benchmark\(|information_schema)"
+| stats count AS probes, dc(uri_path) AS distinct_paths, values(status) AS statuses, max(_time) AS last_seen BY clientip, useragent
+| where probes &gt; 5
+| sort - probes
+| table clientip, useragent, probes, distinct_paths, statuses, last_seen</code></pre>
+  </figure>
+  <p class="field-note"><strong>Field assumptions:</strong> events live in <code>index=web</code> with <code>sourcetype=access_combined</code>, so <code>clientip</code>, <code>uri_path</code>, <code>uri_query</code>, <code>status</code>, and <code>useragent</code> are already extracted; the threshold 5 filters single-request noise.</p>
+  <ul>
+    <li><strong>False positives:</strong> your own approved scanners and any URL that legitimately contains SQL-like words.</li>
+    <li><strong>Tuning:</strong> add a filter selection excluding scanner source IPs from your test provider; keep the count threshold low - probes precede the actual attack by minutes to days.</li>
+    <li><strong>Severity:</strong> critical - this is the entry stage of the highest-frequency defacement path (TH-01).</li>
+  </ul>
+
+  <h4 id="rule-th02">TH-02 - High-risk CMS action from an unusual network</h4>
+  <p>Intent: catch a stolen admin session by the one thing it cannot fake easily - the network it comes from. This rule alerts when an administrator performs a content-changing CMS action from an untrusted ASN.</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">sigma · cms_audit · TH-02</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>title: High-Risk CMS Content Action by Admin Session from Untrusted ASN
+id: b4d9e8f1-2a3c-4b5d-8e9f-0a1b2c3d4e5f
+status: stable
+description: Detects content-changing actions (template update, plugin install,
+    file upload, user creation) performed by an administrator role from a network
+    ASN outside the trusted list. Maps to threat TH-02 (compromised CMS credentials).
+references:
+    - https://attack.mitre.org/techniques/T1491/
+author: SOC Detection Engineering
+date: 2026-10-22
+logsource:
+    category: application
+    product: cms_audit
+    service: content
+detection:
+    selection_actions:
+        action:
+            - 'template.update'
+            - 'theme.edit'
+            - 'plugin.install'
+            - 'file.upload'
+            - 'user.create'
+    selection_role:
+        role:
+            - 'administrator'
+            - 'superuser'
+    filter_trusted_network:
+        source_asn:
+            - 64500
+            - 64510
+    condition: selection_actions and selection_role and not filter_trusted_network
+fields:
+    - event_time
+    - user
+    - role
+    - action
+    - object
+    - source_ip
+    - source_asn
+    - session_id
+falsepositives:
+    - Administrators working through a new VPN range or a changed office network
+    - Automation accounts that publish from a hosting provider network
+level: high
+tags:
+    - attack.impact
+    - attack.t1491
+    - attack.t1491.002
+    - attack.persistence
+    - attack.t1078</code></pre>
+  </figure>
+
+  <p><strong>Sigma to SPL field mapping:</strong> <code>action</code>, <code>role</code>, <code>source_asn</code>, <code>session_id</code>, <code>user</code>, and <code>object</code> keep the same names in the CMS audit sourcetype; <code>event_time</code> maps to Splunk's <code>_time</code>.</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">spl · index=cms · TH-02</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>index=cms sourcetype=cms:audit action IN ("template.update", "theme.edit", "plugin.install", "file.upload", "user.create") role IN ("administrator", "superuser") NOT source_asn IN (64500, 64510)
+| stats count AS actions, values(action) AS action_list, values(object) AS objects, min(_time) AS first_action, max(_time) AS last_action BY user, session_id, source_ip, source_asn
+| sort - actions
+| table user, session_id, source_ip, source_asn, actions, action_list, objects, first_action, last_action</code></pre>
+  </figure>
+  <p class="field-note"><strong>Field assumptions:</strong> CMS audit events land in <code>index=cms</code> with <code>sourcetype=cms:audit</code> and fields <code>user</code>, <code>role</code>, <code>action</code>, <code>object</code>, <code>source_ip</code>, <code>source_asn</code>, and <code>session_id</code>; ASNs 64500 and 64510 stand in for your trusted office and VPN networks - replace them with your own.</p>
+  <ul>
+    <li><strong>False positives:</strong> admins on new VPN ranges, new office networks, or publishing automation running in a hosting network.</li>
+    <li><strong>Tuning:</strong> maintain the trusted ASN list in a lookup table instead of the rule text; add a time window (for example actions within 15 minutes of a login from the same new ASN) to raise precision.</li>
+    <li><strong>Severity:</strong> high - matches the TH-02 rank; content-changing admin actions from an unknown network rarely end well.</li>
+  </ul>
+  <h4 id="rule-th03">TH-03 - Third-party script size drift</h4>
+  <p>Intent: notice when a vendor script your site loads changes shape. Your servers did not change, so any drift in size or hash of a known script is suspect.</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">sigma · proxy/cdn · TH-03</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>title: Third-Party Script Content Size Drift Outside Baseline
+id: c5e0f9a2-3b4d-4c6e-9f0a-1b2c3d4e5f6a
+status: stable
+description: Detects responses of known third-party JavaScript files whose body size
+    no longer matches the recorded baseline. A changed vendor script can alter the
+    rendered page for all visitors without touching local servers (threat TH-03).
+references:
+    - https://attack.mitre.org/techniques/T1491/
+    - https://attack.mitre.org/techniques/T1195/
+author: SOC Detection Engineering
+date: 2026-10-22
+logsource:
+    category: proxy
+detection:
+    selection_thirdparty:
+        cs-host:
+            - 'cdn.partner-scripts.example'
+            - 'static.vendor-js.example'
+        cs-uri-path|endswith:
+            - '/analytics.min.js'
+            - '/widget.js'
+    filter_baseline_size:
+        sc-bytes:
+            - 48213
+            - 11204
+    condition: selection_thirdparty and not filter_baseline_size
+fields:
+    - c-ip
+    - cs-host
+    - cs-uri-path
+    - sc-bytes
+    - sc-status
+    - cache_status
+falsepositives:
+    - A planned vendor release that changed the script size without a notice
+    - Compression differences between edge nodes changing the logged byte count
+level: high
+tags:
+    - attack.impact
+    - attack.t1491
+    - attack.t1491.002
+    - attack.initial_access
+    - attack.t1195</code></pre>
+  </figure>
+
+  <p><strong>Sigma to SPL field mapping:</strong> <code>cs-host</code> -&gt; <code>cs_host</code>, <code>cs-uri-path</code> -&gt; <code>cs_uri_path</code>, <code>sc-bytes</code> -&gt; <code>sc_bytes</code>, <code>sc-status</code> -&gt; <code>sc_status</code>, <code>c-ip</code> -&gt; <code>src_ip</code> (common proxy sourcetype extractions).</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">spl · index=web · TH-03</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>index=web sourcetype=stream:http cs_host IN ("cdn.partner-scripts.example", "static.vendor-js.example") cs_uri_path IN ("/analytics.min.js", "/widget.js")
+| join cs_uri_path [| inputlookup thirdparty_js_baseline.csv | fields cs_uri_path, baseline_bytes]
+| where sc_bytes != baseline_bytes
+| stats count AS drift_events, values(sc_bytes) AS observed_bytes, values(baseline_bytes) AS expected_bytes, max(_time) AS last_seen BY cs_host, cs_uri_path
+| table cs_host, cs_uri_path, drift_events, observed_bytes, expected_bytes, last_seen</code></pre>
+  </figure>
+  <p class="field-note"><strong>Field assumptions:</strong> proxy or CDN fetch logs in <code>index=web</code> with <code>sourcetype=stream:http</code> providing <code>cs_host</code>, <code>cs_uri_path</code>, <code>sc_bytes</code>; a lookup file <code>thirdparty_js_baseline.csv</code> holds one row per script with its baseline size (48213 for analytics.min.js, 11204 for widget.js) - update it after every planned vendor release.</p>
+  <ul>
+    <li><strong>False positives:</strong> vendor releases without notice and compression differences between edge nodes.</li>
+    <li><strong>Tuning:</strong> prefer content hashes over byte counts when your logging captures them; keep a release calendar so tuning is a one-line update, not an alert-by-alert debate.</li>
+    <li><strong>Severity:</strong> high - matches TH-03; the blast radius covers every visitor of every site using the script.</li>
+  </ul>
+
+  <h4 id="rule-th04">TH-04 - Corporate domain resolving outside approved ranges</h4>
+  <p>Intent: catch a DNS or registrar hijack at resolution time. If your own domain starts answering with unknown addresses, everything downstream is untrusted.</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">sigma · dns_query · TH-04</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>title: Corporate Domain Resolving to Non-Approved Address Range
+id: d6f1a0b3-4c5e-4d7f-8a1b-2c3d4e5f6a7b
+status: stable
+description: Detects DNS answers for corporate domains whose A records fall outside
+    the approved address ranges. A domain pointed at attacker infrastructure is a
+    domain-level defacement (threat TH-04).
+references:
+    - https://attack.mitre.org/techniques/T1491/
+    - https://attack.mitre.org/techniques/T1584/
+author: SOC Detection Engineering
+date: 2026-10-22
+logsource:
+    category: dns_query
+    service: resolver
+detection:
+    selection_corp_domains:
+        query|endswith:
+            - '.example-corp.com'
+            - '.example-corp.net'
+        record_type: 'A'
+    filter_approved_answers:
+        answer|cidr:
+            - '203.0.113.0/24'
+            - '198.51.100.0/24'
+    condition: selection_corp_domains and not filter_approved_answers
+fields:
+    - query
+    - record_type
+    - answer
+    - ttl
+    - client_ip
+falsepositives:
+    - Planned infrastructure moves that add new hosting ranges
+    - Geographically distributed CDN edge addresses outside the listed ranges
+level: medium
+tags:
+    - attack.impact
+    - attack.t1491
+    - attack.t1491.002</code></pre>
+  </figure>
+
+  <p><strong>Sigma to SPL field mapping:</strong> <code>query</code> -&gt; <code>query</code>, <code>record_type</code> -&gt; <code>record_type</code>, <code>answer</code> -&gt; <code>answer</code>, <code>ttl</code> -&gt; <code>ttl</code>, <code>client_ip</code> -&gt; <code>src</code> (adjust to your DNS sourcetype field names).</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">spl · index=dns · TH-04</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>index=dns sourcetype=infra:dns record_type="A" query="*.example-corp.com"
+| search NOT answer="203.0.113.*" NOT answer="198.51.100.*"
+| stats count AS lookups, values(answer) AS answers, max(ttl) AS max_ttl, values(src) AS resolvers BY query
+| table query, lookups, answers, max_ttl, resolvers</code></pre>
+  </figure>
+  <p class="field-note"><strong>Field assumptions:</strong> DNS query logs in <code>index=dns</code> with <code>sourcetype=infra:dns</code> providing <code>query</code>, <code>record_type</code>, <code>answer</code>, <code>ttl</code>, and <code>src</code>; the approved ranges 203.0.113.0/24 and 198.51.100.0/24 stand in for your real hosting ranges - replace them before use.</p>
+  <ul>
+    <li><strong>False positives:</strong> new hosting ranges, CDN edge nodes, and cloud providers with wide address pools.</li>
+    <li><strong>Tuning:</strong> keep the approved list in a lookup keyed by domain; alert only on answers seen more than once to cut resolver-cache noise; pair with registrar audit log alerts.</li>
+    <li><strong>Severity:</strong> medium - matches TH-04; rare, but when it fires the response clock is already running.</li>
+  </ul>
+
+  <h4 id="rule-th05">TH-05 - Bulk content changes by a single publisher</h4>
+  <p>Intent: catch an insider who changes far more content than any normal workflow produces, or who publishes while skipping the approval step.</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">sigma · cms_audit · TH-05</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>title: Bulk Content Changes by Single CMS User in Short Window
+id: e7a2b1c4-5d6f-4e8a-9b2c-3d4e5f6a7b8c
+status: stable
+description: Detects a single CMS user performing an unusual volume of content
+    changes or publishes in one short window, or publishing while skipping the
+    approval workflow state. Maps to threat TH-05 (insider misuse of publishing
+    rights).
+references:
+    - https://attack.mitre.org/techniques/T1491/
+author: SOC Detection Engineering
+date: 2026-10-22
+logsource:
+    category: application
+    product: cms_audit
+    service: content
+detection:
+    selection_volume:
+        action:
+            - 'content.publish'
+            - 'content.update'
+        objects_changed|gte: 10
+    selection_skip_approval:
+        action: 'content.publish'
+        workflow_state: 'direct'
+    condition: selection_volume or selection_skip_approval
+fields:
+    - event_time
+    - user
+    - action
+    - object
+    - objects_changed
+    - workflow_state
+    - source_ip
+falsepositives:
+    - Planned mass updates such as rebrands, legal text changes, or migrations
+    - Import jobs run by integration accounts with a service role
+level: medium
+tags:
+    - attack.impact
+    - attack.t1491
+    - attack.t1491.002</code></pre>
+  </figure>
+
+  <p><strong>Sigma to SPL field mapping:</strong> <code>user</code>, <code>action</code>, <code>object</code>, <code>objects_changed</code>, and <code>workflow_state</code> keep their names in <code>cms:audit</code>; <code>event_time</code> maps to <code>_time</code>. In SPL the volume condition is computed with <code>stats dc(object)</code> instead of a stored field.</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">spl · index=cms · TH-05</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>index=cms sourcetype=cms:audit action IN ("content.publish", "content.update")
+| bin _time span=10m
+| stats dc(object) AS objects_changed, values(action) AS actions, values(workflow_state) AS states BY _time, user, source_ip
+| where objects_changed &gt;= 10 OR states="direct"
+| table _time, user, source_ip, objects_changed, actions, states</code></pre>
+  </figure>
+  <p class="field-note"><strong>Field assumptions:</strong> CMS audit events in <code>index=cms</code> with <code>sourcetype=cms:audit</code> providing <code>user</code>, <code>action</code>, <code>object</code>, <code>workflow_state</code>, and <code>source_ip</code>; the value <code>direct</code> marks a publish that skipped approval - adapt to your workflow engine's state names.</p>
+  <ul>
+    <li><strong>False positives:</strong> planned mass updates (rebrands, migrations) and integration accounts doing bulk imports.</li>
+    <li><strong>Tuning:</strong> baseline <code>objects_changed</code> per user role, not globally; allowlist scheduled migration jobs; require two signals (volume plus skipped approval) during a change freeze.</li>
+    <li><strong>Severity:</strong> medium - matches TH-05; lower frequency and smaller blast radius, but it bypasses outer controls.</li>
+  </ul>
+
+  <h4 id="rule-th06">TH-06 - Subdomain serving a takeover error fingerprint</h4>
+  <p>Intent: catch a claimed subdomain at the moment it serves attacker content. When your own subdomain answers with a hosting service error page, the DNS record was dangling and someone claimed it.</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">sigma · synthetic_monitor · TH-06</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>title: Corporate Subdomain Serving Third-Party Error Fingerprint
+id: 7c1d4e8a-2f3b-49d6-8e5c-9a7b3d1f6e24
+status: stable
+description: Detects HTTP answers from corporate subdomains that carry hosting
+    service error fingerprints, for example a "site not found" page. Such answers
+    usually mean a dangling DNS record was claimed by a third party, which turns
+    the subdomain into attacker-controlled content (threat TH-06).
+references:
+    - https://attack.mitre.org/techniques/T1491/
+    - https://attack.mitre.org/techniques/T1584/
+author: SOC Detection Engineering
+date: 2026-10-22
+logsource:
+    category: application
+    product: synthetic_monitor
+    service: http
+detection:
+    selection_corp_hosts:
+        host|endswith: '.example-corp.com'
+    selection_fingerprints:
+        response_body|contains:
+            - 'There isn''t a GitHub Pages site here'
+            - 'There isn''t a GitLab Pages site here'
+            - 'The specified bucket does not exist'
+            - 'Fastly error: unknown domain'
+            - 'repo not found'
+    condition: selection_corp_hosts and selection_fingerprints
+fields:
+    - event_time
+    - host
+    - url
+    - http_status
+    - response_body
+    - monitor_name
+falsepositives:
+    - A planned service retirement where the DNS record removal is still pending
+level: high
+tags:
+    - attack.impact
+    - attack.t1491
+    - attack.t1491.002</code></pre>
+  </figure>
+
+  <p><strong>Sigma to SPL field mapping:</strong> <code>host</code>, <code>url</code>, and <code>http_status</code> keep their names in the synthetic monitor sourcetype; <code>response_body</code> carries the first bytes of the HTTP answer; <code>event_time</code> maps to Splunk's <code>_time</code>.</p>
+
+  <figure class="code">
+    <figcaption>
+      <span class="code-lang">spl · index=web · TH-06</span>
+      <button class="copy-btn" type="button">Copy</button>
+    </figcaption>
+    <pre><code>index=web sourcetype=synthetic:http host="*.example-corp.com"
+| regex response_body="(?i)(There isn't a GitHub Pages site here|There isn't a GitLab Pages site here|The specified bucket does not exist|Fastly error: unknown domain|repo not found)"
+| stats count AS fingerprint_hits, values(http_status) AS statuses, max(_time) AS last_seen BY host, url
+| table host, url, fingerprint_hits, statuses, last_seen</code></pre>
+  </figure>
+  <p class="field-note"><strong>Field assumptions:</strong> results from scheduled external checks land in <code>index=web</code> with <code>sourcetype=synthetic:http</code>, providing <code>host</code>, <code>url</code>, <code>http_status</code>, and the first bytes of the answer in <code>response_body</code>. Replace <code>example-corp.com</code> with your own domain. Run one synthetic check per subdomain on a short interval.</p>
+  <ul>
+    <li><strong>False positives:</strong> a planned service retirement where the record removal is still pending.</li>
+    <li><strong>Tuning:</strong> keep the fingerprint list in a lookup table and add the fingerprints of the services you actually use; pair the rule with a DNS monitor that flags CNAME targets outside your live-service list.</li>
+    <li><strong>Severity:</strong> high - matches TH-06; fake content on a real subdomain is convincing enough for phishing, and your servers were never touched.</li>
+  </ul>
+
+  <h4>Detection maturity for T1491</h4>
+  <ul>
+    <li><strong>Basic:</strong> centralized web logs plus the TH-01 SQL injection rule. Catches most opportunistic attacks.</li>
+    <li><strong>Intermediate:</strong> add file integrity monitoring with a tuned scope, CMS audit logging, and the TH-02 and TH-05 rules.</li>
+    <li><strong>Advanced:</strong> correlate FIM, WAF, CMS, and CDN signals automatically; add TH-03 script baselines, TH-04 DNS monitoring, and TH-06 subdomain checks; measure detection latency as a metric.</li>
+    <li><strong>Optimized:</strong> rules tuned per site with lookup-driven allowlists, automated restore verification, threat intel that updates the rules on a cadence, and a TH-07 drill: when a loud impact event opens, check the whole estate for quiet work in the same window.</li>
+  </ul>
+</section>
+<section id="sec-6-case-study">
+  <header class="section-head">
+    <span class="section-num">6</span>
+    <h2>Real-World Case Study</h2>
+    <p class="section-intro">The Ubuntu Forums breach of July 2013: SQL injection, a large data dump, and defaced pages - found late, fixed publicly.</p>
+  </header>
+
+  <p class="field-note"><strong>Sourcing:</strong> items marked "public record" come from Canonical statements and security press from July 2013. Items marked "illustrative" are a realistic reconstruction for teaching; public reporting does not document them.</p>
+
+  <h3>Context</h3>
+  <p><strong>Public record.</strong> The Ubuntu Forums, run by Canonical, was the community heart of the Ubuntu Linux distribution: millions of posts and a very large registered user base. The forum software was vBulletin with third-party add-ons on top. In July 2013, attackers used SQL injection (a trick that sends database commands through a web input) in one of those add-ons, changed forum content so visitors saw attacker material, and pulled the user database. About 1.8 million user records were exposed: usernames, email addresses, and hashed passwords (not plaintext); several press reports also list IP addresses. During the defacement, the site redirected visitors to a page on the forum's own domain, which security press identified as <code>signaturepics/Sput.html</code>. The stolen dump was later published, and Canonical forced password resets across the community.</p>
+  <p>The case is a textbook T1491 event with a twist: the defacement was the visible part of a data breach. Anyone who treated it as "just vandalism" would have missed the real damage - the user database was already gone.</p>
+
+  <h3>Timeline</h3>
+  <p>Dates follow the public reporting; some exact hours are approximated where sources differ. The weekend defacement reports, the data volume, and the password resets are public record. The attacker's working steps before the event are illustrative.</p>
+  <ol class="timeline">
+    <li><span class="tl-date">Before July 2013</span> (public record context) The forums run vBulletin with third-party add-ons. Canonical later confirmed that the entry point was an SQL injection flaw in a third-party add-on. The exact add-on was never named publicly. (illustrative) No file integrity monitoring watches the web root, and no automated alert watches admin sessions.</li>
+    <li><span class="tl-date">Early July 2013</span> (illustrative) Attackers find and test the injection point in the add-on, learning how to query the underlying database.</li>
+    <li><span class="tl-date">Saturday, 20 July 2013</span> (public record) Visitors report defaced pages; the site redirected to attacker content. Security press reported that the forums went offline the same day after Canonical received reports of the defacement, and one news outlet reported the shutdown took only minutes.</li>
+    <li><span class="tl-date">20-21 July 2013</span> (public record) Canonical confirms that the attackers pulled usernames, email addresses, and password hashes from the forum database. Press coverage puts the number at about 1.8 to 1.82 million records. The passwords were hashed, not stored in plaintext.</li>
+    <li><span class="tl-date">21-22 July 2013</span> (public record) The stolen dump circulates, and Canonical forces password resets for all forum users and warns anyone who reused the password on other services. The forum stays offline while the team investigates.</li>
+    <li><span class="tl-date">Late July 2013</span> (public record, with illustrative detail) The forums return after a rebuild. The vulnerable add-on path is closed and the deployment is hardened; the exact hardening steps are illustrative.</li>
+  </ol>
+
+  <h3>Attack chain mapped to ATT&amp;CK</h3>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Ubuntu Forums incident steps mapped to MITRE ATT&amp;CK techniques</caption>
+      <thead>
+        <tr><th scope="col">Incident step</th><th scope="col">ATT&amp;CK technique</th><th scope="col">What happened</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Find and exploit the vulnerable add-on</td><td><a href="https://attack.mitre.org/techniques/T1190/">T1190</a> Exploit Public-Facing Application</td><td>SQL injection in a third-party vBulletin add-on gave database access.</td></tr>
+        <tr><td>Extract the user database</td><td><a href="https://attack.mitre.org/techniques/T1213/">T1213</a> Data from Information Repositories</td><td>Queries pulled user records straight out of the forum database.</td></tr>
+        <tr><td>Change visible forum content</td><td><a href="https://attack.mitre.org/techniques/T1491/002/">T1491.002</a> External Defacement</td><td>Forum pages showed attacker content while the dump was publicized.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Detection point - the key lesson</h3>
+  <p>According to public reporting, the intrusion surfaced through user reports and manual review, not through an automated alert. That is the lesson: with database audit, web access log monitoring, or file integrity monitoring in place, the story would have been different. A simple rule would have caught the event days earlier, before the dump was publicized. Examples: "alert on SELECT queries against the users table from the web application account" or "alert on web-root file changes outside deploy windows".</p>
+
+  <h3>Tools involved</h3>
+  <p><strong>Illustrative.</strong> Public reporting does not name the attacker's tools, so treat this list as representative. It likely included generic SQL injection tooling or hand-made requests against the vulnerable add-on, plus database queries to extract the user table. The defacement itself was a simple HTML page served from the forum's own file path. <strong>Public record.</strong> On the defender side, the response used the forum's own account tooling for the forced password reset, and a manual review of the site while it was offline.</p>
+
+  <h3>Response and recovery</h3>
+  <ul>
+    <li><strong>Containment.</strong> The forums were taken offline completely, cutting off further exploitation and further changes while the team investigated. Press reporting at the time said this happened the same day the defacement was reported.</li>
+    <li><strong>Communication.</strong> Canonical published statements explaining the breach, the data involved, and the password reset requirement - a strong example of open incident communication.</li>
+    <li><strong>Eradication.</strong> The vulnerable add-on path was closed, the web root was reviewed and cleaned, and administrative credentials were rotated.</li>
+    <li><strong>Recovery.</strong> The platform was rebuilt and brought back with a forced password reset for all users, so stolen hashes could not be replayed against the new system.</li>
+  </ul>
+
+  <h3>Response team roles</h3>
+  <p><strong>Illustrative.</strong> Canonical's statements do not list who did what, so the roles below show a typical setup for an incident of this size:</p>
+  <ul>
+    <li><strong>Incident lead:</strong> owns the timeline, decides when the site goes offline, and coordinates every team.</li>
+    <li><strong>Platform engineers:</strong> rebuild the forum servers, restore clean content, and close the vulnerable add-on path.</li>
+    <li><strong>Database administrator:</strong> checks which tables were read and confirms what data left.</li>
+    <li><strong>Security analysts:</strong> review web and application logs, confirm the injection path, and check for web shells.</li>
+    <li><strong>Communications lead:</strong> writes the public statements and the password reset instructions.</li>
+    <li><strong>Community and support team:</strong> answers user questions and handles reports of password reuse problems.</li>
+  </ul>
+
+  <h3>Impact and consequences</h3>
+  <p>The direct impact was a multi-day outage of a major community resource and a full password reset cycle for 1.8 million users. The lasting impact was trust: every user had to assume their email and password pair was in attackers' hands, and every site where those users reused passwords became a target. For the security community, the incident became a standing example that community platforms and their third-party add-ons are a real attack surface.</p>
+
+  <h3>Lessons learned</h3>
+  <ul>
+    <li><strong>Input validation and parameterized queries</strong> would have removed the entry point entirely; SQL injection is a code-level failure, not a configuration accident.</li>
+    <li><strong>File integrity monitoring on web roots</strong> would have flagged the content changes within minutes instead of days.</li>
+    <li><strong>Faster automated detection</strong> matters: humans noticed what tools should have caught, and every day of delay widened the exposure.</li>
+    <li><strong>CMS and add-on hardening</strong> (minimal add-ons, prompt patching, review before install) reduces the attack surface that monitoring must then defend.</li>
+    <li><strong>Prepare the response plan</strong> before the breach: offline switches, password reset tooling, and public statement templates made Canonical's response faster than it would otherwise have been.</li>
+  </ul>
+</section>
+<section id="sec-7-mitigation">
+  <header class="section-head">
+    <span class="section-num">7</span>
+    <h2>Mitigation and Defense</h2>
+    <p class="section-intro">Controls grouped by area, a home-user path, and a prioritized action table that shows where each hour of work buys the most risk reduction.</p>
+  </header>
+
+  <h3>Enterprise controls by area</h3>
+  <div class="grid-3">
+    <div class="card card-hover">
+      <h4>Policy</h4>
+      <ul>
+        <li>Formal change management for web content: no direct production edits.</li>
+        <li>Publishing approvals: content goes live only after a second pair of eyes.</li>
+        <li>A named owner for every public site and its logs.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Identity</h4>
+      <ul>
+        <li>MFA on every CMS and admin panel (Privileged Account Management).</li>
+        <li>Least privilege: editors publish, only a few admins change templates.</li>
+        <li>No shared admin accounts; unique credentials, rotation on departure.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Endpoint</h4>
+      <ul>
+        <li>Patch the CMS, plugins, and server OS on a fixed schedule (Update Software).</li>
+        <li>Remove unused plugins and add-ons; each one is attack surface.</li>
+        <li>EDR on admin workstations that reach production web servers.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Network</h4>
+      <ul>
+        <li>WAF with SQL injection rules in blocking mode (Exploit Protection).</li>
+        <li>CDN and DDoS protection in front of public sites.</li>
+        <li>Segmentation: the web server reaches the database, not the whole network.</li>
+        <li>Restrict admin panels to VPN or allowlisted ranges.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Cloud and hosting</h4>
+      <ul>
+        <li>Managed hosting hardening: provider-managed patching and isolation.</li>
+        <li>Immutable or write-once storage for backups where the provider supports it.</li>
+        <li>Least-privilege cloud roles for deploy pipelines.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Logging</h4>
+      <ul>
+        <li>Centralize web, WAF, CDN, CMS audit, and database audit logs.</li>
+        <li>Keep 90+ days hot, longer in cold storage (section 4 shows why).</li>
+        <li>Sync clocks so timelines can be stitched together.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Monitoring</h4>
+      <ul>
+        <li>File integrity monitoring on every web root (AIDE, OSSEC, Wazuh).</li>
+        <li>Third-party defacement monitoring for your public domains.</li>
+        <li>Script integrity checks on payment pages (PCI DSS 11.5.2 style).</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Backup</h4>
+      <ul>
+        <li>Verified backups of web root and database (Data Backup).</li>
+        <li>Keep versions going back far enough to predate the intrusion.</li>
+        <li>Test restores on a schedule - an untested backup is a hope, not a plan.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Response</h4>
+      <ul>
+        <li>A defacement playbook: who takes the site offline, who rotates what.</li>
+        <li>Pre-approved communication templates for customers and regulators.</li>
+        <li>CDN purge steps documented and tested before you need them.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Home and small-office users</h3>
+  <p>If you run a small site on managed hosting, keep the CMS and its plugins updated automatically where possible. Use a strong unique password plus MFA (Multi-Factor Authentication) on the admin panel. Install only plugins you truly need. Choose a host that makes backups and restores easy. Check how your site looks once a week - most small-site defacements are found by their owners, so find them first.</p>
+
+  <h3>Prioritized actions</h3>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Prioritized defacement mitigation actions with effort, owner, and expected risk reduction</caption>
+      <thead>
+        <tr><th scope="col">Priority</th><th scope="col">Action</th><th scope="col">Effort</th><th scope="col">Owner</th><th scope="col">Expected risk reduction</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge badge-critical">Critical</span></td><td>Patch CMS core and plugins; remove end-of-life add-ons (Update Software)</td><td>Medium</td><td>Web team</td><td>Removes the TH-01 entry point, the highest-frequency path.</td></tr>
+        <tr><td><span class="badge badge-critical">Critical</span></td><td>MFA on all CMS admin accounts (Multi-Factor Authentication, Privileged Account Management)</td><td>Low</td><td>Identity team</td><td>Blocks most TH-02 credential reuse and phishing paths.</td></tr>
+        <tr><td><span class="badge badge-critical">Critical</span></td><td>File integrity monitoring on every web root</td><td>Medium</td><td>SOC / Infra</td><td>Cuts detection time from days to minutes for TH-01 and TH-02.</td></tr>
+        <tr><td><span class="badge badge-high">High</span></td><td>Centralize web, WAF, CMS, and DB audit logs with 90-day retention</td><td>Medium</td><td>SOC</td><td>Makes the 5.5 rules possible and incidents reconstructable.</td></tr>
+        <tr><td><span class="badge badge-high">High</span></td><td>WAF in blocking mode with SQL injection rules (Exploit Protection)</td><td>Medium</td><td>Network team</td><td>Stops most automated TH-01 probes before they succeed.</td></tr>
+        <tr><td><span class="badge badge-high">High</span></td><td>Verified, versioned backups with tested restores (Data Backup)</td><td>Low</td><td>Infra</td><td>Turns recovery from days to hours after any defacement.</td></tr>
+        <tr><td><span class="badge badge-medium">Medium</span></td><td>Script integrity baselines for payment and landing pages (Restrict File and Directory Permissions)</td><td>Medium</td><td>Web team + SOC</td><td>Covers TH-03, where nothing on your servers changes.</td></tr>
+        <tr><td><span class="badge badge-medium">Medium</span></td><td>Registrar lock, registrar MFA, and DNS answer monitoring</td><td>Low</td><td>IT / Domain owner</td><td>Closes TH-04, the domain-level defacement path.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="sec-8-mistakes">
+  <header class="section-head">
+    <span class="section-num">8</span>
+    <h2>Common Mistakes and Best Practices</h2>
+    <p class="section-intro">Twelve mistakes blue teams make around defacement detection, each with the symptom, the root cause, the fix, and the habit that prevents it from returning.</p>
+  </header>
+
+  <div class="grid-2">
+    <div class="mistake card card-hover">
+      <h4>1. Treating defacement as vandalism, not breach</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>Ticket closed after the page was restored.</dd>
+        <dt>Root cause</dt><dd>The visible change was fixed, the access path was not investigated.</dd>
+        <dt>Fix</dt><dd>Every defacement gets a full scoping: files, rows, accounts, shells.</dd>
+        <dt>Prevention</dt><dd>Make "scope before restore" a mandatory playbook step.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>2. No owner for website logs</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>Nobody can answer "where are the nginx logs?" during the incident.</dd>
+        <dt>Root cause</dt><dd>The site grew organically; log ownership was never assigned.</dd>
+        <dt>Fix</dt><dd>Assign each site an owner who maintains its logging.</dd>
+        <dt>Prevention</dt><dd>Asset inventory that lists log sources per public site.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>3. WAF logs rotated away too fast</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>The probe evidence is gone by the time triage starts.</dd>
+        <dt>Root cause</dt><dd>Default short retention on edge logs.</dd>
+        <dt>Fix</dt><dd>Ship WAF logs to the SIEM; keep 90+ days hot.</dd>
+        <dt>Prevention</dt><dd>Retention policy covering edge, web, and CMS logs.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>4. FIM deployed but nobody reads it</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>The FIM event existed two days before anyone looked.</dd>
+        <dt>Root cause</dt><dd>FIM events routed to a queue nobody owns.</dd>
+        <dt>Fix</dt><dd>Route web-root FIM events to the SOC with a priority tier.</dd>
+        <dt>Prevention</dt><dd>Alert routing review after every tool change.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>5. One giant FIM rule, drowning in noise</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>Thousands of cache-file events; real changes are invisible.</dd>
+        <dt>Root cause</dt><dd>Monitoring the whole web root including caches and uploads.</dd>
+        <dt>Fix</dt><dd>Split scopes: strict for templates and code, tolerant for uploads.</dd>
+        <dt>Prevention</dt><dd>Quarterly review of FIM scope against the deploy process.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>6. Alert fatigue from unturned rules</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>The SQLi rule fires on harmless URLs all day, so it gets ignored.</dd>
+        <dt>Root cause</dt><dd>Rule shipped with default thresholds and no tuning loop.</dd>
+        <dt>Fix</dt><dd>Baseline two weeks, add exclusions, then re-enable with a threshold.</dd>
+        <dt>Prevention</dt><dd>Every rule gets a false-positive review at 30 and 90 days.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>7. Only watching the homepage</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>Deep pages or the API were defaced; monitors saw nothing.</dd>
+        <dt>Root cause</dt><dd>External checks cover one URL.</dd>
+        <dt>Fix</dt><dd>Hash-check a page list, or monitor the whole web root locally.</dd>
+        <dt>Prevention</dt><dd>Include high-value pages in the monitoring list review.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>8. Restoring without finding the entry point</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>The banner returns within days after restore.</dd>
+        <dt>Root cause</dt><dd>The exploited plugin or stolen credential stayed in place.</dd>
+        <dt>Fix</dt><dd>Block the entry point before or during restore.</dd>
+        <dt>Prevention</dt><dd>Restore checklist item: "entry point closed? yes/no".</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>9. Forgetting the CDN cache</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>Site is clean at origin, but visitors still see the banner.</dd>
+        <dt>Root cause</dt><dd>Cache was not purged after the fix.</dd>
+        <dt>Fix</dt><dd>Purge the full CDN cache as a recovery step.</dd>
+        <dt>Prevention</dt><dd>CDN purge step in the recovery playbook with an owner.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>10. No CMS audit trail at all</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>Content changed, but nobody can say which account did it.</dd>
+        <dt>Root cause</dt><dd>CMS audit logging was never enabled.</dd>
+        <dt>Fix</dt><dd>Enable audit logging and ship it to the SIEM.</dd>
+        <dt>Prevention</dt><dd>Audit logging in the CMS setup baseline.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>11. Admin panel open to the whole internet</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>Password spray events against the login route.</dd>
+        <dt>Root cause</dt><dd>Convenience: admin reachable from anywhere.</dd>
+        <dt>Fix</dt><dd>VPN or allowlist for admin routes; MFA regardless.</dd>
+        <dt>Prevention</dt><dd>External scan checks for exposed admin endpoints.</dd>
+      </dl>
+    </div>
+    <div class="mistake card card-hover">
+      <h4>12. Weak tuning vocabulary</h4>
+      <dl class="kv">
+        <dt>Symptom</dt><dd>Analysts argue each alert from scratch; decisions are inconsistent.</dd>
+        <dt>Root cause</dt><dd>No documented tuning rules or severity definitions.</dd>
+        <dt>Fix</dt><dd>Write tuning guidance per rule (the 5.5 format helps).</dd>
+        <dt>Prevention</dt><dd>Detection-as-code reviews with false-positive notes required.</dd>
+      </dl>
+    </div>
+  </div>
+
+  <h3>Habits that keep the edge</h3>
+  <div class="grid-3">
+    <div class="card card-hover">
+      <h4>Daily</h4>
+      <ul>
+        <li>Review web-root FIM events and admin logins to public CMS.</li>
+        <li>Check that last night's backups completed and verified.</li>
+        <li>Skim WAF blocks for new source networks hitting admin routes.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Weekly</h4>
+      <ul>
+        <li>Visually inspect key public pages or run your synthetic checks.</li>
+        <li>Review new plugins, scripts, and domains added to public sites.</li>
+        <li>Check external monitoring and brand-watch feeds for your domains.</li>
+      </ul>
+    </div>
+    <div class="card card-hover">
+      <h4>Monthly</h4>
+      <ul>
+        <li>Patch review: CMS core, plugins, server packages.</li>
+        <li>Rule health: false-positive counts and threshold tuning for 5.5 rules.</li>
+        <li>Restore test of one web root plus database to a clean environment.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+<section id="sec-9-cheat-sheet">
+  <header class="section-head">
+    <span class="section-num">9</span>
+    <h2>Cheat Sheet and Quick Reference</h2>
+    <p class="section-intro">The whole page compressed: key facts, the top detections, an incident checklist, and the links worth keeping open.</p>
+  </header>
+
+  <h3>Key facts</h3>
+  <dl class="kv">
+    <dt>Technique</dt><dd>T1491 - Defacement (Impact tactic)</dd>
+    <dt>Sub-techniques</dt><dd>T1491.001 Internal Defacement · T1491.002 External Defacement</dd>
+    <dt>Core idea</dt><dd>Attacker changes content users see: files, templates, database rows, scripts, or DNS</dd>
+    <dt>Entry paths</dt><dd>Exploited public app (T1190), valid accounts (T1078), supply chain script (T1195), registrar hijack (T1584)</dd>
+    <dt>Best data sources</dt><dd>Web access logs, file integrity monitoring, CMS audit, database audit, WAF/CDN, DNS</dd>
+    <dt>Golden rule</dt><dd>A defacement is proof of write access - always scope for breach, never just restore</dd>
+  </dl>
+
+  <h3>Top detections</h3>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Top one-line detection ideas for defacement</caption>
+      <thead>
+        <tr><th scope="col">#</th><th scope="col">Detection idea</th><th scope="col">Source</th><th scope="col">Threat</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>SQL injection syntax or tool user agents in web requests</td><td>Web / WAF logs</td><td>TH-01</td></tr>
+        <tr><td>2</td><td>Content-changing CMS action by admin from an untrusted network</td><td>CMS audit</td><td>TH-02</td></tr>
+        <tr><td>3</td><td>Web-root file change outside the deploy window</td><td>FIM / Sysmon 11</td><td>TH-01, TH-02</td></tr>
+        <tr><td>4</td><td>Third-party script size or hash drift from baseline</td><td>Proxy / CDN</td><td>TH-03</td></tr>
+        <tr><td>5</td><td>Corporate domain resolving to non-approved addresses</td><td>DNS logs</td><td>TH-04</td></tr>
+        <tr><td>6</td><td>Bulk content changes or publishes that skip approval</td><td>CMS audit</td><td>TH-05</td></tr>
+        <tr><td>7</td><td>Subdomain answers with a vendor error fingerprint, or a new certificate appears for it</td><td>DNS / synthetic monitors</td><td>TH-06</td></tr>
+        <tr><td>8</td><td>During a defacement window, a second host shows admin logins or large transfers</td><td>EDR / auth logs</td><td>TH-07</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Incident response checklist</h3>
+  <ul class="checklist">
+    <li>Confirm the change is unauthorized: compare against last known-good version and FIM baseline.</li>
+    <li>Scope it: diff the web root, list changed database rows, check for web shells and rogue accounts.</li>
+    <li>Contain: freeze admin accounts, rotate credentials, take the site offline if needed, block attacker addresses.</li>
+    <li>Find the entry point in web, WAF, and CMS audit logs before you change anything else.</li>
+    <li>Evict: remove web shells and unknown files, patch or disable the exploited path.</li>
+    <li>Recover: restore from a clean backup, verify hashes, purge CDN and browser caches.</li>
+    <li>Notify per your obligations (GDPR 72h clock if personal data was involved) using prepared templates.</li>
+    <li>Review: update the detections that should have caught it and record the full timeline.</li>
+  </ul>
+
+  <h3>Glossary</h3>
+  <div class="table-wrap">
+    <table>
+      <caption class="sr-only">Short glossary of terms used on this page</caption>
+      <thead>
+        <tr><th scope="col">Term</th><th scope="col">Meaning</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>ASN</td><td>Autonomous System Number - the network operator a connection comes from, useful as a "known vs new network" signal.</td></tr>
+        <tr><td>CDN</td><td>Content Delivery Network - caches your site worldwide; can serve a defaced page even after the server is fixed.</td></tr>
+        <tr><td>CMS</td><td>Content Management System - software such as WordPress or vBulletin that stores and renders web content.</td></tr>
+        <tr><td>CSP</td><td>Content Security Policy - a browser control that limits which scripts a page may load; helps against TH-03.</td></tr>
+        <tr><td>EDR</td><td>Endpoint Detection and Response - software on hosts that records and can block process and file activity.</td></tr>
+        <tr><td>FIM</td><td>File Integrity Monitoring - checks protected files against a baseline and reports changes.</td></tr>
+        <tr><td>SIEM</td><td>Security Information and Event Management - the central system where logs are searched and alerts raised.</td></tr>
+        <tr><td>SQL injection</td><td>A trick that sends database commands through a web input, such as a URL parameter or form field.</td></tr>
+        <tr><td>TTL</td><td>Time To Live - how long a DNS answer may be cached; long TTLs slow recovery from TH-04.</td></tr>
+        <tr><td>WAF</td><td>Web Application Firewall - inspects HTTP traffic to a web app and can block or count suspicious requests.</td></tr>
+        <tr><td>Web root</td><td>The folder on the server that the website serves files from.</td></tr>
+        <tr><td>Web shell</td><td>A hidden page an attacker uploads to run commands on the server through the browser.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Links</h3>
+  <ul>
+    <li><a href="https://attack.mitre.org/techniques/T1491/">MITRE ATT&amp;CK T1491 - Defacement</a> (official page)</li>
+    <li><a href="https://attack.mitre.org/techniques/T1491/001/">T1491.001 - Internal Defacement</a></li>
+    <li><a href="https://attack.mitre.org/techniques/T1491/002/">T1491.002 - External Defacement</a></li>
+    <li><a href="T1491.001-Internal-Defacement-v2.0.html">T1491.001 - Internal Defacement (v2.0 page, same folder)</a></li>
+    <li><a href="T1491.002-External-Defacement-v2.0.html">T1491.002 - External Defacement (v2.0 page, same folder)</a></li>
+    <li><a href="https://attack.mitre.org/techniques/T1190/">T1190 - Exploit Public-Facing Application</a> (common predecessor)</li>
+    <li><a href="https://attack.mitre.org/techniques/T1078/">T1078 - Valid Accounts</a> (common predecessor)</li>
+    <li><a href="https://attack.mitre.org/techniques/T1565/">T1565 - Data Manipulation</a> (check alongside)</li>
+  </ul>
+</section>
+
+  </main>
+</div>
+
+<button id="toc-fab" type="button" aria-label="Open table of contents" aria-expanded="false" aria-controls="toc-overlay">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z"/></svg>
+  <span>Contents</span>
+</button>
+
+<button id="back-to-top" type="button" aria-label="Back to top">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l8 8h-5v8h-6v-8H4l8-8z"/></svg>
+</button>
+
+<div id="toc-overlay" hidden role="dialog" aria-modal="true" aria-label="Contents">
+  <div class="overlay-panel">
+    <div class="overlay-head">
+      <p class="overlay-title">Contents</p>
+      <button id="overlay-close" class="overlay-close" type="button" aria-label="Close contents">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+      </button>
+    </div>
+    <nav class="toc" aria-label="Table of contents overlay">
+      <ol id="toc-list-overlay"></ol>
+    </nav>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+
+  var doc = document;
+  var root = doc.documentElement;
+  var reduceMedia = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace';
+
+  function $(id) { return doc.getElementById(id); }
+  function on(el, ev, fn, opts) { if (el) { el.addEventListener(ev, fn, opts || false); } }
+
+  /* ================= 1. Theme toggle ================= */
+  var themeToggle = $('theme-toggle');
+  function currentTheme() { return root.dataset.theme === 'light' ? 'light' : 'dark'; }
+  function applyTheme(t, persist) {
+    root.dataset.theme = t;
+    if (persist) {
+      try { window.localStorage.setItem('atk-theme', t); } catch (e) { /* storage blocked */ }
+    }
+    if (window.__atkSim && typeof window.__atkSim.redraw === 'function') {
+      window.__atkSim.redraw();
+    }
+  }
+  on(themeToggle, 'click', function () {
+    applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+  });
+  window.addEventListener('load', function () {
+    try {
+      var hdr = $('atk-header');
+      if (hdr && hdr.getAttribute('data-has-theme-toggle') === 'true' && themeToggle) {
+        themeToggle.hidden = true;
+      }
+    } catch (e) { /* shell hook is best effort */ }
+  });
+
+  /* ================= 2. TOC self-heal rebuild + scrollspy ================= */
+  var tocList = $('toc-list');
+  var overlayList = $('toc-list-overlay');
+  var mainEl = $('main');
+  var spyLinks = [];
+  var spyObserver = null;
+  var activeId = '';
+
+  function buildTocData() {
+    var items = [];
+    if (!mainEl) { return items; }
+    var sections = mainEl.querySelectorAll('section[id]');
+    Array.prototype.forEach.call(sections, function (sec) {
+      var h2 = sec.querySelector('h2');
+      var num = sec.querySelector('.section-num');
+      var entry = {
+        id: sec.id,
+        label: (num ? num.textContent.trim() + '. ' : '') + (h2 ? h2.textContent.trim() : sec.id),
+        children: []
+      };
+      var subs = sec.querySelectorAll('h3[id]');
+      Array.prototype.forEach.call(subs, function (h3) {
+        entry.children.push({ id: h3.id, label: h3.textContent.trim() });
+      });
+      items.push(entry);
+    });
+    return items;
+  }
+
+  function renderTocList(items) {
+    var ol = doc.createElement('ol');
+    items.forEach(function (item) {
+      var li = doc.createElement('li');
+      var a = doc.createElement('a');
+      a.href = '#' + item.id;
+      a.textContent = item.label;
+      a.setAttribute('data-toc-target', item.id);
+      li.appendChild(a);
+      if (item.children.length) {
+        var sub = doc.createElement('ol');
+        sub.className = 'toc-sub';
+        item.children.forEach(function (child) {
+          var cli = doc.createElement('li');
+          var ca = doc.createElement('a');
+          ca.href = '#' + child.id;
+          ca.textContent = child.label;
+          ca.setAttribute('data-toc-target', child.id);
+          cli.appendChild(ca);
+          sub.appendChild(cli);
+        });
+        li.appendChild(sub);
+      }
+      ol.appendChild(li);
+    });
+    return ol;
+  }
+
+  function setActive(id) {
+    if (id === activeId) { return; }
+    activeId = id;
+    spyLinks.forEach(function (pair) {
+      var isActive = pair.id === id;
+      pair.link.classList.toggle('active', isActive);
+      if (isActive) { pair.link.setAttribute('aria-current', 'true'); }
+      else { pair.link.removeAttribute('aria-current'); }
+    });
+  }
+
+  function initSpy() {
+    spyLinks = [];
+    var all = doc.querySelectorAll('.toc a[data-toc-target]');
+    Array.prototype.forEach.call(all, function (a) {
+      spyLinks.push({ id: a.getAttribute('data-toc-target'), link: a });
+    });
+    if (spyObserver) { spyObserver.disconnect(); spyObserver = null; }
+    if (!('IntersectionObserver' in window)) { setupScrollFallback(); return; }
+    spyObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { setActive(en.target.id); }
+      });
+    }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
+    var seen = {};
+    spyLinks.forEach(function (pair) {
+      if (seen[pair.id]) { return; }
+      seen[pair.id] = true;
+      var el = doc.getElementById(pair.id);
+      if (el) { spyObserver.observe(el); }
+    });
+  }
+
+  function setupScrollFallback() {
+    var targets = [];
+    var seen = {};
+    spyLinks.forEach(function (pair) {
+      if (seen[pair.id]) { return; }
+      seen[pair.id] = true;
+      var el = doc.getElementById(pair.id);
+      if (el) { targets.push(el); }
+    });
+    function pick() {
+      var line = window.innerHeight * 0.42;
+      var current = '';
+      targets.forEach(function (t) {
+        var r = t.getBoundingClientRect();
+        if (r.top <= line) { current = t.id; }
+      });
+      if (current) { setActive(current); }
+    }
+    window.addEventListener('scroll', pick, { passive: true });
+    pick();
+  }
+
+  function rebuildToc() {
+    var items = buildTocData();
+    if (!items.length) { return; }
+    if (tocList) { tocList.innerHTML = ''; tocList.appendChild(renderTocList(items)); }
+    if (overlayList) { overlayList.innerHTML = ''; overlayList.appendChild(renderTocList(items)); }
+    initSpy();
+  }
+  rebuildToc();
+
+  /* ================= 3. Reading progress bar + back to top ================= */
+  var progress = $('page-progress');
+  var backToTop = $('back-to-top');
+  function onScroll() {
+    var docEl = doc.documentElement;
+    var max = docEl.scrollHeight - window.innerHeight;
+    var pct = max > 0 ? Math.min(100, Math.max(0, (window.scrollY / max) * 100)) : 0;
+    if (progress) { progress.style.width = pct + '%'; }
+    if (backToTop) {
+      if (window.scrollY > 600) { backToTop.classList.add('show'); }
+      else { backToTop.classList.remove('show'); }
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+  on(backToTop, 'click', function () {
+    window.scrollTo({ top: 0, behavior: reduceMedia.matches ? 'auto' : 'smooth' });
+  });
+
+  /* ================= 4. Mobile TOC overlay ================= */
+  var overlay = $('toc-overlay');
+  var fab = $('toc-fab');
+  var overlayClose = $('overlay-close');
+  var lastFocus = null;
+
+  function openOverlay() {
+    if (!overlay) { return; }
+    lastFocus = doc.activeElement;
+    overlay.hidden = false;
+    if (fab) { fab.setAttribute('aria-expanded', 'true'); }
+    doc.body.style.overflow = 'hidden';
+    (overlayClose || overlay).focus();
+  }
+  function closeOverlay() {
+    if (!overlay || overlay.hidden) { return; }
+    overlay.hidden = true;
+    if (fab) { fab.setAttribute('aria-expanded', 'false'); }
+    doc.body.style.overflow = '';
+    if (lastFocus && typeof lastFocus.focus === 'function') { lastFocus.focus(); }
+  }
+  on(fab, 'click', openOverlay);
+  on(overlayClose, 'click', closeOverlay);
+  on(overlay, 'click', function (e) {
+    if (e.target === overlay) { closeOverlay(); return; }
+    if (e.target && e.target.closest && e.target.closest('a')) { closeOverlay(); }
+  });
+  doc.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (overlay && !overlay.hidden) { closeOverlay(); return; }
+      if (window.__atkSim && typeof window.__atkSim.hideTip === 'function') { window.__atkSim.hideTip(); }
+    }
+  });
+
+  /* ================= 5. Copy buttons ================= */
+  function legacyCopy(text) {
+    try {
+      var ta = doc.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      doc.body.appendChild(ta);
+      ta.select();
+      var ok = doc.execCommand('copy');
+      doc.body.removeChild(ta);
+      return ok;
+    } catch (e) { return false; }
+  }
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(
+        function () { return true; },
+        function () { return legacyCopy(text); }
+      );
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+  Array.prototype.forEach.call(doc.querySelectorAll('figure.code .copy-btn'), function (btn) {
+    on(btn, 'click', function () {
+      var fig = btn.closest ? btn.closest('figure.code') : null;
+      if (!fig) { return; }
+      var codeEl = fig.querySelector('pre code') || fig.querySelector('pre');
+      if (!codeEl) { return; }
+      copyText(codeEl.textContent).then(function (ok) {
+        var prev = btn.textContent;
+        btn.textContent = ok ? 'Copied' : 'Copy failed';
+        btn.classList.add('copied');
+        window.setTimeout(function () {
+          btn.textContent = prev;
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    });
+  });
+
+  /* ================= 6. Step chip keyboard support ================= */
+  var chipsWrap = $('sim-chips');
+  on(chipsWrap, 'keydown', function (e) {
+    if (!chipsWrap) { return; }
+    var chips = Array.prototype.slice.call(chipsWrap.querySelectorAll('.step-chip'));
+    var idx = chips.indexOf(doc.activeElement);
+    if (idx === -1) { return; }
+    var next = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { next = chips[(idx + 1) % chips.length]; }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { next = chips[(idx - 1 + chips.length) % chips.length]; }
+    else if (e.key === 'Home') { next = chips[0]; }
+    else if (e.key === 'End') { next = chips[chips.length - 1]; }
+    if (next) { e.preventDefault(); next.focus(); next.click(); }
+  });
+
+  /* ================= 7. Canvas simulation ================= */
+  (function initSim() {
+    var canvas = $('sim-canvas');
+    var wrap = $('sim-wrap');
+    var tipEl = $('sim-tip');
+    var captionEl = $('sim-caption');
+    var hintEl = $('sim-hint');
+    var playBtn = $('sim-play');
+    var restartBtn = $('sim-restart');
+    var speedSel = $('sim-speed');
+    var stepSel = $('sim-step');
+    if (!canvas || !canvas.getContext || !wrap) { return; }
+    var ctx = canvas.getContext('2d');
+    var chips = chipsWrap ? Array.prototype.slice.call(chipsWrap.querySelectorAll('.step-chip')) : [];
+
+    var LW = 960, LH = 540;
+    var dpr = 1, scale = 1;
+    var current = 0;
+    var playing = false;
+    var speed = 1;
+    var stepStart = 0;
+    var reduceMotion = reduceMedia.matches;
+    var pinned = null;
+    var resizeTimer = 0;
+
+    var NODES = {
+      atk:   { x: 110, y: 300, r: 30, glyph: 'A', label: 'Attacker', sub: 'external host', color: 'danger',
+               tip: 'Attacker', tipDesc: 'External threat actor. Reaches the web server over the internet and drives every step from the left.' },
+      web:   { x: 360, y: 130, r: 30, glyph: 'W', label: 'Web server', sub: 'CMS host', color: 'accent',
+               tip: 'Internet-facing web server', tipDesc: 'Serves the CMS to the public. Takes the probes, the upload, and every visitor request.' },
+      admin: { x: 360, y: 300, r: 30, glyph: 'M', label: 'Admin WS', sub: 'staff workstation', color: 'violet',
+               tip: 'Admin workstation', tipDesc: 'A staff laptop used to manage the CMS. Legitimate admin sessions are expected from here.' },
+      db:    { x: 360, y: 460, r: 30, glyph: 'D', label: 'Database', sub: 'content store', color: 'accent2',
+               tip: 'Database', tipDesc: 'Stores user records and content rows. SQL injection talks to it directly through the plugin.' },
+      soc:   { x: 640, y: 300, r: 26, glyph: 'S', label: 'SOC', sub: 'defender', color: 'success',
+               tip: 'SOC / Defender', tipDesc: 'Security operations center. Correlates alerts, logs, and user reports in the panel on the right.' }
+    };
+
+    var STEPS = [
+      { title: 'RECON',
+        caption: 'The attacker scans the public website and finds an outdated CMS with a vulnerable plugin.',
+        hint: 'SOC view: Nothing fires yet. Internet scanners are common, so this traffic looks like normal background noise.',
+        log: ['[edge] GET /robots.txt 200', '[edge] GET /CHANGELOG.md 200', '[scan] CMS v3.9 -> old plugin found'],
+        active: 'web', packets: [{ from: 'atk', to: 'web' }], evidence: [] },
+      { title: 'PROBE',
+        caption: 'Crafted SQL injection requests hit the vulnerable plugin, hoping to reach the database behind it.',
+        hint: 'SOC view: The WAF starts counting encoded requests. One rule is close to its threshold, but nothing alerts yet.',
+        log: ['[waf] rule 942100 score 5/5', '[waf] encoded payload, action=count', '[edge] 500 x12 from one client'],
+        active: 'web', packets: [{ from: 'atk', to: 'web' }], evidence: [] },
+      { title: 'BREACH',
+        caption: 'The injection returns the CMS admin password hash. The attacker cracks it offline and logs in as an admin.',
+        hint: 'SOC view: A login from a new network joins the admin account. Without admin-session monitoring this stays invisible.',
+        log: ['[web] POST /login 200 (admin)', '[geo] new ASN -> admin session', '[cms] session 8f3ac1 created'],
+        active: 'web', packets: [{ from: 'atk', to: 'web' }, { from: 'web', to: 'db' }], evidence: [] },
+      { title: 'STAGE',
+        caption: 'The attacker uploads a modified template file into the web root, the folder the website serves.',
+        hint: 'SOC view: File integrity monitoring records the change, but the event lands in a low-priority queue.',
+        log: ['[fim] add templates/footer.php', '[web] POST /admin/upload 200', '[db] template row id=442 updated'],
+        active: 'web', packets: [{ from: 'atk', to: 'web' }, { from: 'web', to: 'db' }], evidence: [] },
+      { title: 'DEFACE',
+        caption: 'The homepage HTML is replaced with the attacker banner. Visitors see the defaced page, and the CDN caches it.',
+        hint: 'SOC view: The CDN refreshes its cache of the homepage. Without correlation this looks like routine traffic.',
+        log: ['[web] GET / -> banner.html', '[cdn] purge+refill / 200', '[users] 1,204 views of defaced page'],
+        active: 'web', packets: [{ from: 'web', to: 'db' }], evidence: ['web'] },
+      { title: 'EXPOSE',
+        caption: 'A monitoring user and the file-integrity system flag the changed web root. The SOC gets its first alert.',
+        hint: 'SOC view: FIM change, CDN refresh, and a user report now join into one incident. Ticket #4411 opens.',
+        log: ['[fim] ALERT web root changed', '[soc] ticket #4411 opened', "[user] 'the site looks hijacked'"],
+        active: 'soc', packets: [{ from: 'web', to: 'soc' }, { from: 'db', to: 'soc' }], evidence: ['web'] },
+      { title: 'TRIAGE',
+        caption: 'The SOC reviews access logs and finds the admin session and the SQL injection pattern from a new network.',
+        hint: 'SOC view: Analysts confirm the entry point, freeze the admin account, and start scoping the blast radius.',
+        log: ['[soc] correlate waf + fim + auth', '[soc] entry = SQLi in old plugin', '[soc] admin session frozen'],
+        active: 'soc', packets: [{ from: 'soc', to: 'web' }], evidence: ['web', 'admin'] },
+      { title: 'RECOVER',
+        caption: 'The team restores the homepage from a clean backup, patches the plugin, rotates credentials, and purges the CDN.',
+        hint: 'SOC view: Verify the web root hash matches the backup, keep the WAF rule set raised, and watch for repeat attempts.',
+        log: ['[ops] restore / from backup', '[ops] plugin patched v3.9 -> v4.1', '[cdn] purge all -> done'],
+        active: 'soc', packets: [{ from: 'web', to: 'db' }], evidence: [] }
+    ];
+
+    function colors() {
+      var cs = getComputedStyle(root);
+      function c(name, fb) {
+        var v = cs.getPropertyValue(name);
+        return (v && v.trim()) ? v.trim() : fb;
+      }
+      return {
+        bg: c('--surface-2', '#172138'),
+        surface: c('--surface', '#121a2e'),
+        text: c('--text', '#e7edf8'),
+        muted: c('--muted', '#9aa8c0'),
+        border: c('--border-strong', '#2f4066'),
+        accent: c('--accent', '#4f8cff'),
+        accent2: c('--accent-2', '#22d3ee'),
+        violet: c('--violet', '#a78bfa'),
+        success: c('--success', '#34d399'),
+        danger: c('--danger', '#f87171')
+      };
+    }
+
+    function resize() {
+      var cssW = canvas.clientWidth || wrap.clientWidth || LW;
+      dpr = window.devicePixelRatio || 1;
+      scale = cssW / LW;
+      canvas.width = Math.round(cssW * dpr);
+      canvas.height = Math.round(cssW * (LH / LW) * dpr);
+      draw(performance.now());
+    }
+
+    function edgePoints(a, b) {
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var d = Math.sqrt(dx * dx + dy * dy) || 1;
+      return {
+        x1: a.x + (dx / d) * a.r, y1: a.y + (dy / d) * a.r,
+        x2: b.x - (dx / d) * (b.r + 4), y2: b.y - (dy / d) * (b.r + 4)
+      };
+    }
+
+    function drawEdge(pal, a, b, dashed) {
+      var p = edgePoints(a, b);
+      ctx.beginPath();
+      ctx.moveTo(p.x1, p.y1);
+      ctx.lineTo(p.x2, p.y2);
+      ctx.strokeStyle = pal.border;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash(dashed ? [5, 5] : []);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function drawPacket(pal, a, b, t, color) {
+      if (t < 0 || t > 1) { return; }
+      var p = edgePoints(a, b);
+      var x = p.x1 + (p.x2 - p.x1) * t;
+      var y = p.y1 + (p.y2 - p.y1) * t;
+      ctx.globalAlpha = 0.25;
+      ctx.beginPath();
+      ctx.arc(x - (p.x2 - p.x1) * 0.03, y - (p.y2 - p.y1) * 0.03, 6, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    function drawNode(pal, n, isActive, now) {
+      var col = pal[n.color] || pal.accent;
+      if (isActive) {
+        if (reduceMotion) {
+          ctx.globalAlpha = 0.6;
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.r + 5, 0, Math.PI * 2);
+          ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+          ctx.globalAlpha = 1;
+        } else {
+          var ph = ((now / 1200) % 1 + 1) % 1;
+          ctx.globalAlpha = 0.55 * (1 - ph);
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.r + 6 + ph * 14, 0, Math.PI * 2);
+          ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+      }
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fillStyle = pal.surface;
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = col;
+      ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.font = '700 15px ' + MONO;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.glyph, n.x, n.y);
+      ctx.fillStyle = pal.text;
+      ctx.font = '700 12px ' + MONO;
+      ctx.fillText(n.label, n.x, n.y + n.r + 15);
+      ctx.fillStyle = pal.muted;
+      ctx.font = '10px ' + MONO;
+      ctx.fillText(n.sub, n.x, n.y + n.r + 29);
+    }
+
+    function drawEvidence(pal, key) {
+      var n = NODES[key];
+      if (!n) { return; }
+      var ex = n.x + n.r - 3, ey = n.y - n.r + 3;
+      ctx.beginPath();
+      ctx.arc(ex, ey, 8, 0, Math.PI * 2);
+      ctx.fillStyle = pal.danger;
+      ctx.fill();
+      ctx.fillStyle = pal.bg;
+      ctx.font = '700 11px ' + MONO;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('!', ex, ey + 0.5);
+    }
+
+    function rr(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    function wrapLine(text, maxChars) {
+      var words = String(text).split(' ');
+      var lines = [];
+      var line = '';
+      words.forEach(function (w) {
+        if ((line + ' ' + w).trim().length > maxChars) {
+          if (line) { lines.push(line); }
+          line = w;
+        } else {
+          line = (line ? line + ' ' : '') + w;
+        }
+      });
+      if (line) { lines.push(line); }
+      return lines;
+    }
+
+    function drawPanel(pal, step, now) {
+      rr(688, 64, 252, 412, 14);
+      ctx.fillStyle = pal.surface;
+      ctx.fill();
+      ctx.strokeStyle = pal.border;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.fillStyle = pal.success;
+      ctx.font = '700 12px ' + MONO;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('SOC / DEFENDER VIEW', 706, 92);
+      ctx.strokeStyle = pal.border;
+      ctx.beginPath();
+      ctx.moveTo(706, 104);
+      ctx.lineTo(922, 104);
+      ctx.stroke();
+      var y = 130;
+      ctx.font = '12px ' + MONO;
+      step.log.forEach(function (line) {
+        wrapLine(line, 34).forEach(function (ln) {
+          ctx.fillStyle = pal.text;
+          ctx.fillText(ln, 706, y);
+          y += 20;
+        });
+        y += 6;
+      });
+      var incident = step.evidence.length > 0;
+      var status = incident ? 'state: INCIDENT' : 'state: watching';
+      ctx.fillStyle = incident ? pal.danger : pal.muted;
+      ctx.font = '700 12px ' + MONO;
+      ctx.fillText(status, 706, 452);
+      if (!reduceMotion && (now % 1000) < 500) {
+        ctx.fillText('_', 706 + ctx.measureText(status).width + 6, 452);
+      }
+    }
+
+    function draw(now) {
+      var pal = colors();
+      var step = STEPS[current];
+      ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+      ctx.clearRect(0, 0, LW, LH);
+      ctx.fillStyle = pal.bg;
+      ctx.fillRect(0, 0, LW, LH);
+
+      var socAnchor = { x: 640, y: 300, r: 26 };
+      drawEdge(pal, NODES.atk, NODES.web, false);
+      drawEdge(pal, NODES.web, NODES.admin, false);
+      drawEdge(pal, NODES.web, NODES.db, false);
+      drawEdge(pal, NODES.web, socAnchor, true);
+      drawEdge(pal, NODES.admin, socAnchor, true);
+      drawEdge(pal, NODES.db, socAnchor, true);
+
+      var cycleMs = reduceMotion ? 1500 : (2200 / speed);
+      step.packets.forEach(function (pk, i) {
+        var t = reduceMotion ? 0.45 : (((now - stepStart) / cycleMs) + i * 0.35) % 1;
+        drawPacket(pal, NODES[pk.from], NODES[pk.to], t, pal[pk.from === 'atk' ? 'danger' : (pk.from === 'soc' ? 'success' : 'accent')]);
+      });
+
+      Object.keys(NODES).forEach(function (key) {
+        drawNode(pal, NODES[key], key === step.active, now);
+      });
+      step.evidence.forEach(function (key) { drawEvidence(pal, key); });
+
+      drawPanel(pal, step, now);
+
+      ctx.fillStyle = pal.accent;
+      ctx.font = '700 15px ' + MONO;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('STEP ' + (current + 1) + '/8 - ' + step.title, 28, 44);
+      for (var i = 0; i < STEPS.length; i++) {
+        ctx.beginPath();
+        ctx.arc(34 + i * 22, 508, 5, 0, Math.PI * 2);
+        ctx.fillStyle = i === current ? pal.accent : pal.border;
+        ctx.fill();
+      }
+    }
+
+    function nodeAt(mx, my) {
+      var keys = Object.keys(NODES);
+      for (var i = 0; i < keys.length; i++) {
+        var n = NODES[keys[i]];
+        var dx = mx - n.x, dy = my - n.y;
+        if (dx * dx + dy * dy <= (n.r + 12) * (n.r + 12)) { return keys[i]; }
+      }
+      return null;
+    }
+    function canvasPos(evt) {
+      var rect = canvas.getBoundingClientRect();
+      return { x: (evt.clientX - rect.left) / scale, y: (evt.clientY - rect.top) / scale };
+    }
+    function showTip(key) {
+      var n = NODES[key];
+      if (!n || !tipEl) { return; }
+      tipEl.querySelector('.tip-name').textContent = n.tip;
+      tipEl.querySelector('.tip-desc').textContent = n.tipDesc;
+      tipEl.classList.add('show');
+      var w = wrap.clientWidth || 1;
+      var left = Math.max(100, Math.min(w - 100, n.x * scale));
+      tipEl.style.left = left + 'px';
+      tipEl.style.top = Math.max(80, (n.y - n.r) * scale - 8) + 'px';
+    }
+    function hideTipSoft() { if (tipEl) { tipEl.classList.remove('show'); } }
+    function hideTip() { pinned = null; hideTipSoft(); }
+
+    on(canvas, 'mousemove', function (e) {
+      var pos = canvasPos(e);
+      var key = nodeAt(pos.x, pos.y);
+      if (key) {
+        canvas.style.cursor = 'pointer';
+        if (!pinned) { showTip(key); }
+      } else {
+        canvas.style.cursor = 'default';
+        if (!pinned) { hideTipSoft(); }
+      }
+    });
+    on(canvas, 'mouseleave', function () {
+      if (!pinned) { hideTipSoft(); }
+    });
+    on(canvas, 'click', function (e) {
+      var pos = canvasPos(e);
+      var key = nodeAt(pos.x, pos.y);
+      if (!key) { hideTip(); return; }
+      if (pinned === key) { hideTip(); }
+      else { pinned = key; showTip(key); }
+    });
+
+    function updatePlayLabel() {
+      if (!playBtn) { return; }
+      if (playing) { playBtn.textContent = 'Pause'; }
+      else if (current === STEPS.length - 1) { playBtn.textContent = 'Replay'; }
+      else { playBtn.textContent = 'Play'; }
+    }
+
+    function renderStep(i, instant) {
+      current = Math.max(0, Math.min(STEPS.length - 1, i));
+      stepStart = performance.now();
+      var s = STEPS[current];
+      if (captionEl) { captionEl.textContent = s.caption; }
+      if (hintEl) { hintEl.textContent = s.hint; }
+      chips.forEach(function (c, k) {
+        c.setAttribute('aria-current', k === current ? 'true' : 'false');
+      });
+      if (stepSel && stepSel.value !== String(current + 1)) { stepSel.value = String(current + 1); }
+      updatePlayLabel();
+      if (instant || reduceMotion) { draw(performance.now()); }
+    }
+
+    function tick(now) {
+      window.requestAnimationFrame(tick);
+      if (playing) {
+        var dur = reduceMotion ? 1500 : 5000;
+        if (now - stepStart >= dur / speed) {
+          if (current < STEPS.length - 1) { renderStep(current + 1); }
+          else { playing = false; updatePlayLabel(); }
+        }
+      }
+      draw(now);
+    }
+
+    on(playBtn, 'click', function () {
+      if (playing) { playing = false; updatePlayLabel(); return; }
+      if (current === STEPS.length - 1) { renderStep(0); }
+      playing = true;
+      stepStart = performance.now();
+      updatePlayLabel();
+    });
+    on(restartBtn, 'click', function () {
+      playing = false;
+      renderStep(0, true);
+    });
+    on(speedSel, 'change', function () {
+      speed = parseFloat(speedSel.value) || 1;
+    });
+    on(stepSel, 'change', function () {
+      playing = false;
+      renderStep(parseInt(stepSel.value, 10) - 1, true);
+    });
+    chips.forEach(function (c) {
+      on(c, 'click', function () {
+        var idx = parseInt(c.getAttribute('data-step'), 10) - 1;
+        renderStep(idx, true);
+      });
+    });
+
+    function onReduceChange() {
+      reduceMotion = reduceMedia.matches;
+      if (reduceMotion && playing) { playing = false; }
+      renderStep(current, true);
+    }
+    if (typeof reduceMedia.addEventListener === 'function') {
+      reduceMedia.addEventListener('change', onReduceChange);
+    } else if (typeof reduceMedia.addListener === 'function') {
+      reduceMedia.addListener(onReduceChange);
+    }
+
+    window.addEventListener('resize', function () {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(resize, 150);
+    });
+
+    resize();
+    renderStep(0, true);
+    if (!reduceMotion) {
+      playing = true;
+      stepStart = performance.now();
+      updatePlayLabel();
+    }
+    window.requestAnimationFrame(tick);
+
+    window.__atkSim = {
+      redraw: function () { resize(); },
+      hideTip: function () { hideTip(); }
+    };
+  })();
+
+})();
+</script>
+</body>
+</html>

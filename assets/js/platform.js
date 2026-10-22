@@ -953,11 +953,27 @@
     });
   }
 
+
+  /* ------------------------------------------------------------------ *
+   * 8b. Simulation engine loader                                      *
+   * ------------------------------------------------------------------ */
+  function loadSimulationEngine() {
+    if (document.querySelector('.atk-sim')) return; // T1195 pages already mount locally.
+    if (document.querySelector('script[data-atk-sim-loader]')) return;
+    window.__ATK_SIM_BASE__ = SITE_BASE;
+    var js = document.createElement('script');
+    js.src = SITE_BASE + 'assets/js/simulation-loader.js';
+    js.defer = true;
+    js.dataset.atkSimLoader = '1';
+    document.head.appendChild(js);
+  }
+
   /* ------------------------------------------------------------------ *
    * 9. Boot                                                            *
    * ------------------------------------------------------------------ */
   function boot() {
     renderHeader();
+    loadSimulationEngine();
     initShortcuts();
     renderMatrix();
     renderHub();

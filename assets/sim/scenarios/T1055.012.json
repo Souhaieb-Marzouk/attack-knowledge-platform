@@ -1,0 +1,284 @@
+{
+  "id": "T1055.012",
+  "title": "T1055.012 — Process Injection - Process Hollowing",
+  "subtitle": "Interactive walkthrough of Process Injection - Process Hollowing with the technique-specific attack path and defender evidence.",
+  "aria": "Animated diagram of process hollowing. An attacker loader creates a suspended svchost.exe, unmaps its real image, writes a malicious PE image, fixes the entry point, and resumes the thread. A SOC panel on the right fills with evidence: Sysmon event 1 with a wrong parent, event 10 with process memory write access, unbacked executable memory, and a rare network connection. The defender isolates the host in the final step.",
+  "renderer": "process-tree",
+  "theme": "endpoint",
+  "transcript": true,
+  "zones": [],
+  "nodes": [
+    {
+      "id": "attacker",
+      "x": 5,
+      "y": 10,
+      "w": 16,
+      "h": 12,
+      "kind": "attacker",
+      "label": "Attacker",
+      "sub": "Operator",
+      "tip": "Attacker - Operator"
+    },
+    {
+      "id": "dropper",
+      "x": 27,
+      "y": 26,
+      "w": 18,
+      "h": 12,
+      "kind": "process",
+      "label": "Dropper / loader",
+      "sub": "Initial payload",
+      "tip": "Dropper / loader - Initial payload"
+    },
+    {
+      "id": "target",
+      "x": 50,
+      "y": 10,
+      "w": 18,
+      "h": 12,
+      "kind": "process",
+      "label": "Target process",
+      "sub": "Hijacked host",
+      "tip": "Target process - Hijacked host"
+    },
+    {
+      "id": "edr",
+      "x": 73,
+      "y": 28,
+      "w": 17,
+      "h": 12,
+      "kind": "defender",
+      "label": "EDR sensor",
+      "sub": "Endpoint telemetry",
+      "tip": "EDR sensor - Endpoint telemetry"
+    },
+    {
+      "id": "soc",
+      "x": 43,
+      "y": 58,
+      "w": 16,
+      "h": 12,
+      "kind": "defender",
+      "label": "SOC analyst",
+      "sub": "Correlation",
+      "tip": "SOC analyst - Correlation"
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "attacker",
+      "to": "dropper",
+      "color": "accent",
+      "bend": 0.12
+    },
+    {
+      "id": "f2",
+      "from": "dropper",
+      "to": "target",
+      "color": "accent",
+      "bend": 0.12
+    },
+    {
+      "id": "f3",
+      "from": "target",
+      "to": "soc",
+      "color": "accent2",
+      "bend": -0.1
+    }
+  ],
+  "steps": [
+    {
+      "title": "Phishing payload lands",
+      "caption": "The attacker sends an email with a document attachment. The user opens it, and a hidden loader program starts on the Windows host WORKSTATION-42. Evidence: suspicious file created",
+      "defender": "a suspicious file was created and a new unknown process started. File and process creation events are the first hints.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.phishing_payload_lands",
+          "fields": {
+            "technique": "T1055.012",
+            "detail": "The attacker sends an email with a document attachment. The user opens it, and a hidden loader progr"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Loader creates svchost.exe suspended",
+      "caption": "The loader calls CreateProcessW to start svchost.exe with the CREATE_SUSPENDED flag. The real service host program never runs its own code; its main thread is frozen at the start. Evidence: Sysmon E1 - wrong parent",
+      "defender": "Sysmon Event ID 1 shows svchost.exe starting from a non-services parent. This is a top hollowing signal.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.loader_creates_svchost_exe_suspended",
+          "fields": {
+            "technique": "T1055.012",
+            "detail": "The loader calls CreateProcessW to start svchost.exe with the CREATE_SUSPENDED flag. The real servic"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Loader unmaps the real image",
+      "caption": "The loader calls NtUnmapViewOfSection. This removes the real svchost program image from the memory of the new process, leaving space for the payload. Evidence: EDR image unmap hook",
+      "defender": "EDR (Endpoint Detection and Response) hooks and the ETW (Event Tracing for Windows) Threat Intelligence provider report an image unmap inside a fresh process.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.loader_unmaps_the_real_image",
+          "fields": {
+            "technique": "T1055.012",
+            "detail": "The loader calls NtUnmapViewOfSection. This removes the real svchost program image from the memory o"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Loader writes the malicious PE",
+      "caption": "The loader uses WriteProcessMemory to copy its own PE (Portable Executable) image into the process: headers first, then sections, with relocations fixed for the new base address. Evidence: Sysmon E10 - VM write 0x1F0FFF",
+      "defender": "Sysmon Event ID 10 logs PROCESS_VM_WRITE (the 0x20 right inside the broad 0x1F0FFF mask) from the temp-folder loader into svchost.exe.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.loader_writes_the_malicious_pe",
+          "fields": {
+            "technique": "T1055.012",
+            "detail": "The loader uses WriteProcessMemory to copy its own PE (Portable Executable) image into the process: "
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Entry point set, thread resumed",
+      "caption": "The loader calls SetThreadContext to point the frozen main thread at the payload entry point, then calls ResumeThread. The trusted binary now runs attacker code. Evidence: EDR context rewrite + resume",
+      "defender": "the EDR flags a thread context rewrite and a resume call on a suspended system binary, plus a memory image mismatch.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.entry_point_set_thread_resumed",
+          "fields": {
+            "technique": "T1055.012",
+            "detail": "The loader calls SetThreadContext to point the frozen main thread at the payload entry point, then c"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No detection",
+        "detail": "This activity is not visible to the victim yet."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Attacker code runs from unbacked memory",
+      "caption": "The hollowed svchost.exe executes the payload from unbacked memory, that is, memory regions with no file on disk behind them. The disk file of svchost.exe is still perfectly clean. Evidence: scan - unbacked RWX region",
+      "defender": "a memory scan finds executable RWX (read-write-execute) regions with no file backing inside a signed process. Image path and mapped section do not match.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.attacker_code_runs_from_unbacked_memory",
+          "fields": {
+            "technique": "T1055.012",
+            "detail": "The hollowed svchost.exe executes the payload from unbacked memory, that is, memory regions with no "
+          }
+        }
+      ],
+      "detection": {
+        "state": "partial",
+        "label": "Partial signal",
+        "detail": "A weak signal exists but is not yet a confirmed alert."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Beacon to command and control",
+      "caption": "The hollowed process beacons to the C2 (command and control) server. On the network it looks like traffic from svchost.exe, but the service group flag is missing and the destination is rare. Evidence: netflow - svchost to C2 (no -k)",
+      "defender": "svchost.exe without a -k service group argument makes a rare outbound connection. Proxy and EDR network events agree.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.beacon_to_command_and_control",
+          "fields": {
+            "technique": "T1055.012",
+            "detail": "The hollowed process beacons to the C2 (command and control) server. On the network it looks like tr"
+          }
+        }
+      ],
+      "detection": {
+        "state": "alert",
+        "label": "Alert raised",
+        "detail": "The SOC has enough evidence to open an incident."
+      },
+      "duration": 6
+    },
+    {
+      "title": "Defender response",
+      "caption": "The defender isolates the host, captures memory, runs a pe-sieve style scan, blocks the parent-child lineage for every endpoint, and deploys mitigation policies such as dynamic code prohibition. Evidence: host isolated, memory captured",
+      "defender": "containment confirmed. The host is isolated, memory is captured for forensics, and the loader lineage is blocked everywhere else.",
+      "nodes": {},
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "EDR telemetry",
+          "event": "step.defender_response",
+          "fields": {
+            "technique": "T1055.012",
+            "detail": "The defender isolates the host, captures memory, runs a pe-sieve style scan, blocks the parent-child"
+          }
+        }
+      ],
+      "detection": {
+        "state": "clear",
+        "label": "Contained",
+        "detail": "The activity is contained and the lesson is captured."
+      },
+      "duration": 6
+    }
+  ]
+}

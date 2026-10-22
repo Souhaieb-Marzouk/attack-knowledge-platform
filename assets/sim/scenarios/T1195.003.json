@@ -1,0 +1,526 @@
+{
+  "id": "T1195.003",
+  "title": "Hardware interdiction: the appliance that arrived changed",
+  "subtitle": "A network appliance is intercepted in transit, a tiny implant is added, and the device behaves normally until it checks in months later.",
+  "aria": "Animated hardware supply chain attack: an appliance is intercepted in transit, an implant is added, the tampered device is delivered and installed, then beacons to an attacker and is found by the SOC.",
+  "zones": [
+    {
+      "label": "Factory and transit",
+      "x": 2,
+      "y": 4,
+      "w": 46,
+      "h": 64,
+      "color": "#fbbf24"
+    },
+    {
+      "label": "Customer site",
+      "x": 52,
+      "y": 4,
+      "w": 46,
+      "h": 64,
+      "color": "#34d399"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "atk",
+      "x": 5,
+      "y": 44,
+      "w": 14,
+      "h": 11,
+      "kind": "attacker",
+      "label": "ATTACKER",
+      "sub": "Interdiction team",
+      "tip": "An actor with access to the shipping path, not the factory itself."
+    },
+    {
+      "id": "factory",
+      "x": 6,
+      "y": 9,
+      "w": 14,
+      "h": 11,
+      "kind": "factory",
+      "label": "FACTORY",
+      "sub": "Appliance build",
+      "tip": "The vendor factory where the appliance is assembled and sealed."
+    },
+    {
+      "id": "transit",
+      "x": 27,
+      "y": 22,
+      "w": 14,
+      "h": 11,
+      "kind": "transit",
+      "label": "IN TRANSIT",
+      "sub": "Carrier hub",
+      "tip": "A shipping or storage point where the package can be opened and resealed."
+    },
+    {
+      "id": "depot",
+      "x": 48,
+      "y": 9,
+      "w": 14,
+      "h": 11,
+      "kind": "transit",
+      "label": "RECEIVING",
+      "sub": "Customer dock",
+      "tip": "The customer receiving dock. The tampered package arrives with a plausible seal."
+    },
+    {
+      "id": "device",
+      "x": 69,
+      "y": 22,
+      "w": 16,
+      "h": 11,
+      "kind": "device",
+      "label": "EDGE APPLIANCE",
+      "sub": "Installed",
+      "tip": "The appliance is racked and configured normally. The implant is on the board."
+    },
+    {
+      "id": "c2",
+      "x": 84,
+      "y": 44,
+      "w": 13,
+      "h": 11,
+      "kind": "c2",
+      "label": "IMPLANT C2",
+      "sub": "Outbound check-in",
+      "tip": "The implant uses the appliance's management path to reach an external server."
+    },
+    {
+      "id": "soc",
+      "x": 62,
+      "y": 47,
+      "w": 15,
+      "h": 11,
+      "kind": "soc",
+      "label": "SOC",
+      "sub": "NetFlow + config",
+      "tip": "The customer SOC, watching network flows and configuration changes."
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "factory",
+      "to": "transit",
+      "color": "warn",
+      "bend": 3
+    },
+    {
+      "id": "f2",
+      "from": "atk",
+      "to": "transit",
+      "color": "danger",
+      "bend": -2
+    },
+    {
+      "id": "f3",
+      "from": "transit",
+      "to": "depot",
+      "color": "warn",
+      "bend": -4
+    },
+    {
+      "id": "f4",
+      "from": "depot",
+      "to": "device",
+      "color": "accent2",
+      "bend": 3
+    },
+    {
+      "id": "f5",
+      "from": "device",
+      "to": "c2",
+      "color": "danger",
+      "bend": 8
+    },
+    {
+      "id": "f6",
+      "from": "device",
+      "to": "soc",
+      "color": "success",
+      "bend": -4
+    }
+  ],
+  "steps": [
+    {
+      "title": "Build and seal",
+      "caption": "The vendor factory builds the appliance, loads the official firmware, and applies a tamper-evident seal.",
+      "defender": "",
+      "nodes": {
+        "factory": "active",
+        "transit": "watch"
+      },
+      "activeFlows": [
+        "f1"
+      ],
+      "packets": [
+        {
+          "from": "factory",
+          "to": "transit",
+          "label": "sealed unit",
+          "at": 0.3,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Factory MES",
+          "event": "unit.shipped",
+          "fields": {
+            "serial": "FW-8821-0042",
+            "firmware": "8.4.1",
+            "seal": "SEAL-7712",
+            "carrier": "Global Express"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Normal shipment",
+        "detail": "The device leaves the factory in its expected state."
+      }
+    },
+    {
+      "title": "Intercept the package",
+      "caption": "The package is diverted for a few hours. The seal is carefully removed, the board is modified, and the unit is resealed.",
+      "defender": "",
+      "nodes": {
+        "atk": "active",
+        "transit": "comp",
+        "factory": "done"
+      },
+      "activeFlows": [
+        "f2"
+      ],
+      "packets": [
+        {
+          "from": "atk",
+          "to": "transit",
+          "label": "open + modify",
+          "at": 0.4,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Carrier scan",
+          "event": "exception.delay",
+          "fields": {
+            "tracking": "GE-7712-AA",
+            "location": "HUB-AMS",
+            "delay_hours": 6
+          }
+        },
+        {
+          "source": "Customs",
+          "event": "package.opened",
+          "fields": {
+            "declaration": "network appliance",
+            "inspection": "resealed",
+            "officer": "third-party"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Shipping delay",
+        "detail": "A six-hour delay is unusual but not proof of tampering."
+      }
+    },
+    {
+      "title": "Deliver and rack",
+      "caption": "The appliance arrives at the customer dock with a seal that looks intact. It is racked during a normal maintenance window.",
+      "defender": "",
+      "nodes": {
+        "transit": "done",
+        "depot": "active",
+        "device": "watch"
+      },
+      "activeFlows": [
+        "f3",
+        "f4"
+      ],
+      "packets": [
+        {
+          "from": "transit",
+          "to": "depot",
+          "label": "delivered",
+          "at": 0.2,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Receiving",
+          "event": "asset.received",
+          "fields": {
+            "serial": "FW-8821-0042",
+            "seal": "SEAL-7712",
+            "condition": "intact",
+            "po": "PO-4418"
+          }
+        },
+        {
+          "source": "Change",
+          "event": "device.racked",
+          "fields": {
+            "hostname": "edge-ams-01",
+            "site": "AMS-DC1",
+            "window": "CHG-1182"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Receiving checks pass",
+        "detail": "The seal number matches the factory record."
+      }
+    },
+    {
+      "title": "First boot looks normal",
+      "caption": "The appliance boots the official firmware, joins the management network, and passes the standard configuration checks.",
+      "defender": "",
+      "nodes": {
+        "depot": "done",
+        "device": "active",
+        "soc": "watch"
+      },
+      "activeFlows": [
+        "f4"
+      ],
+      "packets": [
+        {
+          "from": "depot",
+          "to": "device",
+          "label": "config + baseline",
+          "at": 0.3,
+          "duration": 2.1
+        }
+      ],
+      "logs": [
+        {
+          "source": "Appliance",
+          "event": "system.boot",
+          "fields": {
+            "host": "edge-ams-01",
+            "firmware": "8.4.1",
+            "config_hash": "7c2a...0f11"
+          }
+        },
+        {
+          "source": "NMS",
+          "event": "device.up",
+          "fields": {
+            "host": "edge-ams-01",
+            "mgmt_ip": "10.60.4.10",
+            "snmp": "ok",
+            "checks": "passed"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Baseline passes",
+        "detail": "The firmware and configuration match the approved baseline."
+      }
+    },
+    {
+      "title": "Implant waits",
+      "caption": "The hardware implant stays dormant for weeks. It does not change files or open a listening port, so normal host checks cannot see it.",
+      "defender": "",
+      "nodes": {
+        "device": "comp",
+        "soc": "watch"
+      },
+      "activeFlows": [],
+      "packets": [],
+      "logs": [
+        {
+          "source": "Config audit",
+          "event": "config.no_change",
+          "fields": {
+            "host": "edge-ams-01",
+            "period": "14d",
+            "hash": "7c2a...0f11"
+          }
+        },
+        {
+          "source": "NMS",
+          "event": "health.ok",
+          "fields": {
+            "host": "edge-ams-01",
+            "cpu": "18%",
+            "uptime": "21d",
+            "interfaces": "up"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No host indicator",
+        "detail": "The implant lives below the observable software layer."
+      }
+    },
+    {
+      "title": "Implant checks in",
+      "caption": "The implant wakes up and sends a small outbound connection through the management path. It looks like a routine vendor update check.",
+      "defender": "",
+      "nodes": {
+        "device": "comp",
+        "c2": "comp",
+        "soc": "watch"
+      },
+      "activeFlows": [
+        "f5"
+      ],
+      "packets": [
+        {
+          "from": "device",
+          "to": "c2",
+          "label": "outbound TCP 443",
+          "at": 0.5,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Firewall",
+          "event": "flow.allowed",
+          "fields": {
+            "src": "10.60.4.10",
+            "dest": "198.51.100.77",
+            "port": 443,
+            "bytes_out": 920,
+            "bytes_in": 4100
+          }
+        },
+        {
+          "source": "Proxy",
+          "event": "https.request",
+          "fields": {
+            "host": "vendor-check.example",
+            "user_agent": "edge-appliance/8.4.1",
+            "method": "POST"
+          }
+        }
+      ],
+      "detection": {
+        "state": "partial",
+        "label": "Unusual egress",
+        "detail": "An edge appliance contacting a new external IP is worth checking, but the port is normal."
+      }
+    },
+    {
+      "title": "SOC finds the hardware",
+      "caption": "A NetFlow review shows the appliance talking to an unapproved host. The team compares the serial, shipping record, and seal evidence.",
+      "defender": "Detection: appliance egress to a first-seen host + shipping exception + seal recheck.",
+      "nodes": {
+        "soc": "alert",
+        "device": "alert",
+        "c2": "comp",
+        "depot": "watch"
+      },
+      "activeFlows": [
+        "f5",
+        "f6"
+      ],
+      "packets": [
+        {
+          "from": "device",
+          "to": "soc",
+          "label": "flow evidence",
+          "at": 0.2,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "SIEM",
+          "event": "correlation.match",
+          "fields": {
+            "rule": "Edge appliance to first-seen external host",
+            "host": "edge-ams-01",
+            "dest": "198.51.100.77",
+            "severity": "high"
+          }
+        },
+        {
+          "source": "Asset DB",
+          "event": "serial.lookup",
+          "fields": {
+            "serial": "FW-8821-0042",
+            "seal": "SEAL-7712",
+            "carrier_delay": "6h",
+            "result": "review"
+          }
+        }
+      ],
+      "detection": {
+        "state": "alert",
+        "label": "Hardware case opened",
+        "detail": "Network telemetry and the shipping record point to a supply-chain compromise, not a software bug."
+      }
+    },
+    {
+      "title": "Replace the appliance",
+      "caption": "The appliance is removed from service, the vendor and carrier are notified, and a replacement is procured through a trusted channel.",
+      "defender": "Containment: remove, preserve the unit, notify vendor/carrier, replace from trusted stock.",
+      "nodes": {
+        "soc": "done",
+        "device": "done",
+        "c2": "idle",
+        "depot": "done"
+      },
+      "activeFlows": [
+        "f6"
+      ],
+      "packets": [
+        {
+          "from": "soc",
+          "to": "device",
+          "label": "remove + replace",
+          "at": 0.3,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Change",
+          "event": "device.removed",
+          "fields": {
+            "host": "edge-ams-01",
+            "reason": "supply-chain investigation",
+            "case": "INC-2026-3301"
+          }
+        },
+        {
+          "source": "Procurement",
+          "event": "replacement.ordered",
+          "fields": {
+            "vendor": "approved reseller",
+            "serial_verified": "true",
+            "delivery": "secure"
+          }
+        },
+        {
+          "source": "Carrier",
+          "event": "claim.opened",
+          "fields": {
+            "tracking": "GE-7712-AA",
+            "reason": "tamper investigation"
+          }
+        }
+      ],
+      "detection": {
+        "state": "clear",
+        "label": "Contained",
+        "detail": "The tampered unit is out of service and the supply path is under review."
+      }
+    }
+  ],
+  "renderer": "route",
+  "theme": "amber"
+}

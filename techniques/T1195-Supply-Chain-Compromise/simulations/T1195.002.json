@@ -1,0 +1,524 @@
+{
+  "id": "T1195.002",
+  "title": "Trojanized update: when the vendor tools turn",
+  "subtitle": "A vendor build server is compromised, a trusted installer is trojanized, and the customer installs it through the normal update process.",
+  "aria": "Animated software supply chain attack: an attacker compromises a vendor build server, trojanizes a signed installer, delivers it to a customer, receives a beacon, and is detected.",
+  "zones": [
+    {
+      "label": "Vendor / build environment",
+      "x": 2,
+      "y": 4,
+      "w": 46,
+      "h": 64,
+      "color": "#a78bfa"
+    },
+    {
+      "label": "Customer / deployment",
+      "x": 52,
+      "y": 4,
+      "w": 46,
+      "h": 64,
+      "color": "#34d399"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "atk",
+      "x": 4,
+      "y": 9,
+      "w": 14,
+      "h": 11,
+      "kind": "attacker",
+      "label": "ATTACKER",
+      "sub": "Outside vendor",
+      "tip": "The actor targeting the supplier's build environment."
+    },
+    {
+      "id": "build",
+      "x": 28,
+      "y": 8,
+      "w": 20,
+      "h": 11,
+      "kind": "vendor",
+      "label": "BUILD SERVER",
+      "sub": "Vendor CI",
+      "tip": "The vendor's build server. It produces the installer customers trust."
+    },
+    {
+      "id": "installer",
+      "x": 28,
+      "y": 28,
+      "w": 20,
+      "h": 11,
+      "kind": "artifact",
+      "label": "INSTALLER",
+      "sub": "Signed 4.8.0",
+      "tip": "A correctly signed vendor installer that now embeds a stage-one loader."
+    },
+    {
+      "id": "update",
+      "x": 54,
+      "y": 8,
+      "w": 18,
+      "h": 11,
+      "kind": "cloud",
+      "label": "UPDATE SERVICE",
+      "sub": "Official CDN",
+      "tip": "The official update service. Customers trust it because it belongs to the vendor."
+    },
+    {
+      "id": "endpoint",
+      "x": 54,
+      "y": 28,
+      "w": 18,
+      "h": 11,
+      "kind": "customer",
+      "label": "CUSTOMER ENDPOINT",
+      "sub": "Installed agent",
+      "tip": "The endpoint that installs the update and runs the vendor agent."
+    },
+    {
+      "id": "c2",
+      "x": 79,
+      "y": 28,
+      "w": 15,
+      "h": 11,
+      "kind": "c2",
+      "label": "STAGE-2 C2",
+      "sub": "HTTPS beacon",
+      "tip": "The second-stage server that receives the implant check-in."
+    },
+    {
+      "id": "soc",
+      "x": 79,
+      "y": 50,
+      "w": 15,
+      "h": 11,
+      "kind": "soc",
+      "label": "SOC",
+      "sub": "EDR + SIEM",
+      "tip": "The customer security team watching process and network telemetry."
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "atk",
+      "to": "build",
+      "color": "danger",
+      "bend": -2
+    },
+    {
+      "id": "f2",
+      "from": "build",
+      "to": "installer",
+      "color": "violet",
+      "bend": 2
+    },
+    {
+      "id": "f3",
+      "from": "installer",
+      "to": "update",
+      "color": "warn",
+      "bend": -4
+    },
+    {
+      "id": "f4",
+      "from": "update",
+      "to": "endpoint",
+      "color": "accent2",
+      "bend": 3
+    },
+    {
+      "id": "f5",
+      "from": "endpoint",
+      "to": "c2",
+      "color": "danger",
+      "bend": 8
+    },
+    {
+      "id": "f6",
+      "from": "endpoint",
+      "to": "soc",
+      "color": "success",
+      "bend": -4
+    }
+  ],
+  "steps": [
+    {
+      "title": "Reach the build server",
+      "caption": "The attacker uses a stolen VPN account to reach the vendor build network. The login is valid, so it does not look like a brute-force attack.",
+      "defender": "",
+      "nodes": {
+        "atk": "active",
+        "build": "watch"
+      },
+      "activeFlows": [
+        "f1"
+      ],
+      "packets": [
+        {
+          "from": "atk",
+          "to": "build",
+          "label": "VPN login",
+          "at": 0.3,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Vendor VPN",
+          "event": "auth.success",
+          "fields": {
+            "user": "build-ops",
+            "src": "198.51.100.77",
+            "device": "new",
+            "mfa": "passed"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Vendor-side event",
+        "detail": "The customer cannot see the vendor's VPN log."
+      }
+    },
+    {
+      "title": "Trojanize the installer",
+      "caption": "The build server is modified so the next official installer includes a small loader. The change survives as a legitimate build artifact.",
+      "defender": "",
+      "nodes": {
+        "atk": "active",
+        "build": "comp",
+        "installer": "comp"
+      },
+      "activeFlows": [
+        "f1",
+        "f2"
+      ],
+      "packets": [
+        {
+          "from": "build",
+          "to": "installer",
+          "label": "extra loader",
+          "at": 0.5,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Build server",
+          "event": "file.modified",
+          "fields": {
+            "path": "C:\\build\\sign.ps1",
+            "user": "build-ops",
+            "change": "appended loader"
+          }
+        },
+        {
+          "source": "CI",
+          "event": "artifact.signed",
+          "fields": {
+            "artifact": "vendor-agent-4.8.0.exe",
+            "signer": "Vendor Product Signing",
+            "result": "valid"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Valid build",
+        "detail": "The artifact is signed by the real vendor certificate."
+      }
+    },
+    {
+      "title": "Publish the official update",
+      "caption": "The trojanized installer is published on the official update channel. The version and signature are correct.",
+      "defender": "",
+      "nodes": {
+        "build": "done",
+        "installer": "comp",
+        "update": "comp"
+      },
+      "activeFlows": [
+        "f3"
+      ],
+      "packets": [
+        {
+          "from": "installer",
+          "to": "update",
+          "label": "publish",
+          "at": 0.4,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Update service",
+          "event": "release.published",
+          "fields": {
+            "product": "Vendor Agent",
+            "version": "4.8.0",
+            "channel": "stable",
+            "sha256": "e9a1...42cf"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Trusted channel",
+        "detail": "The update came from the vendor's real infrastructure."
+      }
+    },
+    {
+      "title": "Customer downloads it",
+      "caption": "An endpoint checks the update service, downloads the signed installer, and prepares to install it.",
+      "defender": "",
+      "nodes": {
+        "update": "comp",
+        "endpoint": "active"
+      },
+      "activeFlows": [
+        "f4"
+      ],
+      "packets": [
+        {
+          "from": "update",
+          "to": "endpoint",
+          "label": "download 28 MB",
+          "at": 0.3,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Proxy",
+          "event": "https.download",
+          "fields": {
+            "user": "SYSTEM",
+            "host": "updates.vendor.example",
+            "path": "/agent/4.8.0/installer.exe",
+            "bytes": 29360128
+          }
+        },
+        {
+          "source": "Update agent",
+          "event": "download.completed",
+          "fields": {
+            "version": "4.8.0",
+            "signature": "valid",
+            "publisher": "Vendor"
+          }
+        }
+      ],
+      "detection": {
+        "state": "partial",
+        "label": "Expected update host",
+        "detail": "The destination is the vendor's legitimate update service."
+      }
+    },
+    {
+      "title": "Installer runs the loader",
+      "caption": "The signed installer starts a vendor process. That process loads the hidden stage-one loader and decrypts the next stage.",
+      "defender": "",
+      "nodes": {
+        "endpoint": "comp",
+        "update": "done",
+        "soc": "watch"
+      },
+      "activeFlows": [
+        "f4"
+      ],
+      "packets": [
+        {
+          "from": "update",
+          "to": "endpoint",
+          "label": "install + loader",
+          "at": 0.5,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Sysmon",
+          "event": "EventID 1 process create",
+          "fields": {
+            "Image": "C:\\Program Files\\Vendor\\agent.exe",
+            "ParentImage": "C:\\Windows\\System32\\msiexec.exe",
+            "CommandLine": "agent.exe --post-install"
+          }
+        },
+        {
+          "source": "Sysmon",
+          "event": "EventID 7 image load",
+          "fields": {
+            "Image": "agent.exe",
+            "ImageLoaded": "C:\\ProgramData\\Vendor\\stage1.dll",
+            "Signed": "false"
+          }
+        }
+      ],
+      "detection": {
+        "state": "partial",
+        "label": "Unsigned DLL",
+        "detail": "A signed vendor process loaded an unsigned DLL from ProgramData."
+      }
+    },
+    {
+      "title": "Stage two checks in",
+      "caption": "The loader contacts the attacker's HTTPS server. The request uses a normal-looking user agent and a domain that looks like a metrics service.",
+      "defender": "",
+      "nodes": {
+        "endpoint": "comp",
+        "c2": "comp",
+        "soc": "watch"
+      },
+      "activeFlows": [
+        "f5"
+      ],
+      "packets": [
+        {
+          "from": "endpoint",
+          "to": "c2",
+          "label": "HTTPS beacon",
+          "at": 0.5,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Sysmon",
+          "event": "EventID 3 network",
+          "fields": {
+            "Image": "agent.exe",
+            "DestinationIp": "198.51.100.77",
+            "DestinationPort": 443,
+            "Protocol": "tcp"
+          }
+        },
+        {
+          "source": "Proxy",
+          "event": "https.request",
+          "fields": {
+            "user": "svc-vendor-agent",
+            "host": "metrics-cdn.example",
+            "method": "POST",
+            "bytes_out": 6120
+          }
+        }
+      ],
+      "detection": {
+        "state": "partial",
+        "label": "New destination",
+        "detail": "The vendor agent has never contacted this host before."
+      }
+    },
+    {
+      "title": "SOC correlates the evidence",
+      "caption": "The SIEM joins the unsigned DLL load with the new HTTPS destination. The combination is much stronger than either event alone.",
+      "defender": "Sigma: vendor process loads an unsigned DLL from ProgramData and connects to a first-seen external host.",
+      "nodes": {
+        "soc": "alert",
+        "endpoint": "alert",
+        "c2": "comp"
+      },
+      "activeFlows": [
+        "f5",
+        "f6"
+      ],
+      "packets": [
+        {
+          "from": "endpoint",
+          "to": "soc",
+          "label": "alert + process tree",
+          "at": 0.2,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "SIEM",
+          "event": "sigma.match",
+          "fields": {
+            "rule": "Vendor Process Loads Unsigned DLL and Beacons",
+            "host": "FIN-WS07",
+            "severity": "critical"
+          }
+        },
+        {
+          "source": "EDR",
+          "event": "investigation.started",
+          "fields": {
+            "host": "FIN-WS07",
+            "process": "agent.exe",
+            "analyst": "soc-tier2"
+          }
+        }
+      ],
+      "detection": {
+        "state": "alert",
+        "label": "Critical alert",
+        "detail": "The SOC has the process, DLL path, destination, and signed installer version."
+      }
+    },
+    {
+      "title": "Isolate and rebuild trust",
+      "caption": "The endpoint is isolated, the vendor is notified, the update is blocked, and the customer rebuilds the affected hosts from a known-good image.",
+      "defender": "Containment: isolate, block the C2, remove the update, notify the vendor, rebuild.",
+      "nodes": {
+        "soc": "done",
+        "endpoint": "done",
+        "c2": "idle",
+        "update": "idle"
+      },
+      "activeFlows": [
+        "f6"
+      ],
+      "packets": [
+        {
+          "from": "soc",
+          "to": "endpoint",
+          "label": "isolate + rebuild",
+          "at": 0.3,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "EDR",
+          "event": "host.isolated",
+          "fields": {
+            "host": "FIN-WS07",
+            "case": "INC-2026-2210",
+            "analyst": "soc-tier2"
+          }
+        },
+        {
+          "source": "Firewall",
+          "event": "deny",
+          "fields": {
+            "dest": "198.51.100.77",
+            "port": 443,
+            "rule": "incident-block"
+          }
+        },
+        {
+          "source": "Update service",
+          "event": "release.blocked",
+          "fields": {
+            "product": "Vendor Agent",
+            "version": "4.8.0",
+            "scope": "fleet"
+          }
+        }
+      ],
+      "detection": {
+        "state": "clear",
+        "label": "Contained",
+        "detail": "The host is isolated and the update is blocked. Vendor remediation remains."
+      }
+    }
+  ],
+  "renderer": "process-tree",
+  "theme": "red"
+}

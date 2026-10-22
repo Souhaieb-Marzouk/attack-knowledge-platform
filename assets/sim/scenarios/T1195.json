@@ -1,0 +1,550 @@
+{
+  "id": "T1195",
+  "title": "Supply Chain Compromise: from vendor to customer",
+  "subtitle": "A vendor build is compromised, a signed update carries the implant, and the customer only sees a normal-looking deployment.",
+  "aria": "Animated supply chain compromise: an attacker compromises a vendor build server, poisons a signed update, delivers it to a customer, receives a beacon, and is detected by the SOC.",
+  "zones": [
+    {
+      "label": "Vendor / upstream",
+      "x": 2,
+      "y": 4,
+      "w": 44,
+      "h": 62,
+      "color": "#a78bfa"
+    },
+    {
+      "label": "Customer environment",
+      "x": 54,
+      "y": 4,
+      "w": 44,
+      "h": 62,
+      "color": "#34d399"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "atk",
+      "x": 5,
+      "y": 11,
+      "w": 16,
+      "h": 13,
+      "kind": "attacker",
+      "label": "ATTACKER",
+      "sub": "Outside vendor",
+      "tip": "The actor targeting the supplier, not the customer directly."
+    },
+    {
+      "id": "vendor",
+      "x": 25,
+      "y": 10,
+      "w": 18,
+      "h": 13,
+      "kind": "vendor",
+      "label": "VENDOR BUILD",
+      "sub": "Build server",
+      "tip": "The supplier's build server. Its output is trusted by every customer."
+    },
+    {
+      "id": "update",
+      "x": 25,
+      "y": 32,
+      "w": 18,
+      "h": 13,
+      "kind": "artifact",
+      "label": "SIGNED UPDATE",
+      "sub": "Official channel",
+      "tip": "A correctly signed update from the real vendor. Signing does not make the code safe."
+    },
+    {
+      "id": "deploy",
+      "x": 58,
+      "y": 10,
+      "w": 17,
+      "h": 13,
+      "kind": "ci",
+      "label": "DEPLOY PIPELINE",
+      "sub": "Customer",
+      "tip": "The customer deployment pipeline accepts the vendor update through the normal process."
+    },
+    {
+      "id": "customer",
+      "x": 58,
+      "y": 32,
+      "w": 17,
+      "h": 13,
+      "kind": "customer",
+      "label": "CUSTOMER FLEET",
+      "sub": "Servers + endpoints",
+      "tip": "The installed product runs the vendor's code with local privileges."
+    },
+    {
+      "id": "c2",
+      "x": 5,
+      "y": 42,
+      "w": 16,
+      "h": 13,
+      "kind": "c2",
+      "label": "ATTACKER C2",
+      "sub": "Beacon receiver",
+      "tip": "The attacker-controlled endpoint that receives the implant's check-in."
+    },
+    {
+      "id": "soc",
+      "x": 79,
+      "y": 42,
+      "w": 16,
+      "h": 13,
+      "kind": "soc",
+      "label": "SOC",
+      "sub": "SIEM + EDR",
+      "tip": "The customer security team, which sees the process and network evidence."
+    }
+  ],
+  "flows": [
+    {
+      "id": "f1",
+      "from": "atk",
+      "to": "vendor",
+      "color": "danger",
+      "bend": -2
+    },
+    {
+      "id": "f2",
+      "from": "vendor",
+      "to": "update",
+      "color": "violet",
+      "bend": 2
+    },
+    {
+      "id": "f3",
+      "from": "update",
+      "to": "deploy",
+      "color": "warn",
+      "bend": -4
+    },
+    {
+      "id": "f4",
+      "from": "deploy",
+      "to": "customer",
+      "color": "accent2",
+      "bend": 3
+    },
+    {
+      "id": "f5",
+      "from": "customer",
+      "to": "c2",
+      "color": "danger",
+      "bend": 8
+    },
+    {
+      "id": "f6",
+      "from": "customer",
+      "to": "soc",
+      "color": "success",
+      "bend": -4
+    },
+    {
+      "id": "f7",
+      "from": "soc",
+      "to": "vendor",
+      "color": "success",
+      "bend": 18
+    }
+  ],
+  "steps": [
+    {
+      "title": "Study the supplier",
+      "caption": "The attacker maps the vendor's public staff, support portal, and build infrastructure. No customer system is touched yet.",
+      "defender": "",
+      "nodes": {
+        "atk": "active",
+        "vendor": "watch"
+      },
+      "activeFlows": [
+        "f1"
+      ],
+      "packets": [
+        {
+          "from": "atk",
+          "to": "vendor",
+          "label": "portal login",
+          "at": 0.4,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Vendor SSO",
+          "event": "signin.success",
+          "fields": {
+            "user": "contractor@vendor.example",
+            "ip": "198.51.100.77",
+            "mfa": "passed",
+            "country": "NL"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "No customer signal",
+        "detail": "The activity is entirely outside the customer estate."
+      }
+    },
+    {
+      "title": "Compromise the build server",
+      "caption": "A vendor build server is reached through a stolen VPN account. The attacker creates a scheduled task for persistence.",
+      "defender": "",
+      "nodes": {
+        "atk": "active",
+        "vendor": "comp",
+        "update": "watch"
+      },
+      "activeFlows": [
+        "f1",
+        "f2"
+      ],
+      "packets": [
+        {
+          "from": "atk",
+          "to": "vendor",
+          "label": "SMB + schtasks",
+          "at": 0.2,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Vendor VPN",
+          "event": "auth.success",
+          "fields": {
+            "user": "buildsvc",
+            "src": "198.51.100.77",
+            "device": "unknown"
+          }
+        },
+        {
+          "source": "Windows Security",
+          "event": "4698 scheduled task",
+          "fields": {
+            "host": "BUILD-01",
+            "task": "WinUpdateCheck",
+            "user": "SYSTEM"
+          }
+        }
+      ],
+      "detection": {
+        "state": "partial",
+        "label": "Vendor-side only",
+        "detail": "This telemetry belongs to the supplier; the customer cannot see it directly."
+      }
+    },
+    {
+      "title": "Poison the build",
+      "caption": "The build script is changed so the next release contains a small loader. The source diff looks like routine build maintenance.",
+      "defender": "",
+      "nodes": {
+        "vendor": "comp",
+        "update": "comp"
+      },
+      "activeFlows": [
+        "f2"
+      ],
+      "packets": [
+        {
+          "from": "vendor",
+          "to": "update",
+          "label": "malicious commit",
+          "at": 0.5,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Git audit",
+          "event": "push",
+          "fields": {
+            "repo": "vendor/product",
+            "actor": "buildsvc",
+            "commit": "9f4c2a1",
+            "file": "build/release.sh"
+          }
+        },
+        {
+          "source": "CI",
+          "event": "build.completed",
+          "fields": {
+            "job": "release-2026.10",
+            "artifact": "product-4.8.1.msi",
+            "signature": "valid"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Looks like a release",
+        "detail": "The commit and artifact are ordinary events in the vendor pipeline."
+      }
+    },
+    {
+      "title": "Sign and publish the update",
+      "caption": "The poisoned installer is signed with the vendor's real certificate and published on the official update channel.",
+      "defender": "",
+      "nodes": {
+        "vendor": "done",
+        "update": "comp",
+        "deploy": "watch"
+      },
+      "activeFlows": [
+        "f2",
+        "f3"
+      ],
+      "packets": [
+        {
+          "from": "update",
+          "to": "deploy",
+          "label": "signed MSI",
+          "at": 0.8,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Code-signing CA",
+          "event": "certificate.used",
+          "fields": {
+            "subject": "CN=Vendor Product Signing",
+            "artifact": "product-4.8.1.msi",
+            "timestamp": "2026-10-22T02:14:00Z"
+          }
+        },
+        {
+          "source": "Update CDN",
+          "event": "artifact.published",
+          "fields": {
+            "path": "/product/4.8.1/",
+            "sha256": "5d2c...e19a"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Valid signature",
+        "detail": "A valid signature proves the vendor built it, not that the build was clean."
+      }
+    },
+    {
+      "title": "Customer installs the update",
+      "caption": "The customer deployment pipeline installs the signed update during the maintenance window. Nothing looks unusual.",
+      "defender": "",
+      "nodes": {
+        "deploy": "active",
+        "customer": "comp",
+        "soc": "watch"
+      },
+      "activeFlows": [
+        "f4"
+      ],
+      "packets": [
+        {
+          "from": "deploy",
+          "to": "customer",
+          "label": "install",
+          "at": 0.4,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Deployment",
+          "event": "package.installed",
+          "fields": {
+            "host": "APP-PROD-04",
+            "package": "product-4.8.1",
+            "signer": "Vendor Product Signing",
+            "change": "CHG-4412"
+          }
+        },
+        {
+          "source": "Windows Installer",
+          "event": "MsiInstaller 11707",
+          "fields": {
+            "product": "Vendor Agent",
+            "version": "4.8.1",
+            "result": "success"
+          }
+        }
+      ],
+      "detection": {
+        "state": "none",
+        "label": "Normal deployment",
+        "detail": "The installer is signed and the change is approved."
+      }
+    },
+    {
+      "title": "Implant checks in",
+      "caption": "The product starts a trusted system process that loads the loader. The loader beacons to the attacker over HTTPS.",
+      "defender": "",
+      "nodes": {
+        "customer": "comp",
+        "c2": "comp",
+        "soc": "watch"
+      },
+      "activeFlows": [
+        "f5"
+      ],
+      "packets": [
+        {
+          "from": "customer",
+          "to": "c2",
+          "label": "HTTPS beacon",
+          "at": 1.0,
+          "duration": 2.2
+        }
+      ],
+      "logs": [
+        {
+          "source": "Sysmon",
+          "event": "EventID 1 process create",
+          "fields": {
+            "Image": "C:\\Program Files\\Vendor\\agent.exe",
+            "ParentImage": "C:\\Windows\\System32\\services.exe",
+            "CommandLine": "agent.exe --run"
+          }
+        },
+        {
+          "source": "Sysmon",
+          "event": "EventID 3 network",
+          "fields": {
+            "Image": "agent.exe",
+            "DestinationIp": "198.51.100.77",
+            "DestinationPort": 443,
+            "Protocol": "tcp"
+          }
+        },
+        {
+          "source": "Proxy",
+          "event": "https.request",
+          "fields": {
+            "user": "svc-vendor-agent",
+            "host": "cdn-metrics.example",
+            "bytes_out": 4821
+          }
+        }
+      ],
+      "detection": {
+        "state": "partial",
+        "label": "Weak signal",
+        "detail": "A trusted vendor process talks to a new external host. This is suspicious only when compared with its baseline."
+      }
+    },
+    {
+      "title": "SOC detects the beacon",
+      "caption": "The SIEM correlates the new external destination with the signed vendor process and raises a high-severity detection.",
+      "defender": "Sigma: vendor product process connecting to first-seen external infrastructure.",
+      "nodes": {
+        "soc": "alert",
+        "customer": "alert",
+        "c2": "comp"
+      },
+      "activeFlows": [
+        "f5",
+        "f6"
+      ],
+      "packets": [
+        {
+          "from": "customer",
+          "to": "soc",
+          "label": "alert",
+          "at": 0.2,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "SIEM",
+          "event": "sigma.match",
+          "fields": {
+            "rule": "Vendor Process to First-Seen External Host",
+            "host": "APP-PROD-04",
+            "dest": "198.51.100.77",
+            "severity": "high"
+          }
+        },
+        {
+          "source": "EDR",
+          "event": "process.tree",
+          "fields": {
+            "root": "services.exe",
+            "child": "agent.exe",
+            "network": "198.51.100.77:443"
+          }
+        }
+      ],
+      "detection": {
+        "state": "alert",
+        "label": "High-severity alert",
+        "detail": "The SOC now has a process, destination, host, and signed package version to investigate."
+      }
+    },
+    {
+      "title": "Contain and notify the vendor",
+      "caption": "The customer isolates the host, blocks the destination, revokes the update, and notifies the vendor. The vendor starts its own incident response.",
+      "defender": "Containment: isolate, block, roll back, preserve evidence, notify supplier.",
+      "nodes": {
+        "soc": "done",
+        "customer": "done",
+        "vendor": "alert",
+        "c2": "idle"
+      },
+      "activeFlows": [
+        "f7"
+      ],
+      "packets": [
+        {
+          "from": "soc",
+          "to": "vendor",
+          "label": "incident notice",
+          "at": 0.4,
+          "duration": 2
+        }
+      ],
+      "logs": [
+        {
+          "source": "EDR",
+          "event": "host.isolated",
+          "fields": {
+            "host": "APP-PROD-04",
+            "analyst": "soc-tier2",
+            "case": "INC-2026-1044"
+          }
+        },
+        {
+          "source": "Firewall",
+          "event": "deny",
+          "fields": {
+            "src": "10.20.4.18",
+            "dest": "198.51.100.77",
+            "port": 443,
+            "rule": "incident-block"
+          }
+        },
+        {
+          "source": "Vendor",
+          "event": "incident.opened",
+          "fields": {
+            "vendor_case": "VND-8821",
+            "artifact": "product-4.8.1",
+            "status": "investigating"
+          }
+        }
+      ],
+      "detection": {
+        "state": "clear",
+        "label": "Contained",
+        "detail": "The host is isolated and the update is blocked. The vendor still has to find the root cause."
+      }
+    }
+  ],
+  "renderer": "network",
+  "theme": "blue"
+}
