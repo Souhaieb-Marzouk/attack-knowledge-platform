@@ -1,0 +1,2111 @@
+<!DOCTYPE html>
+<!-- MITRE ATT&CK guide — T1020.001 Traffic Duplication — version 2.0.0 (full audit revision, 2026-10-22) -->
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="description" content="Beginner-friendly detection engineering guide for MITRE ATT&CK T1020.001 Traffic Duplication: how adversaries abuse traffic mirroring (SPAN ports, cloud mirror APIs) to copy data out silently, with an animated simulation, Sigma rules, Splunk SPL, a case study, and mitigations.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1020-Automated-Exfiltration/001-Traffic-Duplication.html">
+<meta name="guide:version" content="2.0.0">
+<title>T1020.001 - Traffic Duplication | ATT&CK Detection Guide</title>
+<style>
+/* ============ DESIGN TOKENS ============ */
+:root{
+  --bg:#0b0f1a;
+  --surface:#121a2e;
+  --surface-2:#172138;
+  --elevated:#1a2542;
+  --text:#e7edf8;
+  --muted:#9aa8c0;
+  --border:#24314e;
+  --border-strong:#2f4066;
+  --accent:#4f8cff;
+  --accent-2:#22d3ee;
+  --violet:#a78bfa;
+  --success:#34d399;
+  --warning:#fbbf24;
+  --danger:#f87171;
+  --high:#fb923c;
+  --low:#4ade80;
+  --shadow:0 1px 2px rgba(2,6,16,.5),0 10px 30px rgba(2,6,16,.35);
+  --radius:14px;
+  --radius-ctl:9px;
+  --font-sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc;
+  --surface:#ffffff;
+  --surface-2:#f5f8ff;
+  --elevated:#e9eefa;
+  --text:#182238;
+  --muted:#5a6a85;
+  --border:#d9e2f2;
+  --border-strong:#c2d0ea;
+  --accent:#2f6fe4;
+  --accent-2:#0891b2;
+  --violet:#7c5ce0;
+  --success:#0d9e6e;
+  --warning:#b45309;
+  --danger:#dc2626;
+  --high:#c2410c;
+  --low:#15803d;
+  --shadow:0 1px 2px rgba(23,43,99,.08),0 10px 30px rgba(23,43,99,.10);
+}
+/* ============ BASE ============ */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-sans);
+  font-size:16.5px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--accent)}
+a:hover{color:var(--accent-2)}
+:focus-visible{outline:2px solid var(--accent-2);outline-offset:2px;border-radius:4px}
+::selection{background:var(--accent);color:#fff}
+h1,h2,h3,h4{line-height:1.2;margin:0 0 .5em;letter-spacing:-.01em;font-weight:750}
+p{margin:0 0 1em}
+.content p{max-width:76ch}
+img,canvas{max-width:100%}
+.skip{position:absolute;left:-9999px;top:0;background:var(--surface);color:var(--text);padding:10px 16px;border:1px solid var(--border-strong);z-index:200;border-radius:0 0 10px 0}
+.skip:focus{left:0}
+/* ============ PROGRESS BAR ============ */
+.progress{position:fixed;top:0;left:0;right:0;height:3px;background:transparent;z-index:90;pointer-events:none}
+.progress span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+/* ============ LAYOUT ============ */
+.wrap{max-width:1280px;margin:0 auto;padding:0 clamp(16px,4vw,32px)}
+.layout{display:grid;grid-template-columns:262px minmax(0,1fr);gap:40px;align-items:start;padding:36px 0 90px}
+/* ============ HERO ============ */
+.hero{padding:52px 0 10px}
+.kicker{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent-2)}
+h1{font-size:clamp(2rem,4.4vw,2.85rem);margin:.35em 0 .4em;letter-spacing:-.02em}
+.tid{display:inline-block;font-family:var(--font-mono);font-weight:700;font-size:.72em;color:var(--accent);background:var(--surface-2);border:1px solid var(--border-strong);border-radius:12px;padding:.08em .45em;margin-right:.35em;vertical-align:middle;transform:translateY(-.08em)}
+.hero-intro{color:var(--muted);max-width:74ch;font-size:1.04rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:20px 0 8px;padding:0;list-style:none}
+.chip{font-family:var(--font-mono);font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:999px;padding:5px 13px;white-space:nowrap}
+.chip strong{color:var(--text);font-weight:600}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:22px 0 0}
+.fact{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:15px 17px;box-shadow:var(--shadow)}
+.fact .k{display:block;font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.fact .v{font-size:.95rem;font-weight:600}
+.fact .v small{display:block;font-weight:400;color:var(--muted);font-size:.85em;margin-top:3px}
+/* ============ TOC ============ */
+.toc{position:sticky;top:22px;max-height:calc(100vh - 44px);overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 14px;box-shadow:var(--shadow)}
+.toc-title{font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:0 10px 10px}
+.toc-list,.toc-list ol{list-style:none;margin:0;padding:0}
+.toc-list a{display:block;padding:6px 10px;border-radius:8px;color:var(--muted);text-decoration:none;font-size:13.5px;border-left:2px solid transparent}
+.toc-list a:hover{color:var(--text);background:var(--surface-2)}
+.toc-list a.active{color:var(--accent);background:var(--surface-2);border-left-color:var(--accent);font-weight:600}
+.toc-sub{margin-top:2px;padding-left:12px !important;border-left:2px solid var(--border)}
+.toc-sub a{font-size:12.5px;padding:4px 10px}
+.toc-num{font-family:var(--font-mono);font-size:11px;color:var(--accent-2);margin-right:6px}
+/* ============ SECTIONS ============ */
+.content{min-width:0}
+.section{margin:0 0 64px;scroll-margin-top:88px}
+.sec-head{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.sec-num{flex:none;font-family:var(--font-mono);font-size:13.5px;font-weight:700;color:var(--accent);background:var(--surface-2);border:1px solid var(--border-strong);border-radius:10px;padding:7px 13px}
+.sec-head h2{margin:0;font-size:clamp(1.45rem,2.4vw,1.95rem)}
+.section-intro{color:var(--muted);max-width:76ch;margin-bottom:26px}
+.sub-sec{margin-top:44px;scroll-margin-top:88px}
+.sub-sec h3{display:flex;align-items:center;gap:10px;font-size:1.22rem;margin:0 0 12px}
+.sub-num{flex:none;font-family:var(--font-mono);font-size:11.5px;font-weight:700;color:var(--accent-2);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:4px 9px}
+.sub-sec > p{color:var(--muted);max-width:76ch}
+/* ============ CARDS & GRIDS ============ */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow);margin:0 0 16px}
+.card h4{font-size:1.02rem;margin:0 0 10px}
+.card p:last-child{margin-bottom:0}
+.card ul,.card ol{margin:0 0 0 1.15em;padding:0}
+.card li{margin:0 0 7px}
+.grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:0 0 16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:0 0 16px}
+.grid-2 .card,.grid-3 .card{margin:0}
+/* ============ CALLOUTS ============ */
+.callout{background:var(--surface-2);border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;padding:15px 18px;margin:16px 0}
+.callout .lab{display:block;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;color:var(--accent)}
+.callout p{margin:0}
+.callout p + p{margin-top:.6em}
+.c-warn{border-left-color:var(--warning)}.c-warn .lab{color:var(--warning)}
+.c-danger{border-left-color:var(--danger)}.c-danger .lab{color:var(--danger)}
+.c-good{border-left-color:var(--success)}.c-good .lab{color:var(--success)}
+.c-violet{border-left-color:var(--violet)}.c-violet .lab{color:var(--violet)}
+.c-note{border-left-color:var(--muted)}.c-note .lab{color:var(--muted)}
+/* ============ TABLES ============ */
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--surface);margin:0 0 16px;box-shadow:var(--shadow);-webkit-overflow-scrolling:touch}
+.table-wrap table{margin:0;box-shadow:none;border:0;border-radius:0}
+table{width:100%;border-collapse:collapse;font-size:14.5px;background:var(--surface)}
+th{background:var(--surface-2);text-align:left;font-family:var(--font-mono);font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:11px 14px;border-bottom:1px solid var(--border-strong);white-space:nowrap}
+td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:0}
+tbody tr:nth-child(even){background:var(--surface-2)}
+td code{white-space:nowrap}
+/* ============ BADGES ============ */
+.badge{display:inline-block;font-family:var(--font-mono);font-size:11px;font-weight:700;letter-spacing:.05em;padding:3px 10px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.sev-critical{color:var(--danger)}
+.sev-high{color:var(--high)}
+.sev-medium{color:var(--warning)}
+.sev-low{color:var(--low)}
+.cat{color:var(--violet);font-weight:600}
+.confidence{color:var(--accent-2)}
+/* ============ CODE ============ */
+.codeblock{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--elevated);margin:0 0 16px;box-shadow:var(--shadow)}
+.code-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.code-title{font-family:var(--font-mono);font-size:12px;font-weight:600;letter-spacing:.03em;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.copy-btn{flex:none;font-family:var(--font-sans);font-size:12px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--border-strong);border-radius:8px;padding:5px 13px;cursor:pointer}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.codeblock pre{margin:0;padding:15px 17px;overflow:auto;max-height:520px}
+pre{font-family:var(--font-mono);font-size:13px;line-height:1.55;color:var(--text);tab-size:2}
+code{font-family:var(--font-mono);font-size:.9em}
+p code,li code,td code,dt code,dd code{background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+/* ============ KEY/VALUE ============ */
+.kv{display:grid;grid-template-columns:minmax(130px,max-content) 1fr;gap:9px 20px;margin:0}
+.kv dt{font-family:var(--font-mono);font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:3px}
+.kv dd{margin:0;font-size:.95rem}
+/* ============ TIMELINE ============ */
+.timeline{position:relative;margin:8px 0 16px;padding-left:30px}
+.timeline::before{content:"";position:absolute;left:9px;top:8px;bottom:8px;width:2px;background:var(--border-strong)}
+.tl-item{position:relative;padding-bottom:20px}
+.tl-item:last-child{padding-bottom:2px}
+.tl-item::before{content:"";position:absolute;left:-27px;top:7px;width:11px;height:11px;border-radius:50%;background:var(--accent);border:2px solid var(--bg)}
+.tl-time{font-family:var(--font-mono);font-size:12px;font-weight:700;color:var(--accent-2)}
+.tl-item h4{margin:3px 0 6px;font-size:1rem}
+.tl-item p{margin:0;color:var(--muted);font-size:.95rem}
+/* ============ CHECKLIST ============ */
+.checklist{list-style:none;margin:0;padding:0}
+.checklist li{position:relative;padding:0 0 0 30px;margin:0 0 10px}
+.checklist li::before{content:"\2713";position:absolute;left:0;top:1px;width:20px;height:20px;border-radius:6px;border:1px solid var(--success);color:var(--success);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+/* ============ SIMULATION ============ */
+.sim{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;margin:0 0 16px}
+.sim-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.sim-title{font-weight:700;font-size:1.02rem}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%}
+.sim-canvas-wrap{position:relative;background:var(--elevated);border-bottom:1px solid var(--border)}
+.sim-canvas-wrap canvas{display:block;width:100%;height:auto}
+.sim-tip{position:absolute;pointer-events:none;background:var(--elevated);border:1px solid var(--border-strong);border-radius:10px;padding:10px 13px;font-size:12.5px;line-height:1.5;max-width:270px;box-shadow:var(--shadow);z-index:6}
+.sim-tip strong{display:block;margin-bottom:3px}
+.sim-tip em{color:var(--muted);font-style:normal}
+.sim-caption{padding:15px 18px 6px}
+.sim-caption .t{font-weight:700;display:block;margin-bottom:5px}
+.sim-caption p{margin:0;color:var(--muted);font-size:.97rem}
+.sim-defender{margin:10px 18px 0;padding:11px 14px;background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--accent-2);border-radius:9px;font-size:.93rem}
+.sim-defender strong{color:var(--accent-2);font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:4px}
+.sim-defender p{margin:0}
+.sim-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:14px 18px 10px}
+.sim-btn{font-family:var(--font-sans);font-size:13px;font-weight:600;color:var(--text);background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--radius-ctl);padding:8px 15px;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.sim-btn:hover{border-color:var(--accent);color:var(--accent)}
+.sim-btn svg{width:12px;height:12px;fill:currentColor}
+.sim-speed{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.sim-speed select{font-family:var(--font-sans);font-size:13px;color:var(--text);background:var(--surface-2);border:1px solid var(--border-strong);border-radius:var(--radius-ctl);padding:7px 10px;cursor:pointer}
+.sim-steps{display:flex;flex-wrap:wrap;gap:7px;padding:2px 18px 16px}
+.sim-chip{font-family:var(--font-mono);font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:5px 11px;cursor:pointer}
+.sim-chip:hover{border-color:var(--accent);color:var(--accent)}
+.sim-chip.active{color:#fff;background:var(--accent);border-color:var(--accent)}
+.sim-story{margin:0;padding-left:22px}
+.sim-story li{margin-bottom:12px}
+.sim-story .soc{color:var(--accent-2);font-size:.93rem}
+/* ============ FLOATING CONTROLS ============ */
+.fab{position:fixed;z-index:95;border:1px solid var(--border-strong);background:var(--elevated);color:var(--text);cursor:pointer;box-shadow:var(--shadow);border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:var(--font-sans);font-size:13px;font-weight:600}
+.fab:hover{border-color:var(--accent);color:var(--accent)}
+#topBtn{right:20px;bottom:20px;width:44px;height:44px;opacity:0;pointer-events:none;transition:opacity .25s}
+#topBtn.show{opacity:1;pointer-events:auto}
+#themeBtn{right:20px;bottom:74px;width:44px;height:44px}
+#themeBtn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#contentsBtn{left:20px;bottom:20px;padding:11px 16px;display:none;gap:8px}
+#contentsBtn svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+/* ============ MOBILE OVERLAY ============ */
+.overlay{position:fixed;inset:0;z-index:100;background:rgba(5,9,20,.6);display:flex;align-items:flex-end;justify-content:center}
+.overlay[hidden]{display:none}
+.ov-panel{background:var(--surface);border:1px solid var(--border);border-radius:18px 18px 0 0;width:100%;max-width:560px;max-height:76vh;overflow:auto;padding:14px 20px 30px;box-shadow:var(--shadow)}
+.ov-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ov-head strong{font-family:var(--font-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.ov-close{background:var(--surface-2);border:1px solid var(--border-strong);color:var(--text);border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer}
+.ov-close:hover{color:var(--danger);border-color:var(--danger)}
+/* ============ MISC ============ */
+.muted{color:var(--muted)}
+.small{font-size:.88rem}
+.tag-row{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0}
+.pill{font-family:var(--font-mono);font-size:11.5px;border:1px solid var(--border);background:var(--surface-2);border-radius:999px;padding:4px 11px;color:var(--muted)}
+/* ============ RESPONSIVE ============ */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);gap:0}
+  .toc{display:none}
+  #contentsBtn{display:flex}
+}
+@media (max-width:640px){
+  .hero{padding:38px 0 6px}
+  .chip{white-space:normal;max-width:100%}
+  .facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .grid-2,.grid-3{grid-template-columns:minmax(0,1fr)}
+  .section{margin-bottom:48px}
+  .kv{grid-template-columns:minmax(110px,max-content) 1fr;gap:8px 14px}
+  .sim-caption,.sim-defender{padding-left:14px;padding-right:14px}
+  .sim-caption{padding-right:14px}
+  .sim-defender{margin-left:14px;margin-right:14px}
+  .sim-controls,.sim-steps{padding-left:14px;padding-right:14px}
+  .sim-head{padding:13px 14px}
+  #topBtn{right:14px;bottom:14px}
+  #themeBtn{right:14px;bottom:66px}
+  #contentsBtn{left:14px;bottom:14px}
+}
+/* ============ REDUCED MOTION ============ */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.001s !important;animation-iteration-count:1 !important;transition-duration:.001s !important}
+}
+/* ============ PRINT ============ */
+@media print{
+  html{--bg:#fff;--surface:#fff;--surface-2:#f4f6fa;--elevated:#fff;--text:#111;--muted:#444;--border:#ccc;--border-strong:#999;--accent:#0b3ea8;--accent-2:#0b5d7d;--violet:#5b3aa8;--success:#0a6b3d;--warning:#8a5a06;--danger:#a11b1b;--high:#8a3a06;--low:#0a5d2a;--shadow:none}
+  body{background:#fff;color:#111;font-size:11.5pt}
+  .toc,.progress,.fab,.overlay,.sim-controls,.sim-steps,.copy-btn,.sim-tip{display:none !important}
+  .layout{display:block;padding:0}
+  .wrap{padding:0;max-width:none}
+  .card,.codeblock,.table-wrap,.sim{box-shadow:none;break-inside:avoid}
+  .section{margin-bottom:28pt}
+  a{color:#0b3ea8;text-decoration:underline}
+  .sim-canvas-wrap{border:1px solid #999}
+}
+</style>
+<script>
+(function(){try{var t=localStorage.getItem('atk-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1020.001"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+<a class="skip" href="#overview">Skip to main content</a>
+<div class="progress" aria-hidden="true"><span id="progressFill"></span></div>
+<header class="hero wrap" aria-label="Technique summary">
+  <p class="kicker">MITRE ATT&amp;CK &middot; Enterprise &middot; Exfiltration</p>
+  <h1><span class="tid">T1020.001</span>Traffic Duplication</h1>
+  <p class="hero-intro">Traffic duplication turns a network's own copying feature into a hidden tap. An attacker reaches a switch, a router, or a cloud network console. Then they tell the device to copy user traffic and send the copy to them. No implant lands on the victim and no new connection leaves it. Data escapes while host tools see nothing.</p>
+  <ul class="chips" aria-label="Technique metadata">
+    <li class="chip"><strong>Tactic:</strong> TA0010 Exfiltration</li>
+    <li class="chip"><strong>Platforms:</strong> IaaS &middot; Network Devices</li>
+    <li class="chip"><strong>Parent:</strong> T1020 Automated Exfiltration</li>
+    <li class="chip"><strong>Technique version:</strong> 1.4 &middot; modified 24 Oct 2025</li>
+    <li class="chip"><strong>Seen in:</strong> state-sponsored network espionage</li>
+    <li class="chip"><strong>Guide v2.0</strong> &middot; full audit</li>
+  </ul>
+  <div class="facts" aria-label="Key facts">
+    <div class="fact"><span class="k">Tactic</span><span class="v">Exfiltration<small>Final stage, after data is collected</small></span></div>
+    <div class="fact"><span class="k">Platforms</span><span class="v">IaaS, Network Devices<small>Switches, routers, and cloud VPCs</small></span></div>
+    <div class="fact"><span class="k">Typical signal</span><span class="v">Mirror config change + twin flows<small>a second copy of traffic leaves to one new destination</small></span></div>
+    <div class="fact"><span class="k">Detection difficulty</span><span class="v">Hard<small>The tap itself is quiet; config changes and volume doubling are the tells</small></span></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <nav class="toc" id="tocNav" aria-label="Table of contents">
+      <div class="toc-title">Contents</div>
+      <ol class="toc-list" id="tocList">
+        <noscript>
+          <li><a href="#overview"><span class="toc-num">1</span>Overview</a></li>
+          <li><a href="#simulation"><span class="toc-num">2</span>Animated simulation</a></li>
+          <li><a href="#red-team"><span class="toc-num">3</span>Red team perspective</a></li>
+          <li><a href="#blue-team"><span class="toc-num">4</span>Blue team perspective</a></li>
+          <li><a href="#detection"><span class="toc-num">5</span>Detection engineering deep dive</a>
+            <ol class="toc-sub">
+              <li><a href="#d-regulation">5.1 Regulation mapping</a></li>
+              <li><a href="#d-intel">5.2 Threat intelligence</a></li>
+              <li><a href="#d-ranking">5.3 Threats ranking</a></li>
+              <li><a href="#d-logs">5.4 Logs and patterns</a></li>
+              <li><a href="#d-sigma">5.5 Sigma rules and Splunk SPL</a></li>
+            </ol>
+          </li>
+          <li><a href="#case-study"><span class="toc-num">6</span>Real-world case study</a></li>
+          <li><a href="#mitigation"><span class="toc-num">7</span>Mitigation and defense</a></li>
+          <li><a href="#mistakes"><span class="toc-num">8</span>Common mistakes and best practices</a></li>
+          <li><a href="#cheat-sheet"><span class="toc-num">9</span>Cheat sheet and quick reference</a></li>
+        </noscript>
+      </ol>
+    </nav>
+    <main class="content" id="mainContent">
+<section id="overview" class="section" aria-labelledby="h-overview">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2 id="h-overview">Overview</h2></div>
+  <p class="section-intro">Before you can detect a technique, you need a clear mental picture of it. This section explains traffic duplication in plain words. It shows where the technique sits in an attack. It also lists the facts you will use again later in this guide.</p>
+
+  <div class="card">
+    <h4>What is it?</h4>
+    <p>Network devices have a built-in diagnostic feature that copies traffic. On a switch it is called a <strong>SPAN port</strong> or <strong>mirror port</strong> (SPAN means Switched Port Analyzer). You pick the ports to watch and one output port. The switch then forwards a copy of every packet there. Network teams use this every day to feed monitoring tools and packet analyzers.</p>
+    <p>T1020.001 is that same feature, abused. An attacker who can change device settings creates a mirror session. That needs access to a switch or router command line, or to a cloud console. The attacker points the session at a server they control. From that moment, a full copy of the chosen traffic flows to the attacker. No user computer is touched.</p>
+    <p>Cloud platforms offer the same power through APIs: <strong>AWS Traffic Mirroring</strong>, <strong>GCP Packet Mirroring</strong>, and <strong>Azure vTap</strong>. A user defines source instances and a target destination, and the platform does the copying. MITRE also notes that attackers may modify the device software itself. The copying then survives reboots and config rollbacks. Section 3 describes this ROMMONkit path.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Why it matters</h4>
+      <ul>
+        <li><strong>No endpoint artifact.</strong> The victim computer runs nothing and stores nothing. Antivirus and EDR (endpoint detection and response) have nothing to find.</li>
+        <li><strong>No new connection from the victim.</strong> Data leaves inside copies of traffic the host already sends. Egress rules — the rules for traffic leaving a network — see only normal flows on the victim segment.</li>
+        <li><strong>It captures everything.</strong> One mirror session can cover a whole VLAN (a virtual LAN: a group of ports that acts as one network). That means many hosts at once, including traffic that never leaves the site.</li>
+        <li><strong>It is quiet.</strong> Mirroring is a native, legitimate feature. A working tap looks like normal device operation.</li>
+        <li><strong>It defeats host-side DLP.</strong> If your data-loss controls live only on computers, mirrored copies pass them by.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Where it fits in the attack chain</h4>
+      <p>ATT&amp;CK places T1020.001 under <strong>T1020 Automated Exfiltration</strong>, in the <strong>Exfiltration</strong> tactic (TA0010). A typical chain looks like this:</p>
+      <ol>
+        <li>Initial access — for example phishing a network contractor, as seen in Salt Typhoon reporting.</li>
+        <li><strong>Management-plane access</strong> — the attacker reaches switch, router, or cloud network administration (the management plane is the admin side of devices and clouds).</li>
+        <li><strong>T1020.001 — a mirror session copies chosen traffic to attacker infrastructure.</strong></li>
+        <li>Captured data is reassembled off-site; credentials and documents are mined from it.</li>
+        <li>Quiet long-term espionage follows.</li>
+      </ol>
+      <p>ATT&amp;CK lists this technique as used together with <strong>Network Sniffing (T1040)</strong>, <strong>Input Capture (T1056)</strong>, and <strong>Adversary-in-the-Middle (T1557)</strong>. All three are ways of seeing traffic the attacker should not see.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>What you will learn on this page</h4>
+      <ul>
+        <li>An animated, step-by-step attack story with defender visibility for each step.</li>
+        <li>How attackers build the tap, in safe lab terms.</li>
+        <li>Which logs and events carry the best evidence.</li>
+        <li>Six Sigma rules (Sigma is a portable detection-rule format) with matching Splunk SPL queries (SPL is Splunk's search language).</li>
+        <li>Mitigations, common blue-team mistakes, and a printable cheat sheet.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Key facts at a glance</h4>
+      <dl class="kv">
+        <dt>Technique ID</dt><dd>T1020.001 — Traffic Duplication</dd>
+        <dt>Tactic</dt><dd>Exfiltration (TA0010)</dd>
+        <dt>Platforms</dt><dd>IaaS, Network Devices</dd>
+        <dt>First ATT&amp;CK version</dt><dd>Created 19 October 2020</dd>
+        <dt>Parent technique</dt><dd>T1020 — Automated Exfiltration</dd>
+        <dt>ATT&amp;CK strategy</dt><dd>DET0403 — analytics AN1131 (cloud mirror policy changes to unapproved destinations) and AN1132 (unauthorized monitor sessions on devices)</dd>
+        <dt>Related techniques</dt><dd>T1020, T1040, T1557, T1056</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<section id="simulation" class="section" aria-labelledby="h-simulation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2 id="h-simulation">Animated simulation</h2></div>
+  <p class="section-intro">The canvas below plays a short, realistic story called <strong>The Silent Tap</strong>. An attacker with stolen admin credentials turns on traffic mirroring on a core switch. Every packet on the finance VLAN then gets a twin copy. The twin leaves for the attacker's server. Watch both lanes: what the attacker does, and what the SOC can see at the same time.</p>
+
+  <div class="sim">
+    <div class="sim-head">
+      <span class="sim-title">Simulation: The Silent Tap (8 steps)</span>
+      <div class="legend" aria-hidden="true">
+        <span><span class="dot" style="background:var(--danger)"></span>attacker action</span>
+        <span><span class="dot" style="background:var(--accent-2)"></span>normal traffic</span>
+        <span><span class="dot" style="background:var(--warning)"></span>evidence</span>
+      </div>
+    </div>
+    <div class="sim-canvas-wrap">
+      <canvas id="simCanvas" width="960" height="540" role="img" tabindex="0" aria-label="Animated diagram. An attacker signs in to a core switch with stolen admin credentials, creates a monitor session that copies the finance VLAN, and points the mirror destination at a rented server they control. Every finance packet is duplicated to that server for weeks while users notice nothing. The SOC finally correlates the config change with twin network flows, removes the session, and blocks the collector. Full text version below."></canvas>
+      <div class="sim-tip" id="simTip" hidden></div>
+    </div>
+    <div class="sim-caption">
+      <span class="t" id="simStepTitle">Step 1 of 8</span>
+      <p id="simCaption">Press Play to start the story.</p>
+    </div>
+    <div class="sim-defender"><strong>SOC view</strong><p id="simDefender">Waiting for the story to start.</p></div>
+    <div class="sim-controls">
+      <button class="sim-btn" id="simPlay" type="button" aria-pressed="false"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z"/></svg><span>Play</span></button>
+      <button class="sim-btn" id="simRestart" type="button"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1a5 5 0 1 0 5 5h-1.6A3.4 3.4 0 1 1 6 2.6V5l3.5-2.5L6 0z"/></svg><span>Restart</span></button>
+      <button class="sim-btn" id="simPrev" type="button"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M9 1L3 6l6 5z"/></svg><span>Prev</span></button>
+      <button class="sim-btn" id="simNext" type="button"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1l6 5-6 5z"/></svg><span>Next</span></button>
+      <label class="sim-speed">Speed
+        <select id="simSpeed" aria-label="Simulation speed">
+          <option value="0.5">0.5&times;</option>
+          <option value="1" selected>1&times;</option>
+          <option value="1.5">1.5&times;</option>
+          <option value="2">2&times;</option>
+        </select>
+      </label>
+    </div>
+    <div class="sim-steps" id="simSteps" role="group" aria-label="Jump to step"></div>
+  </div>
+
+  <div class="card">
+    <h4>Written version of the simulation</h4>
+    <p class="small muted">This is the same story in text form. It covers every step the animation shows, so nothing is lost if you cannot see or play the canvas.</p>
+    <ol class="sim-story">
+      <li><strong>Attacker logs in.</strong> With admin credentials stolen from a contractor, the operator reaches the management network and opens the switch CLI. <span class="soc">SOC view: a VPN login to the management network from a new autonomous system (ASN), with no change ticket behind it.</span></li>
+      <li><strong>A mirror session is created.</strong> The attacker adds <code>monitor session 1</code> on <code>core-sw-01</code>, copying the finance VLAN. <span class="soc">SOC view: a config change at 03:12 with no matching ticket, and the session is not in the golden config.</span></li>
+      <li><strong>The destination points outward.</strong> The mirror target is set to <code>203.0.113.9</code>, a rented server outside the approved list. <span class="soc">SOC view: mirror destination outside the approved list, hosted at an ASN the company never uses.</span></li>
+      <li><strong>Users notice nothing.</strong> The finance host keeps its normal HTTPS sessions to the application server. <span class="soc">SOC view: baseline unchanged — no new processes or destinations, which is exactly the problem.</span></li>
+      <li><strong>Every packet is duplicated.</strong> The switch sends a second copy of each packet toward the collector. <span class="soc">SOC view: twin sessions with identical byte counts to two destinations within 2 seconds.</span></li>
+      <li><strong>The collector reassembles sessions.</strong> TLS content stays unreadable, but server names, sizes, and timing leak; cleartext protocols give up everything. <span class="soc">SOC view: no host-side signal at all — the theft surface covers the whole VLAN.</span></li>
+      <li><strong>The pattern continues for weeks.</strong> Egress volume doubles, mostly at night, and an early anomaly is dismissed as a backup job. <span class="soc">SOC view: egress volume 2.1x baseline at night — a dismissed anomaly that should have been triaged.</span></li>
+      <li><strong>The SOC correlates and contains.</strong> Config-change alerting and twin-flow analytics meet; the session is removed and the collector is blocked. <span class="soc">SOC view: containment works — session removed, credentials rotated, collector blocked at egress and upstream.</span></li>
+    </ol>
+  </div>
+</section>
+
+<section id="red-team" class="section" aria-labelledby="h-redteam">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2 id="h-redteam">Red team / hacker perspective</h2></div>
+  <p class="section-intro">This section explains why attackers love traffic mirroring and how the machinery works. Everything here is described for defense, education, and safe lab practice. Do not run these ideas against systems you do not own.</p>
+
+  <div class="card">
+    <h4>When and why an attacker uses it</h4>
+    <p>Mirroring solves three needs at the same time. <strong>Reach:</strong> one session covers every host on a segment, so the attacker sees traffic from machines they never touched. <strong>Stealth:</strong> the copying happens inside the switch, so no endpoint process runs and no new connection leaves the victim. <strong>Patience:</strong> after setup, the tap collects data around the clock while the operator is offline. CISA's September 2025 advisory describes Salt Typhoon enabling traffic mirroring on compromised telecom networks to steal data. A state-sponsored team chose a native feature over custom malware.</p>
+    <p>It also fits the device-compromise mindset: once you own the network's control plane, the network itself becomes your collection tool.</p>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Mechanism 1: switch SPAN sessions</h4>
+      <p>The classic path. On Cisco-style devices, the attacker enters configuration mode and adds a <code>monitor session</code>. The session copies chosen ports or VLANs to an output interface. Remote variants — <code>RSPAN</code> and <code>ERSPAN</code> — carry the copy across switches to a far destination. One short command block can mirror an entire finance VLAN.</p>
+    </div>
+    <div class="card">
+      <h4>Mechanism 2: Linux tc mirroring</h4>
+      <p>On Linux gateways and routers, the <code>tc</code> traffic-control tool can copy packets with one rule. The rule adds a queueing rule (qdisc) on the incoming side, plus a <code>mirred egress mirror</code> action. No reboot is needed and no file is dropped. The rule disappears on reboot unless the attacker also edits startup scripts.</p>
+    </div>
+    <div class="card">
+      <h4>Mechanism 3: cloud mirror APIs</h4>
+      <p>AWS Traffic Mirroring, GCP Packet Mirroring, and Azure vTap copy traffic between instances through API calls. An attacker with a cloud network role creates a mirror target inside their own VPC (a private, isolated cloud network). One API request is enough. There is no CLI session on any device — only an event in the control-plane log.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Advanced path: modify the device image</h4>
+      <p>Instead of adding a config line, an attacker can change the software the device runs. Bootloaders can be manipulated — security researchers call this tradecraft family ROMMONkit. A bootloader such as ROMMON is the small program that starts a Cisco device. Firmware images can also be patched to embed a hidden mirror; MITRE tracks this path as Patch System Image (T1601.001). The behavior then lives in the image, not the config, so it survives reboots <em>and</em> config rollbacks. The path is rare and hard. Still, public reporting on nation-state device tradecraft shows the intent.</p>
+    </div>
+    <div class="card">
+      <h4>Where it applies and what it needs</h4>
+      <ul>
+        <li><strong>Places:</strong> core and distribution switches, routers, virtualization hosts, cloud VPCs, and ISP or telecom edges — the Salt Typhoon pattern.</li>
+        <li><strong>Preconditions:</strong> management-plane access (device CLI, SNMP write, or a cloud network role). The device also needs a route to the collector, and the collector needs enough storage.</li>
+        <li><strong>Collector:</strong> a rented server that receives the copies, reassembles sessions, and stores whatever is mined from them.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Practical variations</h4>
+      <ul>
+        <li><strong>Mirror only what matters:</strong> ports or VLANs of high-value systems, to keep copy volume believable.</li>
+        <li><strong>Filter the copy:</strong> cloud mirror filters and select-style rules keep only interesting ports and protocols.</li>
+        <li><strong>Tunnel the mirror leg:</strong> ERSPAN over GRE or VXLAN (common tunnel wrappers) can hide the copied content in transit to a far-away collector.</li>
+        <li><strong>Limit duration:</strong> short off-hours sessions reduce the chance the volume doubling is noticed.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Attacker mistakes</h4>
+      <ul>
+        <li><strong>Config changes are logged.</strong> Device syslog, AAA accounting (AAA means authentication, authorization, and accounting), and cloud API logs record who changed what, from where, and when.</li>
+        <li><strong>The collector betrays them.</strong> Mirror destinations resolve to hosting providers in unexpected countries; the ASN stands out.</li>
+        <li><strong>Mirroring everything doubles volume.</strong> A careless "mirror all" session shows up as 2x egress, especially at night.</li>
+        <li><strong>Reused infrastructure.</strong> The same collector IP seen across victims links incidents together.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout c-warn">
+    <span class="lab">Lab only — safe and legal</span>
+    <p>The commands below are a harmless classroom demo. They create two <em>dummy</em> network interfaces inside one isolated test virtual machine. Then they mirror packets between the two. No real network and no real traffic is involved. Run it only on a Linux test VM you own, and run the cleanup commands afterwards. Using mirroring against systems without written permission is illegal.</p>
+  </div>
+
+  <div class="codeblock">
+    <div class="code-head"><span class="code-title">lab_tc_mirror.sh — mirror between two dummy interfaces (no real traffic)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code># LAB ONLY: isolated test VM with two dummy interfaces. Nothing here touches a
+# real network. Mirroring eth1 -&gt; eth2 on a machine you own shows the exact
+# mechanics defenders must detect.
+
+sudo ip link add eth1 type dummy
+sudo ip link add eth2 type dummy
+sudo ip link set eth1 up
+sudo ip link set eth2 up
+
+# Mirror every packet arriving on eth1 out of eth2 (classic tc mirred action)
+sudo tc qdisc add dev eth1 handle ffff: ingress
+sudo tc filter add dev eth1 parent ffff: u32 match u8 0 0 \
+     action mirred egress mirror dev eth2
+
+# Observe: any packet that arrives on eth1 is copied to eth2. Generate harmless
+# test packets from another local interface, then check the copy:
+#   sudo tcpdump -ni eth2 -c 10
+
+# Cleanup (always run):
+sudo tc qdisc del dev eth1 ingress
+sudo ip link del eth1
+sudo ip link del eth2</code></pre>
+  </div>
+</section>
+
+<section id="blue-team" class="section" aria-labelledby="h-blueteam">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2 id="h-blueteam">Blue team / SOC perspective</h2></div>
+  <p class="section-intro">You will not see this technique on a computer, because nothing happens on a computer. Defense shifts to three other places: device configuration telemetry, cloud control-plane logs, and the shape of network traffic itself.</p>
+
+  <div class="card">
+    <h4>How defenders can see it</h4>
+    <p>Three telemetry lanes matter. <strong>Device config telemetry</strong> tells you the tap was installed. Watch config-change syslog, AAA accounting, and daily diffs against a golden config — the approved reference copy of each device's settings. <strong>Cloud control-plane logs</strong> record every mirror API call together with the identity behind it. Examples are CloudTrail, the Azure Activity Log, and GCP audit logs. <strong>Network analytics</strong> reveal the result: a second copy of the same traffic leaving to one extra destination. Flow records and Zeek do that job. Any single lane can carry the detection; combining two turns a hunch into a case.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <caption class="small muted" style="caption-side:bottom;text-align:left;padding:10px 14px">Artifacts traffic duplication leaves behind</caption>
+      <thead><tr><th scope="col">Artifact</th><th scope="col">Where you find it</th><th scope="col">Why it helps</th></tr></thead>
+      <tbody>
+        <tr><td>Mirror session in the running config</td><td>Config-change syslog, AAA command log, golden-config diff, <code>show monitor session</code> output</td><td>The tap is a named object with a source list and a destination; the diff proves when it appeared and who made it.</td></tr>
+        <tr><td>Mirror API events in the cloud tenant</td><td>CloudTrail <code>CreateTrafficMirrorSession</code>, Azure Activity Log, GCP audit logs</td><td>API events carry the exact identity, source IP, source interface, and target — the cleanest attribution you will get.</td></tr>
+        <tr><td>Twin flows with identical byte counts</td><td>NetFlow/IPFIX, Zeek <code>conn.log</code>, flow analytics</td><td>The same session appearing twice — same bytes, two destinations, seconds apart — is the physical result of mirroring.</td></tr>
+        <tr><td>Egress from the mirror target</td><td>Firewall and egress logs for the collector or mirror target</td><td>Mirror legs that leave the site (tunneled ERSPAN, target upload) add volume from places that normally send little.</td></tr>
+        <tr><td>Promiscuous-mode kernel messages</td><td>Linux syslog: <code>device ethX entered promiscuous mode</code></td><td>Packet capture on hosts or gateways flips the NIC mode; usually benign, but unexplained entries deserve a check.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Where to look first</h4>
+      <ul>
+        <li>Config diffs for network devices: anything in the running config that is not in the golden config.</li>
+        <li>Cloud mirror API events from the last 30 days, filtered by identities outside the network team.</li>
+        <li>Flow analytics for one source talking to two destinations with near-identical byte counts.</li>
+        <li>Egress volume per site against its own baseline, focused on off-hours.</li>
+        <li>Approved-mirror inventory: compare live <code>monitor session</code> output against the documented list.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Why it matters and how it fits the chain</h4>
+      <p>Mirroring is <strong>bulk passive theft</strong>. There is no malware to quarantine and no single "stolen file" event. The loss is continuous and invisible until you measure it. That makes the exposure window long and the compliance duty heavy. Regulators expect you to know what left, and when.</p>
+      <p>ATT&amp;CK's detection strategy for this technique is DET0403. It has two analytics. <strong>AN1131</strong> watches for configuration changes to virtual TAP or mirror policies that forward traffic to unapproved destinations. The best practice is to correlate each change with the mirrored traffic itself. <strong>AN1132</strong> watches for unauthorized mirroring sessions on routers and switches. Think of <code>monitor session</code> or mirror port commands. It pairs them with outbound traffic from the mirrored interface to unexpected destinations.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Short triage flow</h4>
+    <ol class="sim-story">
+      <li><strong>Check the device.</strong> Pull the running config and diff it against the golden config. Look for <code>monitor session</code>, SPAN, RSPAN, ERSPAN, and mirror entries.</li>
+      <li><strong>Name the change.</strong> From syslog, AAA, or cloud audit logs, find who created it, from which address, and when. Compare against change tickets — the approved records of planned changes.</li>
+      <li><strong>Trace the destination.</strong> Resolve the mirror target. Is it internal and approved, or a rented host in a hosting ASN?</li>
+      <li><strong>Measure the loss.</strong> Use flow records to size the duplication: which sources, how many bytes, over what window.</li>
+      <li><strong>Contain and report.</strong> Remove the session. Block the collector at egress and upstream. Rotate device credentials. Then open the incident with a volume estimate.</li>
+    </ol>
+  </div>
+</section>
+
+<section id="detection" class="section" aria-labelledby="h-detection">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2 id="h-detection">Detection engineering deep dive</h2></div>
+  <p class="section-intro">This is the working section of the page. It maps the technique to regulations your auditors know. It feeds the topic with threat intelligence. It ranks realistic threats by platform and shows the log shapes behind each threat. It ends with six Sigma rules and matching Splunk SPL queries you can adapt and test.</p>
+
+  <div class="sub-sec" id="d-regulation" aria-labelledby="h-d-reg">
+    <h3 id="h-d-reg"><span class="sub-num">5.1</span>Regulation mapping</h3>
+    <p>Detection work does not live in a vacuum. Suppose you ask for config-diff tooling, mirror API auditing, or flow analytics budget. Naming the control each request satisfies makes that ask stronger. The table below connects T1020.001 detections to common frameworks. <em>Evidence</em> means the artifact an auditor expects to see.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Framework and control</th><th scope="col">What it requires</th><th scope="col">Why it applies to T1020.001</th><th scope="col">Expected evidence</th></tr></thead>
+        <tbody>
+          <tr><td><strong>GDPR</strong> — Art. 32 (security of processing), Art. 33 (breach notification)</td><td>Protect personal data against unlawful disclosure; report breaches within 72 hours</td><td>Mirrored copies of employee or customer traffic are unlawful disclosure; the session's lifetime defines the exposure window you must reconstruct</td><td>Golden-config diffs for network devices, mirror API logs, an incident timeline with byte counts and first/last duplication times</td></tr>
+          <tr><td><strong>HIPAA</strong> — §164.312(b) audit controls, §164.312(e) transmission security</td><td>Record and examine system activity; guard data in transit</td><td>ePHI (protected health information) crossing a mirrored VLAN is copied without any endpoint control noticing; audit controls must cover the network layer</td><td>Device config-change logs with review sign-offs, evidence that every mirror destination is authorized</td></tr>
+          <tr><td><strong>ISO/IEC 27001:2022</strong> — A.8.20 (network security), A.8.16 (monitoring activities), A.8.9 (configuration management)</td><td>Secure networks, monitor for anomalies, control configuration changes</td><td>All three map directly: golden configs, mirror-policy monitoring, and change control are the defenses on this page</td><td>Golden-config repository with device backup jobs, detection rules in version control, monitoring coverage matrix</td></tr>
+          <tr><td><strong>SOC 2</strong> — CC6.6 (boundary protection), CC7.2 (anomaly monitoring), CC8.1 (change management)</td><td>Protect boundaries, detect anomalies, authorize changes</td><td>A mirror session added outside a change window is both a boundary failure and an unauthorized change</td><td>Change tickets linked to device diffs, alert-to-closure records for mirror alerts, quarterly rule validation results</td></tr>
+          <tr><td><strong>PCI DSS v4.0</strong> — Req 1.2 (network security controls), Req 10.4 (log review), Req 12.10 (incident response)</td><td>Maintain and review network security controls, review logs, respond to incidents</td><td>Cardholder data environments are prime mirror targets; the standard expects controls and reviews to cover switches and routers too</td><td>Network diagram checked against live mirror sessions, daily log-review evidence, an IR runbook covering device compromise</td></tr>
+          <tr><td><strong>NIST SP 800-53 Rev.5</strong> — AC-4 (information flow enforcement), SI-4 (system monitoring), CM-6 (configuration settings)</td><td>Enforce flow policy, monitor for attacks, harden and verify settings</td><td>AC-4 justifies approved-destination lists for mirrors; SI-4 justifies twin-flow analytics; CM-6 justifies golden-config diffs</td><td>Baseline configurations with deviation reports, SIEM monitoring coverage docs, analyst review rosters and findings</td></tr>
+          <tr><td><strong>NIS2 Directive</strong> — Art. 21 (risk measures), Art. 23 (reporting)</td><td>Proportionate technical measures; early warning of significant incidents</td><td>Telecom and other essential entities are exactly the sector where Salt Typhoon used this technique; monitoring must catch it in hours</td><td>Monitoring architecture description, detection backlog with T1020.001 coverage, incident timeline records</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout c-good">
+      <span class="lab">Good practice</span>
+      <p>Keep one table like this per technique in your detection backlog. When an auditor asks how you meet A.8.9 or CC8.1 for network devices, you can show real artifacts. Point at golden-config diffs, device backup jobs, and mirror API logs. That beats quoting a policy paragraph.</p>
+    </div>
+  </div>
+
+  <div class="sub-sec" id="d-intel" aria-labelledby="h-d-intel">
+    <h3 id="h-d-intel"><span class="sub-num">5.2</span>Threat intelligence</h3>
+    <p>Threat intelligence tells you who uses this technique, what their tooling looks like, and which destinations deserve extra scrutiny. Work through four steps. <strong>Collect:</strong> pull reporting on T1020.001 and device compromises. <strong>Analyze:</strong> extract behaviors and indicators. <strong>Apply:</strong> turn them into hunts and rules. <strong>Review:</strong> age out stale indicators and adjust confidence.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Source</th><th scope="col">What you get</th><th scope="col">Collection method</th><th scope="col">Typical confidence</th></tr></thead>
+        <tbody>
+          <tr><td><strong>MITRE ATT&amp;CK</strong> + ATT&amp;CK data (STIX)</td><td>Technique definition, detection strategy (DET0403, analytics AN1131 and AN1132), group mappings</td><td>ATT&amp;CK website, navigator layers, GitHub CTI repository</td><td>High — curated primary source</td></tr>
+          <tr><td><strong>Vendor threat reports</strong> (Mandiant, Microsoft, CrowdStrike, Talos)</td><td>Device tradecraft details, ROMMONkit-style tooling, infrastructure patterns</td><td>RSS feeds, blogs, vendor newsletters</td><td>High to medium — depends on sourcing</td></tr>
+          <tr><td><strong>Government advisories</strong> (CISA advisory on Salt Typhoon, Sept 2025; US-CERT TA18-106A)</td><td>Actor playbooks for network device compromise including mirroring, hunting guidance, indicators</td><td>CISA.gov advisories, ISAC re-distribution</td><td>High — incident-verified</td></tr>
+          <tr><td><strong>OSINT feeds</strong></td><td>Exposed device management interfaces, leaked credentials, hosting-ASN reputation lists</td><td>Free feeds, API lookups, permitted scanning services</td><td>Medium — verify before blocking</td></tr>
+          <tr><td><strong>Commercial feeds</strong></td><td>Curated collector infrastructure lists, machine-readable STIX/TAXII</td><td>TAXII collections into your SIEM/TIP</td><td>Medium to high — contract for provenance</td></tr>
+          <tr><td><strong>ISACs</strong> (sector ISACs, national CERTs)</td><td>Peer warnings about device compromise and mirror abuse in your sector</td><td>Membership portals, trusted circles</td><td>Medium — often sensitive-source</td></tr>
+          <tr><td><strong>Internal telemetry</strong></td><td>Your own golden-config baselines, approved-mirror inventory, past incident artifacts</td><td>SIEM, config backup jobs, cloud audit history</td><td>High for your estate — the most underused source</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h4>Known actors and campaigns using traffic duplication</h4>
+      <p>Public reporting on T1020.001 by name is thin — device compromises are underreported and often classified. The items below are the best-documented anchors; treat the gaps as a reason to hunt, not as evidence of safety.</p>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:10px 0 0">
+        <table>
+          <thead><tr><th scope="col">Actor / campaign</th><th scope="col">Behavior</th><th scope="col">Confidence</th></tr></thead>
+          <tbody>
+            <tr><td><code>G1045 Salt Typhoon</code></td><td>Enabled traffic mirroring on compromised network devices to exfiltrate data (CISA advisory, September 2025, on Chinese state-sponsored actors compromising networks worldwide)</td><td><span class="badge confidence">HIGH</span></td></tr>
+            <tr><td>Russian state-sponsored actors (US-CERT TA18-106A)</td><td>Precondition tradecraft: device compromise and persistence on network devices that enables later traffic redirection; the alert does not document mirroring itself</td><td><span class="badge confidence">LOW</span></td></tr>
+            <tr><td>Ransomware crews and access brokers (hunt hypothesis)</td><td>Cloud mirroring APIs are attractive for lateral visibility in cloud estates. Treat the pattern as unproven until your own telemetry confirms it.</td><td><span class="badge confidence">LOW</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="callout c-violet">
+      <span class="lab">Confidence levels</span>
+      <p><strong>High</strong> — multiple primary sources or government advisories with published evidence. <strong>Medium</strong> — single credible source or limited sample. <strong>Low</strong> — unverified claim, use for hypotheses and hunts only. Record confidence next to every rule you build from intel so analysts know how hard to push an alert.</p>
+    </div>
+  </div>
+
+  <div class="sub-sec" id="d-ranking" aria-labelledby="h-d-rank">
+    <h3 id="h-d-rank"><span class="sub-num">5.3</span>Threats ranking and categorization</h3>
+    <p>Not every variant deserves the same attention. The list below ranks seven realistic T1020.001 threats for a mid-size enterprise. Severity combines three inputs. Likelihood is how often the pattern appears in public reporting. Impact is the scale of data loss. Effort is how cheaply attackers can run it. The platform categories are the two official ATT&amp;CK platforms for this technique: <strong>IaaS</strong> and <strong>Network Devices</strong>. Host-side items appear only as clearly marked companion context.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">#</th><th scope="col">Threat</th><th scope="col">Severity</th><th scope="col">Platform</th><th scope="col">Preconditions</th><th scope="col">Impact</th><th scope="col">Why ranked here</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Cloud virtual TAP or packet mirror created toward an unapproved target</td><td><span class="badge sev-critical">CRITICAL</span></td><td><span class="badge cat">IaaS</span></td><td>Cloud console or API role with network permissions</td><td>Silent copying of whole subnets; no endpoint alert at all</td><td>Dominant cloud path; ATT&amp;CK analytic AN1131 is built for it</td></tr>
+          <tr><td>2</td><td>Switch or router <code>monitor session</code> / SPAN added outside a change window</td><td><span class="badge sev-critical">CRITICAL</span></td><td><span class="badge cat">NETWORK DEVICES</span></td><td>Device CLI or enable-level access</td><td>Full VLAN capture with one command block</td><td>The classic AN1132 pattern seen in state-sponsored device tradecraft</td></tr>
+          <tr><td>3</td><td>Linux <code>tc</code> mirror or redirect action inserted on a gateway</td><td><span class="badge sev-high">HIGH</span></td><td><span class="badge cat">NETWORK DEVICES</span> <span class="pill">Linux-based gateway</span></td><td>Root on a Linux router or gateway</td><td>Duplicates forwarded traffic; no reboot needed</td><td>Cheap, fileless, and invisible to file-integrity tools</td></tr>
+          <tr><td>4</td><td>Device image patched to embed a hidden mirror (ROMMONkit-style)</td><td><span class="badge sev-high">HIGH</span></td><td><span class="badge cat">NETWORK DEVICES</span></td><td>Device image write access</td><td>Survives reboots and config rollbacks</td><td>Rare but documented nation-state intent; image hash checks catch it</td></tr>
+          <tr><td>5</td><td>Promiscuous capture relay on a host next to the mirrored segment</td><td><span class="badge sev-medium">MEDIUM</span></td><td><span class="badge cat">COMPANION (HOST)</span> <span class="pill">Windows/Linux — secondary context</span></td><td>Local admin on a host</td><td>Segment-local sniffing relay</td><td>Common companion of T1040, not a platform of this technique; noisy at the kernel level</td></tr>
+          <tr><td>6</td><td>VPC route or gateway change that redirects copies through an attacker VPC</td><td><span class="badge sev-medium">MEDIUM</span></td><td><span class="badge cat">IaaS</span></td><td>Network admin role in the tenant</td><td>Subtler than an explicit mirror session</td><td>Looks like routine routing work; needs route-table analytics</td></tr>
+          <tr><td>7</td><td>Small-office or home-router port-mirror or WAN-duplex abuse</td><td><span class="badge sev-low">LOW</span></td><td><span class="badge cat">NETWORK DEVICES</span></td><td>Router admin, often default credentials</td><td>Small offices only; limited traffic worth stealing</td><td>Real for branch offices; low volume and low value keep it last</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout c-note">
+      <span class="lab">Note</span>
+      <p>Re-rank quarterly. In a cloud-heavy estate, threats 1 and 6 stay on top. If you run your own switching fabric, threat 2 leads. The ranking should mirror <em>your</em> asset inventory, not a generic one. ATT&amp;CK lists only two platforms for T1020.001: IaaS and Network Devices. Treat threat 5 as companion telemetry. It corroborates T1040 Network Sniffing nearby.</p>
+    </div>
+  </div>
+
+  <div class="sub-sec" id="d-logs" aria-labelledby="h-d-logs">
+    <h3 id="h-d-logs"><span class="sub-num">5.4</span>Logs and patterns</h3>
+    <p>Each threat from 5.3 gets its own log recipe. The recipe names the sources to collect and the fields that matter. It shows what normal looks like, what suspicious looks like, and the detection logic to encode. Event examples use realistic field layouts so your parsers have something concrete to aim at. All values are invented and safe.</p>
+
+    <div class="card">
+      <h4>Threat A — cloud virtual TAP or packet mirror to an unapproved target <span class="badge sev-critical" style="margin-left:6px">CRITICAL</span></h4>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:0 0 12px">
+        <table>
+          <thead><tr><th scope="col">Log source</th><th scope="col">Key fields</th><th scope="col">Normal behavior</th><th scope="col">Suspicious behavior</th></tr></thead>
+          <tbody>
+            <tr><td>AWS CloudTrail, Azure Activity Log, GCP Cloud Audit Logs</td><td><code>eventName</code>, <code>userIdentity.arn</code>, <code>sourceIPAddress</code>, <code>networkInterfaceId</code>, <code>trafficMirrorTargetId</code></td><td>Network team creates mirrors from corporate IPs inside change windows, targeting the approved packet-broker subnet (a packet broker is a device that copies and steers network traffic to tools)</td><td>Mirror created by a new role or unusual identity, source IP outside corporate ranges, target outside the approved list, outside change windows</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Detection logic:</strong> alert on any <code>CreateTrafficMirrorSession</code> call — or its Azure vTap and GCP packetMirroring equivalents. Escalate when the target, the source interface, or the caller is not on the approved list. That is exactly ATT&amp;CK analytic AN1131. It pairs naturally with watching the mirrored traffic itself.</p>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">AWS CloudTrail CreateTrafficMirrorSession (example event)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>{"eventTime":"2025-09-18T03:12:44Z","eventSource":"ec2.amazonaws.com",
+ "eventName":"CreateTrafficMirrorSession","eventCategory":"Management",
+ "awsRegion":"eu-west-1","sourceIPAddress":"198.51.100.24",
+ "userAgent":"console.amazonaws.com",
+ "userIdentity":{"type":"IAMUser","accountId":"111122223333",
+   "arn":"arn:aws:iam::111122223333/user/netops-temp",
+   "accessKeyId":"AKIA-EXAMPLE-KEY"},
+ "requestParameters":{"networkInterfaceId":"eni-0b91fa4473EXAMPLE",
+   "trafficMirrorTargetId":"tmt-0f7c9a2b4dEXAMPLE",
+   "trafficMirrorFilterId":"tmf-0a1b2c3d4eEXAMPLE","sessionNumber":7},
+ "responseElements":{"trafficMirrorSession":{"trafficMirrorSessionId":"tms-09a1b2c3d4EXAMPLE",
+   "trafficMirrorTargetId":"tmt-0f7c9a2b4dEXAMPLE","sessionNumber":7}},
+ "requestID":"6b1f2a30-1c2d-4e5f-9a01-77c2d4e5f6a7"}</code></pre>
+    </div>
+
+    <div class="card">
+      <h4>Threat B — switch or router monitor session added outside a change window <span class="badge sev-critical" style="margin-left:6px">CRITICAL</span></h4>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:0 0 12px">
+        <table>
+          <thead><tr><th scope="col">Log source</th><th scope="col">Key fields</th><th scope="col">Normal behavior</th><th scope="col">Suspicious behavior</th></tr></thead>
+          <tbody>
+            <tr><td>Device syslog (config change, SPAN events), AAA/TACACS+ command accounting (TACACS+ is a protocol that checks device logins), golden-config diff jobs</td><td><code>host</code>, <code>user</code>, <code>source IP</code>, <code>message</code>, <code>config diff</code></td><td>Network team sessions from jump hosts during change windows; every change matches a ticket</td><td>Monitor session commands from unknown sources or off-hours; the diff shows a session that is not in the golden config; no ticket exists</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Detection logic:</strong> flag any config change that contains <code>monitor session</code>, <code>port mirroring</code>, or SPAN keywords. Then check the author, the time, and the destination against change tickets and the approved-destination list. This is the device half of ATT&amp;CK analytic AN1132.</p>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Cisco IOS syslog — config change plus SPAN (example lines)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>Sep 18 03:12:01 core-sw-01 118943: %SYS-5-CONFIG_I: Configured from console
+  by netops on vty1 (203.0.113.9)
+Sep 18 03:12:03 core-sw-01 118944: %SPAN-5-PKT_CAP: Packet capture enabled on
+  monitor session 1, destination interface Gi0/47
+Sep 18 03:12:04 core-sw-01 118945: %SYS-6-LOGOUT: User netops has exited tty session 1(203.0.113.9)</code></pre>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Juniper Junos syslog — config change and port mirroring (example lines)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>Sep 18 03:11:57 core-rtr-02 mgd[3321]: UI_CONFIG_CHANGE: Configuration changed
+  by 'netops' from terminal 'd0001' via 'ssh'
+Sep 18 03:11:58 core-rtr-02 mib2d[2250]: port-mirroring instance added,
+  family inet, output interface ge-0/0/7.0
+Sep 18 03:12:41 core-rtr-02 mgd[3321]: UI_DBASE_LOGOUT: User 'netops' exiting
+  configuration mode</code></pre>
+    </div>
+
+    <div class="card">
+      <h4>Threat C — Linux tc mirror or redirect action on a gateway <span class="badge sev-high" style="margin-left:6px">HIGH</span></h4>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:0 0 12px">
+        <table>
+          <thead><tr><th scope="col">Log source</th><th scope="col">Key fields</th><th scope="col">Normal behavior</th><th scope="col">Suspicious behavior</th></tr></thead>
+          <tbody>
+            <tr><td>Linux auditd (execve of <code>tc</code>), sudoers logs, shell history forwarding</td><td><code>exe</code>, <code>cmd</code>, <code>uid</code>, <code>auid</code>, <code>ppid</code></td><td>Network engineers run <code>tc</code> for shaping during maintenance from bastion sessions; config management applies approved qos rules</td><td><code>tc</code> invoked with <code>mirred</code>, <code>mirror</code>, or <code>redirect</code> by an interactive user, at night, or from a session with no ticket</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Detection logic:</strong> flag an execve of <code>/usr/sbin/tc</code> or <code>/sbin/tc</code> whose command line contains <code>mirred</code> or <code>mirror</code>. Then join the event with the change calendar. Escalate when the user has no approved change record in the same window.</p>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Linux auditd — tc invoked with a mirror action (example events)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>type=USER_CMD msg=audit(1758162721.002:7740): pid=2210 uid=0 auid=1001
+  msg='cwd="/home/netops" cmd=746320717363646420616464206465762065746830...'
+type=SYSCALL msg=audit(1758162721.118:7741): arch=c000003e syscall=59
+  success=yes ppid=2043 pid=2210 auid=1001 uid=0 exe="/usr/sbin/tc" comm="tc"
+  key="NET_TOOLS_EXEC"
+type=USER_CMD msg=audit(1758162722.401:7742): pid=2212 uid=0 auid=1001
+  msg='cwd="/home/netops" cmd=74632066696C7465722061646420...'
+# decoded second USER_CMD: tc filter add dev eth0 parent ffff: u32 match u8 0 0
+#   action mirred egress mirror dev eth2</code></pre>
+    </div>
+
+    <div class="card">
+      <h4>Threat D — device image patched to embed a hidden mirror <span class="badge sev-high" style="margin-left:6px">HIGH</span></h4>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:0 0 12px">
+        <table>
+          <thead><tr><th scope="col">Log source</th><th scope="col">Key fields</th><th scope="col">Normal behavior</th><th scope="col">Suspicious behavior</th></tr></thead>
+          <tbody>
+            <tr><td>Device syslog (image install, verification messages), config backup jobs, hash manifests from the vendor</td><td><code>host</code>, <code>image name</code>, <code>computed hash</code>, <code>expected hash</code>, <code>user</code></td><td>Sanctioned upgrades during change windows; computed hash matches the vendor manifest every time</td><td>Image installed outside a window; verification message reports a mismatch; hash differs from the vendor manifest or the last known-good value</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Detection logic:</strong> raise an alert for any image verification event whose computed hash does not match the vendor manifest. Also raise one for any image install that has no ticketed upgrade behind it. A config rollback will not undo this path. The image itself is the thing to check.</p>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Device syslog — image install and hash mismatch (example lines)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>Sep 18 02:41:10 core-sw-01 118900: %SEC_LOGIN-5-LOGIN_SUCCESS: Login Success
+  [user: netops] [Source: 203.0.113.9] [localport: tcp/22]
+Sep 18 02:47:52 core-sw-01 118902: %INSTALL-6-INSTALL_OPERATION: install add
+  file flash:cat9k_iosxe.bin started by netops
+Sep 18 02:59:31 core-sw-01 118910: IMAGE_VERIFY: computed sha1
+  4f1a9c83d2e7... differs from vendor manifest b72e41a09f3c...</code></pre>
+    </div>
+
+    <div class="card">
+      <h4>Twin-flow network signal — the physical result of mirroring <span class="badge sev-critical" style="margin-left:6px">CRITICAL</span></h4>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:0 0 12px">
+        <table>
+          <thead><tr><th scope="col">Log source</th><th scope="col">Key fields</th><th scope="col">Normal behavior</th><th scope="col">Suspicious behavior</th></tr></thead>
+          <tbody>
+            <tr><td>Zeek <code>conn.log</code>, NetFlow/IPFIX, flow analytics platform</td><td><code>id.orig_h</code>, <code>id.resp_h</code>, <code>orig_bytes</code>, <code>resp_bytes</code>, <code>ts</code></td><td>A source's sessions go to their business destinations; byte counts differ per session</td><td>One source sends the same byte count to two different destinations within seconds; the second destination is external and new</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Detection logic:</strong> group connection records by source and byte count in short time bins. Raise the twin-flow alert when the same byte count reaches two or more destinations and at least one is external. This is the network half of AN1132. It is also the strongest corroboration for every other signal on this page.</p>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Zeek conn.log TSV — twin sessions to two destinations (example records)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>#fields ts uid id.orig_h id.orig_p id.resp_h id.resp_p proto service duration orig_bytes resp_bytes
+1758162721.412  CdupAa1  10.20.7.61  49812  10.20.30.15  443  tcp  ssl  182.4  1984512  24118
+1758162723.008  CdupBb2  10.20.7.61  51177  203.0.113.9  443  tcp  ssl  179.8  1984512  23990
+1758162811.900  CdupCc3  10.20.7.61  50190  10.20.30.15  443  tcp  ssl  190.1  2043210  24077
+1758162813.402  CdupDd4  10.20.7.61  51388  203.0.113.9  443  tcp  ssl  188.0  2043210  24102
+# identical orig_bytes to two id.resp_h within ~2 seconds -&gt; duplicated traffic
+# legit dest 10.20.30.15 (finance app), mirror copy leaves to 203.0.113.9</code></pre>
+    </div>
+
+    <div class="card">
+      <h4>Threat E — promiscuous capture relay on a host next to the mirrored segment <span class="badge sev-medium" style="margin-left:6px">MEDIUM</span> <span class="pill">companion — host context</span></h4>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:0 0 12px">
+        <table>
+          <thead><tr><th scope="col">Log source</th><th scope="col">Key fields</th><th scope="col">Normal behavior</th><th scope="col">Suspicious behavior</th></tr></thead>
+          <tbody>
+            <tr><td>Linux kernel syslog, Windows NDIS/packet-capture driver events, EDR sensor</td><td><code>host</code>, <code>interface</code>, <code>mode</code>, <code>process</code>, <code>user</code></td><td>Sensor hosts capture by design; administrators run short, ticketed tcpdump sessions</td><td>A non-sensor host flips to promiscuous mode with no ticket, and a capture process starts on the same host</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Detection logic:</strong> alert on promiscuous-mode kernel messages from hosts outside the sensor allow-list (see Sigma rule 6). Join each hit with the process that started a capture. This threat is companion context: it supports T1040 Network Sniffing next to T1020.001.</p>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Linux kernel syslog — promiscuous mode plus a capture process (example lines)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>Sep 18 03:34:01 gw-01 kernel: [88231.442] device eth1 entered promiscuous mode
+Sep 18 03:34:02 gw-01 kernel: [88232.001] device eth1 left promiscuous mode
+# pattern: an interface that flips in and out of promiscuous mode without a
+# sanctioned capture session is the thing to review with the host owner</code></pre>
+    </div>
+
+    <div class="card">
+      <h4>Threat F — VPC route or gateway change that redirects copies <span class="badge sev-medium" style="margin-left:6px">MEDIUM</span></h4>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:0 0 12px">
+        <table>
+          <thead><tr><th scope="col">Log source</th><th scope="col">Key fields</th><th scope="col">Normal behavior</th><th scope="col">Suspicious behavior</th></tr></thead>
+          <tbody>
+            <tr><td>CloudTrail <code>CreateRoute</code>/<code>ReplaceRoute</code>, Azure route-table events, GCP <code>routes.insert</code> audit records</td><td><code>routeTableId</code>, <code>destinationCidrBlock</code>, <code>gatewayId</code>/<code>networkInterfaceId</code>, <code>userIdentity.arn</code></td><td>Network team changes routes inside change windows, toward approved gateways and endpoints</td><td>A route for a sensitive subnet now points at an unfamiliar ENI (an Elastic Network Interface, a virtual network card in AWS), peer VPC, or internet gateway; the caller is new or the hour is off-window</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Detection logic:</strong> review every route change that touches a mirrored or sensitive subnet. Correlate the route change with mirror API events from the same identity. A route change plus a mirror session on one day is a critical pattern, even when each event alone looks routine.</p>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">AWS CloudTrail CreateRoute (example event)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>{"eventTime":"2025-09-21T02:58:10Z","eventSource":"ec2.amazonaws.com",
+ "eventName":"CreateRoute","eventCategory":"Management","awsRegion":"eu-west-1",
+ "sourceIPAddress":"198.51.100.24","userAgent":"console.amazonaws.com",
+ "userIdentity":{"type":"IAMUser","accountId":"111122223333",
+   "arn":"arn:aws:iam::111122223333/user/netops-temp"},
+ "requestParameters":{"routeTableId":"rtb-0ab12cd34eEXAMPLE",
+   "destinationCidrBlock":"10.20.30.0/24",
+   "networkInterfaceId":"eni-0e5d97a1b2c3d4e05"},
+ "requestID":"9c3d5a11-2f4e-4a6b-8c1d-5e9f0a2b3c4d"}
+# pattern: subnet 10.20.30.0/24 (finance app tier) now routes to an unfamiliar ENI</code></pre>
+    </div>
+
+    <div class="card">
+      <h4>Threat G — small-office or home-router mirroring <span class="badge sev-low" style="margin-left:6px">LOW</span></h4>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:0 0 12px">
+        <table>
+          <thead><tr><th scope="col">Log source</th><th scope="col">Key fields</th><th scope="col">Normal behavior</th><th scope="col">Suspicious behavior</th></tr></thead>
+          <tbody>
+            <tr><td>SOHO router syslog (where supported), admin-login records, WAN volume per site</td><td><code>host</code>, <code>admin source IP</code>, <code>config change</code>, <code>WAN bytes</code></td><td>Admin logins come from the office or the ISP range; WAN volume matches the site baseline</td><td>Admin login from a new country; a port-mirror setting appears; WAN volume doubles at night</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Detection logic:</strong> collect router syslog into a branch index where the model supports it. Where it does not, compare WAN volume per site against its own baseline. Escalate any mirroring setting that nobody can tie to a ticket.</p>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">SOHO router syslog — admin login and mirror setting (example lines)</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>Jan  6 02:11:41 soho-rtr authpriv.info dropbear[7411]: Password auth succeeded
+  for 'root' from 203.0.113.9:51022
+Jan  6 02:12:03 soho-rtr user.notice switch: port-mirroring enabled
+  (mirror port lan4 -&gt; wan)
+# pattern: foreign admin login followed by a mirror setting and night-time
+# WAN volume growth is the branch-office version of this technique</code></pre>
+    </div>
+  </div>
+
+  <div class="sub-sec" id="d-sigma" aria-labelledby="h-d-sigma">
+    <h3 id="h-d-sigma"><span class="sub-num">5.5</span>Sigma rules and Splunk SPL</h3>
+    <p>Each threat from 5.3 has a log recipe in 5.4. The six Sigma rules below cover the highest-priority patterns: threats 1 to 5 plus the twin-flow result that proves duplication. Each rule has a matching Splunk SPL query that expresses the same logic. SPL examples assume these index names — <code>index=cloud sourcetype=aws:cloudtrail</code> (cloud control plane), <code>index=netdev sourcetype=cisco:ios</code> (network device syslog), <code>index=network sourcetype=zeek:conn</code> (Zeek), <code>index=unix sourcetype=linux_audit</code> (auditd) and <code>sourcetype=syslog</code> (kernel and vendor syslog). Swap them for your own names; field names are noted under each query.</p>
+
+    <div class="card">
+      <h4>Rule 1 — Cloud traffic mirror session created or modified (Threat A) <span class="badge sev-high" style="margin-left:6px">HIGH</span></h4>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Sigma YAML — cloud_traffic_mirror_session_change.yml</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>title: Cloud Traffic Mirror Session Created or Modified
+id: 8f4d2c61-9a30-4b7e-b5d1-2e6c8a94f001
+status: stable
+description: Detects creation, modification, or deletion of traffic mirror
+  resources in AWS CloudTrail. An attacker with a cloud network role can copy
+  whole subnets to a mirror target they control with one API call. Azure vTap
+  and GCP packetMirroring (packetMirrors.insert) are the equivalents - apply
+  the same logic to those providers' audit logs. Maps to ATT&amp;CK analytic
+  AN1131 (mirror policy changes to unapproved destinations).
+references:
+  - https://attack.mitre.org/techniques/T1020/001/
+author: Detection Engineering Team
+date: 2026-02-14
+logsource:
+  category: cloud
+  product: aws
+  service: cloudtrail
+detection:
+  selection_events:
+    eventName:
+      - 'CreateTrafficMirrorSession'
+      - 'CreateTrafficMirrorTarget'
+      - 'CreateTrafficMirrorFilter'
+      - 'ModifyTrafficMirrorSession'
+      - 'DeleteTrafficMirrorSession'
+  filter_approved_roles:
+    userIdentity.arn|contains:
+      - 'role/netops-mirroring'
+      - 'user/packet-broker-admin'
+  condition: selection_events and not filter_approved_roles
+fields:
+  - eventTime
+  - eventName
+  - userIdentity.arn
+  - sourceIPAddress
+  - requestParameters.networkInterfaceId
+  - requestParameters.trafficMirrorTargetId
+falsepositives:
+  - Network team mirroring sessions created inside approved change windows
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1020
+  - attack.t1020.001</code></pre>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Splunk SPL — cloud mirror API events outside approved roles</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>index=cloud sourcetype=aws:cloudtrail
+  eventName IN ("CreateTrafficMirrorSession","CreateTrafficMirrorTarget",
+                "CreateTrafficMirrorFilter","ModifyTrafficMirrorSession",
+                "DeleteTrafficMirrorSession")
+| search NOT (userIdentity.arn="*role/netops-mirroring*" OR userIdentity.arn="*packet-broker-admin*")
+| stats count values(eventName) AS events values(requestParameters.trafficMirrorTargetId) AS targets
+        values(sourceIPAddress) AS source_ips first(_time) AS first_seen BY userIdentity.arn
+| sort - first_seen</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping note:</strong> implements AN1131 — mirror policy changes that forward traffic to unapproved destinations. Correlate each hit with the mirrored traffic observation. <strong>Field assumptions:</strong> <code>index=cloud sourcetype=aws:cloudtrail</code> with CIM fields <code>eventName</code> and <code>userIdentity.arn</code>; for Azure use AzureActivity where <code>operationName</code> starts with <code>Microsoft.Network/networkWatchers/</code>; for GCP use <code>protoPayload.methodName="packetmirrors.insert"</code>. <strong>False positives:</strong> approved packet-broker and NDR (network detection and response) deployments. <strong>Tuning:</strong> keep the approved-role list in the filter. Add an approved-target subnet check. Treat delete storms — session removal right after theft — as their own alert. <strong>Severity:</strong> high; raise to critical when the target is outside approved subnets.</p>
+
+    <div class="card">
+      <h4>Rule 2 — Monitor session or port mirror configured on a device (Threat B) <span class="badge sev-critical" style="margin-left:6px">CRITICAL</span></h4>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Sigma YAML — netdev_monitor_session_config.yml</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>title: Monitor Session or Port Mirror Configured on Network Device
+id: 4c7b8e12-5d94-4f6a-8b23-9a1c6d02e774
+status: stable
+description: Detects configuration of SPAN, RSPAN, ERSPAN, or monitor sessions
+  on switches and routers from syslog. A mirror session copying traffic to an
+  attacker-chosen destination is the classic network-device half of traffic
+  duplication (ATT&amp;CK analytic AN1132). Tune with your approved change
+  tickets.
+references:
+  - https://attack.mitre.org/techniques/T1020/001/
+  - https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-239a
+author: Detection Engineering Team
+date: 2026-02-14
+logsource:
+  category: application
+  service: syslog
+detection:
+  selection_mirror:
+    message|contains:
+      - 'monitor session'
+      - '%SPAN-'
+      - 'port mirroring'
+      - 'port-mirroring'
+      - 'mirror session'
+      - 'erspan'
+      - 'rspan'
+  condition: selection_mirror
+fields:
+  - host
+  - user
+  - message
+falsepositives:
+  - Legitimate NDR and monitoring teams creating sanctioned mirror sessions
+  - Approved packet-broker changes inside change windows
+level: critical
+tags:
+  - attack.exfiltration
+  - attack.t1020
+  - attack.t1020.001</code></pre>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Splunk SPL — mirror keywords in device syslog</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>index=netdev (sourcetype=cisco:ios OR sourcetype=juniper)
+  ("monitor session" OR "%SPAN-" OR "port mirroring" OR "port-mirroring"
+   OR "mirror session" OR "erspan" OR "rspan")
+| stats count values(_raw) AS examples first(_time) AS first_seen BY host
+| sort - first_seen</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping note:</strong> implements the device half of AN1132 (unauthorized mirroring sessions on routers and switches). <strong>Field assumptions:</strong> device events land in <code>index=netdev</code> with <code>sourcetype=cisco:ios</code> or <code>sourcetype=juniper</code>; the full message is in <code>_raw</code>. <strong>False positives:</strong> legit NDR (network detection and response) and monitoring teams — this is the rule's biggest cost. <strong>Tuning:</strong> join every hit with the change-ticket queue. Suppress only when the ticket is open and names the session. Suppress approved sensors by host, never by keyword. <strong>Severity:</strong> critical when the author is outside the network team or the hour is off-window; high otherwise.</p>
+
+    <div class="card">
+      <h4>Rule 3 — tc invoked with a mirror or redirect action (Threat C) <span class="badge sev-high" style="margin-left:6px">HIGH</span></h4>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Sigma YAML — linux_tc_mirred_action.yml</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>title: tc Command Invoked with Mirror or Redirect Action
+id: b2a5d3f7-1e48-49c6-a0d9-63f5c70b119e
+status: stable
+description: Detects the Linux traffic-control utility tc being run with a
+  mirred mirror or redirect action. A root user adding an ingress qdisc plus a
+  mirred action duplicates forwarded traffic on a gateway without writing any
+  file that file-integrity monitoring would notice.
+references:
+  - https://attack.mitre.org/techniques/T1020/001/
+  - https://attack.mitre.org/techniques/T1040/
+author: Detection Engineering Team
+date: 2026-02-14
+logsource:
+  category: process_creation
+  product: linux
+detection:
+  selection_exe:
+    Image|endswith:
+      - '/usr/sbin/tc'
+      - '/sbin/tc'
+      - '/usr/bin/tc'
+  selection_action:
+    CommandLine|contains:
+      - 'mirred'
+      - 'mirror'
+  condition: selection_exe and selection_action
+fields:
+  - Image
+  - CommandLine
+  - User
+  - ParentImage
+falsepositives:
+  - Network engineers shaping or debugging traffic on Linux gateways
+  - Configuration management tools applying approved qos policies
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1020
+  - attack.t1020.001</code></pre>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Splunk SPL — tc with mirred action in auditd</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>index=unix sourcetype=linux_audit syscall=execve
+  (exe="/usr/sbin/tc" OR exe="/sbin/tc" OR exe="/usr/bin/tc")
+| where like(cmd, "%mirred%") OR like(cmd, "%mirror%")
+| table _time host auid exe cmd
+| sort -_time</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping note:</strong> covers threat 3 on Linux gateways; complements AN1132 where the "device" is a Linux router. <strong>Field assumptions:</strong> <code>index=unix sourcetype=linux_audit</code> with parsed <code>exe</code> and <code>cmd</code> fields (most auditd TAs provide both; if only <code>_raw</code> survives, add a <code>rex</code> on <code>cmd=</code> first). <strong>False positives:</strong> qos and shaping work by network engineers. <strong>Tuning:</strong> alert only on <code>mirred</code> hits in steady state. Keep <code>mirror</code> as a secondary keyword. Also watch for config-management runners that apply rules from approved repositories. <strong>Severity:</strong> high.</p>
+
+    <div class="card">
+      <h4>Rule 4 — Device config change without ticket or image hash mismatch (Threat D) <span class="badge sev-high" style="margin-left:6px">HIGH</span></h4>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Sigma YAML — netdev_config_image_integrity.yml</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>title: Device Config Change Without Ticket or Image Hash Mismatch
+id: d9e1f0a4-7b62-4c58-93ab-08d4e91c2b35
+status: test
+description: Detects syslog lines indicating a device configuration was
+  modified outside an approved process, or image verification messages where
+  a computed hash does not match the vendor manifest. The patched-image path
+  (ROMMONkit style) survives config rollbacks, so image integrity is the
+  deeper check for T1020.001 persistence.
+references:
+  - https://attack.mitre.org/techniques/T1020/001/
+  - https://attack.mitre.org/techniques/T1601/001/
+author: Detection Engineering Team
+date: 2026-02-14
+logsource:
+  category: application
+  service: syslog
+detection:
+  selection_config:
+    message|contains:
+      - 'configuration modified'
+      - 'config change'
+      - 'CONFIG_I'
+  selection_image:
+    message|contains: 'image'
+    message|re: '(?i)(sha1|md5|checksum|manifest).{0,80}(mismatch|different|unknown)'
+  filter_upgrade:
+    message|contains:
+      - 'install add'
+      - 'software upgrade'
+      - 'install commit'
+  condition: 1 of selection_* and not filter_upgrade
+fields:
+  - host
+  - user
+  - message
+falsepositives:
+  - Sanctioned software upgrades and scheduled maintenance changes
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1020
+  - attack.t1020.001
+  - attack.defense_evasion
+  - attack.t1601.001</code></pre>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Splunk SPL — config changes and image verification failures</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>index=netdev sourcetype=cisco:ios
+  ("CONFIG_I" OR "configuration modified" OR "config change"
+   OR ("image" AND ("sha1" OR "md5" OR "checksum" OR "manifest")))
+| regex _raw!="(?i)install add|software upgrade|install commit"
+| regex _raw="(?i)CONFIG_I|configuration modified|config change|(sha1|md5|checksum|manifest).{0,80}(mismatch|different|unknown)"
+| stats first(_time) AS first_seen count AS events values(_raw) AS examples BY host
+| sort - first_seen</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping note:</strong> supports AN1131/AN1132 correlation and covers threat 4 (image tampering), which config rollbacks cannot undo. <strong>Field assumptions:</strong> device syslog in <code>index=netdev sourcetype=cisco:ios</code> with the message in <code>_raw</code>; a vendor hash manifest feeds the expected values. <strong>False positives:</strong> sanctioned upgrades — the filter removes the common install flow, and golden-config joins remove ticketed changes. <strong>Tuning:</strong> run the config-change half against the change calendar; treat any hash mismatch as a page, not a ticket. <strong>Severity:</strong> high; critical when the hash differs from the vendor manifest.</p>
+
+    <div class="card">
+      <h4>Rule 5 — Same session bytes sent to two destinations (twin flows) <span class="badge sev-critical" style="margin-left:6px">CRITICAL</span></h4>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Sigma YAML — zeek_conn_twin_flow_shape.yml</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>title: Same Session Bytes Sent to Two Different Destinations
+id: 5a8c2b60-3f14-4d97-b2e1-c94a06f8d422
+status: test
+description: Flags Zeek connection records where one internal source sent the
+  same large byte count to two different destinations. Sigma cannot express
+  the time-pairing (two sessions within 2 seconds), so this rule filters the
+  volume shape only; pair it with the Splunk query below, which adds the
+  2-second bin and implements the network half of ATT&amp;CK analytic AN1132.
+references:
+  - https://attack.mitre.org/techniques/T1020/001/
+author: Detection Engineering Team
+date: 2026-02-14
+logsource:
+  category: firewall
+  product: zeek
+  service: conn
+detection:
+  selection_volume:
+    proto: 'tcp'
+    orig_bytes|gte: 1000000
+  filter_internal_dst:
+    id.resp_h|startswith:
+      - '10.'
+      - '192.168.'
+      - '172.16.'
+      - '172.17.'
+      - '172.18.'
+      - '172.19.'
+      - '172.20.'
+      - '172.21.'
+      - '172.22.'
+      - '172.23.'
+      - '172.24.'
+      - '172.25.'
+      - '172.26.'
+      - '172.27.'
+      - '172.28.'
+      - '172.29.'
+      - '172.30.'
+      - '172.31.'
+  condition: selection_volume and not filter_internal_dst
+fields:
+  - ts
+  - id.orig_h
+  - id.resp_h
+  - orig_bytes
+  - resp_bytes
+falsepositives:
+  - Content replication, backups, and CDN prefetch with matching payload sizes
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1020
+  - attack.t1020.001</code></pre>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Splunk SPL — twin-flow pairing by source and byte count</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>index=network sourcetype=zeek:conn proto=tcp orig_bytes&gt;=1000000
+| bin _time span=2s
+| stats dc(id.resp_h) AS dests values(id.resp_h) AS peers max(orig_bytes) AS bytes
+        BY id.orig_h _time orig_bytes
+| where dests &gt;= 2
+| table _time id.orig_h dests peers bytes
+| sort -_time</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping note:</strong> implements the network half of AN1132: outbound traffic from a mirrored interface to unexpected destinations. It also gives the physical proof of duplication. <strong>Field assumptions:</strong> <code>index=network sourcetype=zeek:conn</code> with <code>id.orig_h</code>, <code>id.resp_h</code>, <code>orig_bytes</code>; with NetFlow use <code>src_ip</code>, <code>dest_ip</code>, <code>bytes_in</code> equivalents and a 2-second bin on your exporter's window. <strong>False positives:</strong> replication and backup jobs that genuinely send equal payloads to two targets. Replication usually repeats on a schedule, and the schedule check exposes it. <strong>Tuning:</strong> raise <code>orig_bytes</code> to your P95 after one week of data. Require the second destination to be new. Exempt known dual-destination applications. <strong>Severity:</strong> critical when paired with a config change on the same day; high alone.</p>
+
+    <div class="card">
+      <h4>Rule 6 — Interface entered promiscuous mode (Threat E) <span class="badge sev-medium" style="margin-left:6px">MEDIUM</span></h4>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Sigma YAML — linux_promiscuous_mode_syslog.yml</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>title: Network Interface Entered Promiscuous Mode
+id: 1f6d9c83-27a5-4e0b-8f64-3b9d0a52c611
+status: stable
+description: Detects kernel messages announcing that a network interface
+  entered promiscuous mode. Capture tools and sniffers flip the interface
+  mode; on hosts that never run monitors this is a strong companion signal
+  to traffic duplication and network sniffing activity.
+references:
+  - https://attack.mitre.org/techniques/T1020/001/
+  - https://attack.mitre.org/techniques/T1040/
+author: Detection Engineering Team
+date: 2026-02-14
+logsource:
+  category: application
+  service: syslog
+detection:
+  selection_promisc:
+    message|contains:
+      - 'entered promiscuous mode'
+      - 'promiscuous mode enabled'
+  condition: selection_promisc
+fields:
+  - host
+  - message
+falsepositives:
+  - Monitoring hosts and security sensors that capture by design
+  - Manual Wireshark or tcpdump sessions by administrators
+level: medium
+tags:
+  - attack.exfiltration
+  - attack.t1020
+  - attack.t1020.001
+  - attack.collection
+  - attack.t1040</code></pre>
+    </div>
+    <div class="codeblock">
+      <div class="code-head"><span class="code-title">Splunk SPL — promiscuous-mode messages outside sensor hosts</span><button class="copy-btn" type="button" aria-label="Copy code to clipboard">Copy</button></div>
+<pre><code>index=unix sourcetype=syslog ("entered promiscuous mode" OR "promiscuous mode enabled")
+| lookup promiscuous_allowlist host OUTPUT approved
+| search NOT approved="true"
+| stats count values(_raw) AS examples first(_time) AS first_seen BY host
+| sort - first_seen</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping note:</strong> covers threat 5 and corroborates T1040 Network Sniffing alongside T1020.001. <strong>Field assumptions:</strong> kernel messages land in <code>index=unix sourcetype=syslog</code>; a <code>promiscuous_allowlist</code> lookup marks sanctioned sensor hosts. <strong>False positives:</strong> monitoring hosts, security sensors, and engineers running Wireshark. <strong>Tuning:</strong> grow the allow-list deliberately. Require the interface to stay promiscuous for more than a few minutes. Then join with <code>tcpdump</code> or capture-process executions on the same host. <strong>Severity:</strong> medium; raise when the host sits on a sensitive VLAN.</p>
+
+    <div class="callout c-note">
+      <span class="lab">Validation</span>
+      <p>Validate every rule before production. Replay one week of data and confirm the expected false-positive rate. Then run a purple-team exercise — a joint test in which an attacker-side engineer helps verify that the defender's alerts fire. The test should add a harmless monitor session, or use the section 3 dummy-interface lab, and confirm the alert fires end to end. A detection you have never seen fire is a hope, not a control.</p>
+    </div>
+  </div>
+</section>
+
+<section id="case-study" class="section" aria-labelledby="h-case">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2 id="h-case">Real-world case study</h2></div>
+  <p class="section-intro">The case below is a <strong>composite</strong> written for training. It is inspired by Salt Typhoon-style intrusions into telecom and managed-network providers, merged into one coherent story. Names, hosts, and numbers are fictional; the behaviors follow public advisories.</p>
+
+  <div class="card">
+    <h4>Context</h4>
+    <p><strong>Nordline Telecom</strong> runs a national mobile network and hosts an enterprise tenant with 3,000 office users. Network device management lived on a flat management VLAN reachable over an old contractor VPN. Config backups ran nightly. But nobody diffed them, and flow data was kept for only 14 days.</p>
+  </div>
+
+  <div class="timeline">
+    <div class="tl-item"><span class="tl-time">Day 0 — initial access</span><h4>Contractor credentials phished</h4><p>A subcontractor's VPN credentials are phished through a fake scheduling site. The account has read-write access to the management network.</p></div>
+    <div class="tl-item"><span class="tl-time">Day 2 — management-plane access</span><h4>Quiet VPN login to the mgmt net</h4><p>The attacker signs in to the management VLAN from a hosting ASN never seen before. They then reach core routers and switches over SSH. VPN logs exist, but no alert watches for "management login from a new ASN".</p></div>
+    <div class="tl-item"><span class="tl-time">Day 3 — 03:12 local</span><h4>Monitor session added on the finance VLAN</h4><p>On <code>core-sw-01</code> the attacker adds <code>monitor session 1</code>. It copies the finance VLAN to a mirror destination that tunnels toward an overseas collector. No change ticket exists; the nightly backup job stores the change without anyone reading it.</p></div>
+    <div class="tl-item"><span class="tl-time">Day 3-33 — quiet theft</span><h4>A month of silent duplication</h4><p>Every packet from the finance VLAN is duplicated to the collector. The enterprise tenant's logins, email metadata, and file transfers are reassembled off-site. Nothing on any endpoint changes.</p></div>
+    <div class="tl-item"><span class="tl-time">Day 19 — missed anomaly</span><h4>Volume doubling dismissed</h4><p>A capacity report flags egress volume at 2.1x baseline during off-hours. An engineer notes "looks like the new backup job" and closes the ticket. No off-hours baseline review exists.</p></div>
+    <div class="tl-item"><span class="tl-time">Day 34 — detection point</span><h4>Config-drift job flags the session</h4><p>A newly deployed golden-config diff job reports <code>monitor session 1</code> on <code>core-sw-01</code> as drift. The running config does not match the approved baseline. The SOC joins the finding with twin-flow analytics and sees identical byte counts to <code>203.0.113.9</code>.</p></div>
+    <div class="tl-item"><span class="tl-time">Day 34 — containment</span><h4>Session removed, collector blocked</h4><p>Engineers remove the mirror session. They block the collector IP at egress and with upstream providers. They also disable the contractor VPN account. Device credentials are rotated the same day.</p></div>
+    <div class="tl-item"><span class="tl-time">Day 35-40 — eradication</span><h4>Image verification and mgmt-plane rebuild</h4><p>Device images are verified against vendor hashes (clean). The management plane is moved behind MFA (multi-factor authentication) and a jump host. A jump host is a single guarded server that admins must pass through. Direct VPN reachability to device CLI is removed.</p></div>
+    <div class="tl-item"><span class="tl-time">Day 41-60 — recovery</span><h4>Exposure window quantified and reported</h4><p>Twin-flow records and collector egress size the 31-day duplication window at roughly 45 GB leaving the site. The enterprise tenant and the national regulator are notified; monitoring coverage is formally extended to network devices.</p></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Attack chain and tools used</h4>
+      <ul>
+        <li><strong>Chain:</strong> phished contractor VPN login, then management-plane access, then T1020.001 mirroring, then off-site reassembly — the pattern from the section 1 overview.</li>
+        <li><strong>Tools:</strong> a phishing kit, the stolen VPN account, an SSH client, and the switch's own <code>monitor session</code> feature with a tunneled mirror destination.</li>
+        <li><strong>Infrastructure:</strong> one rented collector server for reassembly and storage. No malware touched any endpoint.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Who did what (team roles)</h4>
+      <ul>
+        <li><strong>SOC analyst:</strong> triaged the config-drift alert and ran the twin-flow query that proved duplication.</li>
+        <li><strong>Network engineer:</strong> removed the mirror session and rebuilt management-plane access rules.</li>
+        <li><strong>Incident commander:</strong> ran the war room and the daily written updates.</li>
+        <li><strong>Identity and cloud teams:</strong> rotated credentials and enforced MFA on admin paths.</li>
+        <li><strong>Legal and compliance:</strong> sized the exposure window and filed the regulator and tenant notifications.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Impact and consequences</h4>
+      <ul>
+        <li>Enterprise tenant credentials and email metadata captured for a month.</li>
+        <li>Tens of gigabytes (about 45 GB) of regulated material duplicated off-site.</li>
+        <li>Regulatory notification and a supervised 60-day remediation plan.</li>
+        <li>Trust damage: the tenant moved traffic to a competitor link.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Team response and communication</h4>
+      <ul>
+        <li>A joint SOC and network-team war room stood up on day 34 with a single incident commander.</li>
+        <li>Daily 16:00 written updates replaced ad-hoc calls for the duration of the incident.</li>
+        <li>Upstream providers were engaged within hours to block the collector beyond the company's own edge.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Lessons learned</h4>
+    <ul>
+      <li><strong>Golden-config diffs are the cheapest control.</strong> The drift job found in one run what 31 days of backups missed. Diffing stored configs against an approved baseline should have existed from day one.</li>
+      <li><strong>Management plane needs MFA and a jump host.</strong> One phished contractor password reached core device CLI because the path was flat.</li>
+      <li><strong>Twin-flow analytics catch what config drift misses.</strong> Short-lived mirror sessions may never appear in a nightly diff; the traffic shape is the durable clue.</li>
+      <li><strong>Off-hours anomalies must be triaged, not dismissed.</strong> The day-19 volume report was closed with a guess; a 30-minute check would have found the truth.</li>
+      <li><strong>Cloud mirroring APIs need their own alerts.</strong> The same intrusion pattern is one API call away in AWS, Azure, and GCP. Control-plane logs must be watched like device configs.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="mitigation" class="section" aria-labelledby="h-mitigation">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2 id="h-mitigation">Mitigation and defense</h2></div>
+  <p class="section-intro">Mirroring is a legitimate feature, so you cannot simply remove it. ATT&amp;CK lists three mitigations for this technique: Data Loss Prevention (M1057), Encrypt Sensitive Information (M1041), and User Account Management (M1018). The rest of the defense is layered friction. Make the tap hard to install. Make its output hard to read. Make its effects impossible to miss.</p>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Policy and change management</h4>
+      <ul>
+        <li>Keep a golden config for every device; back up configs nightly and diff automatically.</li>
+        <li>Allow mirror sessions only through ticketed change windows with named approvers.</li>
+        <li>Keep an approved-mirror inventory and audit live sessions against it.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Identity and management plane (M1018)</h4>
+      <ul>
+        <li>Put MFA on every device management path; reach CLI only through jump hosts.</li>
+        <li>Split network admin roles so mirror rights sit separate from routine rights.</li>
+        <li>Never grant users permissions to create or modify traffic mirrors unless explicitly required.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Network device hygiene</h4>
+      <ul>
+        <li>Verify device images against vendor hashes after every install.</li>
+        <li>Disable unused services (old SNMP versions, Telnet, HTTP) on switches and routers.</li>
+        <li>Patch bootloaders and firmware; keep ROMMONkit reporting in scope so firmware never falls off the list.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Cloud controls</h4>
+      <ul>
+        <li>Use AWS service control policies (SCPs) or Azure Policy to deny mirror creation outside approved roles.</li>
+        <li>Audit <code>CreateTrafficMirror*</code> and equivalent events daily (see section 5.5).</li>
+        <li>Tag approved mirror targets and alert when a target appears without the tag.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Encryption (M1041)</h4>
+      <ul>
+        <li>Encrypt internal traffic with TLS, not only the edge, so duplicated traffic is unreadable.</li>
+        <li>Prefer modern protocols (SSH, HTTPS, QUIC) over legacy cleartext on server VLANs.</li>
+        <li>Remember what still leaks: server names, DNS, sizes, and timing. Metadata is data too.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>DLP (M1057) and monitoring</h4>
+      <ul>
+        <li>Run twin-flow analytics that flag one source feeding two destinations with equal byte counts.</li>
+        <li>Alert on mirror config changes and mirror API events regardless of the author.</li>
+        <li>Watch egress volume per site against an off-hours baseline.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout c-good">
+    <span class="lab">Home and small office</span>
+    <p>You do not need a SOC. Change the default router password on day one. Keep the router firmware updated. Turn off remote administration. And do not enable port-mirroring features you do not need. If your line uploads for hours at night for no reason, ask your provider to check it.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <caption class="small muted" style="caption-side:bottom;text-align:left;padding:10px 14px">Prioritized actions — effort, owner, and expected risk reduction</caption>
+      <thead><tr><th scope="col">Action</th><th scope="col">Effort</th><th scope="col">Owner</th><th scope="col">Risk reduction</th></tr></thead>
+      <tbody>
+        <tr><td>Daily golden-config diff with alerting on all network devices</td><td>Low</td><td>Network + SOC</td><td>High — catches threat 2 at install time</td></tr>
+        <tr><td>Alert on cloud mirror API events outside approved roles</td><td>Low</td><td>Cloud platform team</td><td>High — catches threat 1 in the control plane</td></tr>
+        <tr><td>MFA plus jump host on every management path</td><td>Medium</td><td>Network + Identity</td><td>Very high — removes the entry ticket</td></tr>
+        <tr><td>Twin-flow analytics on egress and core links</td><td>Medium</td><td>SOC</td><td>High — the reliable backstop</td></tr>
+        <tr><td>TLS everywhere, including internal server VLANs</td><td>High</td><td>Application teams</td><td>High — makes duplicated content unreadable</td></tr>
+        <tr><td>Approved-mirror inventory audited monthly</td><td>Low</td><td>Network</td><td>Medium — shrinks the hiding space</td></tr>
+        <tr><td>Image hash verification after every device change</td><td>Low</td><td>Network</td><td>Medium — catches image tampering</td></tr>
+        <tr><td>Quarterly purple-team test of the section 5.5 rules</td><td>Low</td><td>Detection engineering</td><td>Medium — keeps the controls effective</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="mistakes" class="section" aria-labelledby="h-mistakes">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2 id="h-mistakes">Common mistakes and best practices</h2></div>
+  <p class="section-intro">Most detection programs do not fail from missing science; they fail from twelve repeatable mistakes. Each row below gives the symptom, the root cause, the fix, and the prevention habit.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th scope="col">#</th><th scope="col">Mistake</th><th scope="col">Symptom</th><th scope="col">Root cause</th><th scope="col">Fix</th><th scope="col">Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Set-and-forget network devices (no config monitoring)</td><td>A mirror session lives for a month unnoticed</td><td>Devices treated as install-once appliances</td><td>Config-change alerting plus daily golden-config diffs</td><td>Treat devices as tier-0 monitored assets with an owner</td></tr>
+        <tr><td>2</td><td>No golden config or backups to diff</td><td>Drift cannot be measured, only guessed</td><td>Backup jobs exist but nobody consumes them</td><td>Store nightly configs in a repo and diff against an approved baseline</td><td>Diff results reviewed by a human every day</td></tr>
+        <tr><td>3</td><td>Management plane reachable from user networks</td><td>One phished password reaches device CLI</td><td>Flat network design from another era</td><td>Move mgmt behind MFA and jump hosts; block direct routes</td><td>Network segmentation reviews include the mgmt plane</td></tr>
+        <tr><td>4</td><td>No logging of cloud mirror APIs</td><td>Mirror created in the tenant, no trace anywhere</td><td>CloudTrail/Activity logs never enabled or not shipped</td><td>Enable and ship control-plane logs for every account</td><td>Quarterly audit of log sources per cloud account</td></tr>
+        <tr><td>5</td><td>Overlooking tc on Linux gateways</td><td>Fileless mirroring rule runs in production</td><td>Linux gateways seen as "just forwarding boxes"</td><td>Ship auditd telemetry and the section 5.5 Rule 3 logic</td><td>Every Linux gateway is inside the monitoring perimeter</td></tr>
+        <tr><td>6</td><td>Ignoring promiscuous-mode kernel alerts as noise</td><td>Real sniffing relay dismissed in the queue</td><td>One noisy sensor host weakened the rule</td><td>Allow-list sensor hosts; alert on the rest</td><td>Exclusions expire and are reviewed quarterly</td></tr>
+        <tr><td>7</td><td>Misreading twin flows as load balancing or backups</td><td>Repeated equal-byte sessions closed as benign</td><td>No habit of naming the second destination</td><td>Require an owner and schedule for every dual-destination pattern</td><td>Twin-flow alerts demand a destination verdict, not a guess</td></tr>
+        <tr><td>8</td><td>No off-hours volume baseline</td><td>2x night traffic looks "within range"</td><td>Baselines built on business hours only</td><td>Build per-site baselines for nights and weekends</td><td>Anomaly reports at night get triaged, not closed</td></tr>
+        <tr><td>9</td><td>Device images never hash-verified</td><td>Image tampering would survive every config check</td><td>Hash checks seen as vendor overhead</td><td>Verify against vendor manifests after every install</td><td>Hash step is part of the change checklist</td></tr>
+        <tr><td>10</td><td>Mirror detections never purple-tested</td><td>Rules exist but have never fired on real behavior</td><td>No validation culture</td><td>Run the section 3 lab and confirm alerts end to end</td><td>Every rule ships with a validation step and evidence</td></tr>
+        <tr><td>11</td><td>Assuming TLS makes duplication harmless</td><td>"Encrypted anyway" closes the case early</td><td>Metadata value is underestimated</td><td>Reassess: SNI, DNS, sizes, and timing leak; cleartext protocols leak all</td><td>Risk reviews count metadata exposure, not only content</td></tr>
+        <tr><td>12</td><td>Windows/endpoint-only SOC mindset</td><td>Network team owns the devices; nobody hunts there</td><td>Org chart became the detection scope</td><td>Joint SOC and network runbooks with shared alerts</td><td>Coverage matrix includes every platform in the inventory</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Daily habits</h4>
+      <ul>
+        <li>Read the golden-config diff report; investigate every line, not just alarms.</li>
+        <li>Check overnight mirror API events and device logins from new ASNs.</li>
+        <li>Review the top egress talkers against yesterday's baseline.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Weekly habits</h4>
+      <ul>
+        <li>Run the twin-flow SPL over core links; demand a verdict for every new pair.</li>
+        <li>Compare live monitor sessions against the approved-mirror inventory.</li>
+        <li>Tune the noisiest rule and record the tuning note.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Monthly habits</h4>
+      <ul>
+        <li>Purple-test one rule end to end and store the evidence.</li>
+        <li>Verify device image hashes and backup job success for every device.</li>
+        <li>Refresh intel on device tradecraft: new advisories, new actors, new collector patterns.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="cheat-sheet" class="section" aria-labelledby="h-cheat">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2 id="h-cheat">Cheat sheet and quick reference</h2></div>
+  <p class="section-intro">Everything an on-call analyst needs on one screen. Print this section; the stylesheet hides navigation and controls when printing.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Key facts</h4>
+      <dl class="kv">
+        <dt>ID / tactic</dt><dd>T1020.001 — Exfiltration (TA0010)</dd>
+        <dt>Version</dt><dd>1.4 — created 19 Oct 2020, modified 24 Oct 2025</dd>
+        <dt>Platforms</dt><dd>IaaS, Network Devices</dd>
+        <dt>Core idea</dt><dd>A mirror session on a device or in the cloud copies traffic to the attacker</dd>
+        <dt>Best signals</dt><dd>Mirror config changes, cloud mirror API events, twin flows with equal bytes</dd>
+        <dt>Parent technique</dt><dd>T1020 Automated Exfiltration</dd>
+        <dt>ATT&amp;CK strategy</dt><dd>DET0403 — analytics AN1131, AN1132</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h4>Top detections</h4>
+      <div class="table-wrap" style="box-shadow:none;border:0;margin:0">
+        <table>
+          <thead><tr><th scope="col">Detection</th><th scope="col">Source</th><th scope="col">Level</th></tr></thead>
+          <tbody>
+            <tr><td>Cloud mirror session to unapproved target or caller</td><td>CloudTrail / Azure Activity / GCP audit</td><td><span class="badge sev-critical">CRITICAL</span></td></tr>
+            <tr><td><code>monitor session</code> or SPAN config outside a change window</td><td>Device syslog + golden-config diff</td><td><span class="badge sev-critical">CRITICAL</span></td></tr>
+            <tr><td>Twin flows: identical bytes to two destinations</td><td>Zeek / NetFlow</td><td><span class="badge sev-critical">CRITICAL</span></td></tr>
+            <tr><td><code>tc</code> invoked with a mirred mirror action</td><td>Linux auditd</td><td><span class="badge sev-high">HIGH</span></td></tr>
+            <tr><td>Interface entered promiscuous mode on a non-sensor host</td><td>Kernel syslog</td><td><span class="badge sev-medium">MEDIUM</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Response checklist</h4>
+    <ul class="checklist">
+      <li>Confirm the mirror session in the running config; capture <code>show monitor session</code> output as evidence.</li>
+      <li>Diff the config against the golden config and record every drift line.</li>
+      <li>Identify who created it, when, and from where (syslog, AAA, cloud audit logs) and match against tickets.</li>
+      <li>Remove the session and block the collector at egress and with upstream providers.</li>
+      <li>Verify the device image hash against the vendor manifest.</li>
+      <li>Rotate device and management-plane credentials, including the VPN and jump-host accounts.</li>
+      <li>Review cloud mirror APIs across all accounts and tenants for the same pattern.</li>
+      <li>Quantify the exposure window from twin flows and collector egress volume.</li>
+      <li>Notify legal and compliance with the volume and window estimate.</li>
+      <li>Add config-drift and twin-flow alerts to the detection backlog and purple-test them.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h4>References and related techniques</h4>
+    <ul>
+      <li>Official ATT&amp;CK page: <a href="https://attack.mitre.org/techniques/T1020/001/" rel="noopener">T1020.001 — Traffic Duplication</a></li>
+      <li>Parent technique: <a href="https://attack.mitre.org/techniques/T1020/" rel="noopener">T1020 — Automated Exfiltration</a></li>
+      <li><a href="https://attack.mitre.org/techniques/T1040/" rel="noopener">T1040 — Network Sniffing</a> and <a href="https://attack.mitre.org/techniques/T1557/" rel="noopener">T1557 — Adversary-in-the-Middle</a></li>
+      <li><a href="https://www.cisa.gov/news-events" rel="noopener">CISA advisory, September 2025 — Salt Typhoon (G1045) enabling traffic mirroring</a></li>
+      <li><a href="https://www.cisa.gov/news-events/cybersecurity-advisories/aa25-239a" rel="noopener">CISA AA25-239A — Chinese state-sponsored actors compromising networks worldwide</a></li>
+      <li>US-CERT Alert <a href="https://us-cert.cisa.gov/ncas/alerts/TA18-106A" rel="noopener">TA18-106A — Russian state-sponsored actors targeting network infrastructure devices</a></li>
+      <li><a href="https://github.com/SigmaHQ/sigma" rel="noopener">Sigma rule repository</a></li>
+    </ul>
+  </div>
+</section>
+    </main>
+  </div>
+</div>
+
+<button class="fab" id="contentsBtn" type="button" aria-expanded="false" aria-controls="tocOverlay">
+  <svg viewBox="0 0 15 15" aria-hidden="true"><path d="M1 3h13M1 7.5h13M1 12h13"/></svg><span>Contents</span>
+</button>
+<button class="fab" id="themeBtn" type="button" aria-label="Switch color theme">
+  <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5a7.5 7.5 0 1 0 7.5 7.5A6 6 0 0 1 10 2.5z"/></svg>
+</button>
+<button class="fab" id="topBtn" type="button" aria-label="Back to top">
+  <svg viewBox="0 0 15 15" aria-hidden="true"><path d="M3 9.5L7.5 5l4.5 4.5" stroke-width="2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+<div class="overlay" id="tocOverlay" hidden role="dialog" aria-modal="true" aria-label="Table of contents">
+  <div class="ov-panel">
+    <div class="ov-head"><strong>Contents</strong><button class="ov-close" id="ovClose" type="button" aria-label="Close contents">&times;</button></div>
+    <ol class="toc-list" id="overlayToc"></ol>
+  </div>
+</div>
+<footer class="wrap" aria-label="Guide version">
+  <p class="small muted" style="margin:6px 0 42px">Guide v2.0.0 &middot; Reviewed against MITRE ATT&amp;CK v20 (October 2026). Technique data: T1020.001 v1.4 — created 19 Oct 2020, modified 24 Oct 2025. Educational use only.</p>
+</footer>
+<script>
+(function(){
+  'use strict';
+
+  /* ---------- Theme toggle ---------- */
+  var themeBtn = document.getElementById('themeBtn');
+  if (themeBtn) {
+    themeBtn.addEventListener('click', function () {
+      var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      var nxt = cur === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', nxt);
+      try { localStorage.setItem('atk-theme', nxt); } catch (e) {}
+    });
+  }
+
+  /* ---------- Table of contents (built from real headings) ---------- */
+  var content = document.getElementById('mainContent');
+  var tocList = document.getElementById('tocList');
+  var overlayToc = document.getElementById('overlayToc');
+  var track = []; /* {a, target} */
+
+  if (content && tocList) {
+    var secs = content.querySelectorAll(':scope > section[id]');
+    secs.forEach(function (sec, i) {
+      var h2 = sec.querySelector('h2');
+      if (!h2) return;
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '#' + sec.id;
+      var num = document.createElement('span');
+      num.className = 'toc-num';
+      num.textContent = String(i + 1);
+      a.appendChild(num);
+      a.appendChild(document.createTextNode(h2.textContent));
+      li.appendChild(a);
+      track.push({ a: a, target: sec });
+      var subs = sec.querySelectorAll('h3[id]');
+      if (subs.length) {
+        var subOl = document.createElement('ol');
+        subOl.className = 'toc-sub';
+        subs.forEach(function (sh) {
+          var li2 = document.createElement('li');
+          var a2 = document.createElement('a');
+          a2.href = '#' + sh.id;
+          a2.textContent = sh.textContent;
+          li2.appendChild(a2);
+          subOl.appendChild(li2);
+          track.push({ a: a2, target: sh });
+        });
+        li.appendChild(subOl);
+      }
+      tocList.appendChild(li);
+    });
+    if (overlayToc) {
+      var clone = tocList.cloneNode(true);
+      clone.removeAttribute('id');
+      var ids = clone.querySelectorAll('[id]');
+      for (var k = 0; k < ids.length; k++) ids[k].removeAttribute('id');
+      overlayToc.innerHTML = '';
+      overlayToc.appendChild(clone);
+    }
+  }
+
+  /* ---------- Progress bar, active TOC, back-to-top ---------- */
+  var fill = document.getElementById('progressFill');
+  var topBtn = document.getElementById('topBtn');
+  var ticking = false;
+
+  function onScroll() {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(function () {
+      ticking = false;
+      var doc = document.documentElement;
+      var max = doc.scrollHeight - window.innerHeight;
+      if (fill) fill.style.width = (max > 0 ? Math.min(100, (window.scrollY / max) * 100) : 0) + '%';
+      if (topBtn) {
+        if (window.scrollY > 600) topBtn.classList.add('show');
+        else topBtn.classList.remove('show');
+      }
+      var probe = window.scrollY + 130;
+      var current = null;
+      for (var i = 0; i < track.length; i++) {
+        var top = track[i].target.getBoundingClientRect().top + window.scrollY;
+        if (top <= probe) current = track[i];
+      }
+      for (var j = 0; j < track.length; j++) {
+        track[j].a.classList.toggle('active', track[j] === current);
+      }
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+  onScroll();
+
+  if (topBtn) {
+    topBtn.addEventListener('click', function () {
+      window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    });
+  }
+
+  /* ---------- Mobile contents overlay ---------- */
+  var contentsBtn = document.getElementById('contentsBtn');
+  var overlay = document.getElementById('tocOverlay');
+  var ovClose = document.getElementById('ovClose');
+
+  function openOv() {
+    if (!overlay) return;
+    overlay.hidden = false;
+    document.body.style.overflow = 'hidden';
+    if (contentsBtn) contentsBtn.setAttribute('aria-expanded', 'true');
+    var first = overlay.querySelector('a');
+    if (first) first.focus();
+  }
+  function closeOv() {
+    if (!overlay) return;
+    overlay.hidden = true;
+    document.body.style.overflow = '';
+    if (contentsBtn) contentsBtn.setAttribute('aria-expanded', 'false');
+    if (contentsBtn) contentsBtn.focus();
+  }
+  if (contentsBtn) contentsBtn.addEventListener('click', openOv);
+  if (ovClose) ovClose.addEventListener('click', closeOv);
+  if (overlay) {
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeOv(); });
+    overlay.addEventListener('click', function (e) {
+      var link = e.target.closest ? e.target.closest('a') : null;
+      if (link) closeOv();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && overlay && !overlay.hidden) closeOv();
+  });
+
+  /* ---------- Copy buttons ---------- */
+  var copyBtns = document.querySelectorAll('.copy-btn');
+  for (var c = 0; c < copyBtns.length; c++) {
+    (function (btn) {
+      btn.addEventListener('click', function () {
+        var block = btn.closest('.codeblock');
+        var pre = block ? block.querySelector('pre') : null;
+        if (!pre) return;
+        var text = pre.innerText;
+        function done() {
+          btn.textContent = 'Copied';
+          btn.disabled = true;
+          window.setTimeout(function () { btn.textContent = 'Copy'; btn.disabled = false; }, 1600);
+        }
+        function fallback() {
+          var ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch (err) {}
+          document.body.removeChild(ta);
+          done();
+        }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, fallback);
+        } else { fallback(); }
+      });
+    })(copyBtns[c]);
+  }
+})();
+</script>
+<script>
+(function(){
+  'use strict';
+
+  var cv = document.getElementById('simCanvas');
+  if (!cv || !cv.getContext) return;
+  var ctx = cv.getContext('2d');
+  var tip = document.getElementById('simTip');
+  var titleEl = document.getElementById('simStepTitle');
+  var capEl = document.getElementById('simCaption');
+  var socEl = document.getElementById('simDefender');
+  var stepsEl = document.getElementById('simSteps');
+  var playBtn = document.getElementById('simPlay');
+  var prevBtn = document.getElementById('simPrev');
+  var nextBtn = document.getElementById('simNext');
+  var restartBtn = document.getElementById('simRestart');
+  var speedSel = document.getElementById('simSpeed');
+
+  var RM = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var W = 960, H = 540, STEP_MS = 6500;
+
+  /* ---------- Storyboard: The Silent Tap ---------- */
+  var NODES = [
+    { id:'att',   x:80,  y:60,  w:158, h:66, label:'Attacker',      sub:'operator console',   type:'attacker', tip:'The attacker console. The operator holds stolen admin credentials and watches captured data arrive.' },
+    { id:'mgmt',  x:400, y:52,  w:170, h:66, label:'Mgmt console',  sub:'switch & cloud admin', type:'infra',  tip:'The management plane of the network: switch CLI and cloud console. Whoever controls it decides what the device copies.' },
+    { id:'host',  x:400, y:236, w:170, h:66, label:'Fin-VLAN host', sub:'victim workstation', type:'victim',   tip:'A finance VLAN workstation. It is never infected and never changes behavior - its traffic is simply copied.' },
+    { id:'legit', x:80,  y:236, w:158, h:66, label:'Legit server',  sub:'finance app',        type:'infra',    tip:'The real finance application server. Traffic to it is business as usual.' },
+    { id:'coll',  x:724, y:236, w:170, h:66, label:'Collector',     sub:'mirror target',      type:'service',  tip:'Attacker-controlled mirror target at 203.0.113.9. It receives the duplicated packets and reassembles sessions.' },
+    { id:'soc',   x:724, y:64,  w:158, h:66, label:'SOC / defender', sub:'monitoring',        type:'defender', tip:'The security operations center. It watches device configs, cloud audit logs, and traffic shape.' }
+  ];
+  var EDGES = [
+    ['att','mgmt'], ['mgmt','host'], ['legit','host'], ['mgmt','coll'], ['host','soc']
+  ];
+  var STEPS = [
+    { title:'Stolen credentials, quiet login',
+      caption:'The operator signs in to the switch command line with admin credentials stolen from a contractor. The management network is small and trusted, which is exactly why attackers want it.',
+      soc:'VPN login to the management network from a new autonomous system (ASN); the account has no change ticket today.',
+      flows:[ { f:'att', t:'mgmt', color:'danger', label:'stolen admin creds', start:500, dur:2600 } ],
+      glow:['att','mgmt'], feed:['VPN login to mgmt net from new ASN','user has no change ticket today'] },
+    { title:'A mirror session is born',
+      caption:'On core-sw-01 the attacker types monitor session 1 and points it at the finance VLAN. A monitor session (also called SPAN) tells the switch to copy packets from chosen ports to one output.',
+      soc:'Device config change at 03:12 with no matching change ticket; the diff shows a new monitor session.',
+      flows:[ { f:'mgmt', t:'mgmt', color:'danger', label:'monitor session 1', start:400, dur:2600, self:true } ],
+      glow:['mgmt'], feed:['config change on core-sw-01 at 03:12','change ticket missing','new session not in golden config'] },
+    { title:'The tap points outward',
+      caption:'The mirror destination is set to 203.0.113.9, a server the attacker rents. On a healthy network this address would be an internal packet broker or NDR sensor.',
+      soc:'Syslog and cloud events show a mirror destination outside the approved list.',
+      flows:[ { f:'mgmt', t:'coll', color:'danger', label:'mirror dest = 203.0.113.9', start:400, dur:2800 } ],
+      glow:['mgmt','coll'], feed:['mirror destination outside approved list','collector hosted at 203.0.113.9'] },
+    { title:'Users see nothing',
+      caption:'Nothing changes for users. The finance host keeps talking to its application server as usual, because mirroring copies traffic instead of touching it.',
+      soc:'Baseline is quiet: no new processes, no new destinations. This silence is why the technique is hard.',
+      flows:[ { f:'host', t:'legit', color:'accent', label:'HTTPS finance app', start:400, dur:2800 } ],
+      glow:['host','legit'], feed:['baseline traffic unchanged','no new connections from the host'] },
+    { title:'Every packet gets a twin',
+      caption:'The switch now sends a second copy of every finance packet to the collector. The victim host sends nothing new; the duplication happens inside the network.',
+      soc:'Flow analytics see twin sessions with identical byte counts to a second destination within 2 seconds.',
+      flows:[ { f:'host', t:'coll', color:'danger', label:'duplicated packets', start:400, dur:3200 } ],
+      glow:['host','coll'], feed:['twin sessions, identical byte counts','same src, two destinations, 2s apart'] },
+    { title:'Sessions reassembled off-site',
+      caption:'On the collector, free tools reassemble the captured sessions. Encrypted TLS content stays unreadable, but server names (SNI), sizes, and timing reveal a lot. Cleartext protocols give up everything.',
+      soc:'Nothing fires at the host. The theft surface now includes every protocol the VLAN speaks, encrypted or not.',
+      flows:[ { f:'coll', t:'coll', color:'danger', label:'reassemble sessions', start:500, dur:2400, self:true } ],
+      glow:['coll'], feed:['collector reassembles captured sessions','SNI + sizes first; TLS content unreadable'] },
+    { title:'Weeks of quiet copying',
+      caption:'The copy runs for weeks. Total egress volume doubles, mostly at night, because every packet now leaves twice: once for the real server and once for the collector.',
+      soc:'Egress volume sits at 2.1x baseline during off-hours. The first anomaly ticket is dismissed as a backup job.',
+      flows:[ { f:'host', t:'coll', color:'danger', label:'weeks of quiet copying', start:400, dur:3000 },
+              { f:'host', t:'soc', color:'warning', label:'volume anomaly', start:2400, dur:2200 } ],
+      glow:['host','coll'], feed:['egress volume 2.1x baseline at night','anomaly dismissed as backup job'] },
+    { title:'Correlation ends the tap',
+      caption:'The SOC joins the config-change alert (AN1132) with the twin-flow analytics and the case is clear. Engineers remove the monitor session, block the collector, and rotate device credentials.',
+      soc:'Detection is a correlation story: management-plane events plus traffic shape, not one loud log line.',
+      flows:[ { f:'soc', t:'mgmt', color:'success', label:'rollback config', start:400, dur:2400 },
+              { f:'soc', t:'coll', color:'success', label:'block collector', start:2400, dur:2400 } ],
+      glow:['soc'], feed:['alert: mirror session to unapproved dest','containment: session removed, creds rotated'] }
+  ];
+
+  /* ---------- Colors ---------- */
+  function tokens() {
+    var s = getComputedStyle(document.documentElement);
+    return {
+      bg:      s.getPropertyValue('--elevated').trim(),
+      surface: s.getPropertyValue('--surface').trim(),
+      surf2:   s.getPropertyValue('--surface-2').trim(),
+      text:    s.getPropertyValue('--text').trim(),
+      muted:   s.getPropertyValue('--muted').trim(),
+      border:  s.getPropertyValue('--border').trim(),
+      strong:  s.getPropertyValue('--border-strong').trim(),
+      accent:  s.getPropertyValue('--accent').trim(),
+      accent2: s.getPropertyValue('--accent-2').trim(),
+      danger:  s.getPropertyValue('--danger').trim(),
+      warn:    s.getPropertyValue('--warning').trim(),
+      success: s.getPropertyValue('--success').trim(),
+      violet:  s.getPropertyValue('--violet').trim()
+    };
+  }
+  var T = tokens();
+  var COLOR = { danger:T.danger, accent:T.accent, warning:T.warn, success:T.success, violet:T.violet, accent2:T.accent2 };
+  function nodeColor(t) {
+    return t === 'attacker' ? T.danger : t === 'victim' ? T.accent : t === 'defender' ? T.success : t === 'service' ? T.violet : T.accent2;
+  }
+  document.documentElement.addEventListener('data-theme-changed', function(){ T = tokens(); COLOR = { danger:T.danger, accent:T.accent, warning:T.warn, success:T.success, violet:T.violet, accent2:T.accent2 }; dirty = true; });
+  new MutationObserver(function(){ T = tokens(); COLOR = { danger:T.danger, accent:T.accent, warning:T.warn, success:T.success, violet:T.violet, accent2:T.accent2 }; dirty = true; })
+    .observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] });
+
+  /* ---------- Sizing ---------- */
+  function fit() {
+    var dpr = window.devicePixelRatio || 1;
+    var cssW = cv.clientWidth || W;
+    cv.width = Math.round(cssW * dpr);
+    cv.height = Math.round(cssW * (H / W) * dpr);
+    dirty = true;
+  }
+  window.addEventListener('resize', fit);
+
+  function center(n) { return { x: n.x + n.w / 2, y: n.y + n.h / 2 }; }
+  function nodeById(id) { for (var i = 0; i < NODES.length; i++) if (NODES[i].id === id) return NODES[i]; return NODES[0]; }
+
+  /* ---------- Drawing ---------- */
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function drawNode(n, now) {
+    var c = center(n);
+    var glow = curStep && curStep.glow.indexOf(n.id) >= 0;
+    ctx.save();
+    if (glow && !RM) {
+      var pulse = 0.5 + 0.5 * Math.sin(now / 300);
+      ctx.strokeStyle = nodeColor(n.type);
+      ctx.globalAlpha = 0.25 + 0.35 * pulse;
+      ctx.lineWidth = 2.5;
+      rr(n.x - 5, n.y - 5, n.w + 10, n.h + 10, 16);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = T.surface;
+    ctx.strokeStyle = glow ? nodeColor(n.type) : T.strong;
+    ctx.lineWidth = 1.5;
+    rr(n.x, n.y, n.w, n.h, 12);
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(n.x + 24, c.y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = nodeColor(n.type);
+    ctx.fill();
+    if (n.type === 'defender') {
+      ctx.strokeStyle = T.elevated || T.surface; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(n.x + 24, c.y - 4.5); ctx.lineTo(n.x + 24, c.y + 4.5);
+      ctx.moveTo(n.x + 20.4, c.y); ctx.lineTo(n.x + 24, c.y + 3.2); ctx.stroke();
+    }
+    ctx.fillStyle = T.text;
+    ctx.font = '700 13px ' + 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, n.x + 42, c.y - 9);
+    ctx.fillStyle = T.muted;
+    ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+    ctx.fillText(n.sub, n.x + 42, c.y + 10);
+    ctx.restore();
+  }
+  function edgePath(a, b) {
+    var ca = center(a), cb = center(b);
+    var mx = (ca.x + cb.x) / 2, my = (ca.y + cb.y) / 2;
+    var dx = cb.x - ca.x, dy = cb.y - ca.y;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var nx = -dy / len, ny = dx / len;
+    return { x1: ca.x, y1: ca.y, cx: mx + nx * 26, cy: my + ny * 26, x2: cb.x, y2: cb.y };
+  }
+  function bezier(p, e) {
+    var u = 1 - p;
+    return {
+      x: u * u * e.x1 + 2 * u * p * e.cx + p * p * e.x2,
+      y: u * u * e.y1 + 2 * u * p * e.cy + p * p * e.y2
+    };
+  }
+  function arrowHead(x, y, angle, color) {
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(-9, -4.5); ctx.lineTo(-9, 4.5); ctx.closePath();
+    ctx.fillStyle = color; ctx.fill();
+    ctx.restore();
+  }
+  function drawStaticFlow(fl) {
+    var e = edgePath(nodeById(fl.f), nodeById(fl.t));
+    var col = COLOR[fl.color] || T.accent;
+    ctx.save();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([7, 5]);
+    ctx.beginPath(); ctx.moveTo(e.x1, e.y1); ctx.quadraticCurveTo(e.cx, e.cy, e.x2, e.y2); ctx.stroke();
+    ctx.setLineDash([]);
+    var ang = Math.atan2(e.y2 - e.cy, e.x2 - e.cx);
+    arrowHead(e.x2, e.y2, ang, col);
+    var m = bezier(0.5, e);
+    ctx.fillStyle = col; ctx.font = '11px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(fl.label, m.x, m.y - 8);
+    ctx.restore();
+  }
+  function drawFlow(fl, now) {
+    var e = edgePath(nodeById(fl.f), nodeById(fl.t));
+    var col = COLOR[fl.color] || T.accent;
+    if (RM) { drawStaticFlow(fl); return; }
+    var local = (stepT - fl.start) / fl.dur;
+    if (fl.self) {
+      if (local < 0 || local > 1) return;
+      var n = nodeById(fl.f); var c = center(n);
+      var ang = local * Math.PI * 2;
+      var px = c.x + Math.cos(ang) * (n.w / 2 + 8), py = c.y + Math.sin(ang) * (n.h / 2 + 8);
+      ctx.save();
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(px, py, 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.font = '11px ui-monospace, Menlo, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText(fl.label, c.x, n.y - 26);
+      ctx.restore();
+      return;
+    }
+    if (local < -0.18 || local > 1.15) return;
+    var ps = [local, local - 0.09, local - 0.18];
+    for (var i = 0; i < ps.length; i++) {
+      var p = ps[i];
+      if (p < 0 || p > 1) continue;
+      var pt = bezier(p, e);
+      ctx.save();
+      ctx.globalAlpha = i === 0 ? 1 : 0.35 - i * 0.1;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(pt.x, pt.y, i === 0 ? 5 : 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    var head = bezier(Math.min(1, Math.max(0, local)), e);
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, 1 - Math.max(0, local - 1) * 6);
+    ctx.fillStyle = col; ctx.font = '11px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(fl.label, head.x, head.y - 10);
+    ctx.restore();
+  }
+  function drawFeed() {
+    if (!curStep || !curStep.feed.length) return;
+    var fx = 60, fy = 448, fw = 560, fh = 76;
+    ctx.save();
+    ctx.fillStyle = T.surf2;
+    ctx.strokeStyle = T.border; ctx.lineWidth = 1;
+    rr(fx, fy, fw, fh, 10); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = T.muted;
+    ctx.font = '700 10px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('EVIDENCE — SOC TELEMETRY', fx + 12, fy + 9);
+    var lines = curStep.feed.slice(0, 3);
+    for (var i = 0; i < lines.length; i++) {
+      ctx.beginPath();
+      ctx.arc(fx + 17, fy + 30 + i * 15, 3, 0, Math.PI * 2);
+      ctx.fillStyle = T.warn; ctx.fill();
+      ctx.fillStyle = T.text;
+      ctx.font = '11px ui-monospace, Menlo, monospace';
+      ctx.fillText(lines[i].length > 66 ? lines[i].slice(0, 65) + '…' : lines[i], fx + 28, fy + 26 + i * 15);
+    }
+    ctx.restore();
+  }
+
+  /* ---------- Step state ---------- */
+  var step = 0, curStep = STEPS[0], stepT = 0;
+  var playing = false, speed = 1, lastTs = null, dirty = true;
+  var chips = [];
+
+  STEPS.forEach(function (s, i) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'sim-chip';
+    b.textContent = 'Step ' + (i + 1);
+    b.setAttribute('aria-label', 'Go to step ' + (i + 1) + ': ' + s.title);
+    b.addEventListener('click', function () { setStep(i); });
+    stepsEl.appendChild(b); chips.push(b);
+  });
+
+  function setStep(i) {
+    step = ((i % STEPS.length) + STEPS.length) % STEPS.length;
+    curStep = STEPS[step];
+    stepT = 0;
+    titleEl.textContent = 'Step ' + (step + 1) + ' of ' + STEPS.length + ' — ' + curStep.title;
+    capEl.textContent = curStep.caption;
+    socEl.textContent = curStep.soc;
+    for (var k = 0; k < chips.length; k++) chips[k].classList.toggle('active', k === step);
+    dirty = true;
+  }
+  function setPlaying(v) {
+    playing = v;
+    if (playBtn) {
+      var label = playBtn.querySelector('span');
+      if (label) label.textContent = v ? 'Pause' : 'Play';
+      playBtn.setAttribute('aria-pressed', v ? 'true' : 'false');
+    }
+    lastTs = null;
+  }
+
+  if (playBtn) playBtn.addEventListener('click', function () { setPlaying(!playing); });
+  if (restartBtn) restartBtn.addEventListener('click', function () { setStep(0); });
+  if (prevBtn) prevBtn.addEventListener('click', function () { setStep(step - 1); });
+  if (nextBtn) nextBtn.addEventListener('click', function () { setStep(step + 1); });
+  if (speedSel) speedSel.addEventListener('change', function () { speed = parseFloat(speedSel.value) || 1; });
+
+  /* ---------- Tooltip ---------- */
+  function showTip(clientX, clientY) {
+    var rect = cv.getBoundingClientRect();
+    var lx = (clientX - rect.left) * (W / rect.width);
+    var ly = (clientY - rect.top) * (W / rect.width);
+    var found = null;
+    for (var i = 0; i < NODES.length; i++) {
+      var n = NODES[i];
+      if (lx >= n.x - 6 && lx <= n.x + n.w + 6 && ly >= n.y - 6 && ly <= n.y + n.h + 6) { found = n; break; }
+    }
+    if (found) {
+      tip.innerHTML = '';
+      var b = document.createElement('strong'); b.textContent = found.label;
+      var em = document.createElement('em'); em.textContent = found.tip;
+      tip.appendChild(b); tip.appendChild(em);
+      tip.hidden = false;
+      var tx = clientX - rect.left + 14, ty = clientY - rect.top + 14;
+      if (tx + 280 > rect.width) tx = rect.width - 280;
+      if (ty + 110 > rect.height) ty = Math.max(4, ty - 120);
+      tip.style.left = tx + 'px'; tip.style.top = ty + 'px';
+    } else { tip.hidden = true; }
+  }
+  cv.addEventListener('mousemove', function (e) { showTip(e.clientX, e.clientY); });
+  cv.addEventListener('click', function (e) { showTip(e.clientX, e.clientY); });
+  cv.addEventListener('mouseleave', function () { if (tip) tip.hidden = true; });
+  cv.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight') { setStep(step + 1); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { setStep(step - 1); e.preventDefault(); }
+    else if (e.key === 'Enter' || e.key === ' ') { setPlaying(!playing); e.preventDefault(); }
+  });
+
+  /* ---------- Render loop ---------- */
+  function render(now) {
+    ctx.setTransform(cv.width / W, 0, 0, cv.width / W, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.strokeStyle = T.border; ctx.globalAlpha = 0.35; ctx.lineWidth = 1;
+    for (var gx = 40; gx < W; gx += 40) { ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke(); }
+    for (var gy = 40; gy < H; gy += 40) { ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke(); }
+    ctx.restore();
+
+    for (var i = 0; i < EDGES.length; i++) {
+      var e = edgePath(nodeById(EDGES[i][0]), nodeById(EDGES[i][1]));
+      ctx.save();
+      ctx.strokeStyle = T.strong; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.2;
+      if (EDGES[i][1] === 'soc') ctx.setLineDash([4, 5]);
+      ctx.beginPath(); ctx.moveTo(e.x1, e.y1); ctx.quadraticCurveTo(e.cx, e.cy, e.x2, e.y2); ctx.stroke();
+      ctx.restore();
+    }
+
+    var flows = curStep.flows;
+    for (var f = 0; f < flows.length; f++) drawFlow(flows[f], now);
+
+    for (var n = 0; n < NODES.length; n++) drawNode(NODES[n], now);
+    drawFeed();
+
+    /* header */
+    ctx.save();
+    ctx.fillStyle = T.accent2;
+    ctx.font = '700 12px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('T1020.001 — TRAFFIC DUPLICATION  ·  STEP ' + (step + 1) + '/8', 60, 20);
+    ctx.fillStyle = T.border;
+    ctx.fillRect(60, 40, 560, 3);
+    ctx.fillStyle = T.accent;
+    ctx.fillRect(60, 40, 560 * Math.min(1, stepT / STEP_MS), 3);
+    if (!playing) {
+      ctx.fillStyle = T.muted;
+      ctx.textAlign = 'right';
+      ctx.fillText(RM ? 'reduced motion: press Play to advance steps' : 'paused — press Play', 900, 20);
+    }
+    ctx.restore();
+  }
+
+  function loop(ts) {
+    var dt = lastTs == null ? 0 : ts - lastTs;
+    lastTs = ts;
+    if (playing) {
+      stepT += dt * speed;
+      if (stepT >= STEP_MS) setStep(step + 1);
+      dirty = true;
+    }
+    if (dirty) { render(ts); dirty = false; }
+    window.requestAnimationFrame(loop);
+  }
+
+  /* ---------- Init ---------- */
+  fit();
+  setStep(0);
+  if (!RM) setPlaying(true); else setPlaying(false);
+  window.requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

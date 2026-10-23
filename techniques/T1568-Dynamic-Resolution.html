@@ -1,0 +1,2499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1568 Dynamic Resolution — Detection Guide</title>
+<meta name="description" content="Beginner-friendly MITRE ATT&amp;CK guide for T1568 Dynamic Resolution: how attackers rotate C2 domains and IPs with fast flux, DGA, and DNS calculation, and how to detect each with DNS logs, Sigma, and Splunk SPL.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1568-Dynamic-Resolution.html">
+<script>
+/* Apply theme BEFORE first paint (no flash). Do not modify. */
+(function(){try{var t=localStorage.getItem('atk-theme');if(!t){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+</script>
+<style>
+/* ============================================================
+   ATT&CK Detection Guide — shared design system (embed verbatim)
+   Dark default + light override + no-JS prefers-color-scheme
+   ============================================================ */
+:root{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+  --shadow:0 10px 30px rgba(3,8,20,.35);
+  --radius:14px; --radius-sm:9px;
+  --sidebar-w:256px;
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 10px 26px rgba(24,34,56,.10);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: light){
+  html:not([data-theme]){
+    --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+    --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+    --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+    --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+    --shadow:0 10px 26px rgba(24,34,56,.10);
+    color-scheme:light;
+  }
+}
+
+/* ---------- base ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:16.5px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; overflow-wrap:break-word;
+}
+img,canvas{max-width:100%}
+h1,h2,h3,h4{line-height:1.2; margin:0 0 .5em; font-weight:700; letter-spacing:-.01em}
+h2{font-size:1.7rem}
+h3{font-size:1.22rem}
+h4{font-size:1.05rem}
+p{margin:0 0 1em}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+ul,ol{padding-left:1.35rem; margin:0 0 1em}
+li{margin:.3em 0}
+code,kbd,samp{font-family:var(--mono); font-size:.86em; background:var(--surface-2);
+  border:1px solid var(--border); border-radius:6px; padding:.1em .35em}
+strong{font-weight:650}
+hr{border:0; border-top:1px solid var(--border); margin:2rem 0}
+::selection{background:color-mix(in srgb,var(--accent) 35%, transparent)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.small{font-size:.85rem}
+.sr-only{position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden;
+  clip:rect(0 0 0 0); white-space:nowrap; border:0}
+.wrap{max-width:1280px; margin:0 auto; padding:0 24px}
+section[id]{scroll-margin-top:84px}
+main > section{padding:52px 0; border-top:1px solid var(--border)}
+main > section:first-child{border-top:0}
+
+/* ---------- progress bar ---------- */
+.progress-bar{position:fixed; top:0; left:0; right:0; height:3px; z-index:120;
+  background:transparent; pointer-events:none}
+.progress-fill{display:block; height:100%; width:0;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+/* ---------- theme toggle ---------- */
+.theme-toggle{display:inline-flex; align-items:center; gap:.45em; font:inherit; font-size:.85rem;
+  color:var(--muted); background:var(--surface); border:1px solid var(--border);
+  border-radius:999px; padding:.35em .85em; cursor:pointer}
+.theme-toggle:hover{color:var(--text); border-color:var(--border-strong)}
+.theme-toggle .sun,.theme-toggle .moon{display:none}
+html[data-theme="dark"] .theme-toggle .sun{display:inline}
+html[data-theme="light"] .theme-toggle .moon{display:inline}
+@media (prefers-color-scheme: light){ html:not([data-theme]) .theme-toggle .moon{display:inline} }
+.theme-toggle .dot-ico{width:.6em; height:.6em; border-radius:50%; background:currentColor}
+
+/* ---------- hero ---------- */
+.hero{padding:44px 0 34px;
+  background:
+    radial-gradient(1000px 380px at 85% -10%, color-mix(in srgb,var(--accent) 16%, transparent), transparent 65%),
+    radial-gradient(700px 300px at 0% 0%, color-mix(in srgb,var(--violet) 12%, transparent), transparent 60%);
+  border-bottom:1px solid var(--border)}
+.hero-top{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px}
+.kicker{font-family:var(--mono); font-size:.78rem; font-weight:600; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--accent-2)}
+.page-title{font-size:clamp(1.9rem,4.5vw,2.9rem); margin:.1em 0 .35em; max-width:24ch}
+.page-title .tid{font-family:var(--mono); font-size:.62em; font-weight:700; vertical-align:.12em;
+  color:var(--accent); background:color-mix(in srgb,var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 45%, transparent);
+  border-radius:10px; padding:.08em .4em; white-space:nowrap}
+.lede{max-width:68ch; color:var(--muted); font-size:1.06rem; margin-bottom:1.2rem}
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:1.4rem}
+.chip{font-family:var(--mono); font-size:.75rem; color:var(--text);
+  background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:.28em .8em}
+.chip.accent{color:var(--accent); border-color:color-mix(in srgb,var(--accent) 45%, transparent)}
+.facts{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
+.fact{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:14px 16px; box-shadow:var(--shadow)}
+.fact::before{content:""; display:block; width:34px; height:3px; border-radius:2px;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2)); margin-bottom:10px}
+.fact-k{font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.1em;
+  color:var(--muted); margin-bottom:2px}
+.fact-v{font-size:.95rem; font-weight:600}
+
+/* ---------- two-column layout ---------- */
+.layout{display:grid; grid-template-columns:var(--sidebar-w) minmax(0,1fr); gap:36px;
+  align-items:start; padding:8px 0 64px}
+.sidebar{position:sticky; top:24px}
+.toc{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px 16px; box-shadow:var(--shadow); max-height:calc(100vh - 48px); overflow:auto}
+.toc-title{font-family:var(--mono); font-size:.75rem; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); margin:0 0 10px}
+.toc-list{list-style:none; margin:0; padding:0; font-size:.9rem}
+.toc-list li{margin:2px 0}
+.toc-list a{display:block; color:var(--muted); border-left:2px solid transparent;
+  border-radius:0 8px 8px 0; padding:6px 10px}
+.toc-list a:hover{color:var(--text); text-decoration:none; background:var(--surface-2)}
+.toc-list a.active{color:var(--accent); background:color-mix(in srgb,var(--accent) 10%, transparent);
+  border-left-color:var(--accent); font-weight:600}
+.toc-list a .n{font-family:var(--mono); font-size:.75rem; color:var(--muted); margin-right:.5em}
+.toc-list a.active .n{color:var(--accent)}
+.toc-sub{margin-left:14px; border-left:1px dashed var(--border); padding-left:0}
+.toc-sub a{font-size:.83rem; padding:4px 10px}
+
+/* ---------- section headers ---------- */
+.sec-head{display:flex; align-items:center; gap:14px; margin-bottom:10px}
+.sec-num{flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+  min-width:40px; height:40px; padding:0 8px; border-radius:12px; font-family:var(--mono);
+  font-weight:700; font-size:1.02rem; color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 40%, transparent)}
+.sec-title{margin:0}
+.sec-intro{color:var(--muted); max-width:70ch; margin-bottom:1.6rem}
+h3[id]{scroll-margin-top:84px}
+h3[id]::before{content:"§"; color:var(--accent-2); font-weight:600; margin-right:.45em; font-size:.9em}
+/* ---------- cards & grids ---------- */
+.card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:20px 22px; box-shadow:var(--shadow); margin-bottom:16px}
+.card>:last-child{margin-bottom:0}
+.card h3,.card h4{margin-top:0}
+.card.accent-edge{border-left:3px solid var(--accent)}
+.grid{display:grid; gap:16px; margin-bottom:16px}
+.grid>*{min-width:0}
+.facts>*{min-width:0}
+.grid-2{grid-template-columns:repeat(2,1fr)}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+.grid .card{margin-bottom:0}
+.grid>.card>:last-child{margin-bottom:0}
+
+/* ---------- callouts ---------- */
+.callout{background:var(--surface-2); border:1px solid var(--border); border-left-width:4px;
+  border-radius:var(--radius-sm); padding:14px 18px; margin:0 0 16px}
+.callout .callout-label{display:block; font-family:var(--mono); font-size:.72rem; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.35em}
+.callout.note{border-left-color:var(--accent)}
+.callout.note .callout-label{color:var(--accent)}
+.callout.good{border-left-color:var(--success)}
+.callout.good .callout-label{color:var(--success)}
+.callout.warn{border-left-color:var(--warning)}
+.callout.warn .callout-label{color:var(--warning)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .callout-label{color:var(--danger)}
+.callout>:last-child{margin-bottom:0}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius);
+  background:var(--surface); box-shadow:var(--shadow); margin-bottom:16px}
+table{border-collapse:collapse; width:100%; min-width:620px; font-size:.92rem}
+caption{caption-side:top; text-align:left; font-family:var(--mono); font-size:.75rem;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--muted); padding:12px 16px 4px}
+th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:top}
+thead th{font-family:var(--mono); font-size:.75rem; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--muted); background:var(--surface-2); white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%, transparent)}
+td code,th code{white-space:nowrap}
+
+/* ---------- code blocks ---------- */
+.code{background:#0d1424; border:1px solid var(--border); border-radius:var(--radius);
+  overflow:hidden; margin:0 0 16px; box-shadow:var(--shadow)}
+html[data-theme="light"] .code{background:#101a30}
+@media (prefers-color-scheme: light){ html:not([data-theme]) .code{background:#101a30} }
+.code-head{display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:8px 12px; background:var(--surface-2); border-bottom:1px solid var(--border)}
+.code-lang{font-family:var(--mono); font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--muted)}
+.copy-btn{font:inherit; font-size:.78rem; font-family:var(--mono); color:var(--text); cursor:pointer;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:.3em .8em}
+.copy-btn:hover{border-color:var(--border-strong)}
+.copy-btn.ok{color:var(--success); border-color:var(--success)}
+.code pre.code-body{margin:0; padding:14px 16px; overflow-x:auto; font-family:var(--mono);
+  font-size:.82rem; line-height:1.55; color:#dbe6f8; background:transparent; border:0; border-radius:0}
+.code pre.code-body code{background:transparent; border:0; padding:0; font-size:inherit;
+  color:inherit; white-space:pre}
+pre.code-body{overflow-x:auto}
+
+/* ---------- badges ---------- */
+.badge{display:inline-block; font-family:var(--mono); font-size:.72rem; font-weight:700;
+  letter-spacing:.06em; border-radius:999px; padding:.22em .7em; border:1px solid transparent;
+  vertical-align:middle}
+.sev-crit{color:var(--danger); background:color-mix(in srgb,var(--danger) 13%, transparent);
+  border-color:color-mix(in srgb,var(--danger) 45%, transparent)}
+.sev-high{color:var(--high); background:color-mix(in srgb,var(--high) 13%, transparent);
+  border-color:color-mix(in srgb,var(--high) 45%, transparent)}
+.sev-med{color:var(--warning); background:color-mix(in srgb,var(--warning) 13%, transparent);
+  border-color:color-mix(in srgb,var(--warning) 45%, transparent)}
+.sev-low{color:var(--low); background:color-mix(in srgb,var(--low) 13%, transparent);
+  border-color:color-mix(in srgb,var(--low) 45%, transparent)}
+.cat{color:var(--violet); background:color-mix(in srgb,var(--violet) 12%, transparent);
+  border-color:color-mix(in srgb,var(--violet) 40%, transparent)}
+.cat-net{color:var(--accent-2); background:color-mix(in srgb,var(--accent-2) 12%, transparent);
+  border-color:color-mix(in srgb,var(--accent-2) 40%, transparent)}
+.badge.plain{color:var(--muted); background:var(--surface-2); border-color:var(--border)}
+
+/* ---------- key/value list ---------- */
+.kv{display:grid; grid-template-columns:minmax(120px,max-content) 1fr; gap:6px 18px; margin:0}
+.kv dt{font-family:var(--mono); font-size:.78rem; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); padding-top:2px}
+.kv dd{margin:0}
+.kv dd ul{margin:0; padding-left:1.1rem}
+
+/* ---------- timeline ---------- */
+.timeline{list-style:none; position:relative; margin:0 0 16px; padding:0 0 0 26px}
+.timeline::before{content:""; position:absolute; left:8px; top:6px; bottom:6px; width:2px;
+  background:linear-gradient(var(--accent),var(--violet))}
+.timeline>li{position:relative; margin:0 0 18px; padding:12px 16px; background:var(--surface);
+  border:1px solid var(--border); border-radius:var(--radius-sm)}
+.timeline>li::before{content:""; position:absolute; left:-24px; top:18px; width:10px; height:10px;
+  border-radius:50%; background:var(--accent); border:2px solid var(--bg); box-shadow:0 0 0 2px var(--accent)}
+.tl-date{font-family:var(--mono); font-size:.75rem; color:var(--accent-2); display:block; margin-bottom:2px}
+
+/* ---------- static diagram ---------- */
+.diagram{display:flex; flex-wrap:wrap; align-items:stretch; gap:10px; margin:0 0 16px}
+.dnode{flex:1 1 150px; min-width:130px; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:10px 12px; text-align:center}
+.dnode .dn-t{font-weight:700; font-size:.9rem}
+.dnode .dn-s{font-size:.78rem; color:var(--muted)}
+.dnode.attacker{border-top:3px solid var(--danger)}
+.dnode.victim{border-top:3px solid var(--accent)}
+.dnode.infra{border-top:3px solid var(--warning)}
+.dnode.defender{border-top:3px solid var(--success)}
+.darrow{align-self:center; color:var(--muted); font-family:var(--mono); font-size:1rem; flex:0 0 auto}
+
+/* ---------- simulation ---------- */
+.sim{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden; margin-bottom:16px}
+.sim-stage{position:relative; background:
+  linear-gradient(color-mix(in srgb,var(--border) 45%, transparent) 1px, transparent 1px),
+  linear-gradient(90deg, color-mix(in srgb,var(--border) 45%, transparent) 1px, transparent 1px),
+  var(--bg);
+  background-size:34px 34px,34px 34px,auto}
+.sim-stage canvas{display:block; width:100%; height:auto; touch-action:pan-y}
+.sim-tip{position:absolute; z-index:20; max-width:260px; background:var(--elevated);
+  border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:8px 12px;
+  font-size:.8rem; color:var(--text); box-shadow:var(--shadow); pointer-events:none; display:none}
+.sim-tip .tt{font-weight:700; display:block; margin-bottom:2px}
+.sim-panel{border-top:1px solid var(--border); padding:16px 20px}
+.sim-step-title{font-weight:700; margin:0 0 .3em; font-size:1rem}
+.sim-step-title .n{font-family:var(--mono); color:var(--accent); margin-right:.5em}
+.sim-caption{color:var(--text); margin:0 0 .7em}
+.sim-hint{display:flex; gap:10px; align-items:flex-start; background:color-mix(in srgb,var(--success) 8%, transparent);
+  border:1px solid color-mix(in srgb,var(--success) 35%, transparent); border-radius:var(--radius-sm);
+  padding:10px 14px; font-size:.9rem; margin:0 0 .9em}
+.sim-hint .lbl{flex:0 0 auto; font-family:var(--mono); font-size:.7rem; font-weight:700;
+  letter-spacing:.1em; color:var(--success); text-transform:uppercase; padding-top:2px}
+.sim-evidence{display:flex; flex-wrap:wrap; gap:8px}
+.sim-evidence .ev{font-family:var(--mono); font-size:.72rem; color:var(--accent-2);
+  background:color-mix(in srgb,var(--accent-2) 10%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent-2) 35%, transparent);
+  border-radius:6px; padding:.25em .6em}
+.sim-controls{display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 20px;
+  border-top:1px solid var(--border); background:var(--surface-2)}
+.btn{font:inherit; font-size:.85rem; font-family:var(--mono); color:var(--text); cursor:pointer;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:.4em .9em}
+.btn:hover{border-color:var(--border-strong)}
+.btn[disabled]{opacity:.45; cursor:not-allowed}
+.btn.primary{color:var(--bg); background:var(--accent); border-color:var(--accent); font-weight:700}
+.btn.primary:hover{filter:brightness(1.08)}
+.seg{display:inline-flex; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden}
+.seg .seg-btn{font:inherit; font-family:var(--mono); font-size:.78rem; color:var(--muted);
+  background:var(--surface); border:0; border-right:1px solid var(--border); padding:.42em .7em; cursor:pointer}
+.seg .seg-btn:last-child{border-right:0}
+.seg .seg-btn[aria-pressed="true"]{color:var(--bg); background:var(--accent); font-weight:700}
+.step-chips{display:flex; flex-wrap:wrap; gap:6px; padding:10px 20px 14px; border-top:1px solid var(--border)}
+.step-chip{font-family:var(--mono); font-size:.72rem; color:var(--muted); cursor:pointer;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:.3em .7em}
+.step-chip:hover{color:var(--text); border-color:var(--border-strong)}
+.step-chip[aria-current="true"]{color:var(--bg); background:var(--accent); border-color:var(--accent); font-weight:700}
+.sim-legend{display:flex; flex-wrap:wrap; gap:14px; padding:10px 20px; font-size:.75rem;
+  color:var(--muted); border-top:1px solid var(--border)}
+.legend-dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:0}
+.sim-progress{height:3px; background:var(--border)}
+.sim-progress .sp-fill{display:block; height:100%; width:0; background:var(--accent-2)}
+.sim-story{padding:18px 20px 20px; border-top:1px solid var(--border)}
+.sim-story h3{margin-top:0}
+.sim-story ol li{margin:.45em 0}
+.sim-story .st{font-weight:600; color:var(--text)}
+
+/* ---------- mobile nav / floating controls ---------- */
+.toc-fab,.to-top{position:fixed; z-index:110; border-radius:999px; box-shadow:var(--shadow);
+  border:1px solid var(--border-strong); background:var(--elevated); color:var(--text);
+  font:inherit; font-weight:600; cursor:pointer}
+.toc-fab{right:18px; bottom:18px; display:none; padding:.65em 1.15em; font-size:.9rem}
+.to-top{right:18px; bottom:74px; width:44px; height:44px; font-size:1.1rem; opacity:0;
+  pointer-events:none; transition:opacity .25s}
+.to-top.show{opacity:1; pointer-events:auto}
+.toc-overlay{position:fixed; inset:0; z-index:130; display:none}
+.toc-overlay.open{display:block}
+.toc-overlay-backdrop{position:absolute; inset:0; background:rgba(4,8,18,.62)}
+.toc-panel{position:absolute; top:0; right:0; bottom:0; width:min(320px,86vw);
+  background:var(--surface); border-left:1px solid var(--border); padding:18px 16px; overflow:auto;
+  box-shadow:var(--shadow)}
+.toc-panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+.toc-close{font:inherit; font-size:1rem; background:var(--surface-2); color:var(--text);
+  border:1px solid var(--border); border-radius:var(--radius-sm); width:34px; height:34px; cursor:pointer}
+
+/* ---------- responsive ---------- */
+@media (max-width:1040px){
+  .layout{display:block}
+  .sidebar{display:none}
+  .toc-fab{display:inline-block}
+  .facts{grid-template-columns:repeat(2,1fr)}
+  .grid-3{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  .wrap{padding:0 16px}
+  .hero{padding:30px 0 24px}
+  .facts{grid-template-columns:1fr}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .page-title{font-size:1.7rem}
+  .card{padding:16px}
+  table{min-width:520px}
+  .sim-panel,.sim-controls,.step-chips,.sim-legend,.sim-story{padding-left:14px; padding-right:14px}
+  .btn{padding:.45em .8em}
+}
+@media (max-width:400px){
+  body{font-size:16px}
+  .chips{gap:6px}
+}
+/* ---------- motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:.01ms !important}
+}
+/* ---------- print ---------- */
+@media print{
+  :root{--bg:#ffffff; --surface:#ffffff; --surface-2:#f2f4f8; --elevated:#ffffff;
+    --text:#111827; --muted:#4b5563; --border:#d1d5db; --border-strong:#9ca3af;
+    --accent:#1d4ed8; --accent-2:#0e7490; --violet:#6d28d9; --success:#047857;
+    --warning:#b45309; --danger:#b91c1c; --high:#c2410c; --low:#15803d; --shadow:none;
+    color-scheme:light}
+  html{scroll-behavior:auto}
+  .progress-bar,.sidebar,.toc-fab,.to-top,.toc-overlay,.theme-toggle,.copy-btn,
+  .sim-controls,.step-chips,.sim-progress{display:none !important}
+  .layout{display:block; padding:0}
+  body{background:#fff; color:#111827; font-size:11.5pt}
+  .hero{border-bottom:1px solid #d1d5db; background:#fff}
+  main > section{border-top:1px solid #e5e7eb; padding:18pt 0; page-break-inside:auto}
+  .card,.callout,.table-wrap,.code,.sim,.fact,.timeline>li{box-shadow:none; page-break-inside:avoid}
+  .code pre.code-body{white-space:pre-wrap; overflow-wrap:anywhere}
+  .table-wrap{overflow:visible}
+  table{min-width:0}
+  .sim-stage canvas{max-height:420px}
+  a{color:#1d4ed8}
+  a[href^="http"]::after{content:" (" attr(href) ")"; font-size:8.5pt; color:#4b5563;
+    overflow-wrap:anywhere}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1568"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div class="progress-bar" aria-hidden="true"><span class="progress-fill"></span></div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-top">
+      <p class="kicker">MITRE ATT&amp;CK · Detection Guide</p>
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">
+        <span class="dot-ico" aria-hidden="true"></span><span class="sun">Switch to light</span><span class="moon">Switch to dark</span>
+      </button>
+    </div>
+    <h1 class="page-title">Dynamic Resolution <span class="tid">T1568</span></h1>
+    <p class="lede">Attackers keep their command and control (C2) channel alive by constantly changing the domain names and IP addresses their malware calls home to. This guide explains the three main tricks — fast flux, DGA domains, and DNS calculation — and shows how to catch each one with DNS logs, Sigma rules, and Splunk searches.</p>
+    <div class="chips" aria-label="Page metadata">
+      <span class="chip accent">MITRE ATT&amp;CK Technique</span>
+      <span class="chip">Tactic: Command and Control</span>
+      <span class="chip">Platforms: ESXi · Linux · Windows · macOS</span>
+      <span class="chip">Beginner friendly</span>
+      <span class="chip">Detection engineering</span>
+      <span class="chip">ATT&amp;CK page v1.1 · updated May 2026</span>
+      <span class="chip">Guide v2.0</span>
+    </div>
+    <div class="facts">
+      <div class="fact"><div class="fact-k">Tactic</div><div class="fact-v">Command and Control</div></div>
+      <div class="fact"><div class="fact-k">Sub-techniques</div><div class="fact-v">3 — Fast Flux, DGA, DNS Calculation</div></div>
+      <div class="fact"><div class="fact-k">Main evidence</div><div class="fact-v">DNS logs, passive DNS, network flows</div></div>
+      <div class="fact"><div class="fact-k">Difficulty to detect</div><div class="fact-v">Medium — needs DNS analytics, not just blocklists</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <aside class="sidebar" aria-label="Table of contents">
+      <nav class="toc">
+        <p class="toc-title">Contents</p>
+        <ul class="toc-list" id="toc-list"><!-- generated by app.js from real headings --></ul>
+      </nav>
+    </aside>
+
+    <main>
+      <!-- ==================== 1. OVERVIEW ==================== -->
+      <section id="overview">
+        <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Overview</h2></div>
+        <p class="sec-intro">This section explains the technique in plain words, shows where it sits in an attack, and lists what this page will teach you.</p>
+
+        <div class="card accent-edge">
+          <h3>What is dynamic resolution?</h3>
+          <p>Malware needs an address to talk to. Most malware reaches out to a <strong>command and control (C2)</strong> server. C2 is the channel that carries attacker orders to the malware and carries stolen data back. If that address is a fixed domain or IP, defenders can block it once — and the attack is over.</p>
+          <p><strong>Dynamic resolution</strong> removes that weakness for the attacker. Before or during an attack, the adversary <strong>buys, computes, or rotates</strong> the domain names and IP addresses that the malware uses. The calculations can change the domain name, the IP address, or even the <strong>port number</strong> the malware calls. ATT&amp;CK also notes that malware often uses dynamic resolution as a <strong>fallback channel</strong> — a backup way to reconnect when the primary C2 server is lost. The malware almost always finds a live C2 server, while old addresses go dark. Blocking one address is not enough, because a new one appears within minutes.</p>
+          <p>Think of a spy who changes safe houses every night and leaves a small note about the next address. Dynamic resolution is that note system, built on top of <strong>DNS</strong> — the internet's phone book, which turns names like <code>example.com</code> into IP addresses.</p>
+        </div>
+
+        <div class="callout note">
+          <span class="callout-label">Note</span>
+          <p>ATT&amp;CK lists three children under T1568. This page is the parent guide. It explains all three children, shows how attackers combine them, and gives detections that cover the whole family. Each child also has its own deep-dive page.</p>
+        </div>
+
+        <div class="grid grid-3">
+          <div class="card">
+            <h3>Fast Flux DNS · .001</h3>
+            <p>One name, many changing IPs. A domain points to a rotating list of hosts, and a very short <strong>TTL</strong> (time to live — how long a DNS answer may be cached) forces every computer to ask again within seconds or minutes.</p>
+            <p><a href="https://attack.mitre.org/techniques/T1568/001/">ATT&amp;CK page for T1568.001</a></p>
+          </div>
+          <div class="card">
+            <h3>Domain Generation Algorithms · .002</h3>
+            <p><strong>DGAs</strong> are small formulas inside malware. Each day they compute a list of fake-looking domain names, such as <code>qhxvbmzsrt.com</code>. The attacker registers only one or two of them, so the malware keeps trying names until one answers.</p>
+            <p><a href="https://attack.mitre.org/techniques/T1568/002/">ATT&amp;CK page for T1568.002</a></p>
+          </div>
+          <div class="card">
+            <h3>DNS Calculation · .003</h3>
+            <p>Data hides inside the query itself. The malware packs its ID or a command into the domain name it asks about, for example <code>a1f3c9.task.c2tld[.]com</code>. The attacker's name server reads the request, decodes it, and answers — often with a TXT record (a DNS record that carries plain text).</p>
+            <p><a href="https://attack.mitre.org/techniques/T1568/003/">ATT&amp;CK page for T1568.003</a></p>
+          </div>
+        </div>
+
+        <h3>Where it sits in the attack chain</h3>
+        <div class="table-wrap">
+          <table>
+            <caption>Dynamic resolution inside a typical intrusion</caption>
+            <thead>
+              <tr><th>Stage</th><th>What happens</th><th>T1568 here?</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Delivery and execution</td><td>A user opens a bad attachment, or downloads malware from a shady site. The malware starts on the device.</td><td>No</td></tr>
+              <tr><td><strong>Command and Control</strong></td><td><strong>The malware resolves a rotating C2 name and connects out. Defenders can no longer stop the attack by blocking one static address.</strong></td><td><strong>Yes — this technique</strong></td></tr>
+              <tr><td>Exfiltration and impact</td><td>Stolen data leaves, or ransomware starts. The same hidden channel often carries this traffic too.</td><td>Enabled by it</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Why it matters to defenders</h3>
+            <ul>
+              <li>Blocklists alone cannot keep up. A DGA can generate thousands of fresh names per day.</li>
+              <li>The C2 channel protects the attacker's whole operation. Cut it, and commands, updates, and data theft all stop.</li>
+              <li>DNS is one of the best places to watch. Almost every malware needs it, and it usually happens before any encryption hides the traffic.</li>
+              <li>Fast flux and DGA noise also appear in cheap adware. Telling the two apart saves hours of false alarms.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>What you will learn on this page</h3>
+            <ul>
+              <li>How the three sub-techniques work, step by step, in an animated simulation.</li>
+              <li>Why attackers rotate infrastructure, and the mistakes they often make.</li>
+              <li>Which artifacts to collect, and where to look first in the SOC.</li>
+              <li>Six ranked threats, with realistic Zeek, Suricata, and Sysmon log examples.</li>
+              <li>Six complete Sigma rules and six matching Splunk SPL queries you can adapt.</li>
+              <li>Mitigations, common blue-team mistakes, and a one-page cheat sheet.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>Small glossary before we start</h3>
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Core DNS terms</h4>
+            <ul>
+              <li><strong>DNS resolver (recursive resolver)</strong> — the server inside your company that answers name lookups for all devices.</li>
+              <li><strong>Authoritative name server</strong> — the server that holds the official answer for a domain. Attackers love to run their own.</li>
+              <li><strong>TTL</strong> — time to live. It says how long a DNS answer may be stored. Normal websites use hours or days.</li>
+              <li><strong>NXDOMAIN</strong> — the DNS answer for "this name does not exist".</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Detection terms</h4>
+            <ul>
+              <li><strong>Passive DNS</strong> — a database that records which domains pointed to which IPs in the past, collected from many networks.</li>
+              <li><strong>Beacon</strong> — a small, regular check-in from malware to C2, for example every 60 seconds.</li>
+              <li><strong>Sinkhole</strong> — a server that takes over a malicious domain so malware talks to the defender instead of the attacker.</li>
+              <li><strong>ASN</strong> — autonomous system number. It groups IP addresses under one network owner. Many ASNs in one domain's answers is a red flag.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="diagram" aria-label="Simple diagram of dynamic resolution">
+          <div class="dnode attacker"><div class="dn-t">Attacker</div><div class="dn-s">registers domains</div></div>
+          <span class="darrow" aria-hidden="true">→</span>
+          <div class="dnode infra"><div class="dn-t">Rotating DNS</div><div class="dn-s">fast names + low TTL</div></div>
+          <span class="darrow" aria-hidden="true">→</span>
+          <div class="dnode victim"><div class="dn-t">Victim malware</div><div class="dn-s">resolves and beacons</div></div>
+          <span class="darrow" aria-hidden="true">→</span>
+          <div class="dnode infra"><div class="dn-t">C2 server</div><div class="dn-s">orders and stolen data</div></div>
+        </div>
+
+        <h3>Key facts at a glance</h3>
+        <div class="card">
+          <dl class="kv">
+            <dt>ATT&amp;CK ID</dt><dd>T1568 — Dynamic Resolution (parent of .001, .002, .003) · ATT&amp;CK page v1.1, created March 2020</dd>
+            <dt>Tactic</dt><dd>Command and Control (TA0011)</dd>
+            <dt>Platforms</dt><dd>ESXi, Linux, Windows, macOS — any device that can send DNS queries</dd>
+            <dt>Permissions needed</dt><dd>None special. An ordinary user-level process can send DNS traffic.</dd>
+            <dt>Main data sources</dt><dd>Domain Name: Active DNS · Domain Name: Passive DNS · Network Traffic: Content · Network Traffic: Flow</dd>
+            <dt>Detection difficulty</dt><dd>Medium. Blocklists miss it; per-client DNS analytics catch it.</dd>
+            <dt>Best first rule</dt><dd>NXDOMAIN burst per client, then low-TTL answers, then long-label queries.</dd>
+          </dl>
+        </div>
+
+        <div class="callout good">
+          <span class="callout-label">Good to know</span>
+          <p>You do not need a big budget to start. One DNS log source, one dashboard, and two or three of the rules in section 5 will catch most real cases. The rest of this page shows you how, step by step.</p>
+        </div>
+      </section>
+      <!-- ==================== 2. ANIMATED SIMULATION ==================== -->
+      <section id="simulation">
+        <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Animated simulation</h2></div>
+        <p class="sec-intro">The animation below shows one full attack day in a small company network. An operator registers a throwaway domain. The malware on a staff laptop tries DGA names. A fast-flux answer gives a short-lived IP. A DNS calculation channel carries hidden data. In the end, the SOC links all of it together. Use the buttons to play, pause, restart, change speed, or jump to any step. Hover over any node to see what it does. If you prefer reading, the written story below the canvas tells the same story in words.</p>
+
+        <div class="sim" id="sim">
+          <div class="sim-progress"><span class="sp-fill"></span></div>
+          <div class="sim-stage" tabindex="0" aria-label="Animation: malware on a victim PC uses DGA domains, fast-flux answers, and DNS calculation to reach a hidden C2 server while the SOC correlates DNS evidence.">
+            <canvas id="sim-canvas" role="img" aria-label="Animation: malware on a victim PC uses DGA domains, fast-flux answers, and DNS calculation to reach a hidden C2 server while the SOC correlates DNS evidence."></canvas>
+            <div class="sim-tip" id="sim-tip" role="status"></div>
+          </div>
+          <div class="sim-panel">
+            <p class="sim-step-title"></p>
+            <p class="sim-caption"></p>
+            <p class="sim-hint"><span class="lbl">Defender view</span><span class="sim-hint-text"></span></p>
+            <div class="sim-evidence" aria-label="Evidence left behind"></div>
+          </div>
+          <div class="sim-controls">
+            <button type="button" class="btn primary" id="sim-play">Pause</button>
+            <button type="button" class="btn" id="sim-restart">Restart</button>
+            <button type="button" class="btn" id="sim-prev">◀ Prev</button>
+            <button type="button" class="btn" id="sim-next">Next ▶</button>
+            <span class="seg" role="group" aria-label="Playback speed">
+              <button type="button" class="seg-btn" data-speed="0.5" aria-pressed="false">0.5×</button>
+              <button type="button" class="seg-btn" data-speed="1" aria-pressed="true">1×</button>
+              <button type="button" class="seg-btn" data-speed="2" aria-pressed="false">2×</button>
+            </span>
+          </div>
+          <div class="step-chips" aria-label="Jump to step"></div>
+          <div class="sim-legend" aria-hidden="true">
+            <span><span class="legend-dot" style="background:var(--danger)"></span>Attacker</span>
+            <span><span class="legend-dot" style="background:var(--accent)"></span>Victim host</span>
+            <span><span class="legend-dot" style="background:var(--warning)"></span>Attack infrastructure</span>
+            <span><span class="legend-dot" style="background:var(--success)"></span>SOC / defender</span>
+            <span><span class="legend-dot" style="background:var(--violet)"></span>Data movement (tunnel, beacon)</span>
+          </div>
+          <div class="sim-story">
+            <h3>Written story (screen-reader and no-JS version)</h3>
+            <ol>
+              <li><span class="st">Step 1 — Register a throwaway domain.</span> The attacker registers a cheap, short-lived domain and points its name server records at a server they control. The plan is simple: the name may live only a few days, so defenders have little time to react, and the registration itself leaves the first clue in registrar and passive DNS data.</li>
+              <li><span class="st">Step 2 — DGA makes candidate names.</span> Malware on the victim laptop runs a domain generation algorithm. It computes a list of fake-looking names for today and starts asking the company resolver about them. Most names do not exist yet, so the resolver answers NXDOMAIN again and again. The resolver log now shows one host with many random labels — a strong early signal.</li>
+              <li><span class="st">Step 3 — Resolver forwards upstream.</span> The company resolver has no answer for these names, so it does its job and asks the authoritative name server on the internet. That server belongs to the attacker. The resolver's outbound lookups and its log entries connect the victim to the attacker's infrastructure.</li>
+              <li><span class="st">Step 4 — Fast-flux answer, TTL 30.</span> One of the DGA names is actually registered today. The attacker's name server answers with an IP that changes at every query, and a TTL of 30 seconds keeps caches small. Within two minutes the same name has returned several different IPs, often in different networks. This IP churn is the fast-flux layer in action.</li>
+              <li><span class="st">Step 5 — DNS calculation channel.</span> The malware hides data inside the query itself. It packs its host ID and the next request into a long label such as <code>a1f3..9c.task.c2tld[.]com</code>. The attacker's name server decodes the label and learns which machine is calling and what it needs. The company sees only ordinary-looking DNS questions, but their labels are far longer than any human name.</li>
+              <li><span class="st">Step 6 — Beacon to the real C2.</span> The name server answers with the real C2 IP inside the A record. The malware now beacons to the C2 server over HTTPS every 60 seconds. On the network this looks like small, regular, boring sessions — to a brand-new domain and IP that nobody has seen before.</li>
+              <li><span class="st">Step 7 — SOC correlation fires.</span> The SOC dashboard links the pieces: a high NXDOMAIN ratio, very low TTLs, IP churn, and a beacon to a first-seen domain, all from one host. A correlation alert goes to the analyst with the host name and a risk score. This is the detection moment — four weak signals become one strong case.</li>
+              <li><span class="st">Step 8 — Block, sinkhole, and hunt.</span> The analyst blocks the domain at the resolver with a response policy and blocks the C2 IPs at the firewall. Then they use passive DNS to hunt backwards and find three more hosts that talked to the same infrastructure earlier. The attack channel is dead, and the wider campaign is now visible.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Three layers, one channel</h3>
+            <p>The animation shows why the parent technique is an umbrella. Fast flux answers <em>where</em> to connect. The DGA decides <em>which name</em> to use today. DNS calculation hides <em>who is asking</em>. An attacker can use one layer, or all three at once. That is why your detections should watch different DNS features, not just one.</p>
+          </div>
+          <div class="card">
+            <h3>What to remember from the sim</h3>
+            <ul>
+              <li>The NXDOMAIN burst in step 2 happens minutes before any real C2 traffic. It is your earliest cheap alert.</li>
+              <li>Step 4 and step 5 both need per-client views. Single-line rules miss both.</li>
+              <li>Step 7 is correlation, not magic. Every input came from logs you can already collect.</li>
+              <li>Step 8 works only if you can act fast: resolver response policy zones (RPZ) and firewall blocks, then a retro-hunt.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 3. RED TEAM ==================== -->
+      <section id="red-team">
+        <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Red team / hacker perspective</h2></div>
+        <p class="sec-intro">This section explains why attackers rotate their infrastructure, how the rotation works in practice, and which mistakes they often make. It is written for defenders: understanding the attacker's choices tells you exactly where to look.</p>
+
+        <div class="callout warn">
+          <span class="callout-label">Lab only</span>
+          <p>Every command in this section is safe and runs only inside a private lab you own — for example a virtual machine on your own computer. Never register lookalike domains of real brands, never point anything at systems you do not own, and never run these tests on a work network. Testing against third-party systems without written permission is a crime in most countries. Use the reserved <code>.test</code> name and documentation IP ranges such as <code>203.0.113.0/24</code>, which exist exactly for this purpose.</p>
+        </div>
+
+        <div class="card">
+          <h3>Why attackers drop static C2</h3>
+          <p>A fixed C2 address is a gift to defenders. One blocklist update kills it, one threat-intel report names it, and the whole botnet goes quiet. Public reporting on botnet takedowns shows the same lesson again and again: when the channel dies, the operation dies. Dynamic rotation answers three attacker problems:</p>
+          <ul>
+            <li><strong>Survival.</strong> Blocked or seized addresses are replaced automatically within minutes.</li>
+            <li><strong>Cheapness.</strong> A throwaway domain costs a few dollars, and some top-level domains cost less than a coffee.</li>
+            <li><strong>Attribution blur.</strong> Shared name servers, rented hosts, and fast-changing IPs make investigation slower.</li>
+          </ul>
+        </div>
+
+        <h3>How the rotation works, step by step</h3>
+        <div class="card">
+          <ol>
+            <li><strong>Buy short-lived domains</strong> in bulk from cheap registrars, often under privacy protection, sometimes across several registrars to slow any single seizure.</li>
+            <li><strong>Point every domain at their own name server.</strong> One server can answer for thousands of names, which makes rotation cheap.</li>
+            <li><strong>Run a DGA inside the malware</strong> so the names of the day are computed on the victim, not written in a config file that defenders can read.</li>
+            <li><strong>Set very low TTLs</strong> (30 to 300 seconds) so caches never pin an old answer and flux works.</li>
+            <li><strong>Mix the layers:</strong> flux for the IPs, DGA for the names, DNS calculation for hidden commands. Each layer covers another's weakness.</li>
+          </ol>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>What an attacker needs first</h3>
+            <ul>
+              <li>A registrar account and a payment method — a few dollars per domain.</li>
+              <li>A rented server (VPS) to run an authoritative name server and the C2 service.</li>
+              <li>Malware with a DGA or a hardcoded seed, plus a beacon loop.</li>
+              <li>Patience with trial and error: name must look random, TTL must be low, zones must stay small.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Where this technique applies</h3>
+            <ul>
+              <li><strong>Ransomware groups</strong> keep DGA failover channels in case their main C2 is blocked.</li>
+              <li><strong>Botnets</strong> use fast flux to rent out hidden hosting to other criminals.</li>
+              <li><strong>Adware and PUP</strong> (potentially unwanted programs) use DGAs for noisy but low-value traffic.</li>
+              <li><strong>Information theft</strong> tools tunnel stolen data out through DNS calculation when web traffic is watched.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>Safe lab exercise: build a toy flux-and-calculation zone</h3>
+        <p class="small muted">Goal: see the same log shapes the SOC sees, without touching any real infrastructure. Run these commands in a lab virtual machine with Linux installed. The <code>dig</code> tool is a DNS lookup command that comes with most distributions.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Bash · dnsmasq lab zone (lab VM only)</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body"><code># 1. Install a tiny DNS server inside the lab VM
+sudo apt-get install -y dnsmasq
+
+# 2. Point the toy domain at a documentation IP and use a 30 second TTL
+#    (add these two lines to /etc/dnsmasq.conf)
+#    address=/c2tld.test/203.0.113.10
+#    local-ttl=30
+
+# 3. Restart the service
+sudo systemctl restart dnsmasq</code></pre>
+        </div>
+        <p class="small muted">This note explains the block: dnsmasq is a small, well-known DNS server. The two config lines make it answer for one fake <code>.test</code> name with a short TTL, which mimics fast-flux behavior in a harmless way.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Bash · query the lab zone</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body"><code># Ask the lab server twice and compare the TTL in the answers
+dig @127.0.0.1 beacon01.c2tld.test A +noall +answer
+dig @127.0.0.1 beacon01.c2tld.test A +noall +answer
+
+# Send a calculation-style query: a long label that carries fake "data"
+dig @127.0.0.1 a1f3c9d2e5b7.task.c2tld.test TXT +noall +answer</code></pre>
+        </div>
+        <p class="small muted">This note explains the block: the two A queries show the 30-second TTL counting down, and the long-label TXT query shows what a DNS calculation channel looks like from the outside. Nothing leaves the lab.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Python · print DGA-style names (no registration)</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body"><code># Prints candidate names only. It registers nothing and contacts nothing.
+python3 - &lt;&lt;'PY'
+import random, string
+random.seed(7)  # fixed seed = same names each run, like a simple DGA
+for _ in range(5):
+    label = "".join(random.choice(string.ascii_lowercase) for _ in range(16))
+    print(label + ".c2tld.test")
+PY</code></pre>
+        </div>
+        <p class="small muted">This note explains the block: the script prints five random 16-character labels with a fixed starting value, so you always get the same list. Real DGA detection is exactly this problem reversed — telling such labels from normal ones.</p>
+
+        <h3>Common variations an attacker picks from</h3>
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Infrastructure variations</h4>
+            <ul>
+              <li><strong>All three layers at once:</strong> DGA names, fluxed IPs, and calculation labels in the same channel.</li>
+              <li><strong>Many top-level domains</strong> in rotation, so a block on one list barely hurts.</li>
+              <li><strong>One subdomain per victim,</strong> which lets the attacker track each machine separately.</li>
+              <li><strong>Borrowed reputation:</strong> some tools place C2 behind large shared hosting or CDN hostnames. The idea is to blend in with trusted traffic; defenders respond by checking that the requested name and the certificate really match the service.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Attacker mistakes (and the clues they leave)</h4>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Mistake</th><th>Clue for defenders</th></tr></thead>
+                <tbody>
+                  <tr><td>Reuses one name server IP across campaigns</td><td>Passive DNS links otherwise unrelated malware families</td></tr>
+                  <tr><td>Leaves TTL too high</td><td>Flux breaks; one blocked IP kills the channel</td></tr>
+                  <tr><td>Uses a guessable DGA seed</td><td>Researchers pre-register future domains and sinkhole them</td></tr>
+                  <tr><td>Registers hundreds of names at one registrar</td><td>Registrar abuse teams see the pattern and suspend them</td></tr>
+                  <tr><td>Never rotates after an incident</td><td>Old indicators still work during your retro-hunt</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout danger">
+          <span class="callout-label">Ethics reminder</span>
+          <p>Studying this technique is legitimate. Using it against systems you do not own is not. If your team runs attack simulations, keep them in the lab, get written approval, and use only fake or reserved domains and documentation IPs.</p>
+        </div>
+      </section>
+      <!-- ==================== 4. BLUE TEAM ==================== -->
+      <section id="blue-team">
+        <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Blue team / SOC perspective</h2></div>
+        <p class="sec-intro">This section shows how dynamic resolution looks from the security operations center (SOC), which artifacts it leaves behind, and a simple triage flow you can follow on a busy day.</p>
+
+        <div class="card accent-edge">
+          <h3>How defenders actually see it</h3>
+          <p>Nobody in the SOC sees "dynamic resolution" directly. You see its side effects in DNS data. A malware sample asks for names that do not exist. One domain returns five IP addresses in ten minutes. A laptop sends TXT queries with 40-character labels. Each event alone looks boring. Together, they form a shape that normal business traffic does not have.</p>
+          <p>Your job is to make that shape visible: log every DNS query, keep the logs long enough, and count the right things per client. Section 5 turns this idea into concrete rules.</p>
+        </div>
+
+        <h3>Artifacts you can collect</h3>
+        <div class="table-wrap">
+          <table>
+            <caption>Side effects of dynamic resolution and where they appear</caption>
+            <thead>
+              <tr><th>Artifact</th><th>Source</th><th>What it tells you</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>NXDOMAIN bursts</td><td>Resolver logs, Zeek <code>dns.log</code></td><td>A DGA is trying candidate names. Often the earliest signal, minutes before real C2.</td></tr>
+              <tr><td>TTL of 30–300 seconds on external answers</td><td>Zeek <code>dns.log</code> TTLs field, resolver logs</td><td>The attacker wants caches to forget fast. Normal sites rarely need this.</td></tr>
+              <tr><td>IP and ASN churn for one name</td><td>Zeek answers field, passive DNS</td><td>Fast-flux hosting. The domain is a moving target on purpose.</td></tr>
+              <tr><td>Long random labels (16+ chars)</td><td>Zeek, Suricata, Sysmon EID 22</td><td>DGA names or calculation-channel labels. Human names are short.</td></tr>
+              <tr><td>High TXT-record share</td><td>Resolver logs, Suricata EVE</td><td>Data is riding inside DNS queries — tunneling or DNS calculation.</td></tr>
+              <tr><td>First-seen domains with regular timing</td><td>Passive DNS, CTI feeds, your own baseline</td><td>A new beacon channel. Regular 60-second spacing is machine behavior.</td></tr>
+              <tr><td>Process attribution</td><td>Sysmon EID 22, and DNS events from your endpoint security tool (EDR — endpoint detection and response)</td><td>Which exact program asked. Separates malware from browsers instantly.</td></tr>
+              <tr><td>Registrar and whois changes</td><td>Registration data services</td><td>Fresh registrations, privacy-shielded owners, odd name servers.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Where to look — network side</h3>
+            <ul>
+              <li><strong>Zeek <code>dns.log</code></strong> — one line per query with rcode, TTLs, and answers. The workhorse for all rules in section 5.</li>
+              <li><strong>Suricata EVE (dns)</strong> — the same story from an intrusion-detection view, useful for cross-checking.</li>
+              <li><strong>Resolver query logs</strong> — from BIND, Unbound, Windows DNS, or a cloud resolver. Covers clients Zeek cannot see, like remote offices.</li>
+              <li><strong>Passive DNS</strong> — history for any domain or IP. Perfect for retro-hunts after you block something.</li>
+              <li><strong>Flow logs / firewall</strong> — confirms the beacon actually connected after the lookup.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Where to look — endpoint side</h3>
+            <ul>
+              <li><strong>Sysmon EID 22 (DNS query)</strong> — logs the process behind every lookup on Windows. It is the fastest way to move from a domain to a malware sample.</li>
+              <li><strong>EDR DNS events</strong> — most endpoint tools (EDR — endpoint detection and response) can show DNS per process; enable it.</li>
+              <li><strong>Proxy and TLS logs</strong> — show the beacon after resolution; check that the visited name matches the lookup.</li>
+              <li><strong>Host timeline</strong> — did the NXDOMAIN burst start right after a phishing email or a new install?</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Why it matters for the whole attack chain</h3>
+          <p>Dynamic resolution sits in the Command and Control tactic, between the initial break-in and the final damage. That position makes it a <strong>choke point</strong>. If you cut the channel, you stop command delivery, tool downloads, and data theft at once — often before the attacker finishes their goal. It also works in reverse: when you find one C2 domain, passive DNS usually leads you to earlier infections you did not know about.</p>
+        </div>
+
+        <h3>A simple triage flow</h3>
+        <div class="card">
+          <ol>
+            <li><strong>Confirm the event is real.</strong> Pull the raw DNS lines. Bots and broken scripts can also make noise.</li>
+            <li><strong>Check the client.</strong> Is it a known server, a scanner, or an office laptop? Known noisy tools go to an allowlist with an owner and a review date.</li>
+            <li><strong>Read the names.</strong> Long random labels? Odd top-level domains? Subdomains that look like data?</li>
+            <li><strong>Read the answers.</strong> How many IPs came back, what TTL, how many different networks (ASNs)?</li>
+            <li><strong>Attribute on the endpoint.</strong> Which process asked? Sysmon EID 22 or EDR data answers in minutes.</li>
+            <li><strong>Decide and act.</strong> Block the domain at the resolver and the IPs at the firewall. Isolate the host if a beacon is confirmed.</li>
+            <li><strong>Hunt backwards.</strong> Query passive DNS for the same name server and IP set. Find other hosts from earlier days.</li>
+            <li><strong>Write it down.</strong> Save indicators, share them internally, and note which rule caught it so tuning has evidence.</li>
+          </ol>
+        </div>
+
+        <div class="callout good">
+          <span class="callout-label">Win condition</span>
+          <p>You do not need to catch the malware file. If you can see the NXDOMAIN burst, block the rotating channel, and attribute the host, the attacker loses their foothold even if you never find the original email.</p>
+        </div>
+      </section>
+
+      <!-- ==================== 5. DETECTION DEEP DIVE ==================== -->
+      <section id="detection-deep-dive">
+        <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Detection engineering deep dive</h2></div>
+        <p class="sec-intro">This is the longest section. It maps the technique to regulations, summarizes what threat intelligence says, ranks six realistic threats, shows the exact log fields to use, and gives six Sigma rules with matching Splunk searches. Everything here is defensive and safe to reuse.</p>
+
+        <h3 id="detection-regulation">5.1 Regulation mapping</h3>
+        <p>Dynamic resolution is not named in any law or standard. What auditors check is whether you <strong>monitor, detect, respond, and keep evidence</strong> — exactly the activities this page describes. The table below connects each framework to the controls that DNS-based detection supports.</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Frameworks that expect this kind of monitoring</caption>
+            <thead>
+              <tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>GDPR (EU)</td>
+                <td>Art. 32 — security of processing; Art. 33 — breach notification</td>
+                <td>C2 channels enable data theft. Detecting them is part of protecting personal data, and detection feeds the 72-hour breach clock.</td>
+                <td>DNS monitoring policy, detection rules with owners, incident tickets showing time-to-detect and notification decisions.</td>
+              </tr>
+              <tr>
+                <td>HIPAA (US health)</td>
+                <td>164.308(a)(1) — risk analysis and management; 164.312(b) — audit controls</td>
+                <td>ePHI leaves through attacker channels. Audit controls require records of activity on systems that handle health data.</td>
+                <td>Retained DNS and endpoint logs, periodic review records, documented response to DGA or flux alerts.</td>
+              </tr>
+              <tr>
+                <td>ISO 27001:2022</td>
+                <td>A.8.15 — logging; A.8.16 — monitoring activities; A.8.20 — network security</td>
+                <td>These controls directly require log collection, monitoring for anomalies, and protection of networks — the base for DNS analytics.</td>
+                <td>Log source inventory including DNS, monitoring runbooks, evidence that alerts are triaged and tuned.</td>
+              </tr>
+              <tr>
+                <td>SOC 2</td>
+                <td>CC7.2 — monitoring for anomalies; CC7.3 — incident response evaluation; CC4.1 — ongoing evaluations</td>
+                <td>Auditors look for continuous monitoring and a working feedback loop, not just tools.</td>
+                <td>Alert triage records, false-positive tuning history, quarterly control tests covering detection rules.</td>
+              </tr>
+              <tr>
+                <td>PCI DSS 4.0</td>
+                <td>10.4.1 — daily review of audit logs; 10.7 — detect and respond to failures of critical security controls; 11.5.1 — network intrusions detected and responded to (IDS/IPS, including covert channels); 12.10 — incident response plan</td>
+                <td>Cardholder environments must review logs of security systems and run intrusion detection on the network.</td>
+                <td>Daily log review evidence, intrusion-detection system coverage notes (Zeek/Suricata), tested incident response plan that includes C2 blocking steps.</td>
+              </tr>
+              <tr>
+                <td>NIST CSF / 800-53</td>
+                <td>CSF DE.CM-1, DE.CM-7; 800-53 SI-4, SC-20, SC-21</td>
+                <td>DE.CM covers network monitoring; SI-4 is system monitoring; SC-20/SC-21 cover secure DNS resolution and data origin.</td>
+                <td>Monitoring strategy documents, DNS resolver hardening notes, detection engineering backlog with dates.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Evidence auditors accept</h4>
+            <p>Keep three simple things: (1) a list of DNS log sources and their retention times, (2) the rule set with an owner per rule, and (3) a sample of closed alerts showing triage notes. This covers "monitor, respond, and improve" for every framework above.</p>
+          </div>
+          <div class="card">
+            <h4>Keep it proportionate</h4>
+            <p>A ten-person company does not need a hundred rules. One resolver with query logging, two Sigma rules from section 5.5, and a written response step already satisfy the spirit of these controls. Document what you chose not to do and why.</p>
+          </div>
+        </div>
+
+        <h3 id="detection-threat-intel">5.2 Threat intelligence</h3>
+        <p>Threat intelligence (CTI) is outside knowledge about attackers: which groups use which tools, which domains are known bad, and which campaigns are active. For dynamic resolution, CTI helps in three ways: it gives you <strong>indicators</strong> to block, it gives you <strong>context</strong> to judge an alert, and it warns you <strong>early</strong> when a new DGA family appears.</p>
+        <div class="card">
+          <h4>A simple way to work with it</h4>
+          <ol>
+            <li><strong>Collect</strong> from the sources in the table below. Start with ATT&amp;CK and one passive DNS source.</li>
+            <li><strong>Enrich.</strong> For every DNS alert, attach: first-seen date of the domain, its name server history, and any known actor use.</li>
+            <li><strong>Apply.</strong> Feed high-confidence indicators into the resolver blocklist. Feed campaign context into alert notes so analysts decide faster.</li>
+          </ol>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <caption>Intel sources and how much to trust each one</caption>
+            <thead>
+              <tr><th>Source</th><th>What you get</th><th>Confidence</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>MITRE ATT&amp;CK</td><td>Technique definitions, mappings, references to public reporting</td><td><span class="badge sev-crit">High</span></td><td>The shared language for what you detect. Free.</td></tr>
+              <tr><td>Vendor threat reports</td><td>Campaign names, malware families, DGA seeds when shared</td><td><span class="badge sev-high">High–Medium</span></td><td>Good context; check the publication date before acting.</td></tr>
+              <tr><td>Passive DNS / OSINT lookup services</td><td>Domain-to-IP history, first-seen dates, NS reuse</td><td><span class="badge sev-med">Medium</span></td><td>Excellent for retro-hunts. Verify before blocking.</td></tr>
+              <tr><td>Commercial indicator feeds</td><td>Large daily lists of malicious domains</td><td><span class="badge sev-med">Medium</span></td><td>Volume is high; measure the false-positive rate for your network.</td></tr>
+              <tr><td>ISACs / sector sharing groups</td><td>Peer reports about active campaigns in your industry</td><td><span class="badge sev-med">Medium</span></td><td>Fastest early warning for targeted activity.</td></tr>
+              <tr><td>Your own telemetry</td><td>Baselines, first-seen lists, past incident indicators</td><td><span class="badge sev-crit">High (for your environment)</span></td><td>The most valuable source. Keep it for at least 90 days.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Public reporting links this technique to several large campaigns. Treat the details below as context, not as confirmed facts about any specific network.</p>
+        <div class="grid grid-3">
+          <div class="card">
+            <h4>Avalanche network (taken down November 2016)</h4>
+            <p>Public reporting by international law enforcement and research partners describes the Avalanche network as hosting infrastructure shared by many malware families. It relied on fast-changing domains and name servers. The November 2016 action seized servers and redirected thousands of domains to sinkholes, which let researchers count infected machines.</p>
+          </div>
+          <div class="card">
+            <h4>Gameover Zeus (disrupted 2014)</h4>
+            <p>Public reporting describes a banking theft botnet that combined peer-to-peer communication with rotated domains, which made blocking harder. Its disruption in 2014 is widely cited as an example of coordinated sinkholing plus endpoint cleanup.</p>
+          </div>
+          <div class="card">
+            <h4>Necurs (disrupted 2020)</h4>
+            <p>Public reporting describes the Necurs botnet as a major spam distributor whose messages carried other malware. Researchers documented its DGA-generated domains, and public reports say the domains could be predicted in advance, which enabled pre-emptive blocking before the 2020 disruption.</p>
+          </div>
+        </div>
+        <div class="callout note">
+          <span class="callout-label">Note on hedging</span>
+          <p>Campaign details change as new reporting appears. When you copy context into an alert or a report, name the source and its date, and prefer "public reporting describes" over firm claims.</p>
+        </div>
+
+        <h4>Documented use in MITRE ATT&amp;CK</h4>
+        <p>ATT&amp;CK's T1568 page lists many real users of this technique (checked October 2026). These rows come from the official page, so you can cite them with high confidence:</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Official ATT&amp;CK procedure examples (T1568)</caption>
+            <thead><tr><th>Actor / Software</th><th>What ATT&amp;CK records</th></tr></thead>
+            <tbody>
+              <tr><td>APT29 (G0016) · SolarWinds Compromise (C0024)</td><td>Used dynamic DNS providers for C2; during the SolarWinds compromise the malware resolved randomly generated subdomains.</td></tr>
+              <tr><td>SUNBURST (S0559)</td><td>Dynamically resolved C2 infrastructure for randomly generated subdomains within a parent domain.</td></tr>
+              <tr><td>APT-C-36 (G0099)</td><td>Used free dynamic DNS services such as DuckDNS and no-ip.com to route victims to malware hosting.</td></tr>
+              <tr><td>Kimsuky (G0094)</td><td>Used FreeDNS and No-IP dynamic DNS services, including servers in South Korea.</td></tr>
+              <tr><td>BRICKSTORM (S9015)</td><td>Used the DNS services sslip.io and nip.io to resolve C2 IP addresses.</td></tr>
+              <tr><td>RTM (S0148)</td><td>Resolved C2 addresses by converting blockchain transaction data into octets.</td></tr>
+              <tr><td>Gamaredon Group (G0047)</td><td>Uses dynamic DNS domains across its infrastructure.</td></tr>
+              <tr><td>RedEcho (G1042) · Remcos · AsyncRAT · TA2541 · Transparent Tribe</td><td>Dynamic DNS domains or services for C2, per the official page.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card accent-edge">
+          <h4>ATT&amp;CK's own detection strategy (DET0039)</h4>
+          <p>The official page groups its detection advice as analytics AN0109–AN0112. In short: correlate unusual or high-frequency DNS queries with processes that do not normally use the network, such as Office apps or system utilities (AN0109, Windows); on Linux, watch <code>/var/log/audit/audit.log</code> and resolver logs for repeated failed lookups and tie them to process lineage such as Python or shell tools (AN0110); on macOS, inspect the unified log for DNS calls from non-network apps (AN0111); on ESXi hosts, alert on resolver changes and odd lookups from management agents (AN0112). The Sigma rules in section 5.5 implement the Windows and network side; the notes below each rule explain what to collect for the rest.</p>
+        </div>
+
+        <h3 id="detection-threat-ranking">5.3 Threats ranking and categorization</h3>
+        <p>The same technique serves very different threats. The six below are the ones a typical mid-size company should expect, ranked by how much damage they cause and how likely they are. Each card gives the preconditions (what must be true for the threat to reach you), the impact, and the reason for the rank.</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Ranked threats using dynamic resolution</caption>
+            <thead>
+              <tr><th>#</th><th>Threat</th><th>Severity</th><th>Platform</th><th>Core signal</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>1</td><td>Ransomware DGA failover channel</td><td><span class="badge sev-crit">Critical</span></td><td><span class="badge cat">Windows</span></td><td>NXDOMAIN burst, then beacon to a first-seen domain</td></tr>
+              <tr><td>2</td><td>Botnet fast-flux C2 hosting</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat-net">Network</span> <span class="badge cat">Windows</span></td><td>Low TTL plus heavy IP and ASN churn</td></tr>
+              <tr><td>3</td><td>DNS-tunnel exfiltration via DNS calculation</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat-net">Network</span></td><td>Long labels, TXT-heavy queries from one host</td></tr>
+              <tr><td>4</td><td>Cloud-resolver shadow IT hiding C2</td><td><span class="badge sev-med">Medium</span></td><td><span class="badge plain">Cloud / Identity</span></td><td>Clients bypassing the internal resolver</td></tr>
+              <tr><td>5</td><td>macOS backdoor with attacker resolver setup</td><td><span class="badge sev-med">Medium</span></td><td><span class="badge cat">macOS</span></td><td>New resolver config plus periodic lookups</td></tr>
+              <tr><td>6</td><td>Adware and PUP DGA noise</td><td><span class="badge sev-low">Low</span></td><td><span class="badge cat">Windows</span></td><td>Weak DGA patterns, mostly harmless domains</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h3>Threat 1 — Ransomware DGA failover channel <span class="badge sev-crit">Critical</span> <span class="badge cat">Windows</span></h3>
+          <p><strong>Description.</strong> Modern ransomware keeps a backup command channel. If the main C2 is blocked, the malware switches to DGA names and tries many per day until one answers. Public reporting on several ransomware families describes exactly this pattern.</p>
+          <p><strong>Preconditions.</strong> Malware already runs on a Windows host, the main C2 was blocked or unreachable, and the client can still send DNS out.</p>
+          <p><strong>Impact.</strong> The attacker regains control, pushes the encryption stage, and can also delete backups over the same channel.</p>
+          <p><strong>Why this rank.</strong> Business-stopping damage plus high probability in the current threat landscape. The failover moment is your last cheap chance to stop the attack.</p>
+          <p class="small muted">Key signals: NXDOMAIN burst (rule 1), unique-domain spike (rule 4), first-seen beacon (rule 5), endpoint process via Sysmon EID 22 (rule 3).</p>
+        </div>
+
+        <div class="card">
+          <h3>Threat 2 — Botnet fast-flux C2 hosting <span class="badge sev-high">High</span> <span class="badge cat-net">Network</span> <span class="badge cat">Windows</span></h3>
+          <p><strong>Description.</strong> A botnet hides its C2 or rented hosting behind many quickly changing IPs, often machines of other victims. The name stays, the addresses move.</p>
+          <p><strong>Preconditions.</strong> Any client that resolves the fluxed name; no malware needed on your side to be a relay target.</p>
+          <p><strong>Impact.</strong> Steady C2 for the operator, and your network may relay traffic for other victims, which damages reputation and invites blocklisting.</p>
+          <p><strong>Why this rank.</strong> Less sudden than ransomware, but it supports many campaigns at once and is easy to detect — so leaving it undetected is pure loss.</p>
+          <p class="small muted">Key signals: TTL at or below 300 seconds with changing answers (rule 2), many unique domains per client (rule 4).</p>
+        </div>
+
+        <div class="card">
+          <h3>Threat 3 — DNS-tunnel exfiltration via DNS calculation <span class="badge sev-high">High</span> <span class="badge cat-net">Network</span></h3>
+          <p><strong>Description.</strong> An attacker encodes stolen data into the labels of DNS queries. TXT answers carry the reply. Because DNS traffic is almost always allowed, the stolen data can leave the network without being noticed.</p>
+          <p><strong>Preconditions.</strong> A compromised host, data worth stealing, and DNS traffic to the internet that is not restricted.</p>
+          <p><strong>Impact.</strong> Quiet, steady data loss that may run for months and evade web-focused controls.</p>
+          <p><strong>Why this rank.</strong> Lower probability than ransomware but very high cost when it happens, because the loss is long and silent.</p>
+          <p class="small muted">Key signals: TXT burst with long labels (rule 6), long-label queries (rule 3), unusual query volume per client.</p>
+        </div>
+
+        <div class="card">
+          <h3>Threat 4 — Cloud-resolver shadow IT hiding C2 <span class="badge sev-med">Medium</span> <span class="badge plain">Cloud / Identity</span></h3>
+          <p><strong>Description.</strong> Staff or malware switch devices to a public resolver or encrypted DNS service, so company DNS logs see nothing. Malware loves this blind spot.</p>
+          <p><strong>Preconditions.</strong> Clients can reach the internet directly on port 53 or via known encrypted-DNS endpoints.</p>
+          <p><strong>Impact.</strong> Loss of the main detection source; C2 that your rules never see.</p>
+          <p><strong>Why this rank.</strong> Medium probability, medium impact — but it silently weakens every other rule on this page, so treat it as a control-health issue.</p>
+          <p class="small muted">Key signals: firewall or flow logs showing direct DNS to external resolvers; check the coverage gap weekly.</p>
+        </div>
+
+        <div class="card">
+          <h3>Threat 5 — macOS backdoor with attacker resolver setup <span class="badge sev-med">Medium</span> <span class="badge cat">macOS</span></h3>
+          <p><strong>Description.</strong> Public reporting on macOS backdoors describes malware that points the system resolver at attacker infrastructure and checks in on a schedule. The DNS side looks like threat 2 or 3, just from Macs.</p>
+          <p><strong>Preconditions.</strong> A user installs a trojanized app; DNS egress is open.</p>
+          <p><strong>Impact.</strong> Persistent access to a platform that many SOCs monitor less.</p>
+          <p><strong>Why this rank.</strong> Medium probability and medium impact; the detection logic is identical to Windows cases, so it costs little to cover.</p>
+          <p class="small muted">Key signals: low-TTL churn (rule 2), first-seen beacon (rule 5), endpoint DNS events from your Mac security tool — or the network rules above, which see Mac traffic too.</p>
+        </div>
+
+        <div class="card">
+          <h3>Threat 6 — Adware and PUP DGA noise <span class="badge sev-low">Low</span> <span class="badge cat">Windows</span></h3>
+          <p><strong>Description.</strong> Cheap adware and Potentially Unwanted Programs also use DGAs, usually to fetch ads or reinstall themselves. The pattern mimics serious malware, so it burns analyst time.</p>
+          <p><strong>Preconditions.</strong> A user installed bundled free software.</p>
+          <p><strong>Impact.</strong> Mostly noise, plus mild risk and slow machines. Its real cost is alert fatigue.</p>
+          <p><strong>Why this rank.</strong> High visibility, low harm. Handle it with a fast triage note, not a heavy investigation.</p>
+          <p class="small muted">Key signals: same rules fire, but answers land on advertising or analytics networks; document the family and lower the rule score for that pattern.</p>
+        </div>
+
+        <h3 id="detection-logs">5.4 Logs and patterns</h3>
+        <p>Before writing rules, learn the fields. The three examples below are shaped like real events, with fake values. All three come from the same fictional client, <code>10.20.6.42</code> (host FIN-LAP-042), during the same minute of one incident, so you can compare them side by side.</p>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Normal versus suspicious in DNS data</caption>
+            <thead>
+              <tr><th>Signal</th><th>Normal</th><th>Suspicious</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>NXDOMAIN share per client</td><td>A few per hour, from typos or old links</td><td>Dozens in five minutes, many with random labels</td></tr>
+              <tr><td>TTL of external answers</td><td>Usually 300 seconds or more</td><td>30–300 seconds on names nobody else asks for</td></tr>
+              <tr><td>Unique domains per client per hour</td><td>Typically under 40 for office work</td><td>Well over 100, often with odd top-level domains</td></tr>
+              <tr><td>Label length</td><td>Short human names, a few subdomains</td><td>16+ character random labels, sometimes stacked</td></tr>
+              <tr><td>TXT-record share</td><td>Mainly mail security checks</td><td>Many TXT queries per minute from one host</td></tr>
+              <tr><td>First-seen domains</td><td>Most names are at least weeks old</td><td>Registered in the last days, then queried with metronome timing</td></tr>
+              <tr><td>Answer diversity</td><td>Stable IP or a small load-balanced set</td><td>A new IP set every few minutes, across many networks</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><strong>Example 1 — Zeek <code>dns.log</code> (JSON).</strong> One NXDOMAIN answer for a random-looking name from the client. This is the line rule 1 and rule 4 are built on:</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">JSON · Zeek dns.log</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body"><code>{"ts":1773577927.061536,"uid":"CZ9uAl4XuYQIhE8sWk","id.orig_h":"10.20.6.42","id.orig_p":53411,"id.resp_h":"10.20.1.10","id.resp_p":53,"proto":"udp","trans_id":42113,"rtt":"0.042117","query":"qhxvbmzsrtpldkwn.com","qclass":1,"qclass_name":"C_INTERNET","qtype":1,"qtype_name":"A","rcode":3,"rcode_name":"NXDOMAIN","AA":false,"TC":false,"RD":true,"RA":true,"Z":0,"answers":[],"TTLs":[],"rejected":false}</code></pre>
+        </div>
+
+        <p><strong>Example 2 — Suricata EVE DNS (JSON).</strong> Ninety seconds after the failed lookup, the same client asks for the next candidate on its list — and this one is registered. A DGA walk moves to a fresh name after each failure, so the name differs from example 1. The answer carries a 30-second TTL, the classic flux value (rule 2 territory):</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">JSON · Suricata EVE dns</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body"><code>{"timestamp":"2026-03-15T12:32:09.441912+0000","flow_id":2194837105,"src_ip":"10.20.6.42","src_port":53411,"dest_ip":"10.20.1.10","dest_port":53,"proto":"UDP","event_type":"dns","dns":{"type":"query","id":42113,"rrname":"tqs7zbmk1xoa4vh8.c2tld.com","rrtype":"A","tx_id":0}}
+{"timestamp":"2026-03-15T12:32:09.460210+0000","flow_id":2194837105,"src_ip":"10.20.1.10","src_port":53,"dest_ip":"10.20.6.42","dest_port":53411,"proto":"UDP","event_type":"dns","dns":{"type":"answer","id":42113,"rrname":"tqs7zbmk1xoa4vh8.c2tld.com","rrtype":"A","ttl":30,"rdata":"203.0.113.10"}}</code></pre>
+        </div>
+
+        <p><strong>Example 3 — Sysmon EID 22 (Windows, JSON render).</strong> The endpoint view: which process asked, and what came back. This is the line rule 3 is built on:</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">JSON · Sysmon EID 22 render</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body"><code>{"EventTime":"2026-03-15 12:32:09.88","EventID":22,"host":"FIN-LAP-042","Image":"C:\\Users\\fin\\AppData\\Roaming\\svchostx.exe","ProcessGuid":"{7A42C9D1-3E8F-11EC-9C2B-005056B1E9A4}","QueryName":"tqs7zbmk1xoa4vh8.c2tld.com","QueryResults":"203.0.113.10;","QueryStatus":"0","RecordNumber":88412,"Category":"DNS query"}</code></pre>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Field explanations for the three examples</caption>
+            <thead>
+              <tr><th>Field</th><th>Appears in</th><th>Meaning</th><th>Why it helps</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>ts</code> / <code>timestamp</code> / <code>EventTime</code></td><td>Zeek, Suricata, Sysmon</td><td>When the event happened</td><td>Needed for every count-per-window rule</td></tr>
+              <tr><td><code>id.orig_h</code> / <code>src_ip</code> / <code>host</code></td><td>Zeek, Suricata, Sysmon</td><td>The asking client, or the host it runs on</td><td>The "per client" part of every rule</td></tr>
+              <tr><td><code>id.resp_h</code> / <code>dest_ip</code></td><td>Zeek, Suricata</td><td>The resolver that answered</td><td>Shows whether clients use your resolver at all</td></tr>
+              <tr><td><code>query</code> / <code>rrname</code> / <code>QueryName</code></td><td>All three</td><td>The name being asked</td><td>Label length and randomness live here</td></tr>
+              <tr><td><code>qtype_name</code> / <code>rrtype</code></td><td>Zeek, Suricata</td><td>Record type asked: A, TXT, and so on</td><td>TXT-heavy traffic hints at tunneling</td></tr>
+              <tr><td><code>rcode_name</code></td><td>Zeek, Suricata</td><td>Result code: NXDOMAIN means "no such name"</td><td>The DGA signal; NXDOMAIN bursts are rule 1</td></tr>
+              <tr><td><code>answers</code> / <code>rdata</code> / <code>QueryResults</code></td><td>Zeek, Suricata, Sysmon</td><td>The returned IPs or records</td><td>IP churn and the real C2 address</td></tr>
+              <tr><td><code>TTLs</code> / <code>ttl</code></td><td>Zeek, Suricata</td><td>How long the answer may be cached</td><td>Low TTL is the fast-flux marker</td></tr>
+              <tr><td><code>uid</code> / <code>flow_id</code></td><td>Zeek, Suricata</td><td>Connection identifier</td><td>Joins DNS to the later beacon session</td></tr>
+              <tr><td><code>Image</code></td><td>Sysmon EID 22</td><td>Path of the process that asked</td><td>Turns a domain into a suspect file in one step</td></tr>
+              <tr><td><code>ProcessGuid</code></td><td>Sysmon EID 22</td><td>Stable ID for that process run</td><td>Groups all queries of one malware run</td></tr>
+              <tr><td><code>QueryStatus</code></td><td>Sysmon EID 22</td><td>Windows result code, 0 means success</td><td>Endpoint-side NXDOMAIN counting</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Best log sources per ranked threat</caption>
+            <thead>
+              <tr><th>Threat</th><th>Primary source</th><th>Backup source</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>1 — Ransomware failover</td><td>Zeek dns.log or resolver logs</td><td>Sysmon EID 22 for the process</td></tr>
+              <tr><td>2 — Fast-flux botnet</td><td>Zeek dns.log (TTLs, answers)</td><td>Passive DNS for history</td></tr>
+              <tr><td>3 — DNS tunnel</td><td>Resolver logs or Zeek (qtype, labels)</td><td>Suricata EVE, flow volume per client</td></tr>
+              <tr><td>4 — Shadow-IT resolver</td><td>Firewall and flow logs</td><td>Cloud DNS logs where available</td></tr>
+              <tr><td>5 — macOS backdoor</td><td>Network DNS rules (platform-blind); macOS unified log (AN0111)</td><td>Network rules plus any Mac endpoint DNS events</td></tr>
+              <tr><td>6 — Adware noise</td><td>Zeek dns.log</td><td>Endpoint uninstall records</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="small muted">Reading order tip: start every investigation in the network DNS data (platform-blind), then confirm the suspect host on the endpoint. The rules in <a href="#detection-sigma-spl">section 5.5</a> follow exactly this order.</p>
+
+        <h3 id="detection-sigma-spl">5.5 Sigma rules and Splunk SPL</h3>
+        <p><strong>Sigma</strong> is a free, text-based format for detection rules. You write the logic once, and converters turn it into searches for Splunk, Elastic, and other tools. Each rule below is complete and valid YAML. Under every rule you get a matching <strong>Splunk SPL</strong> query (Splunk's search language), plus mapping notes, false positives, and tuning advice. The seven rules below cover the six threats from section 5.3: rules 1, 2, 3, 5 and 6 map to threats 1, 2, 3, 5 and 6, and rule 7 covers threat 4 — clients that bypass your resolver and leave every DNS rule blind. One assumption applies to every rule: your Zeek add-on maps <code>id.orig_h</code> to <code>src_ip</code>; if it does not, use <code>id.orig_h</code> wherever a rule says <code>src_ip</code>. Finally, a rule's level (how loud the alert is) and a threat's severity (how much damage it can do) measure different things — a Critical threat can have a Medium-level rule when the rule only sees part of the picture.</p>
+        <div class="callout note">
+          <span class="callout-label">Before you paste</span>
+          <p>Field names depend on how your logs arrive. The queries assume a Zeek sensor feeding <code>index=dns sourcetype=zeek:dns</code> through a common Splunk add-on, and Sysmon feeding <code>index=ep_sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational</code>. Each mapping note lists the assumptions again, so you can swap in your own index and field names in minutes.</p>
+        </div>
+
+        <h4>Detection 1 — NXDOMAIN burst from one client <span class="badge sev-high">High</span> <span class="badge cat-net">Network</span> <span class="badge plain">Threat 1 · Threat 6</span></h4>
+        <p class="small muted">Sigma rule below: paste it into a <code>.yml</code> file in your rules folder, or test it in any Sigma converter. It fires when one client collects 40 or more NXDOMAIN answers with random-looking external names in five minutes.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="sigma"><code>title: 'High NXDOMAIN burst from one client'
+id: '3f7c2a91-6b4d-4e08-9a52-1c7d84e6f3b0'
+status: stable
+description: 'Detects a client that receives many NXDOMAIN answers for random-looking
+  external names within five minutes. This fits a domain generation algorithm trying
+  many candidate C2 names, for example ransomware searching for a live failover channel.'
+references:
+  - 'https://attack.mitre.org/techniques/T1568/'
+  - 'https://attack.mitre.org/techniques/T1568/002/'
+  - 'Practice reference: DNS analytics guides recommend watching NXDOMAIN ratios per client'
+author: 'Beginner detection guide series'
+date: '2026-09-14'
+logsource:
+  category: dns
+  product: zeek
+detection:
+  selection:
+    rcode_name: 'NXDOMAIN'
+    query|re: '(?i)([a-z0-9]{8,})\.(com|net|org|info|biz|top|xyz)$'
+  filter_internal:
+    query|endswith:
+      - '.internal'
+      - '.corp'
+      - '.local'
+      - '.in-addr.arpa'
+  condition: 'selection and not filter_internal | count() by src_ip &gt;= 40'
+  timeframe: 5m
+fields:
+  - 'src_ip'
+  - 'query'
+  - 'rcode_name'
+falsepositives:
+  - 'A browser or security tool that pre-fetches many dead names'
+  - 'A misconfigured application that looks up a rotating list of removed hosts'
+level: high
+tags:
+  - attack.t1568
+  - attack.t1568.002
+  - attack.tactic.command_and_control</code></pre>
+        </div>
+        <p class="small muted">Splunk search below: run it over the last 15 minutes as a scheduled search. It keeps only NXDOMAIN answers with random-looking labels, groups them in 5-minute buckets per client, and keeps the buckets with 40 or more hits.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="spl"><code>index=dns sourcetype=zeek:dns rcode_name=NXDOMAIN
+| regex query="(?i)[a-z0-9]{8,}\.(com|net|org|info|biz|top|xyz)$"
+| bucket _time span=5m
+| stats count AS nxdomain_hits dc(query) AS unique_names BY _time src_ip
+| where nxdomain_hits &gt;= 40
+| sort -_time</code></pre>
+        </div>
+        <p><strong>Mapping and tuning.</strong> The Sigma selection becomes the two base filters (<code>rcode_name=NXDOMAIN</code> plus the label regex), the aggregation becomes <code>stats ... BY _time src_ip</code>, and <code>where</code> applies the threshold. Assumptions: <code>index=dns</code> holds Zeek DNS events; the add-on maps Zeek's <code>id.orig_h</code> to <code>src_ip</code> — if yours does not, replace <code>src_ip</code> with <code>id.orig_h</code>. False positives usually come from a single broken application; confirm on the endpoint with Sysmon EID 22 before you isolate anything. Tune by raising the threshold after a week of data — busy networks often sit at 15–25.</p>
+
+        <h4>Detection 2 — Low-TTL answers with changing IPs <span class="badge sev-high">High</span> <span class="badge cat-net">Network</span> <span class="badge plain">Threat 2 · Threat 5</span></h4>
+        <p class="small muted">Sigma rule below: it fires when one client resolves the same external domain 12 or more times in 30 minutes while every answer TTL stays at or below 300 seconds — the fast-flux shape.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="sigma"><code>title: 'External domain answered with very low TTL and changing IPs'
+id: '8e51d4c7-2f3a-4b19-b6e7-5a90c1d2e8f4'
+status: stable
+description: 'Detects fast-flux style answers. The same client resolves the same
+  external domain many times in half an hour, the answer TTL stays at or below 300
+  seconds, and the returned IP set keeps changing. This fits botnet C2 hidden behind
+  fast flux.'
+references:
+  - 'https://attack.mitre.org/techniques/T1568/'
+  - 'https://attack.mitre.org/techniques/T1568/001/'
+  - 'Practice reference: passive DNS vendors flag low TTL with high IP diversity as flux'
+author: 'Beginner detection guide series'
+date: '2026-09-15'
+logsource:
+  category: dns
+  product: zeek
+detection:
+  selection:
+    qtype_name: 'A'
+    rcode_name: 'NOERROR'
+    TTLs|lt: 301
+  filter_internal:
+    query|endswith:
+      - '.internal'
+      - '.corp'
+      - '.local'
+  condition: 'selection and not filter_internal | count() by src_ip,query &gt;= 12'
+  timeframe: 30m
+fields:
+  - 'src_ip'
+  - 'query'
+  - 'TTLs'
+  - 'answers'
+falsepositives:
+  - 'Round-robin load balancers of large websites with short TTLs'
+  - 'Content delivery networks that rotate addresses often, such as video or update services'
+level: high
+tags:
+  - attack.t1568
+  - attack.t1568.001
+  - attack.tactic.command_and_control</code></pre>
+        </div>
+        <p class="small muted">Splunk search below: same logic, plus an IP-diversity check. It needs at least three different answer addresses in the window, which removes most honest load balancers.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="spl"><code>index=dns sourcetype=zeek:dns qtype_name=A rcode_name=NOERROR
+| eval answer_ttl=mvindex(TTLs, 0)
+| where answer_ttl &lt;= 300
+| bucket _time span=30m
+| stats count AS lookups dc(answers) AS unique_ips min(answer_ttl) AS min_ttl BY _time src_ip query
+| where lookups &gt;= 12 AND unique_ips &gt;= 3
+| sort -_time</code></pre>
+        </div>
+        <p><strong>Mapping and tuning.</strong> <code>TTLs|lt: 301</code> becomes <code>eval answer_ttl=mvindex(TTLs, 0)</code> and <code>where answer_ttl &lt;= 300</code>: Zeek stores TTLs as a list, one value per answer record, and the add-on usually keeps it as a multivalue field — if your data has a flat <code>TTL</code> field instead, drop the <code>mvindex</code>. The Sigma aggregation by <code>src_ip,query</code> becomes the two-field <code>stats</code>. One note: the Sigma side cannot express "the IP set keeps changing" — it checks TTL and repeat count only, while the SPL adds the IP-diversity check; use the SPL version for alerting where you can. Tuning: large CDNs rarely trigger because their TTLs sit above 300; if a video service still fires, add its domain suffix to a filter block, exactly like <code>filter_internal</code>.</p>
+
+        <h4>Detection 3 — Long random label from a Windows process <span class="badge sev-high">High</span> <span class="badge cat">Windows</span> <span class="badge plain">Threat 1 · Threat 3</span></h4>
+        <p class="small muted">Sigma rule below: it uses Sysmon event 22 on Windows hosts and matches queries where a random-looking label of 16 or more characters is followed by at least one more label, for example <code>tqs7zbmk1xoa4vh8.c2tld.com</code>. Human names almost never look like this.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="sigma"><code>title: 'Long random DNS label from a Windows process'
+id: 'c2a9f613-7d84-4e5b-8a1d-9b3e6f2c7051'
+status: stable
+description: 'Detects a Windows process that issues DNS queries with very long,
+  random-looking labels — at least one label of 16 or more characters followed by
+  further labels, such as a generated subdomain under an attacker zone. This fits
+  a domain generation algorithm or an attacker DNS zone. Event 22 also names the
+  process, which speeds triage.'
+references:
+  - 'https://attack.mitre.org/techniques/T1568/'
+  - 'https://attack.mitre.org/techniques/T1568/002/'
+  - 'https://attack.mitre.org/techniques/T1568/003/'
+  - 'Practice reference: Sysmon event 22 gives the process behind each DNS query'
+author: 'Beginner detection guide series'
+date: '2026-09-16'
+logsource:
+  category: dns_query
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 22
+    QueryName|re: '(?i)[a-z0-9]{16,}\.[a-z0-9-]{2,}\.'
+  filter_known:
+    QueryName|endswith:
+      - '.windowsupdate.com'
+      - '.azureedge.net'
+      - '.akamaihd.net'
+      - '.cloudfront.net'
+  condition: 'selection and not filter_known'
+fields:
+  - 'QueryName'
+  - 'QueryResults'
+  - 'Image'
+  - 'ProcessGuid'
+falsepositives:
+  - 'Content delivery networks and update services that use long cache-buster labels'
+  - 'Backup or monitoring tools that encode job data inside names'
+level: high
+tags:
+  - attack.t1568
+  - attack.t1568.002
+  - attack.t1568.003
+  - attack.tactic.command_and_control</code></pre>
+        </div>
+        <p class="small muted">Splunk search below: same filter on the Sysmon index, then a per-host summary so you see repeat offenders and the exact process paths in one screen.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="spl"><code>index=ep_sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=22
+| regex QueryName="(?i)[a-z0-9]{16,}\.[a-z0-9-]{2,}\."
+| search NOT QueryName IN ("*.windowsupdate.com", "*.azureedge.net", "*.akamaihd.net", "*.cloudfront.net")
+| stats count AS hits dc(QueryName) AS unique_names values(Image) AS processes BY host
+| where hits &gt;= 5
+| sort -hits</code></pre>
+        </div>
+        <p><strong>Mapping and tuning.</strong> The base filter (<code>EventCode=22</code> plus the same regex on <code>QueryName</code>) matches the Sigma selection; the <code>stats</code> adds triage value on top. Assumptions: Sysmon arrives as XML into <code>index=ep_sysmon</code>, so fields keep their XML names — <code>QueryName</code>, <code>QueryResults</code>, <code>Image</code>, <code>host</code> — and <code>EventCode=22</code> marks DNS query events. In Sigma the event number is <code>EventID: 22</code>; converters handle the rename. Tuning: watch the <code>processes</code> column — browser hits are noise, anything from <code>AppData</code> or a temp folder is urgent. Note that the Sigma rule fires on single events, while the SPL adds a per-host summary on top — keep both, they answer different questions.</p>
+
+        <h4>Detection 4 — Unusual number of unique domains per hour <span class="badge sev-med">Medium</span> <span class="badge cat-net">Network</span> <span class="badge plain">Threat 2 · Threat 6</span></h4>
+        <p class="small muted">Sigma rule below: it fires when one client asks for 100 or more unique external domains within one hour. Successful answers and failures both count, because cycling malware produces both.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="sigma"><code>title: 'Client resolves an unusual number of unique external domains in one hour'
+id: '5b8e1d2f-9c3a-4f67-a2e4-7d1b9c8e3f60'
+status: stable
+description: 'Detects one host that asks for 100 or more unique external domains
+  in one hour. Normal office work rarely does this. Malware families that cycle
+  through fast-flux or DGA names do it constantly, on both successful and failed
+  lookups.'
+references:
+  - 'https://attack.mitre.org/techniques/T1568/'
+  - 'https://attack.mitre.org/techniques/T1568/001/'
+  - 'Practice reference: baseline unique-domain counts per client before setting thresholds'
+author: 'Beginner detection guide series'
+date: '2026-09-17'
+logsource:
+  category: dns
+  product: zeek
+detection:
+  selection:
+    rcode_name:
+      - 'NOERROR'
+      - 'NXDOMAIN'
+    query|re: '(?i)\.(com|net|org|info|biz|top|xyz)$'
+  filter_internal:
+    query|endswith:
+      - '.internal'
+      - '.corp'
+      - '.local'
+  condition: 'selection and not filter_internal | count(query) by src_ip &gt;= 100'
+  timeframe: 1h
+fields:
+  - 'src_ip'
+  - 'query'
+  - 'rcode_name'
+falsepositives:
+  - 'Heavy web use such as large shopping events or big document downloads with many trackers'
+  - 'Security scanners or vulnerability tools running on a workstation'
+level: medium
+tags:
+  - attack.t1568
+  - attack.t1568.001
+  - attack.tactic.command_and_control</code></pre>
+        </div>
+        <p class="small muted">Splunk search below: identical counting logic, sorted so the loudest client sits on top. Schedule it hourly and compare against your baseline before raising or lowering the threshold.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="spl"><code>index=dns sourcetype=zeek:dns
+| regex query="(?i)\.(com|net|org|info|biz|top|xyz)$"
+| search rcode_name IN ("NOERROR", "NXDOMAIN")
+| bucket _time span=1h
+| stats dc(query) AS unique_domains count AS lookups BY _time src_ip
+| where unique_domains &gt;= 100
+| sort -unique_domains</code></pre>
+        </div>
+        <p><strong>Mapping and tuning.</strong> Sigma's two-value <code>rcode_name</code> list becomes the <code>IN</code> filter, and <code>count(query) by src_ip</code> becomes <code>dc(query) ... BY _time src_ip</code> — <code>dc</code> counts distinct values, which is exactly what the Sigma aggregation means. One caveat: Sigma converters differ on <code>count(field)</code> — most turn it into a distinct count, but verify what yours produces and keep both sides the same. Assumptions are the same Zeek DNS feed as before; the regex on <code>query</code> keeps only common external top-level domains. Tuning: measure your quietest day first. If no office client passes 60, use 80; if developers hit 150 legally, exclude their subnet with an owner name in the comment field of your scheduler.</p>
+
+        <h4>Detection 5 — Repeated beaconing to a first-seen domain <span class="badge sev-med">Medium</span> <span class="badge cat-net">Network</span> <span class="badge plain">Threat 1 · Threat 5</span></h4>
+        <p class="small muted">Sigma rule below: it catches the repetition — one client resolving the same external name 30 or more times in 30 minutes. Sigma cannot know "first-seen" by itself, so the Splunk version adds that part with a baseline lookup.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="sigma"><code>title: 'Repeated DNS beaconing to a first-seen external domain'
+id: 'a94d3c78-1e5b-4f2a-8d69-3c7e2b5f1a08'
+status: stable
+description: 'Detects a client that resolves the same external domain over and over
+  in a short window, which is typical beacon behavior. Pair this rule with a first-seen
+  domain list, because repetition alone also matches busy cloud applications.'
+references:
+  - 'https://attack.mitre.org/techniques/T1568/'
+  - 'https://attack.mitre.org/techniques/T1568/001/'
+  - 'Practice reference: keep a rolling baseline of seen domains and alert on new plus repeated'
+author: 'Beginner detection guide series'
+date: '2026-09-18'
+logsource:
+  category: dns
+  product: zeek
+detection:
+  selection:
+    qtype_name: 'A'
+    rcode_name: 'NOERROR'
+    query|re: '(?i)\.(com|net|org|info|biz|top|xyz)$'
+  filter_internal:
+    query|endswith:
+      - '.internal'
+      - '.corp'
+      - '.local'
+  condition: 'selection and not filter_internal | count() by src_ip,query &gt;= 30'
+  timeframe: 30m
+fields:
+  - 'src_ip'
+  - 'query'
+  - 'answers'
+falsepositives:
+  - 'Cloud productivity applications that poll on a fixed schedule'
+  - 'Update agents and telemetry agents with short poll intervals'
+level: medium
+tags:
+  - attack.t1568
+  - attack.t1568.001
+  - attack.t1568.002
+  - attack.tactic.command_and_control</code></pre>
+        </div>
+        <p class="small muted">Splunk search below: the same repetition check, plus the first-seen part. It joins a daily-refreshed lookup table (<code>dns_domain_baseline</code>) and keeps only domains that are not in the baseline.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="spl"><code>index=dns sourcetype=zeek:dns qtype_name=A rcode_name=NOERROR
+| regex query="(?i)\.(com|net|org|info|biz|top|xyz)$"
+| bucket _time span=30m
+| stats count AS queries dc(answers) AS unique_answers BY _time src_ip query
+| where queries &gt;= 30
+| lookup dns_domain_baseline query OUTPUT first_seen
+| where isnull(first_seen)
+| sort -queries</code></pre>
+        </div>
+        <p><strong>Mapping and tuning.</strong> The <code>stats</code> mirrors the Sigma aggregation; the two extra lines are the first-seen enrichment. Assumptions: a lookup file named <code>dns_domain_baseline</code> with at least the columns <code>query</code> and <code>first_seen</code>, rebuilt every night from the previous 30 days of your own DNS data. If the lookup is missing, the search still returns repetitive domains — just without the first-seen filter. Tuning: check the <code>unique_answers</code> column; a beacon usually returns one stable address, while content delivery networks return many, so high diversity plus low repetition is usually safe.</p>
+
+        <h4>Detection 6 — TXT burst with long labels <span class="badge sev-high">High</span> <span class="badge cat-net">Network</span> <span class="badge plain">Threat 3</span></h4>
+        <p class="small muted">Sigma rule below: it fires when one client sends 40 or more TXT queries with 16-character-plus labels in ten minutes. TXT records carry text, so they are the favorite carrier for DNS calculation channels and tunnels.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="sigma"><code>title: 'Burst of long-label TXT queries from one client'
+id: '6d2f8b4a-9e1c-47d3-b5a8-2f6e9c1d7b04'
+status: stable
+description: 'Detects a client that sends many TXT queries with long labels in ten
+  minutes. TXT records carry text, so attackers use them for DNS calculation channels
+  and for tunneling stolen data out of the network.'
+references:
+  - 'https://attack.mitre.org/techniques/T1568/'
+  - 'https://attack.mitre.org/techniques/T1568/003/'
+  - 'Practice reference: DNS tunneling detection relies on TXT share and label length per client'
+author: 'Beginner detection guide series'
+date: '2026-09-19'
+logsource:
+  category: dns
+  product: zeek
+detection:
+  selection:
+    qtype_name: 'TXT'
+    query|re: '(?i)([a-z0-9]{16,})\.'
+  condition: 'selection | count() by src_ip &gt;= 40'
+  timeframe: 10m
+fields:
+  - 'src_ip'
+  - 'query'
+  - 'qtype_name'
+falsepositives:
+  - 'Anti-spam services and mail gateways that verify sender domains with TXT lookups'
+  - 'Software license or telemetry checks that use long TXT records'
+level: high
+tags:
+  - attack.t1568
+  - attack.t1568.003
+  - attack.tactic.command_and_control
+  - attack.tactic.exfiltration
+  - attack.t1048.003</code></pre>
+        </div>
+        <p class="small muted">Splunk search below: the same filter and window, with the number of distinct labels added so you can see whether one name repeats or every query is different — tunnels usually use a fresh label each time.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="spl"><code>index=dns sourcetype=zeek:dns qtype_name=TXT
+| regex query="(?i)([a-z0-9]{16,})\."
+| bucket _time span=10m
+| stats count AS txt_hits dc(query) AS unique_labels BY _time src_ip
+| where txt_hits &gt;= 40
+| sort -_time</code></pre>
+        </div>
+        <p><strong>Mapping and tuning.</strong> A simple one-to-one mapping: selection to base filter, aggregation to <code>stats BY _time src_ip</code>, threshold to <code>where</code>. Assumptions: the same Zeek DNS feed; <code>qtype_name=TXT</code> must survive your add-on (check one event first). Tuning: mail gateways are the classic false positive — if your <code>smtp-relay</code> subnet fires daily, exclude it in the filter block and write the owner and reason next to it. When this rule fires on a laptop, treat it as data theft until proven otherwise: pull the endpoint process, then measure how much DNS volume left the network.</p>
+
+        <h4>Detection 7 — Client bypassing the internal resolver <span class="badge sev-med">Medium</span> <span class="badge plain">Threat 4</span></h4>
+        <p class="small muted">Sigma rule below: it watches connection logs, not DNS content. It flags clients that send DNS to any address except your approved resolvers. This is the rule for threat 4 — the blind-spot threat. Extend it with your TLS-proxy or SNI logs to catch DNS-over-HTTPS services such as <code>dns.google</code> or <code>cloudflare-dns.com</code>.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="sigma"><code>title: 'Client sends DNS to a non-approved resolver'
+id: '3f8e1c52-7a40-4b6d-9e21-5c8d0a7f6b34'
+status: stable
+description: 'Detects a client that opens DNS (port 53) to an address outside the
+  approved resolver list. Such clients skip your DNS logging, which hides C2 from
+  every DNS rule. Treat hits as a control-health problem first and a compromise
+  indicator second.'
+references:
+  - 'https://attack.mitre.org/techniques/T1568/'
+author: 'Beginner detection guide series'
+date: '2026-09-19'
+logsource:
+  category: network_connection
+  product: zeek
+  service: conn
+detection:
+  selection:
+    id.resp_p: 53
+    proto: 'udp'
+  filter_resolvers:
+    id.resp_h:
+      - '10.20.1.10'
+      - '10.20.1.11'
+  condition: 'selection and not filter_resolvers'
+fields:
+  - 'id.orig_h'
+  - 'id.resp_h'
+  - 'id.resp_p'
+falsepositives:
+  - 'Approved security tools that test public resolvers'
+  - 'Guest Wi-Fi clients — exclude their subnet'
+level: medium
+tags:
+  - attack.t1568
+  - attack.t1071.004
+  - attack.tactic.command_and_control</code></pre>
+        </div>
+        <p class="small muted">Splunk search below: the same check on the Zeek connection index. Replace the two resolver addresses with your own; keep the list short and owned.</p>
+        <div class="code">
+          <div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+          <pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:conn id.resp_p=53 proto=udp
+| search NOT id.resp_h IN ("10.20.1.10", "10.20.1.11")
+| stats count AS direct_dns dc(id.resp_h) AS external_resolvers BY id.orig_h
+| sort -direct_dns</code></pre>
+        </div>
+        <p><strong>Mapping and tuning.</strong> The Sigma selection is a single condition (destination port 53 over UDP) and the filter is the allowlist of your two internal resolvers; the SPL mirrors both and adds a per-client summary. Assumptions: Zeek connection logs land in <code>index=network sourcetype=zeek:conn</code>; change the index and the resolver list to match your site. Tuning: expect one burst of findings in the first week as you discover legitimate direct-resolver users — move each one into the allowlist with an owner and a reason, or block it.</p>
+
+        <div class="callout good">
+          <span class="callout-label">Validation habit</span>
+          <p>Replay the lab queries from section 3 against your search head before going live: a five-minute test with fake data proves the fields, the regex, and the thresholds faster than any document. Re-test after every add-on upgrade, because field names quietly change.</p>
+        </div>
+      </section>
+
+      <!-- ==================== 6. CASE STUDY ==================== -->
+      <section id="case-study">
+        <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Real-world case study</h2></div>
+        <p class="sec-intro">The best-known example of dynamic resolution at scale is the Avalanche network, taken down in November 2016. Everything below follows public reporting from law enforcement and research partners, so treat exact numbers as approximate.</p>
+
+        <div class="card accent-edge">
+          <h3>Background</h3>
+          <p>Public reporting describes Avalanche as a rented hosting and naming platform shared by many criminal groups. It gave them two services: fast-changing domains (fast flux) and name servers that moved often. Malware families that used it included banking theft tools and ransomware. Because the platform was shared, one takedown touched many campaigns at once — and because it rotated domains constantly, simple blocklists had little effect for years.</p>
+        </div>
+
+        <h3>Timeline as public reporting describes it</h3>
+        <ol class="timeline">
+          <li><span class="tl-date">2009 onward</span><p>The platform grows. Researchers notice that many unrelated malware families resolve their C2 names through the same small set of name servers — the first structural clue.</p></li>
+          <li><span class="tl-date">2014–2016</span><p>Researchers, registrars, and law enforcement map the network quietly. They document thousands of fluxed domains and plan a coordinated response, including sinkhole access for several malware families.</p></li>
+          <li><span class="tl-date">November 2016</span><p>Coordinated action across roughly 40 countries seizes servers and redirects large numbers of domains to defender-controlled sinkholes. Public reporting describes hundreds of servers taken and many hundreds of thousands of domains affected.</p></li>
+          <li><span class="tl-date">Weeks after</span><p>Sinkhole logs show millions of still-infected machines calling in worldwide. Security vendors push updated detections, and enterprises use the sinkhole data to find their own victims.</p></li>
+          <li><span class="tl-date">2017 and later</span><p>Remaining botnets decline as their DGA names expire and cleanup finishes. The case becomes a textbook example of why shared infrastructure is both a strength and a weakness for attackers.</p></li>
+        </ol>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Attack chain in one view</h3>
+            <ul>
+              <li><strong>In:</strong> spam and exploit kits deliver the malware to victims.</li>
+              <li><strong>Resolve:</strong> each sample computes or fetches a rotating C2 name and resolves it — DGA plus flux together.</li>
+              <li><strong>Connect:</strong> the malware beacons to whatever IP the answer gave, on shared fluxed hosting.</li>
+              <li><strong>Act:</strong> the operator pushes commands — steal banking data, or drop the ransomware stage.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Detection point</h3>
+            <p>For researchers, the detection point was structural: many families, one naming pattern. For an enterprise, the same campaign shows up exactly where this page says — NXDOMAIN bursts, low TTLs, and beacons to first-seen domains. After the takedown, sinkhole contact lists became a free victim-finding tool: if your resolver had asked those domains, you had an infected machine.</p>
+          </div>
+          <div class="card">
+            <h3>Containment and eradication</h3>
+            <p>Containment was network-wide: domains were sinkholed, so malware talked to defenders instead of criminals. For individual organizations, eradication meant using sinkhole and vendor data to list infected hosts, then cleaning or reimaging them and resetting credentials the malware could have stolen.</p>
+          </div>
+          <div class="card">
+            <h3>Recovery and impact</h3>
+            <p>Recovery meant watching for leftovers for months, because not every sample accepted the sinkhole answer. Public reporting says the platform infected millions of machines in many countries. The takedown reduced theft and spam for months. But the criminal groups later rebuilt their networks on new infrastructure.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>How the response teams worked</h3>
+            <p>The operation needed years of quiet coordination: researchers shared data, registrars suspended domains, courts in several countries approved seizures, and vendors prepared sinkhole coverage. Enterprises received indicator lists and cleanup guidance within days. The lesson for your SOC is communication speed — when a shared takedown happens, you want a person who reads the bulletins and turns them into searches that day.</p>
+          </div>
+          <div class="card">
+            <h3>Lessons learned</h3>
+            <ul>
+              <li><strong>Shared infrastructure cuts both ways.</strong> One pattern exposed many campaigns at once.</li>
+              <li><strong>Sinkholes do double duty</strong> — they stop the attack and count the victims.</li>
+              <li><strong>DNS analytics matter more than blocklists</strong> for the next cycle, because the groups rebuilt.</li>
+              <li><strong>Takedowns buy time.</strong> Endpoint hygiene and monitoring decide whether time becomes safety.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== 7. MITIGATION ==================== -->
+      <section id="mitigation">
+        <div class="sec-head"><span class="sec-num">7</span><h2 class="sec-title">Mitigation and defense</h2></div>
+        <p class="sec-intro">You cannot stop malware from computing domain names — the fix is to make the network boring and observable, so rotation has nothing to hide behind. The controls below are grouped by area, then by budget.</p>
+
+        <div class="grid grid-3">
+          <div class="card">
+            <h4>Policy</h4>
+            <ul>
+              <li>Written rule: all clients use company resolvers only.</li>
+              <li>Domain allowlist process with an owner and review dates.</li>
+              <li>Turn on multi-factor authentication (MFA) and a registrar lock for the accounts that hold your own domains.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Network</h4>
+            <ul>
+              <li>Block direct outbound port 53 except from resolvers — this matches ATT&amp;CK mitigation M1021 (Restrict Web-Based Content: a local DNS sinkhole).</li>
+              <li>Run a response policy zone (RPZ) or sinkhole for known-bad names.</li>
+              <li>Use network intrusion prevention on known malware channels — ATT&amp;CK mitigation M1031 (Network Intrusion Prevention).</li>
+              <li>Alert on traffic to first-seen domains from section 5.5 rules.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Endpoint</h4>
+            <ul>
+              <li>Enable Sysmon event 22 (or EDR DNS events) on every Windows host.</li>
+              <li>Deploy EDR on Macs too — threat 5 is easy to miss.</li>
+              <li>Keep office software updated; most DGA malware still needs an old bug to land.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Cloud and identity</h4>
+            <ul>
+              <li>Turn on DNS query logging in each cloud account and send the logs to your SIEM — the central system that stores and searches security logs.</li>
+              <li>Least-privilege accounts, so a stolen login cannot change resolver settings.</li>
+              <li>Watch for new encrypted-DNS usage from servers, which should never need it.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Logging and monitoring</h4>
+            <ul>
+              <li>Retain DNS logs 90–180 days for retro-hunts.</li>
+              <li>Dashboards: NXDOMAIN ratio, low-TTL share, unique domains per client.</li>
+              <li>Integrate one passive DNS source for enrichment.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Backup and response</h4>
+            <ul>
+              <li>Offline or immutable backups — ransomware with a DGA failover channel still tries to delete them.</li>
+              <li>Runbook: block, isolate, retro-hunt, report (section 4 triage flow).</li>
+              <li>Practice the DGA alert once per quarter, end to end.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout note">
+          <span class="callout-label">Home and small office</span>
+          <p>You can do this without an SOC. Point your router's DNS at a filtering resolver, keep router firmware updated, put smart devices on a guest network, and turn on DNS query logging if your router offers it. One habit matters most: keep one offline backup. Most home-relevant attacks using this technique are ransomware, and a backup turns a disaster into an inconvenience.</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Prioritized actions, cheapest protection first</caption>
+            <thead>
+              <tr><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Enable DNS query logging on the main resolver and retain 90+ days</td><td>Low</td><td>Network team</td><td>Very high — it feeds every rule on this page</td></tr>
+              <tr><td>Block direct outbound port 53 from clients</td><td>Low</td><td>Network team</td><td>High — closes the shadow-IT blind spot</td></tr>
+              <tr><td>Deploy rules 1 and 4 (NXDOMAIN burst, unique domains)</td><td>Low</td><td>Detection engineering</td><td>High — earliest and broadest signals</td></tr>
+              <tr><td>Enable Sysmon EID 22 on Windows estate</td><td>Medium</td><td>Endpoint team</td><td>High — adds process attribution</td></tr>
+              <tr><td>Add RPZ/sinkhole for known-bad domains</td><td>Medium</td><td>Network team</td><td>High — instant containment lever</td></tr>
+              <tr><td>Add rules 2, 3, 5, 6 after a baseline week</td><td>Medium</td><td>Detection engineering</td><td>Medium to high, depending on network mix</td></tr>
+              <tr><td>Passive DNS enrichment and retro-hunt procedure</td><td>Medium</td><td>SOC lead</td><td>Medium — finds older infections</td></tr>
+              <tr><td>Immutable backups with restore tests</td><td>Medium</td><td>IT operations</td><td>Very high against the ransomware threat</td></tr>
+              <tr><td>Quarterly DGA-alert exercise</td><td>Low</td><td>SOC lead</td><td>Medium — keeps the runbook real</td></tr>
+              <tr><td>Cloud DNS logging in every account</td><td>Medium</td><td>Cloud platform team</td><td>Medium — closes remote-work gaps</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ==================== 8. MISTAKES ==================== -->
+      <section id="mistakes">
+        <div class="sec-head"><span class="sec-num">8</span><h2 class="sec-title">Common mistakes and best practices</h2></div>
+        <p class="sec-intro">These are the twelve mistakes blue teams make most often with dynamic resolution. Each row names the symptom you will notice first, the root cause behind it, the fix, and the habit that prevents it from returning.</p>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Twelve blue-team mistakes around DNS-based C2 detection</caption>
+            <thead>
+              <tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>1</td><td>Trusting blocklists alone</td><td>Attacks continue despite updated feeds</td><td>Rotation defeats static lists by design</td><td>Add per-client behavioral rules from section 5.5</td><td>Review rule coverage monthly against ATT&amp;CK</td></tr>
+              <tr><td>2</td><td>No DNS log retention</td><td>Cannot answer "who talked to this domain last month?"</td><td>Logs deleted after days to save storage</td><td>Keep 90–180 days; archive to cheap storage</td><td>Retention policy per log source, checked quarterly</td></tr>
+              <tr><td>3</td><td>Ignoring TTL</td><td>Flux campaigns slip past content-only rules</td><td>TTL field never parsed or indexed</td><td>Index TTLs; deploy rule 2</td><td>Field dictionary includes every dns.log field</td></tr>
+              <tr><td>4</td><td>No passive DNS source</td><td>Retro-hunts take days</td><td>Only forward-looking logs kept</td><td>Add one passive DNS service and use it in triage</td><td>Enrichment step is part of the runbook</td></tr>
+              <tr><td>5</td><td>Alerting on a single NXDOMAIN</td><td>Hundreds of useless tickets</td><td>Rule written per event, not per burst</td><td>Aggregate in windows (rule 1 style)</td><td>Every new rule states its expected daily volume</td></tr>
+              <tr><td>6</td><td>Missing egress visibility</td><td>Clients bypass the resolver, rules see nothing</td><td>Direct port 53 and encrypted DNS allowed</td><td>Force internal resolvers; block direct DNS</td><td>Weekly coverage check: resolver share of all DNS</td></tr>
+              <tr><td>7</td><td>No owner for DNS analytics</td><td>Dashboards rot, thresholds never tuned</td><td>Nobody holds the pager for DNS rules</td><td>Assign a named owner per rule</td><td>Ownership list reviewed in each sprint</td></tr>
+              <tr><td>8</td><td>Entropy-only rules</td><td>CDN tokens flood the queue</td><td>Long random labels alone treated as evil</td><td>Combine label length with repetition and process data</td><td>New rules tested against a week of real traffic</td></tr>
+              <tr><td>9</td><td>Rules never validated</td><td>Silent misses after add-on upgrades</td><td>Nobody replays test data, and no joint attack-and-defense test (purple team) is run</td><td>Replay lab data after every change (section 3)</td><td>Validation task attached to every pipeline change</td></tr>
+              <tr><td>10</td><td>No domain allowlist process</td><td>Same business app re-alerts every week</td><td>Ad-hoc silencing, no records</td><td>Allowlist with owner, reason, expiry</td><td>Allowlist reviewed monthly, stale entries removed</td></tr>
+              <tr><td>11</td><td>Treating all T1568 as one threat</td><td>Low-value noise outranks real cases</td><td>No severity model per sub-technique</td><td>Rank threats like section 5.3 and route by severity</td><td>Severity model revisited each quarter</td></tr>
+              <tr><td>12</td><td>Blind spot for encrypted DNS</td><td>New C2 channel invisible to DNS rules</td><td>DNS over HTTPS (DoH) and DNS over TLS (DoT) endpoints are not watched</td><td>Restrict encrypted DNS to approved services; log the rest</td><td>Encrypted-DNS usage dashboard with baseline</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid grid-3">
+          <div class="card">
+            <h4>Daily habits</h4>
+            <ul>
+              <li>Check the DNS dashboards before the queue: NXDOMAIN ratio, unique-domain leaders.</li>
+              <li>Read one fired rule end to end — raw log to host — even for five minutes.</li>
+              <li>Note any new noisy client and route it to the allowlist process.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Weekly habits</h4>
+            <ul>
+              <li>Compare resolver coverage: what share of clients still uses it?</li>
+              <li>Tune the one rule with the worst true-positive rate.</li>
+              <li>Skim new CTI reports for DGA or flux keywords and save seeds if shared.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Monthly habits</h4>
+            <ul>
+              <li>Replay the section 3 lab data against every DNS rule.</li>
+              <li>Review the allowlist and remove expired entries.</li>
+              <li>Re-read the threat ranking (5.3) and adjust priorities with your team.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout warn">
+          <span class="callout-label">Watch out</span>
+          <p>The fastest way to lose this capability is a noisy first month. If a rule fires more than a handful of times per day without a true positive, stop and tune it that week. Analysts learn quickly to ignore an alert name — and un-learning is much harder than fixing.</p>
+        </div>
+      </section>
+
+      <!-- ==================== 9. CHEAT SHEET ==================== -->
+      <section id="cheat-sheet">
+        <div class="sec-head"><span class="sec-num">9</span><h2 class="sec-title">Cheat sheet and quick reference</h2></div>
+        <p class="sec-intro">One page to keep beside your keyboard: the key facts, the top detections, a response checklist, and the official links.</p>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Key facts</h4>
+            <dl class="kv">
+              <dt>Technique</dt><dd>T1568 Dynamic Resolution — Command and Control</dd>
+              <dt>Children</dt><dd>.001 Fast Flux DNS · .002 DGA · .003 DNS Calculation</dd>
+              <dt>Core idea</dt><dd>Rotate names and IPs so blocking one address never stops the attack</dd>
+              <dt>Best evidence</dt><dd>Active DNS logs, passive DNS, network flows, Sysmon EID 22</dd>
+              <dt>First alerts</dt><dd>NXDOMAIN burst per client, then unique-domain spike per hour</dd>
+              <dt>Containment</dt><dd>RPZ/sinkhole the domain, block the IPs, isolate the host</dd>
+            </dl>
+          </div>
+          <div class="card">
+            <h4>Top detections</h4>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Signal</th><th>Where</th><th>First check</th></tr></thead>
+                <tbody>
+                  <tr><td>NXDOMAIN burst</td><td>Zeek dns.log</td><td>Label randomness + endpoint process</td></tr>
+                  <tr><td>TTL at or below 300 with IP churn</td><td>Zeek TTLs/answers</td><td>Answer diversity per name</td></tr>
+                  <tr><td>Long random labels</td><td>Sysmon EID 22 / Zeek</td><td>Process path and reputation</td></tr>
+                  <tr><td>100+ unique domains per hour</td><td>Zeek dns.log</td><td>Client role and baseline</td></tr>
+                  <tr><td>Repeating lookups, first-seen domain</td><td>Zeek + baseline lookup</td><td>Beacon spacing, answer stability</td></tr>
+                  <tr><td>TXT burst with long labels</td><td>Zeek qtype_name=TXT</td><td>Treat as exfiltration until proven safe</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Response checklist</h4>
+            <ul>
+              <li>Pull the raw DNS lines for the suspect client and time window.</li>
+              <li>Confirm the shape: burst, low TTL, long labels, or repetition.</li>
+              <li>Attribute the process with Sysmon EID 22 or EDR.</li>
+              <li>Block the domain at the resolver (RPZ) and the IPs at the firewall.</li>
+              <li>Isolate the host if a beacon is confirmed.</li>
+              <li>Retro-hunt the name server and IP set in passive DNS.</li>
+              <li>List other clients that touched the same infrastructure.</li>
+              <li>Save indicators with dates; note which rule fired.</li>
+              <li>Notify the data owner if exfiltration is possible.</li>
+              <li>Schedule the follow-up hunt for one week later.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Official links and related techniques</h4>
+            <ul>
+              <li><a href="https://attack.mitre.org/techniques/T1568/">T1568 — Dynamic Resolution (this technique)</a></li>
+              <li><a href="https://attack.mitre.org/techniques/T1568/001/">T1568.001 — Fast Flux DNS</a></li>
+              <li><a href="https://attack.mitre.org/techniques/T1568/002/">T1568.002 — Domain Generation Algorithms</a></li>
+              <li><a href="https://attack.mitre.org/techniques/T1568/003/">T1568.003 — DNS Calculation</a></li>
+              <li><a href="https://attack.mitre.org/techniques/T1071/004/">T1071.004 — Application Layer Protocol: DNS</a> (the protocol layer around these queries)</li>
+              <li><a href="https://attack.mitre.org/techniques/T1090/">T1090 — Proxy</a> (often combined with rotated infrastructure)</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout good">
+          <span class="callout-label">Remember</span>
+          <p>Watch DNS per client, keep logs long, tune weekly, and act on the channel — not the file. Do these four things and dynamic resolution loses most of its power.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<button type="button" class="toc-fab" id="toc-fab" aria-expanded="false" aria-controls="toc-overlay">☰ Contents</button>
+<button type="button" class="to-top" id="to-top" aria-label="Back to top">↑</button>
+<div class="toc-overlay" id="toc-overlay" role="dialog" aria-modal="true" aria-label="Contents">
+  <div class="toc-overlay-backdrop"></div>
+  <div class="toc-panel">
+    <div class="toc-panel-head">
+      <p class="toc-title" style="margin:0">Contents</p>
+      <button type="button" class="toc-close" id="toc-close" aria-label="Close contents">✕</button>
+    </div>
+    <ul class="toc-list" id="toc-overlay-list"><!-- generated --></ul>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ATT&CK Detection Guide — page framework (embed verbatim)
+   Theme, progress bar, TOC generation, overlay, back-to-top, copy
+   ============================================================ */
+(function () {
+  'use strict';
+  var doc = document, root = doc.documentElement;
+
+  /* ---------- theme ---------- */
+  function storedTheme() { try { return localStorage.getItem('atk-theme'); } catch (e) { return null; } }
+  function currentTheme() { return root.getAttribute('data-theme') || 'dark'; }
+  function applyTheme(t, persist) {
+    root.setAttribute('data-theme', t);
+    if (persist) { try { localStorage.setItem('atk-theme', t); } catch (e) {} }
+    try { doc.dispatchEvent(new CustomEvent('atk-theme-change', { detail: { theme: t } })); } catch (e) {}
+  }
+  var toggle = doc.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', function () {
+      applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+    });
+    /* If a shared site shell already renders a theme control inside the platform
+       header, hide this page-level toggle to avoid a duplicate control. */
+    try {
+      var hdr = doc.getElementById('atk-header');
+      if (hdr) {
+        var shellCtl = hdr.querySelector('[data-theme-toggle],[aria-label*="theme" i],.theme-toggle,.atk-theme');
+        if (shellCtl) toggle.hidden = true;
+        hdr.addEventListener('click', function (ev) {
+          var el = ev.target.closest ? ev.target.closest('button,a') : null;
+          if (!el) return;
+          var lbl = (el.getAttribute('aria-label') || el.textContent || '').toLowerCase();
+          if (lbl.indexOf('theme') !== -1 || lbl.indexOf('dark') !== -1 || lbl.indexOf('light') !== -1) {
+            applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  /* ---------- reading progress ---------- */
+  var fill = doc.querySelector('.progress-fill');
+  function onScroll() {
+    var h = doc.documentElement.scrollHeight - window.innerHeight;
+    var p = h > 0 ? Math.min(100, Math.max(0, (window.scrollY / h) * 100)) : 0;
+    if (fill) fill.style.width = p + '%';
+    if (toTop) {
+      if (window.scrollY > 600) toTop.classList.add('show');
+      else toTop.classList.remove('show');
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  /* ---------- back to top ---------- */
+  var toTop = doc.getElementById('to-top');
+  if (toTop) {
+    toTop.addEventListener('click', function () {
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+    });
+  }
+
+  /* ---------- TOC generation from real section headings ---------- */
+  var main = doc.querySelector('main');
+  var tocLists = [doc.getElementById('toc-list'), doc.getElementById('toc-overlay-list')];
+  var SECTION_TITLES = {
+    'overview': 'Overview', 'simulation': 'Animated simulation',
+    'red-team': 'Red team perspective', 'blue-team': 'Blue team / SOC perspective',
+    'detection-deep-dive': 'Detection engineering deep dive',
+    'detection-regulation': 'Regulation mapping', 'detection-threat-intel': 'Threat intelligence',
+    'detection-threat-ranking': 'Threats ranking', 'detection-logs': 'Logs and patterns',
+    'detection-sigma-spl': 'Sigma rules and Splunk SPL', 'case-study': 'Real-world case study',
+    'mitigation': 'Mitigation and defense', 'mistakes': 'Common mistakes and best practices',
+    'cheat-sheet': 'Cheat sheet and quick reference'
+  };
+  function shortTitle(section, fallback) {
+    var t = SECTION_TITLES[section.id];
+    if (!t) { var hh = section.querySelector('h2'); t = hh ? hh.textContent.replace(/^\s*\d+[.)]?\s*/, '').trim() : fallback; }
+    return t;
+  }
+  function buildTOC() {
+    if (!main || !tocLists.some(Boolean)) return;
+    var secs = [];
+    main.querySelectorAll(':scope > section[id]').forEach(function (s) { secs.push(s); });
+    if (!secs.length) return;
+    var frag = doc.createDocumentFragment();
+    var num = 0;
+    secs.forEach(function (s) {
+      num += 1;
+      var li = doc.createElement('li');
+      var a = doc.createElement('a');
+      a.href = '#' + s.id;
+      a.setAttribute('data-sec', s.id);
+      var n = doc.createElement('span'); n.className = 'n';
+      n.textContent = (num < 10 ? '0' : '') + num;
+      a.appendChild(n);
+      a.appendChild(doc.createTextNode(shortTitle(s, '')));
+      li.appendChild(a); frag.appendChild(li);
+      if (s.id === 'detection-deep-dive') {
+        var subUl = doc.createElement('ul');
+        subUl.className = 'toc-list toc-sub';
+        s.querySelectorAll('h3[id]').forEach(function (h3) {
+          var sli = doc.createElement('li');
+          var sa = doc.createElement('a');
+          sa.href = '#' + h3.id;
+          sa.setAttribute('data-sec', h3.id);
+          sa.textContent = (SECTION_TITLES[h3.id] || h3.textContent.trim());
+          sli.appendChild(sa); subUl.appendChild(sli);
+        });
+        var wrapLi = doc.createElement('li');
+        wrapLi.appendChild(subUl); frag.appendChild(wrapLi);
+      }
+    });
+    tocLists.forEach(function (ul) {
+      if (!ul) return;
+      ul.innerHTML = '';
+      ul.appendChild(frag.cloneNode(true));
+    });
+  }
+  buildTOC();
+
+  /* ---------- active section highlight ---------- */
+  var links = [];
+  function collectLinks() {
+    links = [];
+    doc.querySelectorAll('[data-sec]').forEach(function (a) { links.push(a); });
+  }
+  collectLinks();
+  function setActive(id) {
+    links.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('data-sec') === id);
+    });
+  }
+  if ('IntersectionObserver' in window) {
+    var visible = {};
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) visible[en.target.id] = en.intersectionRatio;
+        else delete visible[en.target.id];
+      });
+      var best = null, bestR = -1;
+      Object.keys(visible).forEach(function (k) {
+        if (visible[k] > bestR) { bestR = visible[k]; best = k; }
+      });
+      if (!best) {
+        var above = [];
+        main.querySelectorAll(':scope > section[id]').forEach(function (s) {
+          var r = s.getBoundingClientRect();
+          if (r.top < 140) above.push(s.id);
+        });
+        best = above.length ? above[above.length - 1] : 'overview';
+      }
+      setActive(best);
+    }, { rootMargin: '-70px 0px -45% 0px', threshold: [0, .05, .25, .5] });
+    main.querySelectorAll(':scope > section[id], #detection-deep-dive h3[id]').forEach(function (el) { obs.observe(el); });
+  }
+
+  /* ---------- smooth scroll for TOC links ---------- */
+  doc.addEventListener('click', function (ev) {
+    var a = ev.target.closest ? ev.target.closest('a[href^="#"]') : null;
+    if (!a) return;
+    var id = a.getAttribute('href').slice(1);
+    var target = doc.getElementById(id);
+    if (!target) return;
+    ev.preventDefault();
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var y = target.getBoundingClientRect().top + window.scrollY - 72;
+    window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
+    setActive(id);
+    if (overlay && overlay.classList.contains('open')) closeOverlay();
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  });
+
+  /* ---------- mobile contents overlay ---------- */
+  var fab = doc.getElementById('toc-fab');
+  var overlay = doc.getElementById('toc-overlay');
+  var closeBtn = doc.getElementById('toc-close');
+  var lastFocus = null;
+  function openOverlay() {
+    if (!overlay) return;
+    lastFocus = doc.activeElement;
+    overlay.classList.add('open');
+    if (fab) fab.setAttribute('aria-expanded', 'true');
+    var first = overlay.querySelector('a,button');
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    if (fab) fab.setAttribute('aria-expanded', 'false');
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  if (fab) fab.addEventListener('click', openOverlay);
+  if (closeBtn) closeBtn.addEventListener('click', closeOverlay);
+  if (overlay) overlay.addEventListener('click', function (ev) {
+    if (ev.target.classList && ev.target.classList.contains('toc-overlay-backdrop')) closeOverlay();
+  });
+  doc.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && overlay && overlay.classList.contains('open')) closeOverlay();
+  });
+
+  /* ---------- copy buttons ---------- */
+  doc.addEventListener('click', function (ev) {
+    var btn = ev.target.closest ? ev.target.closest('.copy-btn') : null;
+    if (!btn) return;
+    var block = btn.closest('.code');
+    var pre = block ? block.querySelector('pre.code-body') : null;
+    if (!pre) return;
+    var text = pre.innerText;
+    function done() {
+      btn.classList.add('ok');
+      var old = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(function () { btn.classList.remove('ok'); btn.textContent = old; }, 1600);
+    }
+    function fallback() {
+      try {
+        var ta = doc.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        doc.body.appendChild(ta); ta.select();
+        doc.execCommand('copy'); doc.body.removeChild(ta); done();
+      } catch (e) {}
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else fallback();
+  });
+
+  onScroll();
+})();
+</script>
+<script>
+/* ============================================================
+   ATT&CK Detection Guide — canvas simulation engine (embed verbatim)
+   Usage: const SIM_CONFIG = {...}; initSimulation(SIM_CONFIG);
+   Schema in page-template.html. Vanilla JS only. No external assets.
+   ============================================================ */
+function initSimulation(cfg) {
+  'use strict';
+  var stage = document.querySelector('.sim-stage');
+  var canvas = document.getElementById('sim-canvas');
+  var tip = document.getElementById('sim-tip');
+  if (!stage || !canvas || !cfg || !cfg.steps || !cfg.steps.length) return;
+  var ctx = canvas.getContext('2d');
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var LW = 1000, LH = 560;                 /* logical space */
+  var tokens = {};
+  function readTokens() {
+    var cs = getComputedStyle(document.documentElement);
+    function v(n) { return cs.getPropertyValue(n).trim() || '#888'; }
+    tokens = {
+      text: v('--text'), muted: v('--muted'), bg: v('--bg'), surface: v('--surface'),
+      accent: v('--accent'), accent2: v('--accent-2'), violet: v('--violet'),
+      success: v('--success'), warning: v('--warning'), danger: v('--danger'),
+      border: v('--border'), borderStrong: v('--border-strong')
+    };
+  }
+  function rgba(hex, a) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    var n = parseInt(hex, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  var TYPE_COLOR = { attacker: 'danger', victim: 'accent', infra: 'warning', defender: 'success', service: 'violet' };
+  var KIND_COLOR = { query: 'accent2', response: 'success', data: 'violet', alert: 'warning', block: 'danger' };
+  var TONE_COLOR = { info: 'accent2', warn: 'warning', bad: 'danger', good: 'success' };
+
+  var nodes = {};
+  (cfg.nodes || []).forEach(function (n) { nodes[n.id] = n; });
+  var nodeById = function (id) { return nodes[id]; };
+
+  /* ---------- state ---------- */
+  var step = 0, playing = false, speed = 1, tStep = 0, lastTs = null, raf = null;
+  var packets = [], hover = null, pinTimer = null;
+  var DWELL = 1600;
+
+  function stepDuration(i) {
+    var s = cfg.steps[i], maxEnd = 2600;
+    (s.flows || []).forEach(function (f) {
+      var count = f.count || 1, gap = f.gap || 420, dur = f.dur || 1300, delay = f.delay || 0;
+      maxEnd = Math.max(maxEnd, delay + (count - 1) * gap + dur + 220);
+    });
+    return maxEnd + DWELL;
+  }
+
+  /* ---------- panel + chips ---------- */
+  var elTitle = document.querySelector('.sim-step-title');
+  var elCap = document.querySelector('.sim-caption');
+  var elHint = document.querySelector('.sim-hint-text');
+  var elEv = document.querySelector('.sim-evidence');
+  var elPlay = document.getElementById('sim-play');
+  var elFill = document.querySelector('.sim-progress .sp-fill');
+  var chipsBox = document.querySelector('.step-chips');
+
+  function fmtStepText(f) {
+    if (!f) return '';
+    var out = '';
+    if (f.label) out = f.label + ' ';
+    out = out || '';
+    return out;
+  }
+  function renderPanel() {
+    var s = cfg.steps[step];
+    if (elTitle) elTitle.innerHTML = '<span class="n">Step ' + (step + 1) + '/' + cfg.steps.length + '</span>' + esc(s.title || '');
+    if (elCap) elCap.textContent = s.caption || '';
+    if (elHint) elHint.textContent = s.hint || '';
+    if (elEv) {
+      elEv.innerHTML = '';
+      (s.evidence || []).forEach(function (e) {
+        var c = document.createElement('span');
+        c.className = 'ev'; c.textContent = e; elEv.appendChild(c);
+      });
+    }
+    if (chipsBox) {
+      Array.prototype.forEach.call(chipsBox.children, function (b, i) {
+        b.setAttribute('aria-current', i === step ? 'true' : 'false');
+      });
+    }
+    document.querySelectorAll('.sim-story ol > li').forEach(function (li, i) {
+      li.style.opacity = i <= step ? '1' : '';
+    });
+  }
+  function esc(t) { var d = document.createElement('span'); d.textContent = t; return d.innerHTML; }
+
+  function buildChips() {
+    if (!chipsBox) return;
+    chipsBox.innerHTML = '';
+    cfg.steps.forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'step-chip';
+      b.textContent = (i + 1) + '. ' + (s.title || 'Step ' + (i + 1));
+      b.setAttribute('aria-label', 'Go to step ' + (i + 1) + ': ' + (s.title || ''));
+      b.addEventListener('click', function () { goStep(i); if (!reduceMotion) play(); });
+      chipsBox.appendChild(b);
+    });
+  }
+
+  /* ---------- flows -> packet instances ---------- */
+  function spawnFlows(i) {
+    packets = [];
+    (cfg.steps[i].flows || []).forEach(function (f) {
+      var a = nodeById(f.from), b = nodeById(f.to);
+      if (!a || !b) return;
+      var count = f.count || 1, gap = f.gap || 420, dur = f.dur || 1300, delay = f.delay || 0;
+      for (var k = 0; k < count; k++) {
+        packets.push({ a: a, b: b, start: delay + k * gap, dur: dur, color: KIND_COLOR[f.kind || 'query'] || 'accent2', label: f.label || '' });
+      }
+    });
+  }
+
+  /* ---------- controls ---------- */
+  function play() {
+    playing = true;
+    if (elPlay) elPlay.textContent = 'Pause';
+    lastTs = null;
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+  function pause() {
+    playing = false;
+    if (elPlay) elPlay.textContent = 'Play';
+  }
+  function goStep(i, auto) {
+    step = Math.max(0, Math.min(cfg.steps.length - 1, i));
+    tStep = 0; lastTs = null;
+    spawnFlows(step);
+    renderPanel();
+    if (reduceMotion && auto !== 'manual-play') { /* static frame */ }
+    draw(0);
+  }
+  function next() { if (step < cfg.steps.length - 1) goStep(step + 1); else pause(); }
+  function prev() { goStep(step - 1); }
+  function restart() { goStep(0); if (!reduceMotion) play(); }
+
+  if (elPlay) elPlay.addEventListener('click', function () { playing ? pause() : (play(), step >= cfg.steps.length - 1 && tStep >= stepDuration(step) && goStep(0)); });
+  var bNext = document.getElementById('sim-next');
+  var bPrev = document.getElementById('sim-prev');
+  var bRestart = document.getElementById('sim-restart');
+  if (bNext) bNext.addEventListener('click', function () { next(); });
+  if (bPrev) bPrev.addEventListener('click', function () { prev(); });
+  if (bRestart) bRestart.addEventListener('click', restart);
+  document.querySelectorAll('.seg .seg-btn[data-speed]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      speed = parseFloat(b.getAttribute('data-speed')) || 1;
+      document.querySelectorAll('.seg .seg-btn[data-speed]').forEach(function (x) {
+        x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+      });
+    });
+  });
+  stage.addEventListener('keydown', function (ev) {
+    if (ev.key === 'ArrowRight') { next(); ev.preventDefault(); }
+    if (ev.key === 'ArrowLeft') { prev(); ev.preventDefault(); }
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { if (playing) pause(); }
+  });
+
+  /* ---------- resize (DPR aware) ---------- */
+  function resize() {
+    var w = stage.clientWidth || 800;
+    var dpr = window.devicePixelRatio || 1;
+    var scale = w / LW;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(LH * scale * dpr);
+    canvas.style.height = Math.round(LH * scale) + 'px';
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+    draw(0);
+  }
+  if ('ResizeObserver' in window) new ResizeObserver(resize).observe(stage);
+  else window.addEventListener('resize', resize);
+
+  /* ---------- drawing ---------- */
+  function nodeXY(n) { return { x: n.x, y: n.y }; }
+  function drawLink(a, b, col) {
+    ctx.strokeStyle = rgba(col, .5); ctx.lineWidth = 1.4;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  function drawNode(n, focused, t) {
+    var c = tokens[TYPE_COLOR[n.type] || 'accent'];
+    var w = n.w || 148, h = n.h || 58;
+    var x = n.x - w / 2, y = n.y - h / 2;
+    if (focused) {
+      ctx.save();
+      var pulse = reduceMotion ? 1 : (1 + 0.05 * Math.sin(t / 240));
+      ctx.strokeStyle = rgba(c, .9); ctx.lineWidth = 2;
+      roundRect(x - 5 * pulse, y - 5 * pulse, w + 10 * pulse, h + 10 * pulse, 14); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = rgba(tokens.surface === v_bg() ? '#16203a' : '#16203a', .92);
+    if (document.documentElement.getAttribute('data-theme') === 'light') ctx.fillStyle = 'rgba(255,255,255,.94)';
+    roundRect(x, y, w, h, 12); ctx.fill();
+    ctx.strokeStyle = rgba(c, .95); ctx.lineWidth = 1.6;
+    roundRect(x, y, w, h, 12); ctx.stroke();
+    ctx.fillStyle = c;
+    roundRect(x, y, 4, h, 2); ctx.fill();
+    ctx.fillStyle = tokens.text;
+    ctx.font = '600 13.5px ' + 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, n.x, n.sub ? n.y - 8 : n.y, w - 18);
+    if (n.sub) {
+      ctx.fillStyle = tokens.muted;
+      ctx.font = '10.5px ui-monospace,Menlo,Consolas,monospace';
+      ctx.fillText(n.sub, n.x, n.y + 11, w - 16);
+    }
+  }
+  function v_bg() { return tokens.bg; }
+  function roundRect(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function drawFlag(f) {
+    var n = nodeById(f.node); if (!n) return;
+    var c = tokens[TONE_COLOR[f.tone || 'info'] || 'accent2'];
+    ctx.font = '700 10.5px ui-monospace,Menlo,Consolas,monospace';
+    var tw = ctx.measureText(f.text).width;
+    var w = tw + 16, h = 19, x = n.x - w / 2, y = n.y - (n.h || 58) / 2 - h - 7;
+    if (x < 6) x = 6;
+    if (x + w > LW - 6) x = LW - 6 - w;
+    ctx.fillStyle = rgba(c, .16);
+    roundRect(x, y, w, h, 9); ctx.fill();
+    ctx.strokeStyle = rgba(c, .8); ctx.lineWidth = 1; roundRect(x, y, w, h, 9); ctx.stroke();
+    ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(f.text, x + w / 2, y + h / 2 + .5);
+  }
+  function easeInOut(p) { return p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; }
+  function drawPacket(p, t) {
+    if (t < p.start) return;
+    var raw = (t - p.start) / p.dur;
+    if (raw > 1) return;
+    var pos = reduceMotion ? 1 : easeInOut(Math.min(1, raw));
+    var x = p.a.x + (p.b.x - p.a.x) * pos;
+    var y = p.a.y + (p.b.y - p.a.y) * pos;
+    var c = tokens[p.color];
+    ctx.fillStyle = rgba(c, .35);
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = c;
+    ctx.beginPath(); ctx.arc(x, y, 4.6, 0, Math.PI * 2); ctx.fill();
+    if (p.label) {
+      ctx.fillStyle = tokens.muted;
+      ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.fillText(p.label, x + 9, y - 6);
+    }
+  }
+
+  function draw(t) {
+    var s = cfg.steps[step];
+    ctx.clearRect(0, 0, LW, LH);
+    /* watermark title */
+    ctx.fillStyle = rgba(tokens.muted, .55);
+    ctx.font = '700 11px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText(cfg.watermark || 'ATTACK SIMULATION', LW - 16, 14);
+    /* static links used by this step's flows */
+    var seen = {};
+    (s.flows || []).forEach(function (f) {
+      var key = [f.from, f.to].sort().join('|');
+      if (seen[key]) return; seen[key] = 1;
+      var a = nodeById(f.from), b = nodeById(f.to);
+      if (a && b) drawLink(a, b, tokens.border);
+    });
+    /* focus rings */
+    (s.focus || []).forEach(function (id) { if (nodes[id]) nodes[id]._f = true; });
+    Object.keys(nodes).forEach(function (id) {
+      drawNode(nodes[id], !!nodes[id]._f, t);
+      nodes[id]._f = false;
+    });
+    (s.flags || []).forEach(drawFlag);
+    packets.forEach(function (p) { drawPacket(p, t); });
+    /* hint footer */
+    ctx.fillStyle = rgba(tokens.muted, .8);
+    ctx.font = '11px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('Hover a node for details. Written story below the canvas.', 16, LH - 12);
+  }
+
+  /* ---------- main loop ---------- */
+  function tick(ts) {
+    raf = null;
+    if (lastTs == null) lastTs = ts;
+    var dt = (ts - lastTs) * speed;
+    lastTs = ts;
+    if (playing) {
+      tStep += dt;
+      var d = stepDuration(step);
+      if (tStep >= d) {
+        if (step < cfg.steps.length - 1) { step += 1; tStep = 0; spawnFlows(step); renderPanel(); }
+        else { pause(); tStep = d; }
+      }
+    }
+    var d = stepDuration(step);
+    if (elFill) elFill.style.width = Math.min(100, (tStep / d) * 100) + '%';
+    draw(tStep);
+    if (playing) raf = requestAnimationFrame(tick);
+  }
+
+  /* ---------- tooltips ---------- */
+  function canvasPos(ev) {
+    var r = canvas.getBoundingClientRect();
+    var scale = r.width / LW;
+    return { x: (ev.clientX - r.left) / scale, y: (ev.clientY - r.top) / scale };
+  }
+  function hitNode(pt) {
+    var keys = Object.keys(nodes), best = null, bd = 1e9;
+    keys.forEach(function (k) {
+      var n = nodes[k];
+      var dx = pt.x - n.x, dy = pt.y - n.y;
+      var d = dx * dx + dy * dy;
+      if (d < bd && d < 60 * 60) { bd = d; best = n; }
+    });
+    return best;
+  }
+  function showTip(n, ev) {
+    if (!tip || !n) return;
+    tip.innerHTML = '<span class="tt">' + esc(n.label) + '</span>' + esc(n.tip || '');
+    tip.style.display = 'block';
+    var r = stage.getBoundingClientRect();
+    var scale = r.width / LW;
+    var x = (n.x * scale) + 14, y = (n.y * scale) - 10;
+    if (x + 270 > r.width) x = n.x * scale - 270;
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top = Math.max(8, y) + 'px';
+  }
+  canvas.addEventListener('pointermove', function (ev) {
+    var n = hitNode(canvasPos(ev));
+    hover = n;
+    if (n) showTip(n, ev); else if (tip) tip.style.display = 'none';
+  });
+  canvas.addEventListener('pointerleave', function () { hover = null; if (tip) tip.style.display = 'none'; });
+  canvas.addEventListener('click', function (ev) {
+    var n = hitNode(canvasPos(ev));
+    if (n) showTip(n, ev);
+  });
+
+  /* ---------- theme + boot ---------- */
+  document.addEventListener('atk-theme-change', function () { readTokens(); draw(0); });
+  readTokens();
+  buildChips();
+  resize();
+  goStep(0);
+  if (!reduceMotion) play();   /* reduced-motion users start paused on step 1 */
+}
+</script>
+<script>
+/* PAGE GLUE — T1568 Dynamic Resolution. Schema: see page-template.html. */
+var SIM_CONFIG = {
+  watermark: 'T1568 · DYNAMIC RESOLUTION SIMULATION',
+  ariaLabel: 'Animation: malware on a victim PC uses DGA domains, fast-flux answers, and DNS calculation to reach a hidden C2 server while the SOC correlates DNS evidence.',
+  nodes: [
+    { id:'atk', x:130, y:110, label:'Attacker', sub:'operator', type:'attacker',
+      tip:'Who: a criminal operator or bot herder. Does: registers short-lived domains, runs the authoritative name server, and rents C2 servers.' },
+    { id:'vic', x:500, y:450, label:'Victim PC', sub:'Windows 11 client', type:'victim',
+      tip:'Who: an office laptop. Does: runs malware that computes DGA names, sends DNS queries, and beacons to C2 over HTTPS.' },
+    { id:'dns', x:500, y:230, label:'DNS resolver', sub:'recursive', type:'infra',
+      tip:'What: the company recursive resolver. Does: answers lookups, forwards unknown names upstream, and logs every query — the key evidence source.' },
+    { id:'ns', x:820, y:120, label:'Authoritative NS', sub:'attacker controlled', type:'infra',
+      tip:'What: the name server the attacker controls. Does: answers for the DGA domains and returns fast-flux IPs with very low TTLs.' },
+    { id:'c2', x:850, y:330, label:'C2 server', sub:'attacker VPS', type:'infra',
+      tip:'What: the command and control server. Does: receives beacons and sends orders to the malware.' },
+    { id:'soc', x:150, y:430, label:'SOC analyst', sub:'monitoring', type:'defender',
+      tip:'Who: the security operations team. Does: watches DNS logs, correlates NXDOMAIN bursts, low TTLs, and beacons, then blocks and hunts.' }
+  ],
+  steps: [
+    { title:'Register a throwaway domain',
+      caption:'The attacker registers a cheap, short-lived domain and points its name server records at a server they control. The domain may live only a few days.',
+      hint:'Registrar and passive DNS data already show a brand new name server that answers for many unrelated domains.',
+      evidence:['registrar record: new domain','NS record → attacker server','whois: privacy protected'],
+      focus:['atk'],
+      flags:[{node:'ns', text:'new NS', tone:'info'}],
+      flows:[{from:'atk', to:'ns', kind:'query', count:1, delay:200, dur:1400, label:'NS record'}] },
+    { title:'DGA makes candidate names',
+      caption:'Malware on the victim laptop runs a domain generation algorithm. It computes a list of fake-looking names for today and starts asking the resolver about them.',
+      hint:'The resolver log now shows one host with many random labels, and most answers are NXDOMAIN.',
+      evidence:['zeek dns.log','rcode=NXDOMAIN ×3','random 16-char labels'],
+      focus:['vic'],
+      flags:[{node:'dns', text:'NXDOMAIN', tone:'bad'}],
+      flows:[{from:'vic', to:'dns', kind:'query', count:4, gap:420, delay:200, dur:1100}] },
+    { title:'Resolver forwards upstream',
+      caption:'The company resolver has no answer for these names, so it forwards the queries to the authoritative name server on the internet — the one the attacker controls.',
+      hint:'Egress logs show the resolver talking to a name server outside approved ranges.',
+      evidence:['resolver forwards upstream','new NS IP seen','egress UDP 53'],
+      focus:['dns'],
+      flags:[{node:'ns', text:'authoritative', tone:'info'}],
+      flows:[{from:'dns', to:'ns', kind:'query', count:2, gap:520, delay:200, dur:1200}] },
+    { title:'Fast-flux answer, TTL 30',
+      caption:'One DGA name is actually registered today. The attacker name server answers with an IP that changes at every query, and a TTL of 30 seconds keeps caches small.',
+      hint:'The same domain returns several different IPs within minutes — classic IP churn with very low TTLs.',
+      evidence:['TTL 30','4 IPs in 2 min','many ASNs'],
+      focus:['ns'],
+      flags:[{node:'dns', text:'TTL 30', tone:'warn'},{node:'vic', text:'IP churn', tone:'bad'}],
+      flows:[{from:'ns', to:'dns', kind:'response', count:1, delay:200, dur:1200},{from:'dns', to:'vic', kind:'response', count:1, delay:1600, dur:1200}] },
+    { title:'DNS calculation channel',
+      caption:'The malware hides data inside the query itself. It packs its host ID and the next request into a long label such as a1f3..9c.task.c2tld[.]com, and the attacker name server decodes it.',
+      hint:'Long hex-like labels in A or TXT queries from one host point to a calculation channel or tunneling.',
+      evidence:['query label a1f3..9c','A and TXT mix','one host, many labels'],
+      focus:['vic'],
+      flags:[{node:'ns', text:'decodes host ID', tone:'info'}],
+      flows:[{from:'vic', to:'dns', kind:'data', count:1, delay:200, dur:1100},{from:'dns', to:'ns', kind:'data', count:1, delay:1500, dur:1300, label:'a1f3..9c.task'}] },
+    { title:'Beacon to the real C2',
+      caption:'The name server answers with the real C2 IP inside the A record. The malware now beacons to the C2 server over HTTPS every 60 seconds.',
+      hint:'Network flow logs show small, regular HTTPS sessions to a fresh IP on a fresh domain.',
+      evidence:['A record 203.0.113[.]10','beacon every 60 s','fresh TLS domain'],
+      focus:['vic'],
+      flags:[{node:'c2', text:'beacon 60s', tone:'warn'}],
+      flows:[{from:'ns', to:'dns', kind:'response', count:1, delay:200, dur:1100},{from:'dns', to:'vic', kind:'response', count:1, delay:1400, dur:1100},{from:'vic', to:'c2', kind:'data', count:2, gap:760, delay:2700, dur:1300, label:'HTTPS beacon'}] },
+    { title:'SOC correlation fires',
+      caption:'The SOC dashboard links the pieces: high NXDOMAIN ratio, low TTLs, IP churn, and a beacon to a first-seen domain, all from one host. One alert goes to the analyst.',
+      hint:'Correlation turns four weak signals into one strong case — this is the detection moment.',
+      evidence:['correlation rule fired','risk score 78','host FIN-LAP-042'],
+      focus:['soc'],
+      flags:[{node:'soc', text:'alert: DGA+flux', tone:'bad'}],
+      flows:[{from:'dns', to:'soc', kind:'alert', count:1, delay:200, dur:1400}] },
+    { title:'Block, sinkhole, and hunt',
+      caption:'The analyst blocks the domain at the resolver and the C2 IPs at the firewall, then uses passive DNS to hunt backwards and finds other hosts that talked to the same infrastructure earlier.',
+      hint:'Blocking plus a retro-hunt shows which machines contacted this infrastructure before the alert existed.',
+      evidence:['resolver RPZ block','passive DNS retro-hunt','3 more hosts found'],
+      focus:['soc'],
+      flags:[{node:'c2', text:'blocked', tone:'good'}],
+      flows:[{from:'soc', to:'dns', kind:'block', count:1, delay:200, dur:1300}] }
+  ]
+};
+initSimulation(SIM_CONFIG);
+</script>
+</body>
+</html>

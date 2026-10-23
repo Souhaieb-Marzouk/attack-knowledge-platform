@@ -1,0 +1,2228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1573 Encrypted Channel — Detection Guide</title>
+<meta name="description" content="Beginner-friendly MITRE ATT&CK T1573 (Encrypted Channel) detection guide: TLS metadata, JA3 fingerprints, certificates, beacon timing, six Sigma rules and matching Splunk SPL.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1573-Encrypted-Channel.html">
+<script>
+/* Apply theme BEFORE first paint (no flash). Do not modify. */
+(function(){try{var t=localStorage.getItem('atk-theme');if(!t){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+</script>
+<style>
+/* ============================================================
+   ATT&CK Detection Guide — shared design system (embed verbatim)
+   Dark default + light override + no-JS prefers-color-scheme
+   ============================================================ */
+:root{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+  --shadow:0 10px 30px rgba(3,8,20,.35);
+  --radius:14px; --radius-sm:9px;
+  --sidebar-w:256px;
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 10px 26px rgba(24,34,56,.10);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: light){
+  html:not([data-theme]){
+    --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+    --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+    --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+    --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+    --shadow:0 10px 26px rgba(24,34,56,.10);
+    color-scheme:light;
+  }
+}
+
+/* ---------- base ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:16.5px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; overflow-wrap:break-word;
+}
+img,canvas{max-width:100%}
+h1,h2,h3,h4{line-height:1.2; margin:0 0 .5em; font-weight:700; letter-spacing:-.01em}
+h2{font-size:1.7rem}
+h3{font-size:1.22rem}
+h4{font-size:1.05rem}
+p{margin:0 0 1em}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+ul,ol{padding-left:1.35rem; margin:0 0 1em}
+li{margin:.3em 0}
+code,kbd,samp{font-family:var(--mono); font-size:.86em; background:var(--surface-2);
+  border:1px solid var(--border); border-radius:6px; padding:.1em .35em}
+strong{font-weight:650}
+hr{border:0; border-top:1px solid var(--border); margin:2rem 0}
+::selection{background:color-mix(in srgb,var(--accent) 35%, transparent)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.small{font-size:.85rem}
+.sr-only{position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden;
+  clip:rect(0 0 0 0); white-space:nowrap; border:0}
+.wrap{max-width:1280px; margin:0 auto; padding:0 24px}
+section[id]{scroll-margin-top:84px}
+main > section{padding:52px 0; border-top:1px solid var(--border)}
+main > section:first-child{border-top:0}
+
+/* ---------- progress bar ---------- */
+.progress-bar{position:fixed; top:0; left:0; right:0; height:3px; z-index:120;
+  background:transparent; pointer-events:none}
+.progress-fill{display:block; height:100%; width:0;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+/* ---------- theme toggle ---------- */
+.theme-toggle{display:inline-flex; align-items:center; gap:.45em; font:inherit; font-size:.85rem;
+  color:var(--muted); background:var(--surface); border:1px solid var(--border);
+  border-radius:999px; padding:.35em .85em; cursor:pointer}
+.theme-toggle:hover{color:var(--text); border-color:var(--border-strong)}
+.theme-toggle .sun,.theme-toggle .moon{display:none}
+html[data-theme="dark"] .theme-toggle .sun{display:inline}
+html[data-theme="light"] .theme-toggle .moon{display:inline}
+@media (prefers-color-scheme: light){ html:not([data-theme]) .theme-toggle .moon{display:inline} }
+.theme-toggle .dot-ico{width:.6em; height:.6em; border-radius:50%; background:currentColor}
+
+/* ---------- hero ---------- */
+.hero{padding:44px 0 34px;
+  background:
+    radial-gradient(1000px 380px at 85% -10%, color-mix(in srgb,var(--accent) 16%, transparent), transparent 65%),
+    radial-gradient(700px 300px at 0% 0%, color-mix(in srgb,var(--violet) 12%, transparent), transparent 60%);
+  border-bottom:1px solid var(--border)}
+.hero-top{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px}
+.kicker{font-family:var(--mono); font-size:.78rem; font-weight:600; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--accent-2)}
+.page-title{font-size:clamp(1.9rem,4.5vw,2.9rem); margin:.1em 0 .35em; max-width:24ch}
+.page-title .tid{font-family:var(--mono); font-size:.62em; font-weight:700; vertical-align:.12em;
+  color:var(--accent); background:color-mix(in srgb,var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 45%, transparent);
+  border-radius:10px; padding:.08em .4em; white-space:nowrap}
+.lede{max-width:68ch; color:var(--muted); font-size:1.06rem; margin-bottom:1.2rem}
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:1.4rem}
+.chip{font-family:var(--mono); font-size:.75rem; color:var(--text);
+  background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:.28em .8em}
+.chip.accent{color:var(--accent); border-color:color-mix(in srgb,var(--accent) 45%, transparent)}
+.facts{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
+.fact{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:14px 16px; box-shadow:var(--shadow)}
+.fact::before{content:""; display:block; width:34px; height:3px; border-radius:2px;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2)); margin-bottom:10px}
+.fact-k{font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.1em;
+  color:var(--muted); margin-bottom:2px}
+.fact-v{font-size:.95rem; font-weight:600}
+
+/* ---------- two-column layout ---------- */
+.layout{display:grid; grid-template-columns:var(--sidebar-w) minmax(0,1fr); gap:36px;
+  align-items:start; padding:8px 0 64px}
+.sidebar{position:sticky; top:24px}
+.toc{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px 16px; box-shadow:var(--shadow); max-height:calc(100vh - 48px); overflow:auto}
+.toc-title{font-family:var(--mono); font-size:.75rem; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); margin:0 0 10px}
+.toc-list{list-style:none; margin:0; padding:0; font-size:.9rem}
+.toc-list li{margin:2px 0}
+.toc-list a{display:block; color:var(--muted); border-left:2px solid transparent;
+  border-radius:0 8px 8px 0; padding:6px 10px}
+.toc-list a:hover{color:var(--text); text-decoration:none; background:var(--surface-2)}
+.toc-list a.active{color:var(--accent); background:color-mix(in srgb,var(--accent) 10%, transparent);
+  border-left-color:var(--accent); font-weight:600}
+.toc-list a .n{font-family:var(--mono); font-size:.75rem; color:var(--muted); margin-right:.5em}
+.toc-list a.active .n{color:var(--accent)}
+.toc-sub{margin-left:14px; border-left:1px dashed var(--border); padding-left:0}
+.toc-sub a{font-size:.83rem; padding:4px 10px}
+
+/* ---------- section headers ---------- */
+.sec-head{display:flex; align-items:center; gap:14px; margin-bottom:10px}
+.sec-num{flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+  min-width:40px; height:40px; padding:0 8px; border-radius:12px; font-family:var(--mono);
+  font-weight:700; font-size:1.02rem; color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 40%, transparent)}
+.sec-title{margin:0}
+.sec-intro{color:var(--muted); max-width:70ch; margin-bottom:1.6rem}
+h3[id]{scroll-margin-top:84px}
+h3[id]::before{content:"§"; color:var(--accent-2); font-weight:600; margin-right:.45em; font-size:.9em}
+/* ---------- cards & grids ---------- */
+.card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:20px 22px; box-shadow:var(--shadow); margin-bottom:16px}
+.card>:last-child{margin-bottom:0}
+.card h3,.card h4{margin-top:0}
+.card.accent-edge{border-left:3px solid var(--accent)}
+.grid{display:grid; gap:16px; margin-bottom:16px}
+.grid>*{min-width:0}
+.facts>*{min-width:0}
+.grid-2{grid-template-columns:repeat(2,1fr)}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+.grid .card{margin-bottom:0}
+.grid>.card>:last-child{margin-bottom:0}
+
+/* ---------- callouts ---------- */
+.callout{background:var(--surface-2); border:1px solid var(--border); border-left-width:4px;
+  border-radius:var(--radius-sm); padding:14px 18px; margin:0 0 16px}
+.callout .callout-label{display:block; font-family:var(--mono); font-size:.72rem; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.35em}
+.callout.note{border-left-color:var(--accent)}
+.callout.note .callout-label{color:var(--accent)}
+.callout.good{border-left-color:var(--success)}
+.callout.good .callout-label{color:var(--success)}
+.callout.warn{border-left-color:var(--warning)}
+.callout.warn .callout-label{color:var(--warning)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .callout-label{color:var(--danger)}
+.callout>:last-child{margin-bottom:0}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius);
+  background:var(--surface); box-shadow:var(--shadow); margin-bottom:16px}
+table{border-collapse:collapse; width:100%; min-width:620px; font-size:.92rem}
+caption{caption-side:top; text-align:left; font-family:var(--mono); font-size:.75rem;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--muted); padding:12px 16px 4px}
+th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:top}
+thead th{font-family:var(--mono); font-size:.75rem; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--muted); background:var(--surface-2); white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%, transparent)}
+td code,th code{white-space:nowrap}
+
+/* ---------- code blocks ---------- */
+.code{background:#0d1424; border:1px solid var(--border); border-radius:var(--radius);
+  overflow:hidden; margin:0 0 16px; box-shadow:var(--shadow)}
+html[data-theme="light"] .code{background:#101a30}
+@media (prefers-color-scheme: light){ html:not([data-theme]) .code{background:#101a30} }
+.code-head{display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:8px 12px; background:var(--surface-2); border-bottom:1px solid var(--border)}
+.code-lang{font-family:var(--mono); font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--muted)}
+.copy-btn{font:inherit; font-size:.78rem; font-family:var(--mono); color:var(--text); cursor:pointer;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:.3em .8em}
+.copy-btn:hover{border-color:var(--border-strong)}
+.copy-btn.ok{color:var(--success); border-color:var(--success)}
+.code pre.code-body{margin:0; padding:14px 16px; overflow-x:auto; font-family:var(--mono);
+  font-size:.82rem; line-height:1.55; color:#dbe6f8; background:transparent; border:0; border-radius:0}
+.code pre.code-body code{background:transparent; border:0; padding:0; font-size:inherit;
+  color:inherit; white-space:pre}
+pre.code-body{overflow-x:auto}
+
+/* ---------- badges ---------- */
+.badge{display:inline-block; font-family:var(--mono); font-size:.72rem; font-weight:700;
+  letter-spacing:.06em; border-radius:999px; padding:.22em .7em; border:1px solid transparent;
+  vertical-align:middle}
+.sev-crit{color:var(--danger); background:color-mix(in srgb,var(--danger) 13%, transparent);
+  border-color:color-mix(in srgb,var(--danger) 45%, transparent)}
+.sev-high{color:var(--high); background:color-mix(in srgb,var(--high) 13%, transparent);
+  border-color:color-mix(in srgb,var(--high) 45%, transparent)}
+.sev-med{color:var(--warning); background:color-mix(in srgb,var(--warning) 13%, transparent);
+  border-color:color-mix(in srgb,var(--warning) 45%, transparent)}
+.sev-low{color:var(--low); background:color-mix(in srgb,var(--low) 13%, transparent);
+  border-color:color-mix(in srgb,var(--low) 45%, transparent)}
+.cat{color:var(--violet); background:color-mix(in srgb,var(--violet) 12%, transparent);
+  border-color:color-mix(in srgb,var(--violet) 40%, transparent)}
+.cat-net{color:var(--accent-2); background:color-mix(in srgb,var(--accent-2) 12%, transparent);
+  border-color:color-mix(in srgb,var(--accent-2) 40%, transparent)}
+.badge.plain{color:var(--muted); background:var(--surface-2); border-color:var(--border)}
+
+/* ---------- key/value list ---------- */
+.kv{display:grid; grid-template-columns:minmax(120px,max-content) 1fr; gap:6px 18px; margin:0}
+.kv dt{font-family:var(--mono); font-size:.78rem; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); padding-top:2px}
+.kv dd{margin:0}
+.kv dd ul{margin:0; padding-left:1.1rem}
+
+/* ---------- timeline ---------- */
+.timeline{list-style:none; position:relative; margin:0 0 16px; padding:0 0 0 26px}
+.timeline::before{content:""; position:absolute; left:8px; top:6px; bottom:6px; width:2px;
+  background:linear-gradient(var(--accent),var(--violet))}
+.timeline>li{position:relative; margin:0 0 18px; padding:12px 16px; background:var(--surface);
+  border:1px solid var(--border); border-radius:var(--radius-sm)}
+.timeline>li::before{content:""; position:absolute; left:-24px; top:18px; width:10px; height:10px;
+  border-radius:50%; background:var(--accent); border:2px solid var(--bg); box-shadow:0 0 0 2px var(--accent)}
+.tl-date{font-family:var(--mono); font-size:.75rem; color:var(--accent-2); display:block; margin-bottom:2px}
+
+/* ---------- static diagram ---------- */
+.diagram{display:flex; flex-wrap:wrap; align-items:stretch; gap:10px; margin:0 0 16px}
+.dnode{flex:1 1 150px; min-width:130px; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:10px 12px; text-align:center}
+.dnode .dn-t{font-weight:700; font-size:.9rem}
+.dnode .dn-s{font-size:.78rem; color:var(--muted)}
+.dnode.attacker{border-top:3px solid var(--danger)}
+.dnode.victim{border-top:3px solid var(--accent)}
+.dnode.infra{border-top:3px solid var(--warning)}
+.dnode.defender{border-top:3px solid var(--success)}
+.darrow{align-self:center; color:var(--muted); font-family:var(--mono); font-size:1rem; flex:0 0 auto}
+
+/* ---------- simulation ---------- */
+.sim{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden; margin-bottom:16px}
+.sim-stage{position:relative; background:
+  linear-gradient(color-mix(in srgb,var(--border) 45%, transparent) 1px, transparent 1px),
+  linear-gradient(90deg, color-mix(in srgb,var(--border) 45%, transparent) 1px, transparent 1px),
+  var(--bg);
+  background-size:34px 34px,34px 34px,auto}
+.sim-stage canvas{display:block; width:100%; height:auto; touch-action:pan-y}
+.sim-tip{position:absolute; z-index:20; max-width:260px; background:var(--elevated);
+  border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:8px 12px;
+  font-size:.8rem; color:var(--text); box-shadow:var(--shadow); pointer-events:none; display:none}
+.sim-tip .tt{font-weight:700; display:block; margin-bottom:2px}
+.sim-panel{border-top:1px solid var(--border); padding:16px 20px}
+.sim-step-title{font-weight:700; margin:0 0 .3em; font-size:1rem}
+.sim-step-title .n{font-family:var(--mono); color:var(--accent); margin-right:.5em}
+.sim-caption{color:var(--text); margin:0 0 .7em}
+.sim-hint{display:flex; gap:10px; align-items:flex-start; background:color-mix(in srgb,var(--success) 8%, transparent);
+  border:1px solid color-mix(in srgb,var(--success) 35%, transparent); border-radius:var(--radius-sm);
+  padding:10px 14px; font-size:.9rem; margin:0 0 .9em}
+.sim-hint .lbl{flex:0 0 auto; font-family:var(--mono); font-size:.7rem; font-weight:700;
+  letter-spacing:.1em; color:var(--success); text-transform:uppercase; padding-top:2px}
+.sim-evidence{display:flex; flex-wrap:wrap; gap:8px}
+.sim-evidence .ev{font-family:var(--mono); font-size:.72rem; color:var(--accent-2);
+  background:color-mix(in srgb,var(--accent-2) 10%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent-2) 35%, transparent);
+  border-radius:6px; padding:.25em .6em}
+.sim-controls{display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 20px;
+  border-top:1px solid var(--border); background:var(--surface-2)}
+.btn{font:inherit; font-size:.85rem; font-family:var(--mono); color:var(--text); cursor:pointer;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:.4em .9em}
+.btn:hover{border-color:var(--border-strong)}
+.btn[disabled]{opacity:.45; cursor:not-allowed}
+.btn.primary{color:var(--bg); background:var(--accent); border-color:var(--accent); font-weight:700}
+.btn.primary:hover{filter:brightness(1.08)}
+.seg{display:inline-flex; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden}
+.seg .seg-btn{font:inherit; font-family:var(--mono); font-size:.78rem; color:var(--muted);
+  background:var(--surface); border:0; border-right:1px solid var(--border); padding:.42em .7em; cursor:pointer}
+.seg .seg-btn:last-child{border-right:0}
+.seg .seg-btn[aria-pressed="true"]{color:var(--bg); background:var(--accent); font-weight:700}
+.step-chips{display:flex; flex-wrap:wrap; gap:6px; padding:10px 20px 14px; border-top:1px solid var(--border)}
+.step-chip{font-family:var(--mono); font-size:.72rem; color:var(--muted); cursor:pointer;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:.3em .7em}
+.step-chip:hover{color:var(--text); border-color:var(--border-strong)}
+.step-chip[aria-current="true"]{color:var(--bg); background:var(--accent); border-color:var(--accent); font-weight:700}
+.sim-legend{display:flex; flex-wrap:wrap; gap:14px; padding:10px 20px; font-size:.75rem;
+  color:var(--muted); border-top:1px solid var(--border)}
+.legend-dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:0}
+.sim-progress{height:3px; background:var(--border)}
+.sim-progress .sp-fill{display:block; height:100%; width:0; background:var(--accent-2)}
+.sim-story{padding:18px 20px 20px; border-top:1px solid var(--border)}
+.sim-story h3{margin-top:0}
+.sim-story ol li{margin:.45em 0}
+.sim-story .st{font-weight:600; color:var(--text)}
+
+/* ---------- mobile nav / floating controls ---------- */
+.toc-fab,.to-top{position:fixed; z-index:110; border-radius:999px; box-shadow:var(--shadow);
+  border:1px solid var(--border-strong); background:var(--elevated); color:var(--text);
+  font:inherit; font-weight:600; cursor:pointer}
+.toc-fab{right:18px; bottom:18px; display:none; padding:.65em 1.15em; font-size:.9rem}
+.to-top{right:18px; bottom:74px; width:44px; height:44px; font-size:1.1rem; opacity:0;
+  pointer-events:none; transition:opacity .25s}
+.to-top.show{opacity:1; pointer-events:auto}
+.toc-overlay{position:fixed; inset:0; z-index:130; display:none}
+.toc-overlay.open{display:block}
+.toc-overlay-backdrop{position:absolute; inset:0; background:rgba(4,8,18,.62)}
+.toc-panel{position:absolute; top:0; right:0; bottom:0; width:min(320px,86vw);
+  background:var(--surface); border-left:1px solid var(--border); padding:18px 16px; overflow:auto;
+  box-shadow:var(--shadow)}
+.toc-panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+.toc-close{font:inherit; font-size:1rem; background:var(--surface-2); color:var(--text);
+  border:1px solid var(--border); border-radius:var(--radius-sm); width:34px; height:34px; cursor:pointer}
+
+/* ---------- responsive ---------- */
+@media (max-width:1040px){
+  .layout{display:block}
+  .sidebar{display:none}
+  .toc-fab{display:inline-block}
+  .facts{grid-template-columns:repeat(2,1fr)}
+  .grid-3{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  .wrap{padding:0 16px}
+  .hero{padding:30px 0 24px}
+  .facts{grid-template-columns:1fr}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .page-title{font-size:1.7rem}
+  .card{padding:16px}
+  table{min-width:520px}
+  .sim-panel,.sim-controls,.step-chips,.sim-legend,.sim-story{padding-left:14px; padding-right:14px}
+  .btn{padding:.45em .8em}
+}
+@media (max-width:400px){
+  body{font-size:16px}
+  .chips{gap:6px}
+}
+/* ---------- motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:.01ms !important}
+}
+/* ---------- print ---------- */
+@media print{
+  :root{--bg:#ffffff; --surface:#ffffff; --surface-2:#f2f4f8; --elevated:#ffffff;
+    --text:#111827; --muted:#4b5563; --border:#d1d5db; --border-strong:#9ca3af;
+    --accent:#1d4ed8; --accent-2:#0e7490; --violet:#6d28d9; --success:#047857;
+    --warning:#b45309; --danger:#b91c1c; --high:#c2410c; --low:#15803d; --shadow:none;
+    color-scheme:light}
+  html{scroll-behavior:auto}
+  .progress-bar,.sidebar,.toc-fab,.to-top,.toc-overlay,.theme-toggle,.copy-btn,
+  .sim-controls,.step-chips,.sim-progress{display:none !important}
+  .layout{display:block; padding:0}
+  body{background:#fff; color:#111827; font-size:11.5pt}
+  .hero{border-bottom:1px solid #d1d5db; background:#fff}
+  main > section{border-top:1px solid #e5e7eb; padding:18pt 0; page-break-inside:auto}
+  .card,.callout,.table-wrap,.code,.sim,.fact,.timeline>li{box-shadow:none; page-break-inside:avoid}
+  .code pre.code-body{white-space:pre-wrap; overflow-wrap:anywhere}
+  .table-wrap{overflow:visible}
+  table{min-width:0}
+  .sim-stage canvas{max-height:420px}
+  a{color:#1d4ed8}
+  a[href^="http"]::after{content:" (" attr(href) ")"; font-size:8.5pt; color:#4b5563;
+    overflow-wrap:anywhere}
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../assets/css/platform.css">
+<div id="atk-header" data-technique="T1573"></div>
+<script src="../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div class="progress-bar" aria-hidden="true"><span class="progress-fill"></span></div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-top">
+      <p class="kicker">MITRE ATT&CK · Detection Guide</p>
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">
+        <span class="dot-ico" aria-hidden="true"></span><span class="sun">Switch to light</span><span class="moon">Switch to dark</span>
+      </button>
+    </div>
+    <h1 class="page-title">Encrypted Channel <span class="tid">T1573</span></h1>
+    <p class="lede">Encryption hides the content of command-and-control traffic — but the outside of the connection still gives it away. This guide teaches you to detect encrypted attack channels from their metadata: handshake shapes, certificates, timing, and volume.</p>
+    <div class="chips" aria-label="Page metadata">
+      <span class="chip accent">MITRE ATT&CK Technique</span>
+      <span class="chip">Tactic: Command and Control</span>
+      <span class="chip">Platforms: ESXi · Linux · Network Devices · Windows · macOS</span>
+      <span class="chip">Beginner friendly</span>
+      <span class="chip">Detection engineering</span>
+      <span class="chip">ATT&amp;CK page v1.2 · updated Sep 2026</span>
+      <span class="chip">Guide v2.0</span>
+    </div>
+    <div class="facts">
+      <div class="fact"><div class="fact-k">Tactic</div><div class="fact-v">Command and Control (TA0011)</div></div>
+      <div class="fact"><div class="fact-k">Sub-techniques</div><div class="fact-v">2 — Symmetric (.001), Asymmetric (.002)</div></div>
+      <div class="fact"><div class="fact-k">Main evidence</div><div class="fact-v">TLS metadata, JA3, cert traits, beacon timing</div></div>
+      <div class="fact"><div class="fact-k">Blind spot</div><div class="fact-v">Decryption is rare; metadata analytics are the answer</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <aside class="sidebar" aria-label="Table of contents">
+      <nav class="toc">
+        <p class="toc-title">Contents</p>
+        <ul class="toc-list" id="toc-list"><!-- generated by app.js from real headings --></ul>
+      </nav>
+    </aside>
+
+    <main>
+      <section id="overview">
+        <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Overview</h2></div>
+        <p class="sec-intro">This section explains what an encrypted channel is, why attackers rely on one, and what you will learn on this page.</p>
+
+        <div class="grid grid-3">
+          <div class="card accent-edge">
+            <h4>What is an encrypted channel?</h4>
+            <p>Malware rarely acts alone. It talks to a server that its owner controls. This link is called <strong>command and control</strong> (C2). A C2 channel carries commands to the malware and sends stolen data back.</p>
+            <p>An <strong>encrypted channel</strong> is a C2 link wrapped in cryptography — most often TLS, the same protocol that protects HTTPS websites. After the handshake, nobody on the network path can read the messages, because only the two ends hold the keys.</p>
+          </div>
+          <div class="card accent-edge">
+            <h4>Why it matters</h4>
+            <p>Most enterprise traffic is already encrypted, so attack traffic looks like the millions of other encrypted connections around it. Teams often cannot decrypt traffic: decryption needs private keys, raises privacy and legal issues, and is expensive to run at scale.</p>
+            <p>So defenders must find attack channels <strong>without reading them</strong>. That is the core skill this page teaches.</p>
+          </div>
+          <div class="card accent-edge">
+            <h4>Where it sits in the attack chain</h4>
+            <p>ATT&amp;CK places T1573 in the <strong>Command and Control</strong> tactic. Attackers usually set the channel up right after their first code runs on a host.</p>
+            <p>The same channel then carries tasking, tool downloads, and very often stolen data on its way out (exfiltration). One channel, many stages.</p>
+          </div>
+        </div>
+
+        <div class="diagram" aria-label="Simple flow: implant on victim, encrypted tunnel through the firewall, C2 server">
+          <div class="dnode victim"><div class="dn-t">Implant on victim PC</div><div class="dn-s">runs malware, starts TLS</div></div>
+          <span class="darrow" aria-hidden="true">→</span>
+          <div class="dnode infra"><div class="dn-t">Firewall / sensor</div><div class="dn-s">sees metadata only</div></div>
+          <span class="darrow" aria-hidden="true">→</span>
+          <div class="dnode attacker"><div class="dn-t">C2 server</div><div class="dn-s">holds keys, sends tasks</div></div>
+        </div>
+
+        <h4>What you will learn</h4>
+        <ul>
+          <li>How a TLS-based C2 session works, step by step, in the animated simulation.</li>
+          <li>Which metadata an encrypted connection always leaves behind: JA3 fingerprints, certificates, timing, and volume.</li>
+          <li>How attackers build encrypted channels — and the mistakes they commonly make (lab-only demo included).</li>
+          <li>How SOC analysts triage a suspicious encrypted flow in a repeatable order.</li>
+          <li>Six ready-to-adapt Sigma rules and six matching Splunk SPL queries, with tuning notes.</li>
+          <li>How this maps to GDPR, HIPAA, ISO 27001, SOC 2, PCI DSS, and NIST expectations.</li>
+          <li>A real-world case study and a prioritized mitigation plan.</li>
+        </ul>
+
+        <div class="callout note">
+          <span class="callout-label">Key idea — metadata vs content</span>
+          <p><strong>Content</strong> is the message itself (for example a stolen password inside the traffic). <strong>Metadata</strong> is data <em>about</em> the connection: who talked to whom, when, how often, how big, with which handshake, and with which certificate. Encryption protects content. It does not hide metadata — and metadata is often enough to catch the attacker.</p>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Key facts</caption>
+            <thead><tr><th>Fact</th><th>Detail</th></tr></thead>
+            <tbody>
+              <tr><td>ATT&amp;CK ID</td><td><code>T1573</code> — Encrypted Channel, tactic Command and Control (TA0011)</td></tr>
+              <tr><td>Sub-techniques</td><td><code>T1573.001</code> Symmetric Cryptography · <code>T1573.002</code> Asymmetric Cryptography</td></tr>
+              <tr><td>Platforms</td><td>Linux, Windows, macOS</td></tr>
+              <tr><td>Detection data sources</td><td>Network Traffic Content, Network Traffic Flow, Network Connection Creation, Process Creation / Process Use</td></tr>
+              <tr><td>Detection idea</td><td>Analyze handshake and flow metadata (JA3/JA3S, certificates, SNI, timing, sizes); decryption is rarely possible</td></tr>
+              <tr><td>Typical carriers</td><td>TLS on port 443 (most common), custom encrypted protocols, encrypted tunnels over other ports</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption>The two sub-techniques</caption>
+            <thead><tr><th>Sub-technique</th><th>How it works in one sentence</th><th>Typical use in malware</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><a href="https://attack.mitre.org/techniques/T1573/001/">T1573.001 — Symmetric Cryptography</a></td>
+                <td>Both sides share one secret key; the same key encrypts and decrypts everything.</td>
+                <td>Malware derives a key from a hard-coded value, then encrypts each message (for example AES).</td>
+              </tr>
+              <tr>
+                <td><a href="https://attack.mitre.org/techniques/T1573/002/">T1573.002 — Asymmetric Cryptography</a></td>
+                <td>Each side has a public and a private key; something locked with the public key opens only with the private key.</td>
+                <td>The two sides run an ephemeral Diffie-Hellman agreement (shown as curve x25519) and derive the session key; older TLS 1.2 setups instead wrapped the key with RSA.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">In practice the two are combined, like in TLS: an asymmetric step exchanges a fresh symmetric session key, and the symmetric cipher then protects the bulk of the traffic.</p>
+      </section>
+
+      <section id="simulation">
+        <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Animated simulation</h2></div>
+        <p class="sec-intro">The animation replays one full encrypted C2 session: TCP connect, TLS handshake, key exchange, symmetric beaconing, tasking, and the two SOC views that catch it — metadata first, timing second. Use the buttons to play, pause, restart, step back and forward, and change speed. Hover any node for details; the written story below the canvas repeats everything as text.</p>
+
+        <div class="sim" id="sim">
+          <div class="sim-progress"><span class="sp-fill"></span></div>
+          <div class="sim-stage" tabindex="0" aria-label="Animation of an encrypted command-and-control channel: TLS handshake, key exchange, beacons, and SOC detection through metadata">
+            <canvas id="sim-canvas" role="img" aria-label="Animation of an encrypted command-and-control channel: TLS handshake, key exchange, beacons, and SOC detection through metadata"></canvas>
+            <div class="sim-tip" id="sim-tip" role="status"></div>
+          </div>
+          <div class="sim-panel">
+            <p class="sim-step-title"></p>
+            <p class="sim-caption"></p>
+            <p class="sim-hint"><span class="lbl">Defender view</span><span class="sim-hint-text"></span></p>
+            <div class="sim-evidence" aria-label="Evidence left behind"></div>
+          </div>
+          <div class="sim-controls">
+            <button type="button" class="btn primary" id="sim-play">Pause</button>
+            <button type="button" class="btn" id="sim-restart">Restart</button>
+            <button type="button" class="btn" id="sim-prev">◀ Prev</button>
+            <button type="button" class="btn" id="sim-next">Next ▶</button>
+            <span class="seg" role="group" aria-label="Playback speed">
+              <button type="button" class="seg-btn" data-speed="0.5" aria-pressed="false">0.5×</button>
+              <button type="button" class="seg-btn" data-speed="1" aria-pressed="true">1×</button>
+              <button type="button" class="seg-btn" data-speed="2" aria-pressed="false">2×</button>
+            </span>
+          </div>
+          <div class="step-chips" aria-label="Jump to step"></div>
+          <div class="sim-legend" aria-hidden="true">
+            <span><span class="legend-dot" style="background:var(--danger)"></span>Attacker (C2 + implant)</span>
+            <span><span class="legend-dot" style="background:var(--accent)"></span>Victim host</span>
+            <span><span class="legend-dot" style="background:var(--warning)"></span>Infrastructure / alerts</span>
+            <span><span class="legend-dot" style="background:var(--success)"></span>SOC / defenders</span>
+            <span><span class="legend-dot" style="background:var(--violet)"></span>Encrypted data</span>
+          </div>
+          <div class="sim-story">
+            <h3>Written story (screen-reader and no-JS version)</h3>
+            <ol>
+              <li><span class="st">Step 1 — The implant opens a TCP connection.</span> Malware on the victim PC starts and connects to the C2 server on TCP port 443. The enterprise firewall sees a brand-new outbound flow to an IP address it has never seen before and writes it into its connection log.</li>
+              <li><span class="st">Step 2 — The TLS handshake happens.</span> The implant sends a TLS ClientHello, and the C2 answers with a ServerHello plus a self-signed certificate. The connection content is still readable at this point, and the handshake details are now stored in the Zeek ssl.log file.</li>
+              <li><span class="st">Step 3 — Keys are exchanged (asymmetric step).</span> The two sides run an ephemeral Diffie-Hellman agreement — the Zeek log shows curve x25519 — and derive the session key. Older TLS 1.2 setups instead wrapped a session key with the server's RSA public key. From the network view either way, this is just more bytes inside the handshake.</li>
+              <li><span class="st">Step 4 — The encrypted beacon starts.</span> Both sides switch to a fast symmetric cipher, and the implant sends its first beacon: a small encrypted blob about every 60 seconds. Nobody in the middle can read it, but its regular shape is visible.</li>
+              <li><span class="st">Step 5 — Tasking and results.</span> The C2 pushes a task to the implant, for example a command to run. The implant executes it and returns the output through the same encrypted channel, which shows up as bidirectional bursts inside long-lived TLS flows.</li>
+              <li><span class="st">Step 6 — SOC view one: metadata.</span> The SOC analyst checks the metadata: the JA3 fingerprint is rare in this environment, the certificate is self-signed, and the server name (SNI) does not match the certificate common name. Each signal alone is weak; together they are strong.</li>
+              <li><span class="st">Step 7 — SOC view two: timing.</span> The SOC checks timing statistics: a connection every 60 seconds, sizes in a narrow band around 250 bytes, and long session durations. This beacon pattern is detectable even though the traffic can never be decrypted.</li>
+              <li><span class="st">Step 8 — Block and hunt.</span> The SOC blocks the rare JA3 fingerprint at the egress firewall and sends the C2 domain to a sinkhole (a DNS service that returns a safe, blocked address), then hunts across all hosts for the same fingerprint and certificate to scope the intrusion. The victim PC is isolated for cleanup.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="callout note">
+          <span class="callout-label">What to watch for</span>
+          <p>Notice that the packets turn from readable handshake data into opaque encrypted blobs after step 4 — yet every later step is still detected. That is the whole lesson of T1573: <strong>the envelope always shows</strong>.</p>
+        </div>
+      </section>
+
+      <section id="red-team">
+        <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Red team / hacker perspective</h2></div>
+        <p class="sec-intro">This section explains, at a concept level, why attackers encrypt their C2 traffic and how they do it. It is written for defenders: understanding the attacker's view is what makes the detection logic in section 5 feel natural.</p>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Why attackers encrypt C2</h4>
+            <ul>
+              <li><strong>Defeat inspection.</strong> Many companies read unencrypted traffic on the wire. Encryption makes that sensor useless.</li>
+              <li><strong>Blend in.</strong> HTTPS is most of all web traffic, so attack traffic on port 443 looks ordinary at first glance.</li>
+              <li><strong>Pass content filters.</strong> Filters that block plain-text malware commands cannot judge what they cannot read.</li>
+              <li><strong>Protect the tooling.</strong> Encryption hides malware features and stolen data from researchers who capture samples.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>How it is done (concept level)</h4>
+            <ul>
+              <li><strong>Use a TLS library.</strong> Almost every language ships one, so a custom C2 can speak real TLS with a few lines of code.</li>
+              <li><strong>Use a C2 framework.</strong> Common offensive frameworks ship HTTPS listeners and configurable profiles that shape how the traffic looks.</li>
+              <li><strong>Self-signed or stolen certificates.</strong> A server certificate can be generated in seconds or copied from a real site.</li>
+              <li><strong>Wrap real HTTPS.</strong> Some implants ride on genuine websites or cloud services, so even the certificate looks normal.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h4>Prerequisites an attacker needs</h4>
+        <ul>
+          <li>A server they control (a rented host, a hacked site, or a cloud instance) reachable from the victim network.</li>
+          <li>Outbound connectivity from the victim — usually TCP 443, because almost every firewall allows it.</li>
+          <li>A certificate, if TLS is used: self-signed, free-issued, or hijacked from a real domain.</li>
+          <li>Code already running on the victim host (the implant) — encryption does not help with getting in.</li>
+        </ul>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Common variations of T1573</caption>
+            <thead><tr><th>Variation</th><th>What it looks like on the wire</th><th>Detection angle</th></tr></thead>
+            <tbody>
+              <tr><td>TLS on 443</td><td>Standard HTTPS session; hard to separate from normal browsing by port alone.</td><td>JA3 rarity, certificate traits, beacon timing.</td></tr>
+              <tr><td>Custom protocol over 443</td><td>Bytes that look almost like TLS but are a private encrypted protocol.</td><td>Handshake does not parse as valid TLS; length patterns.</td></tr>
+              <tr><td>Encrypt-then-mimic HTTPS</td><td>Framework profiles copy real browser headers, paths, and cert settings.</td><td>Small mismatches: header order, JA3 vs claimed browser, missing common paths.</td></tr>
+              <tr><td>Mutual TLS (mTLS)</td><td>Client <em>and</em> server both present certificates.</td><td>Client certificates are rare on workstations — a strong signal by itself.</td></tr>
+              <tr><td>Encrypted channel on odd ports</td><td>TLS-looking traffic on ports such as 8443, 8888, or 1337.</td><td>TLS service on a non-standard port (rule 6 in section 5.5).</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <span class="callout-label">Lab only</span>
+          <p>The commands below demonstrate a plain TLS server and client with OpenSSL, so you can <em>see</em> handshake metadata yourself. Run them only on an isolated lab virtual machine that has no access to production networks or the internet. Never point these tools at systems you do not own. The goal is defensive learning: open a second terminal with a packet or flow sensor and watch what the handshake leaves in the logs.</p>
+          <div class="code"><div class="code-head"><span class="code-lang">Shell · lab TLS demo (isolated VM)</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code># 1. Make a throwaway self-signed certificate (isolated lab VM only)
+openssl req -x509 -newkey rsa:2048 -sha256 -days 3 -nodes \
+  -keyout lab-key.pem -out lab-cert.pem \
+  -subj "/CN=lab-c2.example.internal"
+
+# 2. Start a TLS server on localhost, serving the certificate
+openssl s_server -accept 8443 -cert lab-cert.pem -key lab-key.pem -www
+
+# 3. In a second terminal, connect as a TLS client
+openssl s_client -connect 127.0.0.1:8443 \
+  -servername lab-c2.example.internal</code></pre></div>
+          <p>In the client output, note the self-signed certificate warning, the issuer (same as subject), and the chosen cipher. A sensor would log the same facts as metadata — plus a JA3 fingerprint for the <code>s_client</code> handshake, which differs from your browser's fingerprint.</p>
+        </div>
+
+        <h4>Where red teams apply it — and the mistakes they make</h4>
+        <p>Red teams use encrypted C2 during almost every engagement phase after initial access: command relay, file transfer, tunneling, and data staging. The best operators customize their profiles; the rest reuse defaults. Those defaults are exactly what defenders should hunt for:</p>
+        <div class="grid grid-2">
+          <div class="card"><h4>Default framework configs</h4><p><strong>Mistake:</strong> out-of-the-box TLS settings produce a fingerprint (JA3) shared by thousands of public scans. <strong>Detection:</strong> match JA3 values against known tool fingerprints.</p></div>
+          <div class="card"><h4>Fixed self-signed certs</h4><p><strong>Mistake:</strong> one generated certificate reused for months across campaigns. <strong>Detection:</strong> cert SHA-1/SHA-256 reuse across unrelated destinations.</p></div>
+          <div class="card"><h4>Perfect 60-second beacons</h4><p><strong>Mistake:</strong> sleeping exactly N seconds with near-constant message sizes. <strong>Detection:</strong> low variance in inter-connection deltas and sizes.</p></div>
+          <div class="card"><h4>Certificate and IP reuse</h4><p><strong>Mistake:</strong> the same cert or C2 IP serving many victims. <strong>Detection:</strong> pivot from one alert to fleet-wide hunting (step 8 of the simulation).</p></div>
+        </div>
+
+        <div class="callout danger">
+          <span class="callout-label">Ethics and scope</span>
+          <p>This page deliberately stops at concepts and a local TLS demo. Building or deploying real C2 tooling against systems without written permission is illegal and harmful. Use this knowledge only to build and tune detections.</p>
+        </div>
+      </section>
+
+      <section id="blue-team">
+        <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Blue team / SOC perspective</h2></div>
+        <p class="sec-intro">Defenders cannot read encrypted C2 content, but they can read everything around it. This section lists the artifacts an encrypted channel leaves, where to find them, and a triage flow your SOC can follow on every alert.</p>
+
+        <h4>How defenders see it: the metadata that remains</h4>
+        <div class="grid grid-3">
+          <div class="card"><h4>Handshake shape</h4><p>The ClientHello encodes TLS version, cipher suites, and extensions in a fixed order. Hashing that list gives a <strong>JA3</strong> fingerprint; the server answer gives <strong>JA3S</strong>. Malware TLS stacks differ from browsers, so their fingerprints stand out.</p></div>
+          <div class="card"><h4>Certificate details</h4><p>Issuer, subject, validity dates, serial, and whether validation succeeded. Self-signed, expired, or oddly-issued certificates are classic C2 traits.</p></div>
+          <div class="card"><h4>SNI and names</h4><p>The <strong>SNI</strong> (server name indication) is the host name the client asked for. Mismatch with the certificate, or an IP literal instead of a name, is suspicious.</p></div>
+          <div class="card"><h4>Timing</h4><p>Beacons repeat. Measure the gaps between connections to one destination: stable deltas (for example 60 s ± a few seconds) with many repeats equal a beacon.</p></div>
+          <div class="card"><h4>Volume and size</h4><p>Bytes and packets per direction. C2 beacons are small and stable; exfiltration is large and one-directional. Both are visible without decryption.</p></div>
+          <div class="card"><h4>Reputation and first-seen</h4><p>Has this destination IP, domain, or JA3 been seen before in your estate? First-seen events and threat-intel matches turn metadata into priority.</p></div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Artifacts and where to find them</caption>
+            <thead><tr><th>Artifact</th><th>Primary source</th><th>Why it helps</th></tr></thead>
+            <tbody>
+              <tr><td>JA3 / JA3S fingerprints</td><td>Zeek ssl.log (JA3 script), some proxy/NGFW logs</td><td>Client TLS stack identity without decryption; pivots fleet-wide</td></tr>
+              <tr><td>Certificate subject/issuer, validation status</td><td>Zeek ssl.log, proxy logs, TLS inspectors</td><td>Self-signed and short-lived certs are strong C2 traits</td></tr>
+              <tr><td>SNI value</td><td>Zeek ssl.log, TLS-inspecting firewall, proxy</td><td>Mismatches and IP-literal SNI flag tooling</td></tr>
+              <tr><td>Flow records (bytes, packets, duration)</td><td>Zeek conn.log, NetFlow/IPFIX, firewall logs</td><td>Beacon timing, size stability, and exfil volumes</td></tr>
+              <tr><td>Per-process network events</td><td>EDR, Sysmon Event ID 3</td><td>Ties the connection to the exact binary that made it</td></tr>
+              <tr><td>DNS queries before connect</td><td>DNS resolver logs, Zeek dns.log</td><td>Shows the domain the implant resolved right before dialing</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Where to look, by log source</h4>
+        <ul>
+          <li><strong>Zeek ssl.log + conn.log</strong> — the backbone of metadata analytics: handshakes, certificates, and per-flow statistics.</li>
+          <li><strong>Firewall / proxy logs</strong> — destination, port, bytes, and (if TLS-inspecting) SNI; usually the easiest place to start blocking.</li>
+          <li><strong>NetFlow / IPFIX</strong> — router-level flows when full sensors are missing; enough for timing and volume analytics.</li>
+          <li><strong>EDR / Sysmon Event ID 3</strong> — the process behind the connection. Metadata says "what"; EDR says "which program".</li>
+          <li><strong>DNS logs</strong> — the lookups immediately before a connect; short-lived domains and high-entropy names help score destinations.</li>
+        </ul>
+
+        <div class="callout note">
+          <span class="callout-label">Attack-chain context</span>
+          <p>Encrypted C2 sits in the middle of the chain: initial access → execution → <strong>encrypted C2 (T1573)</strong> → tasking → discovery and lateral movement → impact and exfiltration. A C2 detection is therefore rarely the start of the incident — assume earlier stages already happened, and hunt backwards from the first beacon.</p>
+        </div>
+
+        <h4>SOC triage flow for a suspicious encrypted flow</h4>
+        <ol>
+          <li><strong>Fingerprint check.</strong> Is the JA3 rare in your environment? Compare against a baseline of common browser and tool fingerprints.</li>
+          <li><strong>Certificate review.</strong> Read issuer, subject, and validation status. Self-signed or mismatched names raise the score.</li>
+          <li><strong>Timing analysis.</strong> Compute deltas and size statistics for the last 24–48 hours. Stable intervals and sizes confirm beaconing.</li>
+          <li><strong>Intel enrichment.</strong> Check the destination IP, domain, SNI, and JA3 against threat intel feeds and past incidents.</li>
+          <li><strong>Find every affected host.</strong> Search all sensors for the same JA3, certificate hash, and destination. List every affected host.</li>
+          <li><strong>Block and document.</strong> Block the fingerprint and destination, isolate infected hosts, and record everything for the incident report.</li>
+        </ol>
+
+        <div class="callout good">
+          <span class="callout-label">Baseline first</span>
+          <p>Before hunting anomalies, spend a week collecting what <em>normal</em> TLS looks like in your network: which JA3 values dominate, which certificates are trusted, how big the daily connection volume is. Every strong detection in section 5 is a comparison against this baseline.</p>
+        </div>
+      </section>
+
+      <section id="detection-deep-dive">
+        <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Detection engineering deep dive</h2></div>
+        <p class="sec-intro">This is the working section of the page. It maps encrypted-channel detection to regulations, lists the threat intelligence worth collecting, ranks six concrete threats, shows real log shapes, and ends with six Sigma rules and six matching Splunk SPL queries.</p>
+
+        <h3 id="detection-regulation">5.1 Regulation mapping</h3>
+        <p>Auditors do not ask for "a JA3 rule". They ask whether you monitor for threats, log enough to investigate, and can detect and report a breach. The table below connects encrypted-channel detection to the control language of six common frameworks, so your detection work also becomes compliance evidence.</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Regulation and framework mapping for encrypted-channel detection</caption>
+            <thead><tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>GDPR</td>
+                <td>Art. 32 — security of processing; Art. 33 — breach notification</td>
+                <td>Art. 32 asks for encryption and for the ability to restore confidentiality after an incident. Detecting an encrypted C2 channel proves monitoring works; Art. 33 requires reporting a personal-data breach within 72 hours of awareness — C2 detections are often the first trigger of that clock.</td>
+                <td>Documented TLS-metadata detections; alert tickets with timestamps; incident reports showing when the team became aware.</td>
+              </tr>
+              <tr>
+                <td>HIPAA</td>
+                <td>45 CFR 164.312(e)(1) — transmission security</td>
+                <td>Protected health information (PHI) moving over networks must be guarded. Malware on a clinical workstation can tunnel PHI out through an encrypted channel; egress monitoring is a technical safeguard the rule expects.</td>
+                <td>Egress monitoring coverage for systems handling PHI; risk-analysis entries; logs of blocked or alerted encrypted flows.</td>
+              </tr>
+              <tr>
+                <td>ISO 27001:2022</td>
+                <td>A.8.15 logging; A.8.16 monitoring activities; A.8.20 networks security; A.8.23 web filtering</td>
+                <td>Annex A expects logging, anomaly monitoring, and secured networks. Zeek/firewall sensors plus the rules in 5.5 are direct evidence of A.8.15/A.8.16; egress restrictions support A.8.20/A.8.23.</td>
+                <td>Sensor deployment documents; rule-change history; reviewed monitoring KPIs; tuning records with false-positive notes.</td>
+              </tr>
+              <tr>
+                <td>SOC 2</td>
+                <td>CC6.7 restrict data movement; CC7.2 monitor for anomalies; CC7.3 evaluate security events</td>
+                <td>Trust-services criteria require the company to control data leaving the perimeter and to evaluate anomalies. Beacon-timing and JA3 detections are exactly the "anomaly evaluation" evidence auditors sample.</td>
+                <td>Runbooks for encrypted-traffic alerts; SOC shift reports; examples of triaged alerts with dispositions.</td>
+              </tr>
+              <tr>
+                <td>PCI DSS 4.0</td>
+                <td>4.2.1 strong cryptography for PAN over open networks; 11.5.1 network intrusions detected and responded to (IDS/IPS, including covert malware communication channels); 10.4.1 daily audit log review</td>
+                <td>Card data must be encrypted in transit (4.2.1), and 11.5.1 requires network intrusions — including covert channels — to be detected and responded to, with alerts reviewed promptly. That covers both inbound exploits and outbound C2 from the cardholder data environment.</td>
+                <td>IDS/IPS configuration covering CDE egress; alert review tickets within the required window; evidence of 24/7 staffing or notification arrangements.</td>
+              </tr>
+              <tr>
+                <td>NIST</td>
+                <td>CSF DE.CM-1 and DE.CM-9; SP 800-53 SI-4, SC-8, SC-7</td>
+                <td>DE.CM-1 (networks monitored) and DE.CM-9 (computing hardware and software monitored) describe exactly what a metadata analytics program does. SI-4 demands system monitoring; SC-8 transmission confidentiality; SC-7 boundary protection.</td>
+                <td>Monitoring strategy and sensor-coverage map; SI-4 control implementation notes; retained flow and TLS metadata within the retention policy.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="detection-threat-intel">5.2 Threat intelligence</h3>
+        <p>Threat intelligence turns a generic anomaly ("rare JA3") into a named, prioritized threat ("this fingerprint matches tooling used in reported intrusions"). For encrypted channels, collect three layers: technique knowledge, campaign indicators, and your own baselines.</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Intelligence sources and realistic confidence levels</caption>
+            <thead><tr><th>Source</th><th>What it gives you</th><th>Confidence</th></tr></thead>
+            <tbody>
+              <tr><td>MITRE ATT&amp;CK (T1573 + sub-techniques)</td><td>Verified technique definitions, platforms, and detection data sources to structure coverage.</td><td>High</td></tr>
+              <tr><td>Vendor threat reports</td><td>Campaign TTPs, malware analyses, C2 infrastructure lists; quality varies per vendor.</td><td>High to medium</td></tr>
+              <tr><td>Commercial indicator feeds</td><td>IP, domain, certificate, and JA3 lists; fresh, but often noisy and without context.</td><td>Medium</td></tr>
+              <tr><td>ISAC / ISAO sharing groups</td><td>Sector-relevant indicators and warnings from peers under sharing rules.</td><td>Medium to high</td></tr>
+              <tr><td>OSINT research blogs</td><td>Deep technical detail on tooling and fingerprints; variable quality and age.</td><td>Medium to low</td></tr>
+              <tr><td>Internal telemetry and baselines</td><td>Which JA3 values, certificates, and destinations are normal <em>for you</em>; the highest-value layer for tuning.</td><td>High (for your environment)</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Known campaigns and tooling involving encrypted C2 (hedged per public reporting)</caption>
+            <thead><tr><th>Reporting</th><th>What was reported about encryption use</th><th>Confidence</th></tr></thead>
+            <tbody>
+              <tr><td>Cobalt Strike beacons in documented intrusions, 2020–2023</td><td>Public reporting and open research indicate wide use of HTTPS/TLS beaconing; default or lightly modified profiles produce recognizable, repeated fingerprints.</td><td>High (widespread use)</td></tr>
+              <tr><td>SolarWinds / SUNBURST, 2020</td><td>According to public reporting, the backdoor used HTTPS traffic designed to blend with legitimate software-update patterns, including fake XML payloads.</td><td>High</td></tr>
+              <tr><td>Conti ransomware operations, 2022 leaks</td><td>Leaked chat reporting indicates Cobalt Strike was used for C2 inside victim networks before ransomware deployment.</td><td>Medium to high</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Documented use in MITRE ATT&amp;CK</h4>
+        <p>The official T1573 page (checked October 2026) lists these users of encrypted channels. You can cite them with high confidence:</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Official ATT&amp;CK procedure examples (T1573)</caption>
+            <thead><tr><th>Actor / Software</th><th>What ATT&amp;CK records</th></tr></thead>
+            <tbody>
+              <tr><td>APT29 (G0016)</td><td>Has used multiple layers of encryption within malware to protect C2 communication.</td></tr>
+              <tr><td>Emotet (S0367)</td><td>Has encrypted data before sending it to the C2 server.</td></tr>
+              <tr><td>gh0st RAT (S0032)</td><td>Has encrypted TCP communications to evade detection.</td></tr>
+              <tr><td>MacMa (S1016)</td><td>Has used TLS encryption to initialize a custom protocol for C2 communications.</td></tr>
+              <tr><td>KV Botnet Activity (C0035)</td><td>C2 traffic includes the server transmitting an RSA public key, followed by handshake stages.</td></tr>
+              <tr><td>Triton Safety Instrumented System Attack (C0030)</td><td>TEMP.Veles used cryptcat binaries to encrypt their traffic.</td></tr>
+              <tr><td>BITTER · Chaes · Cryptoistic · Gomir · Lizar · Magic Hound · NETWIRE · PowerLess · PowGoop · RCSession · Tropic Trooper</td><td>Encrypted C2 communications, per the official page.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card accent-edge">
+          <h4>ATT&amp;CK's own detection strategy (DET0273)</h4>
+          <p>The official page groups its detection advice as analytics AN0759–AN0763: flag processes that
+            normally do not initiate connections establishing outbound TLS sessions, especially with
+            asymmetric traffic volumes or non-standard certificate chains (AN0759); watch tools like curl,
+            wget, python, and socat initiating TLS to non-standard destinations, including abnormal
+            <code>connect()</code> syscalls and libssl loading (AN0760); on macOS, use unified logs for TLS
+            API calls from processes that are not baseline-approved (AN0761); on ESXi, alert on hostd or
+            vpxa initiating outbound TLS to uncommon destinations (AN0762); and detect TLS tunnels on ports
+            not normally encrypted, such as 8080 or 53, using NetFlow/IPFIX entropy and asymmetric exchange
+            ratios (AN0763). The rules in section 5.5 implement the network side of this advice.</p>
+        </div>
+
+        <h4>How to apply intelligence here</h4>
+        <ul>
+          <li><strong>Pivot on fingerprints.</strong> When a report names a tool's JA3 or certificate, search your whole estate for it first. (Threat hunting means searching logs for attacker activity without waiting for an alert.)</li>
+          <li><strong>Watch certificate reuse.</strong> Campaign infrastructure often shares certificates across IPs and domains — match on the cert hash, not just the address.</li>
+          <li><strong>Feed blocking, not detection.</strong> Use indicator lists for blocking and enrichment; rely on behavioral rules (section 5.5) for detection, because infrastructure changes weekly.</li>
+          <li><strong>Record dispositions.</strong> Every true and false positive from intel-matched alerts improves your local baseline — log why you decided.</li>
+        </ul>
+
+        <h3 id="detection-threat-ranking">5.3 Threats ranking and categorization</h3>
+        <p>Six realistic encrypted-channel threats, ranked by severity and tagged by platform. The ranking assumes a typical enterprise with Windows endpoints, some Linux servers, a few macOS laptops, cloud workloads, and standard network sensors.</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Ranked threats for T1573</caption>
+            <thead><tr><th>Rank</th><th>Threat</th><th>Severity</th><th>Platform</th><th>Key precondition</th><th>Primary impact</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Ransomware C2 over TLS</td><td><span class="badge sev-crit">Critical</span></td><td><span class="badge cat">Windows</span></td><td>Workstation or server implant with outbound 443</td><td>Encryption of file shares; operational outage</td></tr>
+              <tr><td>2</td><td>Custom encrypted C2 on 443</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Windows / Linux</span></td><td>Custom implant using a TLS library</td><td>Persistent remote control of hosts</td></tr>
+              <tr><td>3</td><td>Encrypted exfiltration channel</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat-net">Network</span></td><td>Access to data plus a working C2 path</td><td>Large-scale data loss, regulatory breach</td></tr>
+              <tr><td>4</td><td>mTLS botnet nodes</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat-net">Network</span></td><td>Infected device with client certificate</td><td>DDoS capacity, relay for further attacks</td></tr>
+              <tr><td>5</td><td>macOS backdoor with pinned certificate</td><td><span class="badge sev-med">Medium</span></td><td><span class="badge cat">macOS</span></td><td>Malicious app or trojanized installer run</td><td>Long-dwell access to executive laptops</td></tr>
+              <tr><td>6</td><td>Cloud workload beaconing to encrypted endpoints</td><td><span class="badge sev-med">Medium</span></td><td><span class="badge plain">Cloud</span></td><td>Compromised VM or container credentials</td><td>Lateral movement toward cloud data stores</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h4><span class="badge sev-crit">Critical</span> 1 · Ransomware C2 over TLS <span class="badge cat">Windows</span></h4>
+            <p><strong>What:</strong> modern ransomware crews keep an HTTPS C2 line open to deploy loaders and receive keys. <strong>Preconditions:</strong> an initial foothold and outbound 443. <strong>Impact:</strong> share-wide encryption and days of downtime. <strong>Why this rank:</strong> public reporting consistently shows ransomware as the costliest intrusion outcome; catching its C2 is the last reliable chance to act before ransomware encryption starts.</p>
+          </div>
+          <div class="card">
+            <h4><span class="badge sev-high">High</span> 2 · Custom encrypted C2 on 443 <span class="badge cat">Windows / Linux</span></h4>
+            <p><strong>What:</strong> hand-rolled or framework implants speaking TLS from code. <strong>Preconditions:</strong> attacker development time; code running on host. <strong>Impact:</strong> durable remote control that survives default content filters. <strong>Why:</strong> common across documented intrusions; the handshake almost always differs from normal browsers, so rarity analytics work.</p>
+          </div>
+          <div class="card">
+            <h4><span class="badge sev-high">High</span> 3 · Encrypted exfiltration channel <span class="badge cat-net">Network</span></h4>
+            <p><strong>What:</strong> stolen data pushed out through the same TLS channel, often disguised as uploads. <strong>Preconditions:</strong> data access and an established channel. <strong>Impact:</strong> breach notification duties and legal exposure. <strong>Why:</strong> volume asymmetry (large upload, small download) is visible in flow logs even when content is invisible.</p>
+          </div>
+          <div class="card">
+            <h4><span class="badge sev-high">High</span> 4 · mTLS botnet nodes <span class="badge cat-net">Network</span></h4>
+            <p><strong>What:</strong> botnets that authenticate both ends with client certificates, making hijack and sinkhole work harder. <strong>Preconditions:</strong> infected device; distributed infrastructure. <strong>Impact:</strong> rented-out DDoS capacity and a relay into your network. <strong>Why:</strong> client certificates from workstations or IoT are rare enough to be a near-zero-false-positive signal.</p>
+          </div>
+          <div class="card">
+            <h4><span class="badge sev-med">Medium</span> 5 · macOS backdoor with pinned certificate <span class="badge cat">macOS</span></h4>
+            <p><strong>What:</strong> backdoors that accept only one hard-coded server certificate (pinning), so the channel cannot be intercepted. <strong>Preconditions:</strong> a trojanized installer or malicious app run. <strong>Impact:</strong> stealthy long-term access to high-value laptops. <strong>Why:</strong> smaller population and fewer sensors mean slower discovery; severity reflects likelihood more than impact.</p>
+          </div>
+          <div class="card">
+            <h4><span class="badge sev-med">Medium</span> 6 · Cloud workload beaconing <span class="badge plain">Cloud</span></h4>
+            <p><strong>What:</strong> compromised VMs or containers beacon to attacker endpoints over TLS, often from unusual regions. <strong>Preconditions:</strong> leaked credentials or a vulnerable service. <strong>Impact:</strong> path to cloud storage and identity systems. <strong>Why:</strong> cloud egress is frequently allow-all by default; detection maturity there is usually lower, keeping this at medium until controls catch up.</p>
+          </div>
+        </div>
+
+        <h3 id="detection-logs">5.4 Logs and patterns</h3>
+        <p>Four log shapes carry almost all encrypted-channel evidence: Zeek ssl.log (the handshake), Zeek conn.log (the flow), Sysmon Event ID 3 (the process), and the firewall traffic log (the block point). The examples below use JSON for Zeek and Sysmon and key-value format for the firewall.</p>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Log sources per ranked threat</caption>
+            <thead><tr><th>Threat (rank)</th><th>Primary log</th><th>Secondary log</th><th>Pattern to hunt</th></tr></thead>
+            <tbody>
+              <tr><td>Ransomware C2 (1)</td><td>Zeek conn.log</td><td>Zeek ssl.log, EDR</td><td>Beacon timing to fresh IP; burst of small stable flows, then silence</td></tr>
+              <tr><td>Custom C2 on 443 (2)</td><td>Zeek ssl.log</td><td>Sysmon EID 3</td><td>Rare JA3, self-signed cert, SNI mismatch, long durations</td></tr>
+              <tr><td>Encrypted exfil (3)</td><td>Zeek conn.log</td><td>Firewall, proxy</td><td>Upload-heavy asymmetry: orig_bytes much larger than resp_bytes</td></tr>
+              <tr><td>mTLS botnet (4)</td><td>Firewall / TLS inspector</td><td>Zeek ssl.log</td><td>Client-certificate request in handshake; odd destination ports</td></tr>
+              <tr><td>macOS backdoor (5)</td><td>EDR network events</td><td>Zeek ssl.log</td><td>Single pinned certificate hash across few hosts, steady cadence</td></tr>
+              <tr><td>Cloud beaconing (6)</td><td>Cloud flow logs (VPC)</td><td>Cloud audit logs</td><td>Periodic connections from VMs to first-seen external IPs on 443</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><strong>Zeek ssl.log (JSON):</strong> one line per TLS handshake. This is the single richest source: it records who connected, what name they asked for, which certificate the server showed, and — if the JA3 script is installed — the client and server fingerprints.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">JSON · Zeek ssl.log (one handshake)</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code>{
+  "ts": 1789480200.712,
+  "uid": "Cxk3Ae2Zf9pQw8LnM4",
+  "id.orig_h": "10.20.6.41",
+  "id.orig_p": 51922,
+  "id.resp_h": "203.0.113.47",
+  "id.resp_p": 443,
+  "version": "TLSv13",
+  "cipher": "TLS_AES_128_GCM_SHA256",
+  "server_name": "cdn-updates.example.net",
+  "subject": "CN=cdn-updates.example.net,O=CloudMedia,L=Internet",
+  "issuer": "CN=cdn-updates.example.net,O=CloudMedia,L=Internet",
+  "validation_status": "self signed certificate",
+  "ja3": "a0e9f5b6c2d14f7e8a3b9c0d1e2f3a4b",
+  "ja3s": "15af877e4f2b93c1d6e0a85b7c2d9e31"
+}</code></pre></div>
+        <p class="small muted">Note: <code>ja3</code> and <code>ja3s</code> appear only when the Zeek JA3/JA3S analysis script is enabled. Without the script these fields are simply missing — enable it before you rely on rules 3 and 5 below.</p>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Field explanation — Zeek ssl.log</caption>
+            <thead><tr><th>Field</th><th>Meaning</th><th>Detection value</th></tr></thead>
+            <tbody>
+              <tr><td><code>ts</code></td><td>Event timestamp (epoch seconds)</td><td>Timing and beacon-delta calculations</td></tr>
+              <tr><td><code>id.orig_h</code></td><td>Client (source) IP address</td><td>Which internal host dialed out</td></tr>
+              <tr><td><code>id.resp_h</code> / <code>id.resp_p</code></td><td>Server IP and port</td><td>Destination reputation; non-standard-port checks</td></tr>
+              <tr><td><code>server_name</code></td><td>SNI — host name the client requested</td><td>Mismatch with cert CN; IP-literal SNI</td></tr>
+              <tr><td><code>subject</code> / <code>issuer</code></td><td>Certificate common-name fields</td><td>Issuer equal to subject means self-signed</td></tr>
+              <tr><td><code>validation_status</code></td><td>Result of certificate validation</td><td>Self-signed or untrusted values are strong signals</td></tr>
+              <tr><td><code>ja3</code> / <code>ja3s</code></td><td>MD5 hash of client / server hello parameters</td><td>Rarity analysis; known-tool matching; fleet pivoting</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p><strong>Zeek conn.log (JSON):</strong> one line per flow, including non-TLS. It carries the statistics that make beacon and exfiltration analytics possible.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">JSON · Zeek conn.log (one flow)</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code>{
+  "ts": 1763214660.891,
+  "uid": "Cxk3Ae2Zf9pQw8LnM5",
+  "id.orig_h": "10.20.6.41",
+  "id.orig_p": 51924,
+  "id.resp_h": "203.0.113.47",
+  "id.resp_p": 443,
+  "proto": "tcp",
+  "service": "ssl",
+  "duration": 3.412,
+  "orig_bytes": 251,
+  "resp_bytes": 243,
+  "orig_pkts": 7,
+  "resp_pkts": 7,
+  "history": "ShADadFf"
+}</code></pre></div>
+        <p class="small muted">Read it like this: a 60-second-beacon shows as many short flows (<code>duration</code> of a few seconds) with nearly identical <code>orig_bytes</code> around 250. An exfil flow shows the opposite: long duration and <code>orig_bytes</code> in the hundreds of megabytes.</p>
+
+        <p><strong>Sysmon Event ID 3 (JSON, Windows host):</strong> network connection creation. This log answers "which program made the connection" — metadata tells you <em>what</em>, this tells you <em>who</em>.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">JSON · Sysmon EID 3 (network connection)</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code>{
+  "UtcTime": "2026-09-15 14:30:02.118",
+  "EventID": 3,
+  "Computer": "WS-FIN-041.corp.local",
+  "ProcessGuid": "{3f8a1c02-7d41-65a2-1104-000000000000}",
+  "ProcessId": 6612,
+  "Image": "C:\\Users\\svcBackup\\AppData\\Roaming\\SyncClient\\sync.exe",
+  "User": "CORP\\jharper",
+  "Protocol": "tcp",
+  "DestinationIp": "203.0.113.47",
+  "DestinationPort": 443,
+  "DestinationHostname": "cdn-updates.example.net",
+  "Initiated": "true"
+}</code></pre></div>
+        <p class="small muted">The strongest triage lead: an unsigned binary in a user-writable folder (<code>AppData\\Roaming</code>) opening 443 to a first-seen IP. Join this log to Zeek by destination IP and time window.</p>
+
+        <p><strong>Firewall traffic log (key=value):</strong> every firewall speaks its own dialect; this example shows the fields that matter for the same session.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">Firewall · egress traffic log</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code>ts=2026-09-15T14:30:02Z action=allow rule=std-egress-443
+src=10.20.6.41:51924 dst=203.0.113.47:443 proto=tcp
+app=https sni=cdn-updates.example.net ja3=a0e9f5b6c2d14f7e8a3b9c0d1e2f3a4b
+bytes_in=243 bytes_out=251 duration_s=3 session_count=1</code></pre></div>
+        <p class="small muted">The firewall is also the enforcement point: the same tuple fields (src, dst, port, ja3) that fired the alert are the fields you block on in step 8 of the simulation.</p>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Normal vs suspicious — the same fields, two stories</caption>
+            <thead><tr><th>Field</th><th>Normal (typical browsing)</th><th>Suspicious (encrypted C2)</th></tr></thead>
+            <tbody>
+              <tr><td>server_name</td><td>Real domain, matches certificate CN</td><td>IP literal, random-looking name, or mismatch with cert</td></tr>
+              <tr><td>validation_status</td><td>ok (public CA or internal enterprise CA)</td><td>self-signed, unable to get local issuer, expired</td></tr>
+              <tr><td>ja3</td><td>Few dozen dominant browser fingerprints</td><td>Appears once or from one host only</td></tr>
+              <tr><td>dest_port</td><td>443, 993, 995, 465, 8443 for known apps</td><td>TLS behavior on 8443-like or high random ports</td></tr>
+              <tr><td>deltas between connections</td><td>Irregular, driven by human activity</td><td>Fixed interval (for example 60 s ± 2 s), 50+ repeats</td></tr>
+              <tr><td>orig_bytes per beacon</td><td>Varies widely with page content</td><td>Small and stable (for example 250 ± 20 bytes)</td></tr>
+              <tr><td>bytes ratio</td><td>Download-heavy (web pages)</td><td>Upload-heavy for exfil; balanced tiny flows for beacons</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout note">
+          <span class="callout-label">From pattern to rule</span>
+          <p>Each row of the suspicious column above becomes one Sigma rule in section 5.5: certificate status → rule 1, name mismatch → rule 2, JA3 rarity → rule 3, timing → rule 4, IP-literal or empty SNI → rule 5, odd-port TLS → rule 6. Stack them: a hit on two or more rules for the same host deserves a ticket even if each rule alone looks weak.</p>
+        </div>
+
+        <h3 id="detection-sigma-spl">5.5 Sigma rules and Splunk SPL</h3>
+        <p>Six complete detection pairs. Each Sigma rule is followed by a Splunk SPL query that implements the same logic. <strong>Environment assumptions used by every query:</strong> Zeek JSON logs land in <code>index=network</code> with sourcetypes <code>zeek:ssl</code> and <code>zeek:conn</code>; a technology add-on maps <code>id.orig_h</code> → <code>src_ip</code>, <code>id.resp_h</code> → <code>dest_ip</code>, and <code>id.resp_p</code> → <code>dest_port</code>; Sysmon events live in <code>index=ep_sysmon</code> with sourcetype <code>XmlWinEventLog:Microsoft-Windows-Sysmon/Operational</code>. Adapt the index and sourcetype names to your own naming standard.</p>
+
+        <h4>Rule 1 — self-signed or untrusted certificate (threat 2, also 5)</h4>
+        <p>Attack tooling rarely bothers with public certificates. When Zeek reports a validation failure, the session deserves a look — unless the destination is internal, where test appliances live.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: TLS Connection with Self-Signed or Untrusted Certificate
+id: 9c14f2a3-7b8e-4c1d-9a52-6e0d41b7f3a8
+status: stable
+description: Detects outbound TLS connections where Zeek records a self-signed or
+  otherwise untrusted server certificate. Attack tooling often generates its own
+  certificates, while enterprise clients normally terminate on certificates from
+  a public or internal certificate authority. Excludes RFC1918 destinations.
+references:
+  - https://attack.mitre.org/techniques/T1573/
+  - Encrypted Channel detection guidance - certificate validation analytics
+author: SOC Detection Engineering
+date: 2026-10-12
+logsource:
+  product: zeek
+  service: ssl
+detection:
+  selection:
+    validation_status:
+      - self signed certificate
+      - unable to get local issuer certificate
+      - certificate has expired
+  filter_internal:
+    dest_ip:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+  condition: selection and not filter_internal
+fields:
+  - src_ip
+  - dest_ip
+  - dest_port
+  - server_name
+  - subject
+  - validation_status
+falsepositives:
+  - Internal appliances and lab systems with self-signed certificates
+  - Internet-of-things devices with embedded vendor certificates
+level: medium
+tags:
+  - attack.t1573
+  - attack.t1573.002
+  - attack.tactic.command_and_control
+</code></pre></div>
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:ssl
+  validation_status IN ("self signed certificate",
+                        "unable to get local issuer certificate",
+                        "certificate has expired")
+| eval is_private=if(cidrmatch("10.0.0.0/8", dest_ip)
+                     OR cidrmatch("172.16.0.0/12", dest_ip)
+                     OR cidrmatch("192.168.0.0/16", dest_ip), 1, 0)
+| where is_private=0
+| stats count AS connections, dc(dest_ip) AS dest_count, values(server_name) AS sni,
+        values(subject) AS subjects by src_ip, validation_status
+| where connections &gt;= 2
+| sort - connections</code></pre></div>
+        <p class="small muted"><strong>Mapping and tuning:</strong> the <code>cidrmatch</code> eval replaces the Sigma CIDR filter. Expect most volume from lab segments — keep the filter, then allowlist known appliance certificates by <code>subject</code> after a week of review. Severity: medium; raise to high when <code>dest_count</code> is high for one source host.</p>
+
+        <h4>Rule 2 — SNI does not match certificate common name (threat 2)</h4>
+        <p>One certificate reused for many unrelated host names is a classic tooling trait. The rule compares the requested name (SNI) with the certificate common name. <strong>Assumption:</strong> your pipeline extracts the common name into a <code>cert_cn</code> field (for example by parsing <code>subject</code>); the SPL below shows how to build it inline.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: TLS Server Name Indicator Does Not Match Certificate Common Name
+id: 41d8b7e2-5f30-4a9c-8e17-2c6b90d54f11
+status: stable
+description: Detects TLS connections where the client supplied a server_name (SNI)
+  but it does not equal the certificate common name. Malicious tooling often skips
+  correct SNI handling or reuses one certificate for many unrelated host names.
+  Requires a cert_cn enrichment field (common name extracted from subject).
+references:
+  - https://attack.mitre.org/techniques/T1573/
+  - Encrypted Channel detection guidance - SNI and certificate analytics
+author: SOC Detection Engineering
+date: 2026-10-12
+logsource:
+  product: zeek
+  service: ssl
+detection:
+  selection_with_sni:
+    server_name: '*'
+  filter_matching_cn:
+    server_name|equalsfield: cert_cn
+  condition: selection_with_sni and not filter_matching_cn
+fields:
+  - src_ip
+  - dest_ip
+  - server_name
+  - subject
+  - cert_cn
+falsepositives:
+  - Content delivery networks serving one certificate for many host names
+  - Shared hosting where one certificate covers several sites
+level: medium
+tags:
+  - attack.t1573
+  - attack.tactic.command_and_control
+</code></pre></div>
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:ssl server_name=*
+| eval cert_cn=replace(replace(subject, "^.*CN=", ""), ",.*$", "")
+| where cert_cn != "" AND server_name != cert_cn
+| stats count AS connections, values(dest_ip) AS destinations,
+        values(subject) AS subjects by src_ip, server_name, cert_cn
+| where connections &gt;= 2
+| sort - connections</code></pre></div>
+        <p class="small muted"><strong>Mapping and tuning:</strong> the inner <code>replace</code> keeps the text after the first <code>CN=</code>, the outer one trims everything from the first comma — so <code>CN=name,O=Org</code> becomes <code>name</code>. For large CDN estates, allowlist high-volume <code>cert_cn</code> values seen on more than twenty source hosts.</p>
+
+        <h4>Rule 3 — rare JA3 client fingerprint (threats 1, 2, 5)</h4>
+        <p>Malware TLS stacks differ from browsers, so their JA3 fingerprints show up rarely in a baseline of thousands of sessions. This rule needs the Zeek JA3 script and at least one week of baseline data. It fires when a fingerprint appeared fewer than five times in 24 hours.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: Rare TLS Client Fingerprint (JA3) in the Environment
+id: c27a51b9-8e04-4d76-b3fa-15e98c2d4a60
+status: stable
+description: Detects JA3 client fingerprints that appeared fewer than five times in
+  24 hours across the environment. Malware TLS implementations differ from common
+  browsers, so their fingerprints are rare in a tuned baseline. Requires the Zeek
+  JA3 script and a baseline of normal browser fingerprints.
+references:
+  - https://attack.mitre.org/techniques/T1573/
+  - JA3 fingerprint method documentation (Salesforce engineering research)
+author: SOC Detection Engineering
+date: 2026-10-12
+logsource:
+  product: zeek
+  service: ssl
+detection:
+  selection:
+    ja3: '*'
+  condition: selection | count() by ja3 &lt; 5
+  timeframe: 24h
+fields:
+  - ja3
+  - src_ip
+  - dest_ip
+  - server_name
+falsepositives:
+  - Newly released or updated legitimate client software
+  - Rare internal admin tools used by a small team
+level: medium
+tags:
+  - attack.t1573
+  - attack.tactic.command_and_control
+</code></pre></div>
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:ssl ja3=* earliest=-24h
+| stats count AS connections, dc(src_ip) AS host_count, values(server_name) AS sni
+  by ja3
+| where connections &lt; 5
+| sort - connections</code></pre></div>
+        <p class="small muted"><strong>Mapping and tuning:</strong> the <code>count() by ja3 &lt; 5</code> aggregate becomes a <code>stats ... | where</code> pair. To suppress well-known browser fingerprints, maintain a lookup (for example <code>ja3_known.csv</code> with a <code>ja3</code> column) and add <code>| lookup ja3_known ja3 OUTPUT is_common | where isnull(is_common)</code> before the <code>where</code>. JA3 fields exist only if the Zeek JA3 script is installed and ingested.</p>
+
+        <h4>Rule 4 — periodic TLS beaconing (threats 1, 6)</h4>
+        <p>Beacons keep a schedule. This rule counts TLS flows from one host to one destination and fires above twenty per 30 minutes; the SPL version adds delta statistics so analysts see the actual interval and its variance.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: Periodic TLS Beaconing to a Single Destination
+id: 5e0c9d41-2a76-4b83-9f15-7d3a62c8e0b4
+status: stable
+description: Detects a host that opened more than twenty TLS connections to the same
+  destination within 30 minutes. A steady connection count with a stable interval is
+  typical of command-and-control beacons, even when the payload is fully encrypted.
+references:
+  - https://attack.mitre.org/techniques/T1573/
+  - Encrypted Channel detection guidance - beacon timing analytics
+author: SOC Detection Engineering
+date: 2026-10-12
+logsource:
+  product: zeek
+  service: conn
+detection:
+  selection:
+    proto: tcp
+    service: ssl
+    dest_port: 443
+  condition: selection | count() by src_ip, dest_ip, dest_port &gt; 20
+  timeframe: 30m
+fields:
+  - src_ip
+  - dest_ip
+  - dest_port
+  - orig_bytes
+  - resp_bytes
+  - duration
+falsepositives:
+  - Long video meetings and continuous downloads to cloud services
+  - Software update channels that poll frequently
+level: high
+tags:
+  - attack.t1573
+  - attack.tactic.command_and_control
+</code></pre></div>
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:conn proto=tcp service=ssl dest_port=443 earliest=-30m
+| sort 0 _time
+| streamstats current=f window=1 global=f values(_time) AS prev_time
+    by src_ip, dest_ip, dest_port
+| eval delta_s=_time - prev_time
+| stats count AS connections, avg(delta_s) AS avg_dt, stdev(delta_s) AS sd_dt,
+        min(delta_s) AS min_dt, max(delta_s) AS max_dt,
+        sum(orig_bytes) AS bytes_out, sum(resp_bytes) AS bytes_in
+    by src_ip, dest_ip, dest_port
+| where connections &gt; 20 AND avg_dt &gt;= 30 AND avg_dt &lt;= 120 AND sd_dt &lt; 10
+| sort - connections</code></pre></div>
+        <p class="small muted"><strong>Mapping and tuning:</strong> <code>streamstats</code> with <code>current=f</code> brings the previous connection time into each row, so <code>delta_s</code> is the gap between beacons. The <code>where</code> clause mirrors the Sigma count and adds the interval window. Tune <code>sd_dt</code> upward (or add jitter) if legitimate polling apps trip it; expect video-call FPs from the 30–120 s band at first.</p>
+
+        <h4>Rule 5 — SNI is an IP literal or missing (threats 2, 4)</h4>
+        <p>Browsers almost always send a proper host name in SNI. Tooling that dials raw IPs skips it, or puts the IP itself into the field — both are cheap, high-signal checks.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: TLS Handshake Without Server Name or With IP Literal SNI
+id: 88b3f6a2-1c95-4e0d-8d47-3b21a6f9c05d
+status: stable
+description: Detects TLS connections where the SNI equals the destination IP address
+  or where no SNI was sent at all. Browsers send a host name; hand-rolled clients
+  and some botnets dial IP literals and omit the name.
+references:
+  - https://attack.mitre.org/techniques/T1573/
+  - Encrypted Channel detection guidance - SNI hygiene analytics
+author: SOC Detection Engineering
+date: 2026-10-12
+logsource:
+  product: zeek
+  service: ssl
+detection:
+  sel_ip_sni:
+    server_name|equalsfield: dest_ip
+  sel_no_sni:
+    server_name: null
+  condition: 1 of sel_*
+fields:
+  - src_ip
+  - dest_ip
+  - dest_port
+  - validation_status
+falsepositives:
+  - Legacy clients that connect by IP address
+  - Monitoring probes and health checks dialing internal IPs
+level: medium
+tags:
+  - attack.t1573
+  - attack.tactic.command_and_control
+</code></pre></div>
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:ssl
+| where (server_name=dest_ip) OR (isnull(server_name)) OR (len(server_name)=0)
+| stats count AS connections, values(validation_status) AS cert_status
+    by src_ip, dest_ip, dest_port
+| where connections &gt;= 2
+| sort - connections</code></pre></div>
+        <p class="small muted"><strong>Mapping and tuning:</strong> <code>server_name: null</code> in Sigma matches events where the field is absent; the SPL covers both absent and empty values. Restrict to external destinations (reuse the <code>cidrmatch</code> filter from rule 1) if internal probes create noise.</p>
+
+        <h4>Rule 6 — TLS service on a non-standard port (threats 2, 4, 6)</h4>
+        <p>Legitimate TLS lives on well-known ports. When Zeek recognizes an SSL handshake on anything else, something non-standard is speaking TLS — sometimes an admin service, sometimes a C2 trying to slip past port-based rules.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: TLS Service Detected on a Non-Standard Port
+id: 1f64d0a8-9b23-4c57-b1e8-6a02d5c47e39
+status: stable
+description: Detects TLS sessions that Zeek identified on ports outside the standard
+  encrypted-service list. Custom implants often pick uncommon ports to avoid simple
+  port-based policy, while admin services occasionally do the same by design.
+references:
+  - https://attack.mitre.org/techniques/T1573/
+  - Encrypted Channel detection guidance - port hygiene analytics
+author: SOC Detection Engineering
+date: 2026-10-12
+logsource:
+  product: zeek
+  service: ssl
+detection:
+  selection_ssl:
+    version|exists: true
+  filter_standard_ports:
+    dest_port:
+      - 443
+      - 465
+      - 563
+      - 993
+      - 995
+      - 8443
+  condition: selection_ssl and not filter_standard_ports
+fields:
+  - src_ip
+  - dest_ip
+  - dest_port
+  - server_name
+  - ja3
+falsepositives:
+  - Admin services deliberately moved to custom ports by policy
+  - Backup or replication appliances with vendor-chosen ports
+level: medium
+tags:
+  - attack.t1573
+  - attack.tactic.command_and_control
+</code></pre></div>
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:ssl
+  NOT (dest_port=443 OR dest_port=465 OR dest_port=563
+       OR dest_port=993 OR dest_port=995 OR dest_port=8443)
+| stats count AS connections, values(server_name) AS sni, values(ja3) AS client_fp
+    by src_ip, dest_ip, dest_port
+| where connections &gt;= 3
+| sort - connections</code></pre></div>
+        <p class="small muted"><strong>Mapping and tuning:</strong> the negated port list in the base search is faster than filtering after <code>stats</code>. Keep the list synchronized with your actual egress policy; every port you approve legitimately should move from this rule into the filter list.</p>
+      </section>
+
+      <section id="case-study">
+        <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Real-world case study</h2></div>
+        <p class="sec-intro">The Colonial Pipeline incident of May 2021 shows why encrypted C2 matters beyond the security team. Details below follow public reporting and incident statements; dates are approximate where reporting differs. This page treats the case defensively — how defenders could see the encrypted channel — not how the attack was built.</p>
+
+        <h4>Context</h4>
+        <p>Colonial Pipeline operates a major fuel pipeline on the United States East Coast. In May 2021 it suffered a ransomware incident that led the company to shut the pipeline down for several days, causing fuel shortages in several states. Public reporting indicates the attackers used DarkSide ransomware-as-a-service tooling, and that stolen data was exfiltrated before the ransomware detonated.</p>
+
+        <h4>Reported timeline</h4>
+        <ol class="timeline">
+          <li><span class="tl-date">Late April 2021 (reported)</span><p>Public reporting indicates the group obtained access with a leaked password for a VPN account that did not use multi-factor authentication. The account was reportedly inactive but still enabled.</p></li>
+          <li><span class="tl-date">About a week later</span><p>Per reporting, the operators moved through the network, gathered credentials, and staged DarkSide ransomware. A C2 channel was available for tasking during this window, and reporting indicates data was copied out before encryption began.</p></li>
+          <li><span class="tl-date">May 7, 2021 · morning</span><p>Ransomware encrypted IT systems. The company took the pipeline offline — a deliberate safety decision, since billing and delivery systems were affected.</p></li>
+          <li><span class="tl-date">May 7–10, 2021</span><p>Response and external engagement: forensic teams, law enforcement, and regulators. Reporting indicates the C2 infrastructure and ransom note were central evidence; threat-intel matches on DarkSide infrastructure became a containment anchor.</p></li>
+          <li><span class="tl-date">May 12–13, 2021</span><p>Operations restarted in stages under heightened monitoring. Public reporting later documented a ransom payment and a partial recovery of funds by authorities — both hedged here, since figures come from public statements.</p></li>
+        </ol>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Attack chain (reported)</h4>
+            <ul>
+              <li><strong>Initial access:</strong> leaked VPN credentials without MFA (reported).</li>
+              <li><strong>Staging:</strong> credential theft, lateral movement, data collection.</li>
+              <li><strong>C2 and exfil:</strong> encrypted channel for tasking; large data transfer out before detonation (reported).</li>
+              <li><strong>Impact:</strong> ransomware encryption of IT systems; operational shutdown chosen by the operator.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Where detection was possible</h4>
+            <ul>
+              <li><strong>C2 window:</strong> days of tasking traffic existed before impact. Beacon timing and rare fingerprints on egress sensors were realistic detection points.</li>
+              <li><strong>Threat intel match:</strong> DarkSide infrastructure was already known in shared reporting; matching C2 certificates and IPs would have flagged the staging phase.</li>
+              <li><strong>Exfil volume:</strong> a large outbound transfer from servers that rarely upload is visible in flow logs without any decryption.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Response stages and the encrypted channel's role</caption>
+            <thead><tr><th>Stage</th><th>What happened (reported)</th><th>Encrypted-channel lesson</th></tr></thead>
+            <tbody>
+              <tr><td>Detection point</td><td>The incident surfaced with ransomware impact and ransom note, not from a C2 alert.</td><td>Metadata rules (5.5) can move detection from impact-day to staging-day.</td></tr>
+              <tr><td>Containment</td><td>Pipeline shut down; systems isolated; external indicators blocked.</td><td>Blocking C2 IPs/certificates stops tasking, but plan for the fallback channel too.</td></tr>
+              <tr><td>Eradication</td><td>Forensic cleanup of malware and persistence across the estate.</td><td>Hunt the same JA3/certificate fleet-wide — one host alert usually means more.</td></tr>
+              <tr><td>Recovery</td><td>Restored systems from backups; staged restart under monitoring.</td><td>Keep egress alerting fully switched on during the restart so any re-infection beacon is seen.</td></tr>
+              <tr><td>Impact</td><td>Days-long fuel delivery outage on the US East Coast; ransom reportedly paid.</td><td>C2 detection is an operational-risk control, not just an IT metric.</td></tr>
+              <tr><td>Communication</td><td>Company statements, regulator briefings, and law-enforcement coordination.</td><td>Log timestamps decide reporting clocks (GDPR Art. 33); store them immutably.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout good">
+          <span class="callout-label">Lessons learned</span>
+          <ul>
+            <li><strong>Encryption did not make the attackers invisible.</strong> Their infrastructure was identifiable by certificate, IP, and timing — metadata analytics worked where content could not be read.</li>
+            <li><strong>Multi-factor authentication remains cheaper than any detection.</strong> The reported entry point was one inactive VPN account without MFA.</li>
+            <li><strong>Detection must precede impact.</strong> Every day the C2 channel ran silently was an opportunity the sensors missed.</li>
+            <li><strong>Operational technology depends on IT visibility.</strong> The shutdown decision shows how IT incidents cascade into physical operations.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="mitigation">
+        <div class="sec-head"><span class="sec-num">7</span><h2 class="sec-title">Mitigation and defense</h2></div>
+        <p class="sec-intro">You cannot patch encryption — attackers legitimately use it. Defense therefore has two halves: reduce the number of channels that can exist (hardening), and make the ones that do exist visible (analytics).</p>
+
+        <div class="grid grid-3">
+          <div class="card"><h4>Policy</h4><p>Document an egress policy: which destinations, ports, and protocols are allowed. Require justification for any new external TLS destination. Keep an allowlist-driven proxy for unmanaged devices.</p></div>
+          <div class="card"><h4>Identity</h4><p>Multi-factor authentication on every remote-access service, including old and inactive VPN accounts. Disable rather than pause unused accounts. Alert on impossible-travel and new-device logins.</p></div>
+          <div class="card"><h4>Endpoint</h4><p>EDR on all servers and laptops. Block unsigned binaries from user-writable folders. Sysmon Event ID 3 (or EDR network events) to map every connection to a process.</p></div>
+          <div class="card"><h4>Network</h4><p>Default-deny egress where feasible; TLS-inspecting proxy for unmanaged traffic; sinkhole for uncategorized domains; Zeek sensors at every egress point with the JA3 script enabled. This maps directly to ATT&amp;CK mitigations <strong>M1020 SSL/TLS Inspection</strong> and <strong>M1031 Network Intrusion Prevention</strong>.</p></div>
+          <div class="card"><h4>Cloud</h4><p>VPC flow logs on; egress firewall rules per workload; treat allow-all internet egress on production subnets as a finding. Alert on VMs beaconing to first-seen external IPs.</p></div>
+          <div class="card"><h4>Logging</h4><p>Retain Zeek ssl/conn, firewall, and flow logs for at least 12 months in searchable storage. Without history, rarity and beacon rules cannot look back far enough to scope an incident.</p></div>
+          <div class="card"><h4>Monitoring</h4><p>Run the six Sigma rules of section 5.5 in the SIEM. Baseline JA3 and beacon behavior quarterly. Review alert dispositions weekly and feed tuning back into thresholds.</p></div>
+          <div class="card"><h4>Backup and response</h4><p>Immutable, offline-tested backups shorten recovery when C2 detection comes late. Keep an isolated environment to analyze blocked destinations safely.</p></div>
+        </div>
+
+        <h4>Home and small-office advice</h4>
+        <ul>
+          <li>Enable multi-factor authentication on your router account, email, and backups; this closes the reported Colonial entry path.</li>
+          <li>Keep your router firmware updated; consumer routers are common botnet targets (mTLS botnets of threat rank 4).</li>
+          <li>Use the security features your devices already have: reputable endpoint protection, automatic updates, and a guest network for smart devices.</li>
+          <li>If you run a small office, start with logging: most cheap firewalls can export traffic logs — retain them, then apply the beacon rules from section 5.5.</li>
+        </ul>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Prioritized actions</caption>
+            <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr></thead>
+            <tbody>
+              <tr><td>Enable MFA on all remote access (including dormant accounts)</td><td>Low</td><td>Identity team</td><td>Very high — removes the most common entry path</td></tr>
+              <tr><td>Deploy Zeek (with JA3) at egress points</td><td>Medium</td><td>Network security</td><td>High — enables rules 1, 2, 3, 5, 6</td></tr>
+              <tr><td>Run beacon-timing analytics on flow logs</td><td>Medium</td><td>SOC engineering</td><td>High — catches threats 1 and 6 without decryption</td></tr>
+              <tr><td>Default-deny egress for servers and OT zones</td><td>High</td><td>Network + IT</td><td>High — shrinks the possible channel space</td></tr>
+              <tr><td>Retain network logs 12 months in searchable storage</td><td>Medium</td><td>SOC / platform</td><td>Medium-high — makes scoping and hunting possible</td></tr>
+              <tr><td>Quarterly JA3 and beacon baseline review</td><td>Low</td><td>Detection engineering</td><td>Medium — keeps false positives down as software changes</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="mistakes">
+        <div class="sec-head"><span class="sec-num">8</span><h2 class="sec-title">Common mistakes and best practices</h2></div>
+        <p class="sec-intro">Ten blue-team mistakes seen again and again in encrypted-traffic programs. Each row gives the symptom you will notice, the root cause, the fix, and the habit that prevents it from returning.</p>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Blue-team mistakes around encrypted-channel detection</caption>
+            <thead><tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Believing TLS inspection is required everywhere</td><td>Program stalls in legal review for months</td><td>Assuming content is the only useful data</td><td>Ship metadata analytics first; inspect only narrow, approved zones</td><td>Start every proposal with the metadata value case</td></tr>
+              <tr><td>2</td><td>Ignoring egress metadata because content is encrypted</td><td>No Zeek or flow sensors at the perimeter</td><td>"We cannot decrypt, so we cannot detect"</td><td>Deploy ssl.log/conn.log capture and run the 5.5 rules</td><td>Track sensor coverage as a KPI</td></tr>
+              <tr><td>3</td><td>Not capturing JA3</td><td>Rules 3 and 5 silently return nothing</td><td>Zeek JA3 script never enabled</td><td>Enable the script, reindex a week, then re-test</td><td>Golden-image sensor config with JA3 on by default</td></tr>
+              <tr><td>4</td><td>Certificate-only rules everywhere</td><td>Hundreds of daily alerts, all ignored</td><td>Self-signed certs are common in appliances</td><td>Combine signals: cert + rarity + timing before alerting</td><td>Review alert-to-ticket ratios monthly</td></tr>
+              <tr><td>5</td><td>False positives from SaaS and CDNs</td><td>Rules 1 and 2 fire on known cloud providers</td><td>No ownership-based allowlist</td><td>Allowlist by ASN or cert organization for vetted SaaS</td><td>Keep the allowlist in version control with owners</td></tr>
+              <tr><td>6</td><td>Flow-log retention too short</td><td>Cannot answer "how long has this been running?"</td><td>Default 7–14 day retention</td><td>Move conn/firewall logs to 12-month searchable storage</td><td>Retention policy reviewed with audit each year</td></tr>
+              <tr><td>7</td><td>No beacon baselining</td><td>Beacon rule fires on backups and updates daily</td><td>Thresholds guessed, never tuned</td><td>Baseline per-destination cadence, then set thresholds from data</td><td>Quarterly baseline review on the calendar</td></tr>
+              <tr><td>8</td><td>Blocking without hunting</td><td>Same implant reappears on another host next week</td><td>Incident closed at the first block</td><td>Hunt the same JA3, certificate, and destination fleet-wide</td><td>"Block implies hunt" step in the incident runbook</td></tr>
+              <tr><td>9</td><td>Treating encrypted as safe (allow-by-default)</td><td>Any port-443 flow passes without a log</td><td>Egress policy = permit any</td><td>Default-deny for servers; authenticate proxy for users</td><td>Annual egress policy review with real flow data</td></tr>
+              <tr><td>10</td><td>No owner for TLS analytics</td><td>Rules rot; thresholds drift; nobody trusts alerts</td><td>Detection seen as a project, not a product</td><td>Assign a detection engineer with on-call and tuning duties</td><td>Detection catalog with an owner per rule</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid grid-3">
+          <div class="card">
+            <h4>Daily habits</h4>
+            <ul>
+              <li>Check overnight alerts from the six rules; disposition each one.</li>
+              <li>Glance at top new external destinations and rare JA3 hits.</li>
+              <li>Note any host with two or more rule hits for follow-up.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Weekly habits</h4>
+            <ul>
+              <li>Review false-positive sources and adjust allowlists with change records.</li>
+              <li>Verify sensor uptime and JA3 field presence on all egress points.</li>
+              <li>Pick one intel report and hunt its indicators in your logs.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Monthly habits</h4>
+            <ul>
+              <li>Re-run beacon baselines; tune interval and size thresholds.</li>
+              <li>Test rules with replayed lab traffic (isolated environment only).</li>
+              <li>Report detection KPIs: coverage, alert-to-incident rate, mean time to triage.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout warn">
+          <span class="callout-label">Watch out</span>
+          <p>The most expensive failure is silent: rules that exist but never fire because a field is missing (no JA3), an index stopped receiving data, or a filter became too broad. Schedule a monthly "rule fire test" with sample data — a rule that cannot demonstrate a true positive is a liability, not a control.</p>
+        </div>
+      </section>
+
+      <section id="cheat-sheet">
+        <div class="sec-head"><span class="sec-num">9</span><h2 class="sec-title">Cheat sheet and quick reference</h2></div>
+        <p class="sec-intro">Everything important on one screen: key facts, the six detections, a response checklist, and official links.</p>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Key facts</h4>
+            <dl class="kv">
+              <dt>Technique</dt><dd>T1573 — Encrypted Channel (Command and Control, TA0011)</dd>
+              <dt>Sub-techniques</dt><dd>T1573.001 Symmetric · T1573.002 Asymmetric</dd>
+              <dt>Platforms</dt><dd>ESXi, Linux, Network Devices, Windows, macOS</dd>
+              <dt>Core idea</dt><dd>Content is hidden; metadata is not. Detect on the envelope.</dd>
+              <dt>Best signals</dt><dd>JA3 rarity, cert validation status, SNI mismatch, beacon timing, volume asymmetry</dd>
+              <dt>Blind spot</dt><dd>Decryption is rarely possible; assume you will never read the payload</dd>
+            </dl>
+          </div>
+          <div class="card">
+            <h4>Top detections</h4>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Rule</th><th>Log</th><th>Catches</th></tr></thead>
+                <tbody>
+                  <tr><td>1 · self-signed cert</td><td>zeek:ssl</td><td>Tooling with generated certificates</td></tr>
+                  <tr><td>2 · SNI ≠ cert CN</td><td>zeek:ssl</td><td>Cert reuse, sloppy tooling</td></tr>
+                  <tr><td>3 · rare JA3</td><td>zeek:ssl</td><td>Non-browser TLS stacks</td></tr>
+                  <tr><td>4 · beacon timing</td><td>zeek:conn</td><td>Scheduled C2 check-ins</td></tr>
+                  <tr><td>5 · IP-literal / empty SNI</td><td>zeek:ssl</td><td>Raw-IP dialing implants</td></tr>
+                  <tr><td>6 · TLS on odd port</td><td>zeek:ssl</td><td>Port-evasion attempts</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4>Response checklist (on a suspected encrypted C2 hit)</h4>
+          <ul>
+            <li>Confirm the metadata: JA3 rarity, certificate status, SNI behavior for the flow.</li>
+            <li>Compute deltas and sizes for 24–48 hours; confirm or reject the beacon pattern.</li>
+            <li>Enrich the destination (IP, domain, SNI, JA3) with threat intel and past tickets.</li>
+            <li>Identify the process via EDR or Sysmon Event ID 3; capture the binary for analysis.</li>
+            <li>Scope: search all sensors for the same JA3, certificate hash, and destination.</li>
+            <li>Block the fingerprint and destination at the egress firewall; sinkhole the domain if owned.</li>
+            <li>Isolate affected hosts; preserve memory and disks before cleanup.</li>
+            <li>Start the incident timeline with exact timestamps (reporting clocks depend on them).</li>
+            <li>Hunt backwards: what did the implant do between first beacon and detection?</li>
+            <li>Feed findings back: allowlist updates, new indicators, runbook changes.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h4>Official references (ATT&amp;CK)</h4>
+          <ul>
+            <li><a href="https://attack.mitre.org/techniques/T1573/">T1573 — Encrypted Channel (this technique)</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1573/001/">T1573.001 — Symmetric Cryptography</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1573/002/">T1573.002 — Asymmetric Cryptography</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1071/">T1071 — Application Layer Protocol (related: plain and encrypted app-layer C2)</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1090/">T1090 — Proxy (related: relays and multi-hop C2)</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1132/">T1132 — Data Encoding (related: encoded payloads alongside encryption)</a></li>
+          </ul>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<button type="button" class="toc-fab" id="toc-fab" aria-expanded="false" aria-controls="toc-overlay">☰ Contents</button>
+<button type="button" class="to-top" id="to-top" aria-label="Back to top">↑</button>
+<div class="toc-overlay" id="toc-overlay" role="dialog" aria-modal="true" aria-label="Contents">
+  <div class="toc-overlay-backdrop"></div>
+  <div class="toc-panel">
+    <div class="toc-panel-head">
+      <p class="toc-title" style="margin:0">Contents</p>
+      <button type="button" class="toc-close" id="toc-close" aria-label="Close contents">✕</button>
+    </div>
+    <ul class="toc-list" id="toc-overlay-list"><!-- generated --></ul>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ATT&CK Detection Guide — page framework (embed verbatim)
+   Theme, progress bar, TOC generation, overlay, back-to-top, copy
+   ============================================================ */
+(function () {
+  'use strict';
+  var doc = document, root = doc.documentElement;
+
+  /* ---------- theme ---------- */
+  function storedTheme() { try { return localStorage.getItem('atk-theme'); } catch (e) { return null; } }
+  function currentTheme() { return root.getAttribute('data-theme') || 'dark'; }
+  function applyTheme(t, persist) {
+    root.setAttribute('data-theme', t);
+    if (persist) { try { localStorage.setItem('atk-theme', t); } catch (e) {} }
+    try { doc.dispatchEvent(new CustomEvent('atk-theme-change', { detail: { theme: t } })); } catch (e) {}
+  }
+  var toggle = doc.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', function () {
+      applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+    });
+    /* If a shared site shell already renders a theme control inside the platform
+       header, hide this page-level toggle to avoid a duplicate control. */
+    try {
+      var hdr = doc.getElementById('atk-header');
+      if (hdr) {
+        var shellCtl = hdr.querySelector('[data-theme-toggle],[aria-label*="theme" i],.theme-toggle,.atk-theme');
+        if (shellCtl) toggle.hidden = true;
+        hdr.addEventListener('click', function (ev) {
+          var el = ev.target.closest ? ev.target.closest('button,a') : null;
+          if (!el) return;
+          var lbl = (el.getAttribute('aria-label') || el.textContent || '').toLowerCase();
+          if (lbl.indexOf('theme') !== -1 || lbl.indexOf('dark') !== -1 || lbl.indexOf('light') !== -1) {
+            applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  /* ---------- reading progress ---------- */
+  var fill = doc.querySelector('.progress-fill');
+  function onScroll() {
+    var h = doc.documentElement.scrollHeight - window.innerHeight;
+    var p = h > 0 ? Math.min(100, Math.max(0, (window.scrollY / h) * 100)) : 0;
+    if (fill) fill.style.width = p + '%';
+    if (toTop) {
+      if (window.scrollY > 600) toTop.classList.add('show');
+      else toTop.classList.remove('show');
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  /* ---------- back to top ---------- */
+  var toTop = doc.getElementById('to-top');
+  if (toTop) {
+    toTop.addEventListener('click', function () {
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+    });
+  }
+
+  /* ---------- TOC generation from real section headings ---------- */
+  var main = doc.querySelector('main');
+  var tocLists = [doc.getElementById('toc-list'), doc.getElementById('toc-overlay-list')];
+  var SECTION_TITLES = {
+    'overview': 'Overview', 'simulation': 'Animated simulation',
+    'red-team': 'Red team perspective', 'blue-team': 'Blue team / SOC perspective',
+    'detection-deep-dive': 'Detection engineering deep dive',
+    'detection-regulation': 'Regulation mapping', 'detection-threat-intel': 'Threat intelligence',
+    'detection-threat-ranking': 'Threats ranking', 'detection-logs': 'Logs and patterns',
+    'detection-sigma-spl': 'Sigma rules and Splunk SPL', 'case-study': 'Real-world case study',
+    'mitigation': 'Mitigation and defense', 'mistakes': 'Common mistakes and best practices',
+    'cheat-sheet': 'Cheat sheet and quick reference'
+  };
+  function shortTitle(section, fallback) {
+    var t = SECTION_TITLES[section.id];
+    if (!t) { var hh = section.querySelector('h2'); t = hh ? hh.textContent.replace(/^\s*\d+[.)]?\s*/, '').trim() : fallback; }
+    return t;
+  }
+  function buildTOC() {
+    if (!main || !tocLists.some(Boolean)) return;
+    var secs = [];
+    main.querySelectorAll(':scope > section[id]').forEach(function (s) { secs.push(s); });
+    if (!secs.length) return;
+    var frag = doc.createDocumentFragment();
+    var num = 0;
+    secs.forEach(function (s) {
+      num += 1;
+      var li = doc.createElement('li');
+      var a = doc.createElement('a');
+      a.href = '#' + s.id;
+      a.setAttribute('data-sec', s.id);
+      var n = doc.createElement('span'); n.className = 'n';
+      n.textContent = (num < 10 ? '0' : '') + num;
+      a.appendChild(n);
+      a.appendChild(doc.createTextNode(shortTitle(s, '')));
+      li.appendChild(a); frag.appendChild(li);
+      if (s.id === 'detection-deep-dive') {
+        var subUl = doc.createElement('ul');
+        subUl.className = 'toc-list toc-sub';
+        s.querySelectorAll('h3[id]').forEach(function (h3) {
+          var sli = doc.createElement('li');
+          var sa = doc.createElement('a');
+          sa.href = '#' + h3.id;
+          sa.setAttribute('data-sec', h3.id);
+          sa.textContent = (SECTION_TITLES[h3.id] || h3.textContent.trim());
+          sli.appendChild(sa); subUl.appendChild(sli);
+        });
+        var wrapLi = doc.createElement('li');
+        wrapLi.appendChild(subUl); frag.appendChild(wrapLi);
+      }
+    });
+    tocLists.forEach(function (ul) {
+      if (!ul) return;
+      ul.innerHTML = '';
+      ul.appendChild(frag.cloneNode(true));
+    });
+  }
+  buildTOC();
+
+  /* ---------- active section highlight ---------- */
+  var links = [];
+  function collectLinks() {
+    links = [];
+    doc.querySelectorAll('[data-sec]').forEach(function (a) { links.push(a); });
+  }
+  collectLinks();
+  function setActive(id) {
+    links.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('data-sec') === id);
+    });
+  }
+  if ('IntersectionObserver' in window) {
+    var visible = {};
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) visible[en.target.id] = en.intersectionRatio;
+        else delete visible[en.target.id];
+      });
+      var best = null, bestR = -1;
+      Object.keys(visible).forEach(function (k) {
+        if (visible[k] > bestR) { bestR = visible[k]; best = k; }
+      });
+      if (!best) {
+        var above = [];
+        main.querySelectorAll(':scope > section[id]').forEach(function (s) {
+          var r = s.getBoundingClientRect();
+          if (r.top < 140) above.push(s.id);
+        });
+        best = above.length ? above[above.length - 1] : 'overview';
+      }
+      setActive(best);
+    }, { rootMargin: '-70px 0px -45% 0px', threshold: [0, .05, .25, .5] });
+    main.querySelectorAll(':scope > section[id], #detection-deep-dive h3[id]').forEach(function (el) { obs.observe(el); });
+  }
+
+  /* ---------- smooth scroll for TOC links ---------- */
+  doc.addEventListener('click', function (ev) {
+    var a = ev.target.closest ? ev.target.closest('a[href^="#"]') : null;
+    if (!a) return;
+    var id = a.getAttribute('href').slice(1);
+    var target = doc.getElementById(id);
+    if (!target) return;
+    ev.preventDefault();
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var y = target.getBoundingClientRect().top + window.scrollY - 72;
+    window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
+    setActive(id);
+    if (overlay && overlay.classList.contains('open')) closeOverlay();
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  });
+
+  /* ---------- mobile contents overlay ---------- */
+  var fab = doc.getElementById('toc-fab');
+  var overlay = doc.getElementById('toc-overlay');
+  var closeBtn = doc.getElementById('toc-close');
+  var lastFocus = null;
+  function openOverlay() {
+    if (!overlay) return;
+    lastFocus = doc.activeElement;
+    overlay.classList.add('open');
+    if (fab) fab.setAttribute('aria-expanded', 'true');
+    var first = overlay.querySelector('a,button');
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    if (fab) fab.setAttribute('aria-expanded', 'false');
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  if (fab) fab.addEventListener('click', openOverlay);
+  if (closeBtn) closeBtn.addEventListener('click', closeOverlay);
+  if (overlay) overlay.addEventListener('click', function (ev) {
+    if (ev.target.classList && ev.target.classList.contains('toc-overlay-backdrop')) closeOverlay();
+  });
+  doc.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && overlay && overlay.classList.contains('open')) closeOverlay();
+  });
+
+  /* ---------- copy buttons ---------- */
+  doc.addEventListener('click', function (ev) {
+    var btn = ev.target.closest ? ev.target.closest('.copy-btn') : null;
+    if (!btn) return;
+    var block = btn.closest('.code');
+    var pre = block ? block.querySelector('pre.code-body') : null;
+    if (!pre) return;
+    var text = pre.innerText;
+    function done() {
+      btn.classList.add('ok');
+      var old = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(function () { btn.classList.remove('ok'); btn.textContent = old; }, 1600);
+    }
+    function fallback() {
+      try {
+        var ta = doc.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        doc.body.appendChild(ta); ta.select();
+        doc.execCommand('copy'); doc.body.removeChild(ta); done();
+      } catch (e) {}
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else fallback();
+  });
+
+  onScroll();
+})();
+
+</script>
+<script>
+/* ============================================================
+   ATT&CK Detection Guide — canvas simulation engine (embed verbatim)
+   Usage: const SIM_CONFIG = {...}; initSimulation(SIM_CONFIG);
+   Schema in page-template.html. Vanilla JS only. No external assets.
+   ============================================================ */
+function initSimulation(cfg) {
+  'use strict';
+  var stage = document.querySelector('.sim-stage');
+  var canvas = document.getElementById('sim-canvas');
+  var tip = document.getElementById('sim-tip');
+  if (!stage || !canvas || !cfg || !cfg.steps || !cfg.steps.length) return;
+  var ctx = canvas.getContext('2d');
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var LW = 1000, LH = 560;                 /* logical space */
+  var tokens = {};
+  function readTokens() {
+    var cs = getComputedStyle(document.documentElement);
+    function v(n) { return cs.getPropertyValue(n).trim() || '#888'; }
+    tokens = {
+      text: v('--text'), muted: v('--muted'), bg: v('--bg'), surface: v('--surface'),
+      accent: v('--accent'), accent2: v('--accent-2'), violet: v('--violet'),
+      success: v('--success'), warning: v('--warning'), danger: v('--danger'),
+      border: v('--border'), borderStrong: v('--border-strong')
+    };
+  }
+  function rgba(hex, a) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    var n = parseInt(hex, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  var TYPE_COLOR = { attacker: 'danger', victim: 'accent', infra: 'warning', defender: 'success', service: 'violet' };
+  var KIND_COLOR = { query: 'accent2', response: 'success', data: 'violet', alert: 'warning', block: 'danger' };
+  var TONE_COLOR = { info: 'accent2', warn: 'warning', bad: 'danger', good: 'success' };
+
+  var nodes = {};
+  (cfg.nodes || []).forEach(function (n) { nodes[n.id] = n; });
+  var nodeById = function (id) { return nodes[id]; };
+
+  /* ---------- state ---------- */
+  var step = 0, playing = false, speed = 1, tStep = 0, lastTs = null, raf = null;
+  var packets = [], hover = null, pinTimer = null;
+  var DWELL = 1600;
+
+  function stepDuration(i) {
+    var s = cfg.steps[i], maxEnd = 2600;
+    (s.flows || []).forEach(function (f) {
+      var count = f.count || 1, gap = f.gap || 420, dur = f.dur || 1300, delay = f.delay || 0;
+      maxEnd = Math.max(maxEnd, delay + (count - 1) * gap + dur + 220);
+    });
+    return maxEnd + DWELL;
+  }
+
+  /* ---------- panel + chips ---------- */
+  var elTitle = document.querySelector('.sim-step-title');
+  var elCap = document.querySelector('.sim-caption');
+  var elHint = document.querySelector('.sim-hint-text');
+  var elEv = document.querySelector('.sim-evidence');
+  var elPlay = document.getElementById('sim-play');
+  var elFill = document.querySelector('.sim-progress .sp-fill');
+  var chipsBox = document.querySelector('.step-chips');
+
+  function fmtStepText(f) {
+    if (!f) return '';
+    var out = '';
+    if (f.label) out = f.label + ' ';
+    out = out || '';
+    return out;
+  }
+  function renderPanel() {
+    var s = cfg.steps[step];
+    if (elTitle) elTitle.innerHTML = '<span class="n">Step ' + (step + 1) + '/' + cfg.steps.length + '</span>' + esc(s.title || '');
+    if (elCap) elCap.textContent = s.caption || '';
+    if (elHint) elHint.textContent = s.hint || '';
+    if (elEv) {
+      elEv.innerHTML = '';
+      (s.evidence || []).forEach(function (e) {
+        var c = document.createElement('span');
+        c.className = 'ev'; c.textContent = e; elEv.appendChild(c);
+      });
+    }
+    if (chipsBox) {
+      Array.prototype.forEach.call(chipsBox.children, function (b, i) {
+        b.setAttribute('aria-current', i === step ? 'true' : 'false');
+      });
+    }
+    document.querySelectorAll('.sim-story ol > li').forEach(function (li, i) {
+      li.style.opacity = i <= step ? '1' : '';
+    });
+  }
+  function esc(t) { var d = document.createElement('span'); d.textContent = t; return d.innerHTML; }
+
+  function buildChips() {
+    if (!chipsBox) return;
+    chipsBox.innerHTML = '';
+    cfg.steps.forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'step-chip';
+      b.textContent = (i + 1) + '. ' + (s.title || 'Step ' + (i + 1));
+      b.setAttribute('aria-label', 'Go to step ' + (i + 1) + ': ' + (s.title || ''));
+      b.addEventListener('click', function () { goStep(i); if (!reduceMotion) play(); });
+      chipsBox.appendChild(b);
+    });
+  }
+
+  /* ---------- flows -> packet instances ---------- */
+  function spawnFlows(i) {
+    packets = [];
+    (cfg.steps[i].flows || []).forEach(function (f) {
+      var a = nodeById(f.from), b = nodeById(f.to);
+      if (!a || !b) return;
+      var count = f.count || 1, gap = f.gap || 420, dur = f.dur || 1300, delay = f.delay || 0;
+      for (var k = 0; k < count; k++) {
+        packets.push({ a: a, b: b, start: delay + k * gap, dur: dur, color: KIND_COLOR[f.kind || 'query'] || 'accent2', label: f.label || '' });
+      }
+    });
+  }
+
+  /* ---------- controls ---------- */
+  function play() {
+    playing = true;
+    if (elPlay) elPlay.textContent = 'Pause';
+    lastTs = null;
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+  function pause() {
+    playing = false;
+    if (elPlay) elPlay.textContent = 'Play';
+  }
+  function goStep(i, auto) {
+    step = Math.max(0, Math.min(cfg.steps.length - 1, i));
+    tStep = 0; lastTs = null;
+    spawnFlows(step);
+    renderPanel();
+    if (reduceMotion && auto !== 'manual-play') { /* static frame */ }
+    draw(0);
+  }
+  function next() { if (step < cfg.steps.length - 1) goStep(step + 1); else pause(); }
+  function prev() { goStep(step - 1); }
+  function restart() { goStep(0); if (!reduceMotion) play(); }
+
+  if (elPlay) elPlay.addEventListener('click', function () { playing ? pause() : (play(), step >= cfg.steps.length - 1 && tStep >= stepDuration(step) && goStep(0)); });
+  var bNext = document.getElementById('sim-next');
+  var bPrev = document.getElementById('sim-prev');
+  var bRestart = document.getElementById('sim-restart');
+  if (bNext) bNext.addEventListener('click', function () { next(); });
+  if (bPrev) bPrev.addEventListener('click', function () { prev(); });
+  if (bRestart) bRestart.addEventListener('click', restart);
+  document.querySelectorAll('.seg .seg-btn[data-speed]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      speed = parseFloat(b.getAttribute('data-speed')) || 1;
+      document.querySelectorAll('.seg .seg-btn[data-speed]').forEach(function (x) {
+        x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+      });
+    });
+  });
+  stage.addEventListener('keydown', function (ev) {
+    if (ev.key === 'ArrowRight') { next(); ev.preventDefault(); }
+    if (ev.key === 'ArrowLeft') { prev(); ev.preventDefault(); }
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { if (playing) pause(); }
+  });
+
+  /* ---------- resize (DPR aware) ---------- */
+  function resize() {
+    var w = stage.clientWidth || 800;
+    var dpr = window.devicePixelRatio || 1;
+    var scale = w / LW;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(LH * scale * dpr);
+    canvas.style.height = Math.round(LH * scale) + 'px';
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+    draw(0);
+  }
+  if ('ResizeObserver' in window) new ResizeObserver(resize).observe(stage);
+  else window.addEventListener('resize', resize);
+
+  /* ---------- drawing ---------- */
+  function nodeXY(n) { return { x: n.x, y: n.y }; }
+  function drawLink(a, b, col) {
+    ctx.strokeStyle = rgba(col, .5); ctx.lineWidth = 1.4;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  function drawNode(n, focused, t) {
+    var c = tokens[TYPE_COLOR[n.type] || 'accent'];
+    var w = n.w || 148, h = n.h || 58;
+    var x = n.x - w / 2, y = n.y - h / 2;
+    if (focused) {
+      ctx.save();
+      var pulse = reduceMotion ? 1 : (1 + 0.05 * Math.sin(t / 240));
+      ctx.strokeStyle = rgba(c, .9); ctx.lineWidth = 2;
+      roundRect(x - 5 * pulse, y - 5 * pulse, w + 10 * pulse, h + 10 * pulse, 14); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = rgba(tokens.surface === v_bg() ? '#16203a' : '#16203a', .92);
+    if (document.documentElement.getAttribute('data-theme') === 'light') ctx.fillStyle = 'rgba(255,255,255,.94)';
+    roundRect(x, y, w, h, 12); ctx.fill();
+    ctx.strokeStyle = rgba(c, .95); ctx.lineWidth = 1.6;
+    roundRect(x, y, w, h, 12); ctx.stroke();
+    ctx.fillStyle = c;
+    roundRect(x, y, 4, h, 2); ctx.fill();
+    ctx.fillStyle = tokens.text;
+    ctx.font = '600 13.5px ' + 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, n.x, n.sub ? n.y - 8 : n.y, w - 18);
+    if (n.sub) {
+      ctx.fillStyle = tokens.muted;
+      ctx.font = '10.5px ui-monospace,Menlo,Consolas,monospace';
+      ctx.fillText(n.sub, n.x, n.y + 11, w - 16);
+    }
+  }
+  function v_bg() { return tokens.bg; }
+  function roundRect(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function drawFlag(f) {
+    var n = nodeById(f.node); if (!n) return;
+    var c = tokens[TONE_COLOR[f.tone || 'info'] || 'accent2'];
+    ctx.font = '700 10.5px ui-monospace,Menlo,Consolas,monospace';
+    var tw = ctx.measureText(f.text).width;
+    var w = tw + 16, h = 19, x = n.x - w / 2, y = n.y - (n.h || 58) / 2 - h - 7;
+    if (x < 6) x = 6;
+    if (x + w > LW - 6) x = LW - 6 - w;
+    ctx.fillStyle = rgba(c, .16);
+    roundRect(x, y, w, h, 9); ctx.fill();
+    ctx.strokeStyle = rgba(c, .8); ctx.lineWidth = 1; roundRect(x, y, w, h, 9); ctx.stroke();
+    ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(f.text, x + w / 2, y + h / 2 + .5);
+  }
+  function easeInOut(p) { return p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; }
+  function drawPacket(p, t) {
+    if (t < p.start) return;
+    var raw = (t - p.start) / p.dur;
+    if (raw > 1) return;
+    var pos = reduceMotion ? 1 : easeInOut(Math.min(1, raw));
+    var x = p.a.x + (p.b.x - p.a.x) * pos;
+    var y = p.a.y + (p.b.y - p.a.y) * pos;
+    var c = tokens[p.color];
+    ctx.fillStyle = rgba(c, .35);
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = c;
+    ctx.beginPath(); ctx.arc(x, y, 4.6, 0, Math.PI * 2); ctx.fill();
+    if (p.label) {
+      ctx.fillStyle = tokens.muted;
+      ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.fillText(p.label, x + 9, y - 6);
+    }
+  }
+
+  function draw(t) {
+    var s = cfg.steps[step];
+    ctx.clearRect(0, 0, LW, LH);
+    /* watermark title */
+    ctx.fillStyle = rgba(tokens.muted, .55);
+    ctx.font = '700 11px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText(cfg.watermark || 'ATTACK SIMULATION', LW - 16, 14);
+    /* static links used by this step's flows */
+    var seen = {};
+    (s.flows || []).forEach(function (f) {
+      var key = [f.from, f.to].sort().join('|');
+      if (seen[key]) return; seen[key] = 1;
+      var a = nodeById(f.from), b = nodeById(f.to);
+      if (a && b) drawLink(a, b, tokens.border);
+    });
+    /* focus rings */
+    (s.focus || []).forEach(function (id) { if (nodes[id]) nodes[id]._f = true; });
+    Object.keys(nodes).forEach(function (id) {
+      drawNode(nodes[id], !!nodes[id]._f, t);
+      nodes[id]._f = false;
+    });
+    (s.flags || []).forEach(drawFlag);
+    packets.forEach(function (p) { drawPacket(p, t); });
+    /* hint footer */
+    ctx.fillStyle = rgba(tokens.muted, .8);
+    ctx.font = '11px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('Hover a node for details. Written story below the canvas.', 16, LH - 12);
+  }
+
+  /* ---------- main loop ---------- */
+  function tick(ts) {
+    raf = null;
+    if (lastTs == null) lastTs = ts;
+    var dt = (ts - lastTs) * speed;
+    lastTs = ts;
+    if (playing) {
+      tStep += dt;
+      var d = stepDuration(step);
+      if (tStep >= d) {
+        if (step < cfg.steps.length - 1) { step += 1; tStep = 0; spawnFlows(step); renderPanel(); }
+        else { pause(); tStep = d; }
+      }
+    }
+    var d = stepDuration(step);
+    if (elFill) elFill.style.width = Math.min(100, (tStep / d) * 100) + '%';
+    draw(tStep);
+    if (playing) raf = requestAnimationFrame(tick);
+  }
+
+  /* ---------- tooltips ---------- */
+  function canvasPos(ev) {
+    var r = canvas.getBoundingClientRect();
+    var scale = r.width / LW;
+    return { x: (ev.clientX - r.left) / scale, y: (ev.clientY - r.top) / scale };
+  }
+  function hitNode(pt) {
+    var keys = Object.keys(nodes), best = null, bd = 1e9;
+    keys.forEach(function (k) {
+      var n = nodes[k];
+      var dx = pt.x - n.x, dy = pt.y - n.y;
+      var d = dx * dx + dy * dy;
+      if (d < bd && d < 60 * 60) { bd = d; best = n; }
+    });
+    return best;
+  }
+  function showTip(n, ev) {
+    if (!tip || !n) return;
+    tip.innerHTML = '<span class="tt">' + esc(n.label) + '</span>' + esc(n.tip || '');
+    tip.style.display = 'block';
+    var r = stage.getBoundingClientRect();
+    var scale = r.width / LW;
+    var x = (n.x * scale) + 14, y = (n.y * scale) - 10;
+    if (x + 270 > r.width) x = n.x * scale - 270;
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top = Math.max(8, y) + 'px';
+  }
+  canvas.addEventListener('pointermove', function (ev) {
+    var n = hitNode(canvasPos(ev));
+    hover = n;
+    if (n) showTip(n, ev); else if (tip) tip.style.display = 'none';
+  });
+  canvas.addEventListener('pointerleave', function () { hover = null; if (tip) tip.style.display = 'none'; });
+  canvas.addEventListener('click', function (ev) {
+    var n = hitNode(canvasPos(ev));
+    if (n) showTip(n, ev);
+  });
+
+  /* ---------- theme + boot ---------- */
+  document.addEventListener('atk-theme-change', function () { readTokens(); draw(0); });
+  readTokens();
+  buildChips();
+  resize();
+  goStep(0);
+  if (!reduceMotion) play();   /* reduced-motion users start paused on step 1 */
+}
+
+</script>
+<script>
+/* PAGE GLUE — T1573 Encrypted Channel: 8-step simulation config.
+   flow kinds: query, response, data, alert, block
+   node types: attacker, victim, infra, defender, service
+   flag tones: info, warn, bad, good. Logical canvas space: 1000x560. */
+const SIM_CONFIG = {
+  watermark: 'T1573 · ENCRYPTED CHANNEL SIMULATION',
+  ariaLabel: 'Animation of an encrypted command-and-control channel: TCP connect, TLS handshake, key exchange, encrypted beacons, tasking, and SOC detection using metadata and timing',
+  nodes: [
+    { id: 'c2',  x: 820, y: 140, label: 'C2 server', sub: 'attacker · TLS :443', type: 'attacker',
+      tip: 'Who: attacker operator. Does: serves a self-signed certificate, unwraps the session key with its private key, pushes tasks, and stores stolen output.' },
+    { id: 'fw',  x: 470, y: 240, label: 'Firewall / sensor', sub: 'egress + Zeek', type: 'infra',
+      tip: 'Who: enterprise egress firewall with TLS logging. Does: forwards flows, records JA3, certificates, and timing, and later blocks the fingerprint.' },
+    { id: 'vic', x: 470, y: 440, label: 'Victim PC', sub: 'Windows 11 · implant', type: 'victim',
+      tip: 'Who: corporate workstation. Does: runs the implant, opens TLS on 443, beacons every 60 seconds, executes C2 tasks.' },
+    { id: 'soc', x: 150, y: 330, label: 'SOC analyst', sub: 'monitoring', type: 'defender',
+      tip: 'Who: SOC analyst. Does: reviews Zeek metadata, checks JA3 rarity and certificate traits, measures beacon timing, then blocks and hunts.' }
+  ],
+  steps: [
+    { title: 'Implant opens a TCP connection',
+      caption: 'The implant on the victim PC starts and connects to the C2 server on TCP port 443. The firewall logs a new outbound flow to a first-seen IP.',
+      hint: 'Port 443 alone is never suspicious. Log first-seen destinations and volumes so later steps have something to compare against.',
+      evidence: ['zeek conn.log: new flow', 'dest 203.0.113.47:443', 'first-seen IP'],
+      focus: ['vic'],
+      flags: [{ node: 'fw', text: 'new flow', tone: 'info' }],
+      flows: [{ from: 'vic', to: 'fw', kind: 'query', count: 2, gap: 600, dur: 1200, label: 'SYN :443' }] },
+    { title: 'TLS handshake',
+      caption: 'The implant sends a TLS ClientHello. The C2 answers with a ServerHello and a self-signed certificate. The handshake is fully visible to the sensor.',
+      hint: 'The ClientHello shape gives the JA3 fingerprint; the certificate gives issuer, subject, and validation status. Both land in zeek ssl.log.',
+      evidence: ['zeek ssl.log', 'JA3 a0e9f5b6...', 'cert: self-signed'],
+      focus: ['fw'],
+      flags: [{ node: 'c2', text: 'self-signed', tone: 'warn' }],
+      flows: [
+        { from: 'vic', to: 'c2', kind: 'query', count: 1, delay: 100, dur: 1300, label: 'ClientHello (via fw)' },
+        { from: 'c2', to: 'vic', kind: 'response', count: 1, delay: 700, dur: 1300, label: 'Cert: self-signed' } ] },
+    { title: 'Asymmetric key exchange',
+      caption: 'The two sides run an ephemeral Diffie-Hellman agreement (curve x25519) and derive the session key. Older TLS 1.2 setups wrapped the key with the server RSA public key — only the C2 private key could unwrap it.',
+      hint: 'You see only more bytes inside the handshake. The crypto detail explains the technique; the metadata explains the detection.',
+      evidence: ['key agreement: x25519', 'session key derived', 'ssl.log: handshake done'],
+      focus: ['vic', 'c2'],
+      flags: [{ node: 'c2', text: 'session key set', tone: 'info' }],
+      flows: [{ from: 'vic', to: 'c2', kind: 'data', count: 1, delay: 100, dur: 1400, label: 'key agreement (x25519)' }] },
+    { title: 'Symmetric beacon starts',
+      caption: 'Both sides switch to a fast symmetric cipher. The implant sends beacon 1: a small encrypted blob, repeated about every 60 seconds.',
+      hint: 'Content is now unreadable. Watch the shape instead: same destination, same port, near-constant size, repeating interval.',
+      evidence: ['conn.log: 250 B ± 20', 'interval ~60 s', 'symmetric cipher on'],
+      focus: ['c2'],
+      flags: [{ node: 'c2', text: 'beacon 60s', tone: 'warn' }],
+      flows: [{ from: 'vic', to: 'c2', kind: 'data', count: 3, gap: 900, delay: 100, dur: 1200, label: 'EncryptedAppData' }] },
+    { title: 'Tasking and results',
+      caption: 'The C2 pushes a task over the channel. The implant runs it and returns the output through the same encrypted session.',
+      hint: 'Long-lived TLS flows with bidirectional bursts often match tasking. Correlate with process activity on the host at the same minute.',
+      evidence: ['long TLS flow', 'bidirectional burst', 'Sysmon EID 3'],
+      focus: ['vic'],
+      flags: [{ node: 'vic', text: 'implant exec', tone: 'info' }],
+      flows: [
+        { from: 'c2', to: 'vic', kind: 'data', count: 1, delay: 100, dur: 1300, label: 'task' },
+        { from: 'vic', to: 'c2', kind: 'data', count: 1, delay: 800, dur: 1300, label: 'result' } ] },
+    { title: 'SOC view 1: metadata',
+      caption: 'The SOC checks the metadata: the JA3 hash is rare in this environment, the certificate is self-signed, and the SNI does not match the certificate CN.',
+      hint: 'JA3 rarity, self-signed certificates, and SNI mismatch are cheap signals that work with zero decryption. Two together justify a ticket.',
+      evidence: ['ja3 rare in env', 'issuer = subject', 'sni != cert CN'],
+      focus: ['soc'],
+      flags: [{ node: 'soc', text: 'enriching', tone: 'info' }],
+      flows: [{ from: 'c2', to: 'soc', kind: 'alert', count: 1, delay: 100, dur: 1400, label: 'meta alert' }] },
+    { title: 'SOC view 2: timing',
+      caption: 'The SOC measures timing: one connection every 60 seconds, sizes within 250 ± 20 bytes, and long repeated sessions — a beacon pattern.',
+      hint: 'Statistics beat decryption: connection deltas, size variance, and duration catch channels you can never open.',
+      evidence: ['delta ~60 s', 'size 250 ± 20 B', 'repeats 50+'],
+      focus: ['soc', 'fw'],
+      flags: [{ node: 'fw', text: 'periodic 60s', tone: 'warn' }],
+      flows: [{ from: 'fw', to: 'soc', kind: 'alert', count: 1, delay: 100, dur: 1400, label: 'beacon pattern' }] },
+    { title: 'Block and hunt',
+      caption: 'The SOC blocks the rare JA3 at the egress firewall and sinks the domain, then hunts other hosts with the same fingerprint and certificate.',
+      hint: 'Block the fingerprint, not just the IP. Hunt fleet-wide for the same JA3 and certificate to scope the intrusion before cleanup.',
+      evidence: ['JA3 blocked', 'domain sinkholed', 'hunt: scope all hosts'],
+      focus: ['soc', 'vic'],
+      flags: [{ node: 'vic', text: 'isolated', tone: 'good' }],
+      flows: [{ from: 'soc', to: 'fw', kind: 'block', count: 1, delay: 100, dur: 1400, label: 'block JA3' }] }
+  ]
+};
+initSimulation(SIM_CONFIG);
+</script>
+</body>
+</html>

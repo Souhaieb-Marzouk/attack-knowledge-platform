@@ -1,0 +1,2054 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Detection guide for MITRE ATT&amp;CK sub-technique T1090.001 Internal Proxy: how attackers relay command and control traffic between compromised internal systems, and how SOC teams detect it with Sysmon, Zeek, Sigma rules, and Splunk SPL.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1090-Proxy/001-Internal-Proxy.html">
+<meta name="guide-version" content="2.0">
+<title>T1090.001 · Internal Proxy — Detection Guide</title>
+<script>
+(function(){
+  try{
+    var saved = localStorage.getItem('atk-theme');
+    if(saved !== 'dark' && saved !== 'light'){
+      saved = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', saved);
+  }catch(e){
+    document.documentElement.setAttribute('data-theme','dark');
+  }
+})();
+</script>
+<style>
+/* ============ DESIGN TOKENS (spec v2.0) ============ */
+:root{
+  color-scheme:dark;
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#31406a;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+}
+html[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#e9eefb; --elevated:#ffffff;
+  --text:#182238; --muted:#5a6a85; --border:#d7e0f0; --border-strong:#b9c8e4;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+}
+/* ============ BASE ============ */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:16.5px;line-height:1.65;-webkit-font-smoothing:antialiased;
+}
+code,kbd,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace}
+h1,h2,h3,h4{line-height:1.25;margin:0 0 10px;font-weight:800;letter-spacing:-.015em}
+p{margin:0 0 12px}
+a{color:var(--accent)}
+a:hover{color:var(--accent-2)}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+::selection{background:color-mix(in srgb,var(--accent) 30%,transparent)}
+.skip{
+  position:absolute;left:-999px;top:8px;z-index:200;background:var(--accent);color:#fff;
+  padding:10px 16px;border-radius:8px;font-weight:700;text-decoration:none;
+}
+.skip:focus{left:12px}
+/* ============ PROGRESS BAR ============ */
+.progress-wrap{position:fixed;top:0;left:0;right:0;height:4px;z-index:120;pointer-events:none;background:transparent}
+.progress-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:0 2px 2px 0}
+/* ============ SHELL ============ */
+.page-shell{max-width:1280px;margin:0 auto;padding:0 24px}
+.layout{display:grid;grid-template-columns:250px minmax(0,1fr);gap:28px;align-items:start;padding:26px 0 60px}
+/* ============ HERO ============ */
+.hero{padding:52px 0 36px;border-bottom:1px solid var(--border)}
+.kicker{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+.hero h1{font-size:clamp(30px,4.5vw,46px);margin:0 0 6px}
+.hero h1 .tid{color:var(--accent)}
+.hero-sub{font-size:20px;font-weight:700;color:var(--accent-2);margin:0 0 14px}
+.hero-intro{max-width:76ch;color:var(--muted);font-size:17px;margin:0 0 18px}
+.badge-version{
+  display:inline-flex;align-items:center;gap:8px;margin:0 0 20px;padding:5px 14px;border-radius:999px;
+  background:color-mix(in srgb,var(--success) 16%,transparent);border:1px solid var(--success);
+  color:var(--success);font-size:13px;font-weight:700;
+}
+.chip-row{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
+.chip{
+  display:inline-flex;align-items:center;gap:7px;padding:4px 12px;border-radius:999px;
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-size:13px;font-weight:600;
+}
+.chip .dot{width:8px;height:8px;border-radius:50%;background:var(--accent-2);flex:none}
+.key-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kf-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+.kf-title{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin:0 0 6px}
+.kf-text{margin:0;font-size:14px;color:var(--muted)}
+/* ============ TOC ============ */
+.toc{
+  position:sticky;top:20px;background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;padding:18px;max-height:calc(100vh - 40px);overflow-y:auto;
+}
+.toc-title{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.toc-list{list-style:none;margin:0;padding:0}
+.toc-list a{
+  display:flex;gap:8px;align-items:baseline;padding:6px 8px;border-radius:8px;
+  color:var(--muted);text-decoration:none;font-size:14px;
+}
+.toc-list a:hover{background:var(--surface-2);color:var(--text)}
+.toc-list a.active{background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--text);font-weight:700}
+.toc-list .n{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--accent);min-width:26px}
+.toc-list li.sub a{padding-left:16px;font-size:13px}
+.toc-close{display:none}
+.toc-backdrop{display:none}
+.toc-fab{display:none}
+/* ============ SECTIONS ============ */
+section.sec{scroll-margin-top:24px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:30px 28px;margin:0 0 28px}
+.sec-head{display:flex;align-items:center;gap:12px;margin:0 0 14px}
+.sec-num{
+  width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:10px;
+  background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent);
+  font-weight:800;font-size:16px;border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);
+}
+.sec-head h2{font-size:24px;margin:0}
+.sec-intro{color:var(--muted);max-width:80ch;margin:0 0 18px}
+h3.sub{font-size:18px;margin:26px 0 10px;display:flex;align-items:center;gap:10px}
+h3.sub .hnum{
+  font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2);
+  background:color-mix(in srgb,var(--accent-2) 14%,transparent);border:1px solid color-mix(in srgb,var(--accent-2) 40%,transparent);
+  padding:3px 9px;border-radius:999px;flex:none;
+}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:0 0 16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:0 0 16px}
+.card{background:var(--surface-2);border:1px solid var(--border);border-radius:14px;padding:18px;margin:0 0 16px}
+.card h4{font-size:15.5px;margin:0 0 8px;color:var(--text)}
+.card p:last-child{margin-bottom:0}
+ul.tick{list-style:none;margin:0;padding:0}
+ul.tick li{position:relative;padding:0 0 8px 24px;margin:0}
+ul.tick li::before{content:"◆";position:absolute;left:2px;top:0;color:var(--accent);font-size:11px;line-height:2.1}
+ul.tick li:last-child{padding-bottom:0}
+/* ============ CALLOUTS ============ */
+.callout{border:1px solid var(--border);border-left:4px solid var(--accent);background:var(--surface-2);border-radius:12px;padding:14px 16px;margin:0 0 16px}
+.callout .callout-label{display:block;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;margin:0 0 6px;color:var(--accent)}
+.callout.danger{border-left-color:var(--danger)} .callout.danger .callout-label{color:var(--danger)}
+.callout.warning{border-left-color:var(--warning)} .callout.warning .callout-label{color:var(--warning)}
+.callout.good{border-left-color:var(--success)} .callout.good .callout-label{color:var(--success)}
+.callout.note{border-left-color:var(--violet)} .callout.note .callout-label{color:var(--violet)}
+.callout p:last-child{margin-bottom:0}
+/* ============ BADGES ============ */
+.badge{
+  display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;
+  font-size:12px;font-weight:800;letter-spacing:.02em;border:1px solid transparent;white-space:nowrap;
+}
+.badge.crit{background:color-mix(in srgb,var(--danger) 18%,transparent);border-color:var(--danger);color:var(--danger)}
+.badge.high{background:color-mix(in srgb,var(--high) 18%,transparent);border-color:var(--high);color:var(--high)}
+.badge.med{background:color-mix(in srgb,var(--warning) 18%,transparent);border-color:var(--warning);color:var(--warning)}
+.badge.low{background:color-mix(in srgb,var(--low) 18%,transparent);border-color:var(--low);color:var(--low)}
+.badge.cat{background:var(--surface);border-color:var(--border);color:var(--muted);font-weight:700}
+.badge.ok{background:color-mix(in srgb,var(--success) 16%,transparent);border-color:var(--success);color:var(--success)}
+/* ============ TABLES ============ */
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;margin:0 0 16px}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+thead th{background:var(--surface-2);font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);position:sticky;top:0}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+/* ============ KV ROWS ============ */
+.kv{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px}
+.kv-row{display:grid;grid-template-columns:220px 1fr;border-bottom:1px solid var(--border)}
+.kv-row:last-child{border-bottom:none}
+.kv-key{background:var(--surface-2);padding:11px 14px;font-weight:700;font-size:13.5px;border-right:1px solid var(--border)}
+.kv-val{padding:11px 14px;font-size:14.5px}
+/* ============ CODE ============ */
+.code-frame{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:0 0 16px;background:var(--elevated)}
+.code-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.code-label{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.02em}
+.copy-btn{
+  flex:none;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;
+  padding:4px 12px;font-size:12.5px;font-weight:700;cursor:pointer;
+}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.copy-btn.copied{background:var(--success);border-color:var(--success);color:#06281c}
+pre{margin:0;padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.55;max-width:100%}
+pre code{background:none;padding:0;color:var(--text)}
+/* ============ STORY ============ */
+ol.story{list-style:none;counter-reset:st;margin:0 0 16px;padding:0}
+ol.story li{
+  counter-increment:st;position:relative;padding:12px 14px 12px 52px;margin:0 0 10px;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:12px;
+}
+ol.story li::before{
+  content:counter(st);position:absolute;left:12px;top:12px;width:26px;height:26px;border-radius:8px;
+  display:grid;place-items:center;background:var(--accent);color:#fff;font-weight:800;font-size:13px;
+}
+ol.story li strong{color:var(--accent-2)}
+/* ============ SIM ============ */
+.sim-shell{border:1px solid var(--border);border-radius:16px;background:var(--elevated);overflow:hidden;margin:0 0 16px}
+.sim-canvas-wrap{position:relative;width:100%}
+.sim-canvas-wrap canvas{display:block;width:100%;height:auto;max-width:100%}
+.sim-tooltip{
+  display:none;position:absolute;z-index:20;max-width:260px;padding:10px 12px;border-radius:10px;
+  background:var(--elevated);border:1px solid var(--accent);box-shadow:0 8px 24px rgba(0,0,0,.35);
+  pointer-events:none;font-size:13px;
+}
+.sim-tooltip .tt-title{margin:0 0 4px;font-weight:800;font-size:13px;color:var(--accent)}
+.sim-tooltip .tt-desc{margin:0;color:var(--muted)}
+.sim-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px 14px;border-top:1px solid var(--border);background:var(--surface-2)}
+.sim-btn{
+  background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:9px;
+  padding:7px 14px;font-size:13.5px;font-weight:700;cursor:pointer;
+}
+.sim-btn:hover{border-color:var(--accent)}
+.sim-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.sim-speed{background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:7px 10px;font-size:13.5px}
+.sim-chips{display:flex;flex-wrap:wrap;gap:6px;width:100%;padding-top:4px}
+.sim-chip{
+  background:var(--surface);color:var(--muted);border:1px solid var(--border);border-radius:999px;
+  padding:4px 12px;font-size:12.5px;font-weight:700;cursor:pointer;
+}
+.sim-chip:hover{color:var(--text);border-color:var(--accent)}
+.sim-chip.done{color:var(--success);border-color:color-mix(in srgb,var(--success) 50%,transparent)}
+.sim-chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.sim-caption{padding:14px 16px;border-top:1px solid var(--border)}
+.sim-cap-step{margin:0 0 2px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-2)}
+.sim-cap-title{margin:0 0 6px;font-size:17px;font-weight:800}
+.sim-cap-text{margin:0 0 6px;max-width:90ch}
+.sim-defender{margin:0;color:var(--success);font-size:14.5px}
+.sim-legend{display:flex;flex-wrap:wrap;gap:16px;padding:10px 16px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)}
+.sim-legend span{display:inline-flex;align-items:center;gap:7px}
+.lg-line{width:26px;height:0;border-top:2.5px solid var(--accent)}
+.lg-line.dash{border-top-style:dashed;border-top-color:var(--warning)}
+/* ============ FABS + MISC ============ */
+.fab-stack{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:10px;z-index:110}
+.fab{
+  width:46px;height:46px;border-radius:50%;border:1px solid var(--border);background:var(--elevated);
+  color:var(--text);font-size:18px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25);
+}
+.fab:hover{border-color:var(--accent)}
+#toTop{opacity:0;pointer-events:none;transition:opacity .25s}
+#toTop.show{opacity:1;pointer-events:auto}
+.toc-open .fab-stack,.toc-open .toc-fab{z-index:260}
+/* ============ RESPONSIVE ============ */
+@media (max-width:1040px){
+  .layout{grid-template-columns:1fr}
+  .toc{position:fixed;inset:0 auto 0 0;width:min(320px,86vw);max-height:none;z-index:250;border-radius:0 16px 16px 0;transform:translateX(-105%);transition:transform .25s}
+  body.toc-open .toc{transform:none}
+  .toc-close{display:block;width:100%;margin:0 0 10px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px;font-weight:700;cursor:pointer}
+  .toc-fab{display:block;position:fixed;left:18px;bottom:18px;z-index:110;background:var(--elevated);border:1px solid var(--border);color:var(--text);border-radius:999px;padding:10px 16px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+  .toc-backdrop{display:block;position:fixed;inset:0;background:rgba(2,6,16,.55);z-index:240;opacity:0;pointer-events:none;transition:opacity .25s;border:0;padding:0}
+  body.toc-open .toc-backdrop{opacity:1;pointer-events:auto}
+  .key-facts{grid-template-columns:repeat(2,1fr)}
+  .grid-3{grid-template-columns:1fr}
+}
+@media (max-width:640px){
+  .hero{padding:36px 0 26px}
+  .key-facts,.grid-2{grid-template-columns:1fr}
+  .kv-row{grid-template-columns:1fr}
+  .kv-key{border-right:none;border-bottom:1px solid var(--border)}
+  .sec-head h2{font-size:20px}
+  section.sec{padding:22px 16px}
+  .fab-stack{right:12px;bottom:76px}
+}
+/* ============ REDUCED MOTION ============ */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  .toc{transition:none}
+  .toc-backdrop{transition:none}
+  #toTop{transition:none}
+}
+/* ============ PRINT ============ */
+@media print{
+  body{background:#fff;color:#111}
+  .progress-wrap,.fab-stack,.toc-fab,.toc,.sim-controls,.toc-backdrop,.skip,.copy-btn,.sim-legend{display:none !important}
+  .layout{display:block}
+  section.sec{border:none;padding:10px 0;break-inside:avoid-page}
+  .card,.callout,.code-frame,.table-wrap,.kv,ol.story li{break-inside:avoid}
+  pre{white-space:pre-wrap}
+  a{color:#111;text-decoration:none}
+}
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1090.001"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div class="progress-wrap" aria-hidden="true"><div class="progress-fill" id="progressBar"></div></div>
+
+<header class="hero">
+  <div class="page-shell">
+    <p class="kicker">Detection Guide · MITRE ATT&amp;CK · Command and Control · T1090.001</p>
+    <h1><span class="tid">T1090.001</span> — Internal Proxy</h1>
+    <p class="hero-intro">An internal proxy is a compromised system inside a network that passes command and control (C2) traffic between two or more other systems. Per MITRE, attackers use it to manage C2 inside the environment, cut the number of outbound connections, survive connection loss, and ride trusted internal paths such as SMB. This guide shows how the trick works and how to detect it step by step.</p>
+    <p class="badge-version">🛡 Guide v2.0 · audited against ATT&amp;CK v20.0</p>
+    <div class="chip-row">
+      <span class="chip"><span class="dot" aria-hidden="true"></span>Sub-technique of T1090 · Proxy</span>
+      <span class="chip"><span class="dot" aria-hidden="true"></span>Tactic: Command and Control</span>
+      <span class="chip"><span class="dot" aria-hidden="true"></span>Platforms: ESXi, Linux, macOS, Network Devices, Windows</span>
+      <span class="chip"><span class="dot" aria-hidden="true"></span>ATT&amp;CK v1.2 · modified 2026-09-08</span>
+    </div>
+    <div class="key-facts">
+      <div class="kf-card"><p class="kf-title">What it is</p><p class="kf-text">A compromised internal host relays C2 for other infected hosts, so they never need their own path to the internet.</p></div>
+      <div class="kf-card"><p class="kf-title">Typical tools</p><p class="kf-text">HTRAN, ZXProxy, ZXPortMap per MITRE; in practice also netsh portproxy, socat, and C2 frameworks with peer-to-peer beacons.</p></div>
+      <div class="kf-card"><p class="kf-title">Why it matters</p><p class="kf-text">One egress flow can hide many infected hosts. Perimeter-only monitoring misses the whole chain.</p></div>
+      <div class="kf-card"><p class="kf-title">How to catch it</p><p class="kf-text">Correlate pipe, process, and flow events: one host that receives from many and sends to one.</p></div>
+    </div>
+  </div>
+</header>
+
+<a class="skip" href="#mainContent">Skip to main content</a>
+
+<div class="page-shell">
+<div class="layout">
+
+<nav class="toc" id="tocPanel" aria-label="Table of contents">
+  <button type="button" class="toc-close" id="tocClose">Close contents ✕</button>
+  <p class="toc-title">Contents</p>
+  <ul class="toc-list" id="tocList">
+    <li><a href="#sec-1-overview"><span class="n">1</span>Overview</a></li>
+    <li><a href="#sec-2-simulation"><span class="n">2</span>Animated Simulation</a></li>
+    <li><a href="#sec-3-red-team"><span class="n">3</span>Red Team Perspective</a></li>
+    <li><a href="#sec-4-blue-team"><span class="n">4</span>Blue Team Perspective</a></li>
+    <li><a href="#sec-5-detection"><span class="n">5</span>Detection Engineering Deep Dive</a></li>
+    <li class="sub"><a href="#sec-5-1-regulation"><span class="n">5.1</span>Regulation Mapping</a></li>
+    <li class="sub"><a href="#sec-5-2-threat-intel"><span class="n">5.2</span>Threat Intelligence</a></li>
+    <li class="sub"><a href="#sec-5-3-threats"><span class="n">5.3</span>Threat Ranking</a></li>
+    <li class="sub"><a href="#sec-5-4-logs"><span class="n">5.4</span>Logs and Patterns</a></li>
+    <li class="sub"><a href="#sec-5-5-sigma-spl"><span class="n">5.5</span>Sigma Rules and Splunk SPL</a></li>
+    <li><a href="#sec-6-case-study"><span class="n">6</span>Case Study</a></li>
+    <li><a href="#sec-7-mitigation"><span class="n">7</span>Mitigation and Defense</a></li>
+    <li><a href="#sec-8-mistakes"><span class="n">8</span>Common Mistakes</a></li>
+    <li><a href="#sec-9-cheat-sheet"><span class="n">9</span>Cheat Sheet</a></li>
+  </ul>
+</nav>
+
+<main class="content" id="mainContent">
+<section class="sec" id="sec-1-overview" aria-labelledby="h2-1">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">1</span><h2 id="h2-1">Overview</h2></div>
+  <p class="sec-intro">This section explains what an internal proxy is, how MITRE describes it, where it sits in an attack chain, and why it is hard to catch.</p>
+
+  <div class="table-wrap">
+    <table>
+      <caption class="small muted" style="caption-side:bottom;text-align:left;padding:8px 12px">At a glance — official MITRE ATT&amp;CK data (collection v20.0, technique version 1.2).</caption>
+      <thead><tr><th>Item</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Technique ID</td><td><strong>T1090.001</strong> — Internal Proxy (sub-technique of <a href="https://attack.mitre.org/techniques/T1090/" rel="noopener">T1090 · Proxy</a>)</td></tr>
+        <tr><td>Tactic</td><td>Command and Control (only)</td></tr>
+        <tr><td>Platforms</td><td>ESXi · Linux · macOS · Network Devices · Windows</td></tr>
+        <tr><td>ATT&amp;CK data sources</td><td>Network Traffic: Network Connection Creation · Network Traffic: Network Traffic Content · Network Traffic: Network Traffic Flow</td></tr>
+        <tr><td>Permissions required</td><td>Not specified by MITRE</td></tr>
+        <tr><td>System requirements</td><td>None listed by MITRE</td></tr>
+        <tr><td>Official mitigation</td><td>Network Intrusion Prevention (M1031)</td></tr>
+        <tr><td>Official page</td><td><a href="https://attack.mitre.org/techniques/T1090/001/" rel="noopener">attack.mitre.org/techniques/T1090/001/</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>What is an internal proxy?</h4>
+      <p>Attackers rarely want every infected host to talk to the internet. Some hosts sit in zones with no outbound access. Others would raise an alert if they opened a new connection.</p>
+      <p>So the attacker picks one host they already control. That host becomes the <strong>internal proxy</strong>. Other infected hosts send their C2 traffic to it. The proxy forwards that traffic onward, often to a single exit point that reaches the internet.</p>
+      <p>MITRE describes it this way (in simple words): an internal proxy directs C2 traffic between two or more systems in a compromised environment. By using a compromised internal system as a proxy, attackers hide the true C2 destination and need fewer connections to external systems.</p>
+      <p>MITRE also names known relay tools: HTRAN, ZXProxy, and ZXPortMap. In real incidents, attackers often use built-in features instead. Common examples are <code>netsh portproxy</code> on Windows, <code>socat</code> on Linux, and peer-to-peer beacons that pass traffic over SMB.</p>
+    </div>
+    <div class="card">
+      <h4>Key words in this guide</h4>
+      <ul class="tick">
+        <li><strong>C2 (command and control)</strong> — the channel an attacker uses to send orders to infected hosts and receive stolen data.</li>
+        <li><strong>Proxy / relay</strong> — a host that receives traffic and forwards it to another host.</li>
+        <li><strong>Beacon</strong> — a small, regular signal an infected host sends to say "I am here" and fetch orders.</li>
+        <li><strong>Egress</strong> — traffic leaving your network towards the internet.</li>
+        <li><strong>East-west traffic</strong> — traffic between machines inside your network, not to or from the internet.</li>
+        <li><strong>SMB</strong> — the Windows file-sharing protocol. It is normal between hosts, which is why attackers hide in it.</li>
+        <li><strong>Named pipe</strong> — a labeled channel for program-to-program talk on Windows, carried over SMB.</li>
+        <li><strong>Fan-in</strong> — many hosts connecting to one host. A C2 relay creates strong fan-in.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Chain</span>Where it fits in an attack</h3>
+  <p>An internal proxy is never the first step. It appears after the attacker already controls one system. A typical chain looks like this:</p>
+  <div class="kv">
+    <div class="kv-row"><div class="kv-key">Before · Initial access</div><div class="kv-val">Phishing, a vulnerable public service, or stolen remote-access credentials give the attacker their first foothold (for example T1566, T1190, or T1078).</div></div>
+    <div class="kv-row"><div class="kv-key">Before · Execution &amp; discovery</div><div class="kv-val">The attacker runs commands, maps the network, and finds a good relay host: a server that many hosts can reach and that is allowed to talk out (T1059, T1046).</div></div>
+    <div class="kv-row"><div class="kv-key">This technique · T1090.001</div><div class="kv-val">The attacker turns that host into an internal proxy. Other infected hosts beacon through it. Peer-to-peer protocols such as SMB make the traffic look ordinary.</div></div>
+    <div class="kv-row"><div class="kv-key">After · Lateral movement</div><div class="kv-val">The attacker uses the relay to reach servers, backups, and admin tools (T1021). One clean path now serves many actions.</div></div>
+    <div class="kv-row"><div class="kv-key">After · Collection &amp; exfiltration</div><div class="kv-val">Stolen data is staged on the relay and leaves through the same single, quiet egress flow (T1005, T1041).</div></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Why detection is hard</h4>
+      <p>The proxy hides two things at once. First, the true destination: victim hosts only talk to an internal server, which is normal-looking. Second, the number of victims: outside the network, everything looks like one host with one connection.</p>
+      <p>The traffic also rides protocols that are always on. SMB, WinRM, and WMI sessions run all day in a Windows network. A C2 channel inside them has no unusual look at first glance.</p>
+      <p>That is why single events rarely help. Detection works when you <strong>correlate</strong>: one host that receives from many and sends to one, plus a pipe or process event that should not exist.</p>
+    </div>
+    <div class="card">
+      <h4>Why it matters</h4>
+      <p>An internal proxy turns one breach into many. Every host that beacons through the relay is a full compromise, but the firewall may show only a single connection.</p>
+      <p>It also breaks your response model. If you block the relay's egress IP, victims may still talk to the relay inside. You must find and clean the whole mesh, not one host.</p>
+      <p>Groups such as Volt Typhoon and Turla, and software such as Cobalt Strike, Duqu, and Stuxnet, have all used internal relaying. This is a real, current problem, not a lab idea.</p>
+    </div>
+  </div>
+
+  <details class="card">
+    <summary><strong>What changed in v2.0</strong> (audit results)</summary>
+    <ul class="tick" style="margin-top:10px">
+      <li>Fixed the platform list: v1 wrote "Linux, Windows, macOS" and dropped the official ESXi and Network Devices platforms. v2.0 lists all five.</li>
+      <li>Added the official at-a-glance table: tactics, the three ATT&amp;CK data sources, "Not specified by MITRE" permissions, and the official M1031 mitigation, all missing from v1.</li>
+      <li>Replaced v1's invented threat list with the six prescribed threats (two Critical, three High, one Medium) and rebuilt all six Sigma rules and SPL queries around them.</li>
+      <li>Replaced v1's vague "China-nexus / FIN-class" intel rows with the official ATT&amp;CK v20.0 actor, software, and campaign names for T1090.001.</li>
+      <li>Corrected the regulation table to the prescribed controls (GDPR Art. 32+33, HIPAA 164.308/164.312, ISO A.8.15/8.16 + 5.24–5.26, SOC 2 CC7.2/CC7.3/CC4.1, PCI Req 10 + 11.5, NIST CSF 2.0) and added the auditor-testing note.</li>
+      <li>Rebuilt the simulation to the prescribed storyline (attacker → internet C2 → internal relay → two internal victims, SMB named pipes, one egress) and added the missing legend.</li>
+      <li>Rewrote the whole page in plain B1 English, removed idioms, and added the key-words box, hunt hypotheses, and the home-worker defense set.</li>
+    </ul>
+  </details>
+</section>
+<section class="sec" id="sec-2-simulation" aria-labelledby="h2-2">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">2</span><h2 id="h2-2">Animated Simulation — "One Exit for Many Hosts"</h2></div>
+  <p class="sec-intro">Watch an internal proxy attack unfold in eight steps. Each step shows what the attacker does and what the SOC can and cannot see at that moment.</p>
+
+  <div class="sim-shell">
+    <div class="sim-canvas-wrap" id="simWrap">
+      <canvas id="simCanvas" role="img" aria-label="Animated diagram of an internal proxy attack. The attacker compromises an internal relay server. The relay opens one outbound C2 link through the company firewall. Two infected workstations then beacon to the relay over SMB named pipes inside the network. The SOC panel shows what defenders can and cannot see at each of the eight steps."></canvas>
+      <div class="sim-tooltip" id="simTooltip" role="tooltip"><p class="tt-title"></p><p class="tt-desc"></p></div>
+    </div>
+    <div class="sim-legend" aria-hidden="true">
+      <span><span class="lg-line" aria-hidden="true"></span>solid line = SOC can see this hop now</span>
+      <span><span class="lg-line dash" aria-hidden="true"></span>dashed line = hidden from the SOC at this step</span>
+    </div>
+    <div class="sim-controls" id="simControls">
+      <button type="button" class="sim-btn primary" id="simPlay" aria-label="Play animation">▶ Play</button>
+      <button type="button" class="sim-btn" id="simRestart" aria-label="Restart animation">⟲ Restart</button>
+      <button type="button" class="sim-btn" id="simPrev" aria-label="Previous step">◀ Prev</button>
+      <button type="button" class="sim-btn" id="simNext" aria-label="Next step">Next ▶</button>
+      <label class="small muted" for="simSpeed" style="margin:0 0 0 4px">Speed</label>
+      <select class="sim-speed" id="simSpeed" aria-label="Animation speed">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="1.5">1.5×</option>
+        <option value="2">2×</option>
+      </select>
+      <div class="sim-chips" id="simChips" role="tablist" aria-label="Simulation steps"></div>
+    </div>
+    <div class="sim-caption" aria-live="polite">
+      <p class="sim-cap-step" id="simCapStep">Step 1 of 8</p>
+      <p class="sim-cap-title" id="simCapTitle">Loading…</p>
+      <p class="sim-cap-text" id="simCapText">Loading…</p>
+      <p class="sim-defender" id="simDefender"></p>
+    </div>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Story</span>Written story: the same eight steps in words</h3>
+  <p>This text tells the same story as the animation. Screen readers and printers can use it instead of the canvas.</p>
+  <ol class="story">
+    <li><strong>Beachhead.</strong> The attacker exploits an internet-facing service and lands on an internal server, R1. R1 sits in a server zone that many hosts can reach and that is allowed to send traffic out. The SOC sees only a normal-looking web session. <em>Defender view:</em> without an endpoint agent on R1, the foothold is invisible at this point.</li>
+    <li><strong>One quiet exit.</strong> The attacker installs a beacon on R1. It opens one outbound link through the company firewall to the C2 server on the internet. The SOC sees one new egress flow from a server. It looks like ordinary HTTPS. <em>Defender view:</em> one flow, no content visibility without TLS inspection.</li>
+    <li><strong>Inside channel.</strong> On R1, the beacon starts an SMB named-pipe listener. Infected hosts inside the network will use this pipe to reach R1. Pipe creation is a local event; the firewall sees nothing. <em>Defender view:</em> without Sysmon event 17/18 or an EDR pipe event, this step never appears in the SIEM.</li>
+    <li><strong>Victim A joins.</strong> A phishing mail infected workstation A earlier. Its beacon cannot reach the internet. It finds the pipe on R1 and sends its C2 traffic through it. The SOC sees plain east-west SMB from A to R1, which happens all day. <em>Defender view:</em> the C2 content hides inside a trusted protocol.</li>
+    <li><strong>Victim B joins.</strong> A second workstation joins the same pipe. Now two victims are controlled through R1, but the firewall still shows only the one egress flow from step 2. <em>Defender view:</em> the egress count stays flat while the number of victims grows. That gap is the story of this technique.</li>
+    <li><strong>The gap, drawn out.</strong> The attacker now commands three hosts and needs only one external connection. If the attacker loses that one link, R1 keeps the inside channel alive and can re-connect later. <em>Defender view:</em> blocking one IP does not close the attack. The mesh lives inside.</li>
+    <li><strong>Detection.</strong> The EDR reports a new named pipe on R1 from a service host. Zeek shows many hosts opening SMB sessions to one server, plus odd pipe names. The correlation rule joins pipe event, fan-in, and the single egress flow. A high-severity alert fires with the whole chain pre-built. <em>Defender view:</em> this is Sigma rule 2 plus rule 6 in section 5.5.</li>
+    <li><strong>Respond and fix.</strong> The SOC isolates R1 and kills the pipe listener. The firewall team blocks the C2 address. The team hunts for the pipe name on every host to find victims A and B, then rebuilds R1 from a clean image. <em>Defender view:</em> contain the relay, then sweep the mesh — in that order.</li>
+  </ol>
+
+  <div class="callout good"><span class="callout-label">Good practice</span>
+    <p>The turning point is step 7. No single event was enough. The chain "new pipe + fan-in from many hosts + one egress flow" is what exposed the mesh. Sections 4 and 5 build exactly that chain.</p>
+  </div>
+</section>
+<section class="sec" id="sec-3-red-team" aria-labelledby="h2-3">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">3</span><h2 id="h2-3">Red Team Perspective</h2></div>
+  <p class="sec-intro">Why attackers build relays inside a network, when they do it, and which mistakes leave traces. All examples in this section are lab-only and use ordinary admin commands.</p>
+
+  <div class="callout note"><span class="callout-label">Ethics</span>
+    <p>This section exists to help defenders practice. Use these ideas only in a lab you own. Running them on systems you do not own is illegal in most countries.</p>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Q&amp;A</span>Four questions about internal proxies</h3>
+  <div class="grid-2">
+    <div class="card"><h4>Why do attackers use one?</h4>
+      <p>Because it solves three problems at once. It reaches hosts that have no path to the internet. It hides how many hosts are infected. And it keeps C2 alive when one route dies.</p></div>
+    <div class="card"><h4>When does it appear?</h4>
+      <p>After the first foothold and after discovery. The attacker needs to know which hosts can reach which zones before they pick a relay. In long spying operations, the relay can stay for months.</p></div>
+    <div class="card"><h4>How is it built?</h4>
+      <p>Three common ways: a forwarding tool such as <code>netsh portproxy</code> or <code>socat</code>; a C2 framework with peer-to-peer beacons over SMB named pipes; or a tunnel tool installed as a service. MITRE names HTRAN, ZXProxy, and ZXPortMap as classic tools.</p></div>
+    <div class="card"><h4>Where does it run?</h4>
+      <p>On hosts that sit in the middle: file and app servers, jump hosts, sometimes network devices or ESXi hosts. The best relay host is one that many machines can reach and one zone trusts.</p></div>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Setup</span>Typical setup and variations</h3>
+  <p>The attacker needs three things: control of the relay host, rights to start a listener or service, and a network path from the relay to the targets. Then the pattern is always the same. Bind a port or pipe. Forward what arrives. Send the answers back.</p>
+  <div class="grid-2">
+    <div class="card">
+      <h4>Variations defenders should know</h4>
+      <ul class="tick">
+        <li><strong>Built-in first.</strong> <code>netsh portproxy</code> and <code>socat</code> need no download, so careful attackers prefer them.</li>
+        <li><strong>Peer-to-peer beacons.</strong> C2 frameworks relay between hosts over SMB named pipes. No new TCP port is needed.</li>
+        <li><strong>Service install.</strong> Tunnel tools registered as Windows services or Linux units survive reboots.</li>
+        <li><strong>Device-level relay.</strong> A router, switch, or ESXi host can forward traffic too, and endpoint tools rarely watch it.</li>
+        <li><strong>Trusted-path rides.</strong> C2 wrapped inside WinRM, WMI, or admin SMB sessions looks like management traffic.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Attacker mistakes that create detections</h4>
+      <ul class="tick">
+        <li>The portproxy rule is stored in the registry and survives reboots. It is a durable anchor for detection.</li>
+        <li>Tunnel tools keep their real names in process and service logs: <code>chisel</code>, <code>frpc</code>, <code>socat</code>.</li>
+        <li>A relay creates fan-in: many sources to one host. Baselines make this visible.</li>
+        <li>Long-lived connections from workstations to server zones are rare in honest traffic.</li>
+        <li>New listening ports on endpoints stand out against a listener inventory.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout danger"><span class="callout-label">Danger — lab only</span>
+    <p>All commands below are <strong>lab only — use only on systems you own</strong>. They are standard admin commands. Run them in an isolated test network only.</p>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Examples</span>Three safe lab examples</h3>
+
+  <div class="code-frame">
+    <div class="code-head"><span class="code-label">Lab only · Windows netsh portproxy (needs Administrator)</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+    <pre><code>:: Run on a Windows lab VM. Forwards local port 4444 to a lab database host.
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=4444 connectaddress=10.90.0.15 connectport=1433
+
+:: Show the rule. Windows stores it under HKLM\SYSTEM\CurrentControlSet\Services\PortProxy
+netsh interface portproxy show all
+
+:: Remove it again when the lab is done
+netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=4444</code></pre>
+  </div>
+
+  <div class="code-frame">
+    <div class="code-head"><span class="code-label">Lab only · SSH tunnel between two lab hosts (Linux / macOS)</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+    <pre><code># -L: local listener on 8443, forwarded through the SSH server to a lab web app
+ssh -N -L 8443:web.lab:443 deploy@jump.lab
+
+# -R: exposes a lab port back to the SSH server side
+ssh -N -R 9999:127.0.0.1:3389 deploy@jump.lab
+
+# -D: dynamic SOCKS proxy for lab tools
+ssh -N -D 1080 deploy@jump.lab</code></pre>
+  </div>
+
+  <div class="code-frame">
+    <div class="code-head"><span class="code-label">Lab only · socat relay on a Linux lab host</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+    <pre><code># Listen on 8080 and forward every connection to the lab web server
+socat TCP-LISTEN:8080,fork,reuseaddr TCP:10.90.0.20:80
+
+# Quick check that the relay path works, then it exits
+echo test | timeout 3 socat - TCP:127.0.0.1:8080</code></pre>
+  </div>
+</section>
+
+<section class="sec" id="sec-4-blue-team" aria-labelledby="h2-4">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">4</span><h2 id="h2-4">Blue Team Perspective</h2></div>
+  <p class="sec-intro">Where to look first, what normal looks like, and a concrete triage flow you can follow on your next shift.</p>
+
+  <h3 class="sub"><span class="hnum">Sources</span>Where to look first</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Data source (ATT&amp;CK)</th><th>Product that records it</th><th>What to pull</th></tr></thead>
+      <tbody>
+        <tr><td>Network Connection Creation</td><td>Sysmon EID 3, Windows Security 5156, EDR</td><td>New listeners, workstation-to-server flows, relay chains on one host</td></tr>
+        <tr><td>Network Traffic Flow</td><td>Zeek conn.log, NetFlow, firewall logs</td><td>Fan-in (many sources to one host), one host with both legs of a relay</td></tr>
+        <tr><td>Network Traffic Content</td><td>Zeek smb_files.log, TLS inspection, IDS</td><td>Odd pipe names, odd protocols inside SMB, unexpected TLS inside the LAN</td></tr>
+        <tr><td>Process &amp; registry events</td><td>Sysmon EID 1/13/17/18, EDR</td><td>portproxy commands, tunnel tools, new named pipes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>What normal looks like</h4>
+      <ul class="tick">
+        <li>Workstations open SMB to file servers and domain controllers, in known patterns.</li>
+        <li>Servers in one tier talk to their own tier and to a few management hosts.</li>
+        <li>Admins run SSH from named jump hosts, in work hours, to approved targets.</li>
+        <li>Listener counts per host stay stable from week to week.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>What suspicious looks like</h4>
+      <ul class="tick">
+        <li>A workstation connects to another workstation on a port that is not 445, 139, or 5357.</li>
+        <li>Many hosts suddenly open sessions to one internal host that never received fan-in before.</li>
+        <li>A new named pipe appears from a service host, with a random-looking name.</li>
+        <li>One host holds both legs: an inbound listener and an outbound connection, on the same ports.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Triage</span>A 7-step triage checklist</h3>
+  <ol class="story">
+    <li><strong>Open the raw event.</strong> Copy host, time, user, process, and command line. Ask: is this a pipe event, a portproxy command, or a flow alert?</li>
+    <li><strong>Pull host context.</strong> On the same host, in a window of 15 minutes before to 15 after: list processes, logons, new listeners, and service installs.</li>
+    <li><strong>Build the chain.</strong> In Zeek, NetFlow, or firewall logs, find both legs. A relay shows traffic in and traffic out on the same host, close in time.</li>
+    <li><strong>Check fan-in.</strong> Count distinct sources that contacted this host in 24 hours. More than 15 on one port is a strong relay signal. Compare with last week.</li>
+    <li><strong>Score it.</strong> Registry or pipe evidence plus a cross-zone flow is high confidence. One SSH <code>-L</code> flag on a developer jump host alone is probably normal. Check the asset owner.</li>
+    <li><strong>Contain if confirmed.</strong> Isolate the relay host first. Then kill the listener or pipe. The mesh loses its exit and its meeting point at once.</li>
+    <li><strong>Escalate and document.</strong> Call IR when the relay reached a server zone or more than two hosts. Record which logs you missed, so the gap gets fixed.</li>
+  </ol>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Escalation criteria — call IR when</h4>
+      <ul class="tick">
+        <li>The PortProxy registry key or a suspicious pipe appears on any server.</li>
+        <li>Two or more hosts beacon through the same internal relay.</li>
+        <li>The relay host is a network device, ESXi host, or domain controller.</li>
+        <li>Stolen or service accounts appear in the chain.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Quick wins this week</h4>
+      <ul class="tick">
+        <li>Turn on Sysmon EID 17/18 (pipe created/connected) on all Windows hosts.</li>
+        <li>Deploy the six Sigma rules in section 5.5 into your SIEM.</li>
+        <li>Build one report: distinct internal sources per internal host per day.</li>
+        <li>Verify an agent exists on every server. List the gaps and fix the top three.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+<section class="sec" id="sec-5-detection" aria-labelledby="h2-5">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">5</span><h2 id="h2-5">Detection Engineering Deep Dive</h2></div>
+  <p class="sec-intro">The core of this guide. Regulation mapping, threat intelligence with official ATT&amp;CK names, a ranked threat model, the logs to collect, and six ready-to-use Sigma and Splunk detections.</p>
+
+  <h3 class="sub" id="sec-5-1-regulation"><span class="hnum">5.1</span>Regulation mapping</h3>
+  <p class="sec-intro">Frameworks do not name this technique. They do ask for the controls that expose it: segmentation, monitoring, logging, and incident response. This table shows the link.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Framework</th><th>Control / requirement</th><th>What it asks for</th><th>What this means for this technique</th></tr></thead>
+      <tbody>
+        <tr><td>GDPR</td><td>Art. 32; Art. 33</td><td>Art. 32 asks for security measures that fit the risk, such as segmentation and monitoring. Art. 33 asks you to report personal-data breaches within 72 hours.</td><td>An undetected internal relay can reach personal data silently. Detection helps you prevent it, and gives you the evidence trail that a fast Art. 33 report needs.</td></tr>
+        <tr><td>HIPAA</td><td>45 CFR 164.308(a)(1)(ii)(D); 164.308(a)(5)(ii)(B); 164.312(b)</td><td>Risk analysis and reduction, protection from malicious software, and audit controls that record activity on systems with health data (ePHI).</td><td>Relay hosts bypass intended access paths to ePHI systems. Audit controls mean host and flow logs must exist and be reviewed, so a relay leaves evidence.</td></tr>
+        <tr><td>ISO/IEC 27001:2022</td><td>Annex A 8.15; 8.16; 5.24–5.26</td><td>8.15 asks for logging, 8.16 for monitoring of unusual activity, and 5.24–5.26 for planned incident management with roles and learning.</td><td>Fan-in baselines, pipe auditing, and the Sigma rules in 5.5 are exactly the "monitoring activities" evidence an auditor wants to see for a C2 relay case.</td></tr>
+        <tr><td>SOC 2</td><td>CC7.2; CC7.3; CC4.1</td><td>Monitor for anomalies, evaluate security events, and assess quality continuously, including whether detection actually works.</td><td>Documented detections with tested false-positive rates, plus response records for relay alerts, satisfy CC7.2/CC7.3. CC4.1 asks you to test them, not just write them.</td></tr>
+        <tr><td>PCI DSS 4.0</td><td>Requirement 10 (logging and review); Requirement 11.5 (network intrusions are detected and responded to)</td><td>Log and review activity in the cardholder data environment, and detect plus respond to network intrusion signals.</td><td>A port proxy crossing into the cardholder network breaks intended isolation. Req 10 logs must capture it; Req 11.5 expects an alert and a response.</td></tr>
+        <tr><td>NIST CSF 2.0</td><td>DE.CM-01/02/09; DE.AE-02/03; RS.MI-01/02</td><td>Monitor networks, endpoints, and computing hardware; analyze anomalies and correlate events; contain and eradicate during incidents.</td><td>The trio maps one-to-one: Zeek and NetFlow for DE.CM-01, Sysmon/EDR for DE.CM-02/09, the 5.5 correlation chain for DE.AE-02/03, and relay containment for RS.MI-01/02.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout note"><span class="callout-label">How auditors may test this</span>
+    <ul class="tick" style="margin-bottom:0">
+      <li>They may ask for one closed alert and trace it end to end: raw event, correlation rule, triage notes, and response record.</li>
+      <li>They may sample server hosts and ask which logs each one produces, then compare your answer with the log pipeline config.</li>
+      <li>They may run a segmentation test, for example a workstation-to-database connection, and ask which control fired.</li>
+    </ul>
+  </div>
+
+  <h3 class="sub" id="sec-5-2-threat-intel"><span class="hnum">5.2</span>Threat intelligence</h3>
+  <p class="sec-intro">Use outside reporting to sharpen the detections above. Start from the official MITRE page for T1090.001 and its linked references, then widen the circle.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Source</th><th>What you get</th><th>How to use it</th></tr></thead>
+      <tbody>
+        <tr><td>MITRE ATT&amp;CK and its references</td><td>The technique definition, official actor, software, and campaign lists, plus the papers ATT&amp;CK cites.</td><td>Anchor every detection to the technique ID. Follow the reference list to primary reports.</td></tr>
+        <tr><td>CISA KEV and CISA advisories</td><td>Known exploited vulnerabilities and advisories on state-sponsored tradecraft, including relay use.</td><td>Feed KEV into patch priority. Read advisories for relay tools and ports, then check your logs.</td></tr>
+        <tr><td>Vendor blogs (Mandiant, Microsoft, Cisco Talos, ESET)</td><td>Incident reports with real pivot paths, pipe names, tool names, and infrastructure.</td><td>Extract behaviors, not only hashes. Turn each behavior into a hunt or a Sigma rule.</td></tr>
+        <tr><td>abuse.ch ThreatFox / URLhaus</td><td>Shared C2 addresses, domains, and URLs, with a free API and feeds.</td><td>Enrich egress logs. If a relay's exit IP appears, you have a lead on the whole mesh.</td></tr>
+        <tr><td>MISP / OpenCTI</td><td>Structured, shareable indicators and reports that you can import into your SIEM.</td><td>Sync event feeds weekly. Map imported events to ATT&amp;CK IDs to keep coverage measured.</td></tr>
+        <tr><td>ISACs</td><td>Sector-peer sightings of relay tradecraft and indicators you can act on quickly.</td><td>Share confirmed sightings back. Peer data often reveals the same relay across victims.</td></tr>
+        <tr><td>VirusTotal</td><td>File, IP, and domain relations that expose proxy infrastructure.</td><td>Check relay exit IPs for downloaded tools and sibling infrastructure. Pivot on certificates and WHOIS.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4 style="margin:18px 0 8px">A 6-step intel workflow</h4>
+  <ol class="story">
+    <li><strong>Collect.</strong> Pull the ATT&amp;CK page, two or three vendor reports, and this week's abuse.ch feed into one place.</li>
+    <li><strong>Process.</strong> Strip noise. Keep behaviors: pipe names, ports, relay tool names, and flow shapes.</li>
+    <li><strong>Analyze.</strong> Compare each behavior with your baselines. Rate how likely it is in your sector.</li>
+    <li><strong>Apply.</strong> Load new indicators into the 5.5 rules. Write new rules for behaviors you cannot yet see.</li>
+    <li><strong>Review.</strong> After 30 days, check which feeds produced alerts and which produced only noise.</li>
+    <li><strong>Feed back.</strong> Send confirmed sightings to your ISAC and note gaps in your coverage plan.</li>
+  </ol>
+
+  <h4 style="margin:18px 0 8px">Official ATT&amp;CK actor, software, and campaign list (v20.0), with confidence</h4>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>ATT&amp;CK entry</th><th>Why it matters for internal proxies</th><th>Confidence</th></tr></thead>
+      <tbody>
+        <tr><td>Actors: APT39, FIN13, Higaisa, Lazarus Group, Lotus Blossom, Strider, Turla, Velvet Ant, Volt Typhoon</td><td>All nine are listed by MITRE as using T1090.001. Turla and Volt Typhoon are known for long-lived internal relays. FIN13 and APT39 kept quiet relays in payment and telecom networks.</td><td><span class="badge ok">High</span> — official ATT&amp;CK v20.0 relationships</td></tr>
+        <tr><td>Software: Cobalt Strike, Sliver, Mythic, Duqu, Stuxnet, Winnti for Windows, Drovorub, Kazuar, Hikit, CHOPSTICK, BRICKSTORM, StarProxy, GlassWorm, Gomir, InvisiMole, Mafalda, MiniDuke, Ninja, Pay2Key, FatDuke, HiddenFace, metaMain, BACKSPACE</td><td>These 23 tools are listed by MITRE for this technique. Cobalt Strike, Sliver, and Mythic do peer-to-peer beaconing over SMB pipes. Duqu and Stuxnet are classic p2p relay malware. StarProxy and Ninja are dedicated relay tools.</td><td><span class="badge ok">High</span> — official ATT&amp;CK v20.0 relationships</td></tr>
+        <tr><td>Campaigns: Operation Wocao, SolarWinds Compromise, APT28 Nearest Neighbor Campaign, AI-Assisted Breach of Mexico's Government Infrastructure</td><td>Four campaigns are listed by MITRE. The SolarWinds attack used p2p C2 between hosts. The Nearest Neighbor Campaign pivoted through neighboring networks. Operation Wocao used a relay pattern in its chain.</td><td><span class="badge ok">High</span> — official ATT&amp;CK v20.0 relationships</td></tr>
+        <tr><td>Generic relay tradecraft (netsh portproxy, socat, SSH tunnels)</td><td>Not tied to one group. These built-in tools appear across many intrusion classes, from espionage to ransomware.</td><td><span class="badge med">Medium</span> — widely reported pattern, no single owner</td></tr>
+        <tr><td>Single-source "group X uses port Y" claims on social media</td><td>Often copied between accounts without a primary report. Treat as leads, not facts.</td><td><span class="badge low">Low</span> — verify before acting</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4 style="margin:18px 0 8px">Turn intel into hunts — three named hypotheses</h4>
+  <div class="kv">
+    <div class="kv-row"><div class="kv-key">H1 · Hidden pipe mesh</div><div class="kv-val">Hypothesis: an infected host runs a C2 named pipe that other hosts connect to. Hunt: search Sysmon EID 17/18 for pipes created by service hosts, then fan-in on the same host in Zeek or NetFlow.</div></div>
+    <div class="kv-row"><div class="kv-key">H2 · Relay on a server</div><div class="kv-val">Hypothesis: a compromised server runs portproxy or socat to bridge two zones. Hunt: list all portproxy registry writes and socat listeners in 90 days of logs, then check each against change tickets.</div></div>
+    <div class="kv-row"><div class="kv-key">H3 · One exit, many victims</div><div class="kv-val">Hypothesis: several hosts share one egress beacon because one internal relay consolidates them. Hunt: rank internal hosts by distinct internal sources per day; then for each top host, check whether it also holds the only egress flow for its group.</div></div>
+  </div>
+  <h3 class="sub" id="sec-5-3-threats"><span class="hnum">5.3</span>Threat ranking</h3>
+  <p class="sec-intro">Six concrete ways this technique shows up, ranked from most to least severe for a typical enterprise.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Rank</th><th>Threat</th><th>Category</th><th>Platforms</th><th>Severity</th><th>Detection difficulty</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Compromised server turned internal relay (netsh portproxy / socat) forwarding C2 between segments</td><td>Pivoting</td><td>Windows, Linux</td><td><span class="badge crit">Critical</span></td><td>Medium — crisp artifacts if Sysmon is on the server</td><td>The attacker runs a forwarder on a server that both zones trust. All C2 for the deeper zone now flows through it. One host, high value, persistent across reboots.</td></tr>
+        <tr><td>2</td><td>SMB named-pipe / p2p C2 mesh between infected hosts (Duqu / CHOPSTICK style)</td><td>C2 hiding</td><td>Windows</td><td><span class="badge crit">Critical</span></td><td>High — needs pipe auditing and baselines</td><td>Beacons talk to each other over SMB named pipes, so no host opens a new port. The mesh survives even when one host loses its route. Classic for espionage toolkits.</td></tr>
+        <tr><td>3</td><td>Workstation-to-workstation unexpected C2 chains (host A beacons, host B forwards)</td><td>C2 hiding</td><td>Windows, Linux, macOS</td><td><span class="badge high">High</span></td><td>Medium — visible with listener inventories</td><td>Host A cannot reach out, so it uses host B as its exit. Each hop looks like peer traffic. Chains of two or three hops are common in real intrusions.</td></tr>
+        <tr><td>4</td><td>Internal proxy on a network device or ESXi host (router, switch, or VM host relays C2)</td><td>Persistence / pivoting</td><td>Network Devices, ESXi</td><td><span class="badge high">High</span></td><td>High — endpoint tools rarely cover devices</td><td>The relay runs where EDR does not: a router config, a switch, or the ESXi management plane. Traffic from devices is often exempt from scrutiny, so the relay can live long.</td></tr>
+        <tr><td>5</td><td>C2 riding trusted internal paths (WinRM / WMI / SMB sessions carrying C2)</td><td>Evasion</td><td>Windows</td><td><span class="badge high">High</span></td><td>High — blends with admin traffic</td><td>Commands and responses travel inside management protocols that are always allowed. The traffic content is the C2, but the wrapper is ordinary administration.</td></tr>
+        <tr><td>6</td><td>Multi-segment beacon chaining to reduce outbound connections to a single egress point</td><td>Resiliency</td><td>Windows, Linux</td><td><span class="badge med">Medium</span></td><td>Medium — fan-in math finds it</td><td>Beacons hop across segments and merge into one exit host. The attacker trades speed for quiet: fewer external flows, harder to count victims from outside.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p><strong>Ranking logic.</strong> Rank 1 and 2 come first because they are both Critical and both common: a relayed server gives the attacker a durable bridge, and an SMB pipe mesh hides an arbitrary number of victims. Ranks 3 to 5 are High: real, frequent, but easier to see with the right logs. Rank 6 is Medium: it is mostly a resiliency trick, and fan-in math exposes it once baselines exist.</p>
+
+  <h3 class="sub" id="sec-5-4-logs"><span class="hnum">5.4</span>Logs and patterns</h3>
+  <p class="sec-intro">For each ranked threat: which logs to collect, what the pattern looks like, one realistic example event, and tuning notes. All examples are synthetic.</p>
+
+  <div class="card">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><span class="badge crit">Threat 1 · Critical</span><span class="badge cat">Windows, Linux</span><strong style="font-size:14.5px">Server-side forwarder (portproxy / socat)</strong></div>
+    <div class="kv">
+      <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon EID 1 (process) and EID 13 (registry) on Windows; EID 7045 (service install); auditd execve and systemd journal on Linux; EDR process events.</div></div>
+      <div class="kv-row"><div class="kv-key">Pattern</div><div class="kv-val">A <code>netsh interface portproxy add</code> command line, a write under <code>Services\PortProxy</code>, or a <code>socat TCP-LISTEN:...,fork</code> process on a server. The rule survives reboots.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning</div><div class="kv-val">Allowlist documented NAT or load-balancer hosts. On Linux, alert when socat runs under service accounts rather than admins.</div></div>
+    </div>
+  </div>
+  <div class="code-frame">
+    <div class="code-head"><span class="code-label">Example — synthetic · Sysmon EID 1, portproxy set on a server</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+    <pre><code>EventID: 1
+TimeCreated: 2026-01-12T03:41:09.312Z      Computer: FS-APP-02.corp.local
+Image: C:\Windows\System32\netsh.exe
+CommandLine: netsh  interface portproxy add v4tov4 listenaddress=0.0.0.0
+             listenport=4444 connectaddress=10.90.0.15 connectport=1433
+User: CORP\svc_backup     ParentImage: C:\Windows\System32\cmd.exe</code></pre>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><span class="badge crit">Threat 2 · Critical</span><span class="badge cat">Windows</span><strong style="font-size:14.5px">SMB named-pipe / p2p C2 mesh</strong></div>
+    <div class="kv">
+      <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon EID 17 (pipe created) and EID 18 (pipe connected); Windows Security 5140/5145 (share and pipe access); Zeek smb logs; EDR pipe events.</div></div>
+      <div class="kv-row"><div class="kv-key">Pattern</div><div class="kv-val">A pipe with a machine-generated name is created by a service host. Several workstations then open IPC$ sessions to that host. Fan-in appears on one internal host.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning</div><div class="kv-val">Baseline honest pipe names per subnet. Watch for pipe names with random letter-digit runs, and for workstation-to-workstation IPC$ that never happened before.</div></div>
+    </div>
+  </div>
+  <div class="code-frame">
+    <div class="code-head"><span class="code-label">Example — synthetic · Sysmon EID 17, C2 pipe created on a server</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+    <pre><code>EventID: 17
+TimeCreated: 2026-01-13T04:02:55.104Z      Computer: FS-APP-02.corp.local
+EventType: CreatePipe
+PipeName: \status_9f31c2
+Image: C:\Windows\System32\svchost.exe
+ProcessGuid: {7a4c2e11-9d3f-6f2a-1001-4d3e5f6a7b8c}</code></pre>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><span class="badge high">Threat 3 · High</span><span class="badge cat">Windows, Linux, macOS</span><strong style="font-size:14.5px">Workstation-to-workstation C2 chains</strong></div>
+    <div class="kv">
+      <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon EID 3 (network connection) and EID 5 (process terminated); EDR network events; Zeek conn.log for the east-west pair.</div></div>
+      <div class="kv-row"><div class="kv-key">Pattern</div><div class="kv-val">Host A opens a connection to host B on a relay port such as 4444 or 8443. Host B then connects onward. The pair of events lands within seconds on B.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning</div><div class="kv-val">Exclude honest peer-to-peer apps by port and process. Raise severity when the destination port is a known relay port and the connection is long-lived.</div></div>
+    </div>
+  </div>
+  <div class="code-frame">
+    <div class="code-head"><span class="code-label">Example — synthetic · Sysmon EID 3, workstation forwards to a peer</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+    <pre><code>EventID: 3
+TimeCreated: 2026-01-14T09:22:31.880Z      Computer: WS-FIN-04.corp.local
+Image: C:\Windows\System32\svchost.exe
+SourceIp: 10.20.4.51      SourcePort: 50712
+DestinationIp: 10.20.4.63 DestinationPort: 4444
+Initiated: true</code></pre>
+  </div>
+  <div class="card">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><span class="badge high">Threat 4 · High</span><span class="badge cat">Network Devices, ESXi</span><strong style="font-size:14.5px">Relay on a network device or ESXi host</strong></div>
+    <div class="kv">
+      <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Firewall and router logs (syslog), Zeek conn.log seen from the device's IP, ESXi shell/vpxa logs, vCenter event logs, config-change (AAA/TACACS) logs.</div></div>
+      <div class="kv-row"><div class="kv-key">Pattern</div><div class="kv-val">A management IP that normally only talks to vCenter or NTP starts new outbound sessions. Or a device logs new NAT/port-forward entries that no change ticket explains.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning</div><div class="kv-val">Inventory every allowed flow from device management IPs. Allowlist backups, monitoring, and updates; alert on anything else.</div></div>
+    </div>
+  </div>
+  <div class="code-frame">
+    <div class="code-head"><span class="code-label">Example — synthetic · Firewall log, ESXi host opens an unexpected session</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+    <pre><code>timestamp: 2026-01-15T02:57:44Z  device: fw-edge-01  action: allow
+proto: tcp  src: 10.0.110.21 (esxi-05.mgmt)  sport: 51022
+dst: 203.0.113.66  dport: 443
+note: ESXi management host with no documented outbound allow rule</code></pre>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><span class="badge high">Threat 5 · High</span><span class="badge cat">Windows</span><strong style="font-size:14.5px">C2 riding WinRM / WMI / SMB paths</strong></div>
+    <div class="kv">
+      <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Sysmon EID 1 with parent process, Windows Security 4624/4648 (logons), 5145 (share access), PowerShell operational logs, EDR process trees.</div></div>
+      <div class="kv-row"><div class="kv-key">Pattern</div><div class="kv-val"><code>WsmProvHost.exe</code> or <code>WmiPrvSE.exe</code> spawns a shell or script host on a remote host. The child then opens the outbound or east-west C2 connection.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning</div><div class="kv-val">Allowlist your management platform's service account and its known child processes. Everything else from these parents deserves review.</div></div>
+    </div>
+  </div>
+  <div class="code-frame">
+    <div class="code-head"><span class="code-label">Example — synthetic · Sysmon EID 1, shell spawned by WinRM on a remote host</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+    <pre><code>EventID: 1
+TimeCreated: 2026-01-16T10:05:12.442Z      Computer: APP-SRV-11.corp.local
+Image: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+CommandLine: powershell -nop -w hidden -enc SQBFAFgAIAAoAE4AZQB3...
+ParentImage: C:\Windows\System32\WsmProvHost.exe
+User: CORP\adm_helpdesk</code></pre>
+  </div>
+
+  <div class="card">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><span class="badge med">Threat 6 · Medium</span><span class="badge cat">Windows, Linux</span><strong style="font-size:14.5px">Multi-segment beacon chaining into one egress point</strong></div>
+    <div class="kv">
+      <div class="kv-row"><div class="kv-key">Log sources</div><div class="kv-val">Zeek conn.log, NetFlow, firewall session logs; EDR network events on the exit host; DHCP or asset data to tell workstation IPs from server IPs.</div></div>
+      <div class="kv-row"><div class="kv-key">Pattern</div><div class="kv-val">One internal host receives sessions from many distinct internal sources on one port, then holds the only egress flow for that group. Fan-in on the inside, one flow on the outside.</div></div>
+      <div class="kv-row"><div class="kv-key">Tuning</div><div class="kv-val">Exclude honest aggregators first: update mirrors, SCCM distribution points, proxy servers, and backup targets. Then threshold on distinct sources per day.</div></div>
+    </div>
+  </div>
+  <div class="code-frame">
+    <div class="code-head"><span class="code-label">Example — synthetic · Zeek conn.log, fan-in plus single egress</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+    <pre><code>#fields ts                uid          id.orig_h    id.orig_p  id.resp_h    id.resp_p  proto
+1767871204.31  CkX1pQ2fKq1  10.20.4.51   51002      10.20.4.63   4444       tcp
+1767871211.77  CkX1pQ5mNz7  10.20.7.12   50318      10.20.4.63   4444       tcp
+1767871219.02  CkX1pQ9xWq4  10.20.9.44   49981      10.20.4.63   4444       tcp
+# Three different workstations converge on 10.20.4.63:4444 within 15 seconds.
+# In the same minute, only 10.20.4.63 opens one outbound flow to the internet.</code></pre>
+  </div>
+
+  <h3 class="sub" id="sec-5-5-sigma-spl"><span class="hnum">5.5</span>Sigma rules and Splunk SPL</h3>
+  <p class="sec-intro">One Sigma rule and one matching Splunk SPL query per ranked threat, in the same order. Replace index and sourcetype names with your own before running the SPL. Every rule is stable and was reviewed for false positives.</p>
+
+  <div class="card">
+    <h4>Detection 1 — server-side forwarder: netsh portproxy <span class="badge crit" style="margin-left:6px">Critical</span></h4>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Sigma 1 · portproxy rule added (Sysmon EID 1)</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code>title: Netsh Portproxy Forwarding Rule Added on Endpoint or Server
+id: 7c1e9a2f-3b4d-4e5f-8a6b-9c0d1e2f3a4b
+status: stable
+description: |
+  Detects creation of a Windows port forwarding rule with
+  'netsh interface portproxy add'. Attackers use this built-in
+  feature to turn a compromised host into an internal proxy that
+  forwards C2 between network segments (MITRE ATT&amp;CK T1090.001).
+  The rule is stored in the registry and survives reboots.
+references:
+  - https://attack.mitre.org/techniques/T1090/001/
+  - https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/netsh
+author: Detection Engineering Team
+date: 2026-01-06
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 1
+    Image|endswith: '\netsh.exe'
+    CommandLine|contains|all:
+      - 'interface'
+      - 'portproxy'
+      - 'add'
+  filter_admin:
+    User|startswith: 'CORP\SVC-SYNDIAG'
+  condition: selection and not filter_admin
+fields:
+  - Computer
+  - User
+  - ParentImage
+  - CommandLine
+falsepositives:
+  - Documented administrative port forwarding on designated NAT or jump hosts
+  - Legacy application redirection deployed by IT through management tooling
+level: critical
+tags:
+  - attack.command_and_control
+  - attack.t1090
+  - attack.t1090.001</code></pre>
+    </div>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Splunk SPL 1 · portproxy command line</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code># Assumptions: Sysmon events land in index=edr with sourcetype
+# XmlWinEventLog:Microsoft-Windows-Sysmon/Operational. Rename to match your feed.
+index=edr sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventID=1
+  Image="*\\netsh.exe" CommandLine="*interface*" CommandLine="*portproxy*" CommandLine="*add*"
+  NOT User="CORP\\SVC-SYNDIAG*"
+| stats min(_time) as first_seen max(_time) as last_seen count
+        values(User) as users values(ParentImage) as parents by Computer, CommandLine
+| sort - last_seen</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping &amp; tuning.</strong> Sigma selection ↔ SPL filter on Image plus three CommandLine terms; the same admin filter applies on both sides. Expected false positives: near zero per week once the admin allowlist holds your real NAT hosts. Escalate at once when the host is a server rather than a workstation.</p>
+  </div>
+  <div class="card">
+    <h4>Detection 2 — SMB named-pipe C2 mesh (Sysmon EID 17) <span class="badge crit" style="margin-left:6px">Critical</span></h4>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Sigma 2 · suspicious named pipe created</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code>title: Suspicious Named Pipe Created by Service Host Process
+id: 2f4b6d8e-0a1c-4b2d-9e3f-5a6b7c8d9e0f
+status: stable
+description: |
+  Detects creation of a named pipe whose name matches patterns used
+  by C2 frameworks for peer-to-peer beaconing over SMB. Infected
+  hosts connect to this pipe, so no new listening TCP port appears.
+  This is the core artifact of an internal SMB C2 mesh
+  (MITRE ATT&amp;CK T1090.001). Correlate with fan-in on the same host.
+references:
+  - https://attack.mitre.org/techniques/T1090/001/
+  - https://github.com/SigmaHQ/sigma/tree/master/rules/windows/pipe_created
+author: Detection Engineering Team
+date: 2026-01-09
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 17
+    PipeName|re: '\\\\(MSSE-[a-zA-Z0-9]{4,6}|status_[a-zA-Z0-9]{4,8}|msagent_[a-zA-Z0-9]{4,8}|postex_[a-zA-Z0-9]{4,8})'
+  condition: selection
+fields:
+  - Computer
+  - Image
+  - PipeName
+  - ProcessGuid
+falsepositives:
+  - Admin or monitoring tools that create similarly named pipes by chance
+  - Penetration-testing tools on dedicated assessment hosts
+level: critical
+tags:
+  - attack.command_and_control
+  - attack.t1090
+  - attack.t1090.001</code></pre>
+    </div>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Splunk SPL 2 · suspicious named pipe</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code># Assumptions: Sysmon in index=edr, sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational.
+# Field names PipeName and Image must exist (standard Sysmon input).
+index=edr sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventID=17
+| regex PipeName="\\\\(MSSE-[a-zA-Z0-9]{4,6}|status_[a-zA-Z0-9]{4,8}|msagent_[a-zA-Z0-9]{4,8}|postex_[a-zA-Z0-9]{4,8})"
+| table _time, Computer, Image, PipeName
+| sort - _time</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping &amp; tuning.</strong> The Sigma regex and the SPL <code>regex</code> command use the same pattern on PipeName. Expected false positives: a handful per month in large estates; test any hit against the asset owner. Pair every hit with the fan-in query in Detection 6 before you declare a mesh.</p>
+  </div>
+
+  <div class="card">
+    <h4>Detection 3 — workstation-to-workstation relay connection <span class="badge high" style="margin-left:6px">High</span></h4>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Sigma 3 · workstation connects to peer on relay port</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code>title: Internal Host Connects to Peer on Common Relay Port
+id: 9d3e5f7a-1b2c-4d6e-8f0a-2b3c4d5e6f70
+status: stable
+description: |
+  Detects a host initiating a connection to another internal host on
+  a port often used for relays and tunnels. One workstation beacons
+  through another in T1090.001 chains. Adapt the source and
+  destination ranges to your workstation subnets before enabling.
+references:
+  - https://attack.mitre.org/techniques/T1090/001/
+  - https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon
+author: Detection Engineering Team
+date: 2026-01-13
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    EventID: 3
+    Initiated: 'true'
+    DestinationPort:
+      - 4444
+      - 5555
+      - 1080
+      - 8081
+      - 8443
+      - 31337
+  filter_local:
+    DestinationIp|startswith:
+      - '127.'
+      - '10.20.4.51'
+  condition: selection and not filter_local
+fields:
+  - Computer
+  - Image
+  - SourceIp
+  - DestinationIp
+  - DestinationPort
+falsepositives:
+  - Development or test services that listen on these ports by convention
+  - Screen-sharing or game tools used with approval on specific hosts
+level: high
+tags:
+  - attack.command_and_control
+  - attack.t1090
+  - attack.t1090.001</code></pre>
+    </div>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Splunk SPL 3 · peer relay ports</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code># Assumptions: Sysmon in index=edr (as above). Replace 10.20.0.0/16 with
+# your workstation range(s). 10.20.4.51 is an example allowlisted host.
+index=edr sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventID=3 Initiated="true"
+  DestinationPort IN (4444, 5555, 1080, 8081, 8443, 31337)
+  NOT DestinationIp="127.*" NOT DestinationIp="10.20.4.51"
+| where cidrmatch("10.20.0.0/16", SourceIp)
+| table _time, Computer, Image, SourceIp, DestinationIp, DestinationPort
+| sort - _time</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping &amp; tuning.</strong> Same port list and same Initiated condition in both languages; the CIDR check is the documented adaptation step. Expected false positives: a few per week in developer-heavy networks. Long durations and repeat pairs on the same hosts are the strongest escalation signal.</p>
+  </div>
+
+  <div class="card">
+    <h4>Detection 4 — device or ESXi management host calls out <span class="badge high" style="margin-left:6px">High</span></h4>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Sigma 4 · management host opens external connection</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code>title: Device or Hypervisor Management Host Connects to External Address
+id: 4a6c8e0b-2d3f-4a5b-9c1d-3e4f5a6b7c8d
+status: stable
+description: |
+  Detects a connection from a network-device or ESXi management IP to
+  a non-private destination. These hosts should only talk to vCenter,
+  NTP, backups, and monitoring. An outbound session from them is a
+  strong T1090.001 relay indicator. Replace the placeholder source
+  ranges with your management subnet before enabling.
+references:
+  - https://attack.mitre.org/techniques/T1090/001/
+  - https://attack.mitre.org/software/S0183/
+author: Detection Engineering Team
+date: 2026-01-16
+logsource:
+  category: network_connection
+detection:
+  selection_src:
+    SourceIp|startswith:
+      - '10.0.110.'
+      - '10.0.120.'
+  filter_private:
+    DestinationIp|re: '^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)'
+  condition: selection_src and not filter_private
+fields:
+  - SourceIp
+  - DestinationIp
+  - DestinationPort
+  - transport
+falsepositives:
+  - Vendor update checks and license validation if they are not proxied
+  - Backup replication between sites that leaves through the internet
+level: high
+tags:
+  - attack.command_and_control
+  - attack.t1090
+  - attack.t1090.001</code></pre>
+    </div>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Splunk SPL 4 · management host egress</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code># Assumptions: Zeek conn.log in index=net, sourcetype=zeek_conn.
+# id.orig_h is the client IP, id.resp_h the server IP, id.resp_p the server port.
+# Replace 10.0.110.0/24 and 10.0.120.0/24 with your device/ESXi management ranges.
+index=net sourcetype=zeek_conn
+| where cidrmatch("10.0.110.0/24", id.orig_h) OR cidrmatch("10.0.120.0/24", id.orig_h)
+| where NOT cidrmatch("10.0.0.0/8", id.resp_h)
+    AND NOT cidrmatch("172.16.0.0/12", id.resp_h)
+    AND NOT cidrmatch("192.168.0.0/16", id.resp_h)
+| table _time, id.orig_h, id.resp_h, id.resp_p, proto, duration
+| sort - _time</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping &amp; tuning.</strong> Sigma source ranges ↔ SPL <code>cidrmatch</code> on the client IP; the private-range filter is the same logic. Expected false positives: near zero per week once the management ranges and their vendor flows are listed. Keep severity high until the flow is explained in a ticket.</p>
+  </div>
+  <div class="card">
+    <h4>Detection 5 — C2 riding WinRM / WMI sessions <span class="badge high" style="margin-left:6px">High</span></h4>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Sigma 5 · shell spawned by remote-management host</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code>title: Suspicious Process Spawned by WinRM or WMI Provider Host
+id: 6b8d0f2a-4c5e-4b7d-9a3c-5d6e7f8a9b0c
+status: stable
+description: |
+  Detects a shell or script host spawned by WsmProvHost (WinRM) or
+  the WMI provider host on a remote machine. Attackers carry C2
+  commands inside these trusted management paths to blend with
+  admin traffic (MITRE ATT&amp;CK T1090.001). Allowlist your management
+  platform's service accounts.
+references:
+  - https://attack.mitre.org/techniques/T1090/001/
+  - https://learn.microsoft.com/en-us/windows/win32/winrm/portal
+author: Detection Engineering Team
+date: 2026-01-20
+logsource:
+  product: windows
+  service: sysmon
+detection:
+  sel_parent:
+    EventID: 1
+    ParentImage|endswith:
+      - '\WsmProvHost.exe'
+      - '\WmiPrvSE.exe'
+  sel_child:
+    Image|endswith:
+      - '\cmd.exe'
+      - '\powershell.exe'
+      - '\pwsh.exe'
+      - '\wscript.exe'
+      - '\cscript.exe'
+      - '\mshta.exe'
+  filter_admin:
+    User|startswith: 'CORP\SVC-DEPLOY'
+  condition: sel_parent and sel_child and not filter_admin
+fields:
+  - Computer
+  - User
+  - Image
+  - ParentImage
+  - CommandLine
+falsepositives:
+  - Remote-support and configuration tools that run commands through WinRM
+  - Automation platforms such as Ansible or SCCM using a service account
+level: high
+tags:
+  - attack.command_and_control
+  - attack.t1090
+  - attack.t1090.001</code></pre>
+    </div>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Splunk SPL 5 · WinRM/WMI child processes</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code># Assumptions: Sysmon in index=edr (as above). CORP\SVC-DEPLOY is the example
+# allowlisted automation account; replace with your own management accounts.
+index=edr sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventID=1
+  (ParentImage="*\\WsmProvHost.exe" OR ParentImage="*\\WmiPrvSE.exe")
+  (Image="*\\cmd.exe" OR Image="*\\powershell.exe" OR Image="*\\pwsh.exe"
+   OR Image="*\\wscript.exe" OR Image="*\\cscript.exe" OR Image="*\\mshta.exe")
+  NOT User="CORP\\SVC-DEPLOY*"
+| table _time, Computer, User, ParentImage, Image, CommandLine
+| sort - _time</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping &amp; tuning.</strong> Parent-plus-child logic is identical on both sides. Expected false positives: several per day in estates that administer heavily through WinRM; the allowlist handles most. Any hit with an encoded or hidden-window command line goes straight to IR.</p>
+  </div>
+
+  <div class="card">
+    <h4>Detection 6 — beacon fan-in to one internal exit host <span class="badge med" style="margin-left:6px">Medium</span></h4>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Sigma 6 · many internal sources to one host</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code>title: Many Internal Hosts Converge on One Internal Host per Day
+id: 8e0a2c4e-6d7f-4a9b-8b1d-7c8d9e0f1a2b
+status: stable
+description: |
+  Aggregates internal connections and fires when more than 15
+  distinct sources contact the same internal host and port in one
+  day on a common relay port. A beacon chain that funnels many
+  infected hosts into one internal proxy produces exactly this
+  fan-in shape (MITRE ATT&amp;CK T1090.001). Exclude known aggregators
+  such as update mirrors and proxy servers.
+references:
+  - https://attack.mitre.org/techniques/T1090/001/
+  - https://www.zeek.org/
+author: Detection Engineering Team
+date: 2026-01-23
+logsource:
+  category: network_connection
+detection:
+  selection:
+    DestinationPort:
+      - 4444
+      - 5555
+      - 1080
+      - 8081
+      - 8443
+  condition: selection | count(SourceIp) by DestinationIp, DestinationPort > 15
+fields:
+  - SourceIp
+  - DestinationIp
+  - DestinationPort
+falsepositives:
+  - Software update mirrors, distribution points, and internal proxies on these ports
+  - Lab or build servers used by many clients by design
+level: medium
+tags:
+  - attack.command_and_control
+  - attack.t1090
+  - attack.t1090.001</code></pre>
+    </div>
+    <div class="code-frame">
+      <div class="code-head"><span class="code-label">Splunk SPL 6 · fan-in aggregation</span><button type="button" class="copy-btn" data-copy>Copy</button></div>
+      <pre><code># Assumptions: Zeek conn.log in index=net, sourcetype=zeek_conn.
+# id.orig_h = client, id.resp_h = server, id.resp_p = server port.
+index=net sourcetype=zeek_conn id.resp_p IN (4444, 5555, 1080, 8081, 8443)
+| bin _time span=1d
+| stats dc(id.orig_h) as distinct_sources values(id.orig_h) as sources by _time, id.resp_h, id.resp_p
+| where distinct_sources &gt; 15
+| sort - distinct_sources</code></pre>
+    </div>
+    <p class="small muted"><strong>Mapping &amp; tuning.</strong> Sigma's <code>count(SourceIp) by DestinationIp, DestinationPort &gt; 15</code> ↔ SPL <code>dc(id.orig_h)</code> grouped per day, with the same threshold and port list. Expected false positives: one or two stable hits per week from listed aggregators; after you exclude them, new hosts reaching the threshold are worth a case. This rule finds the exit host of threat 6 and confirms Detection 2 hits.</p>
+  </div>
+</section>
+<section class="sec" id="sec-6-case-study" aria-labelledby="h2-6">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">6</span><h2 id="h2-6">Case Study — "The Quiet Fan-In"</h2></div>
+  <div class="callout note"><span class="callout-label">Composite scenario</span>
+    <p>This case study is <strong>fictional but realistic</strong>. The company, hosts, and dates are invented. Every step follows tradecraft documented in public incident reports. It does not describe one specific real company.</p>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Context</h4>
+      <p>"Aurora Freight" runs regional logistics. Its office workstations and a server zone share one routing design from an older merger. Server FS-APP-02 hosts a file application. It has an endpoint agent, but the agent was set to silent mode by a vendor installer, so pipe and process alerts never reached the SIEM.</p>
+    </div>
+    <div class="card">
+      <h4>Attack chain mapped to ATT&amp;CK</h4>
+      <ul class="tick">
+        <li><strong>Initial access</strong> — T1566.001 spear-phishing attachment to a finance mailbox.</li>
+        <li><strong>Execution</strong> — T1204.002 user opens the attachment; T1059.001 PowerShell loader runs.</li>
+        <li><strong>Persistence</strong> — T1543.003 a fake "Aurora Sync" Windows service on FS-APP-02.</li>
+        <li><strong>Command and control</strong> — T1071.001 one HTTPS beacon out; T1090.001 SMB named-pipe relay for two workstations (this technique).</li>
+        <li><strong>Lateral movement</strong> — T1021.006 WinRM sessions launched through the relay.</li>
+        <li><strong>Objective</strong> — T1005 files collected from share folders; T1041 exfiltration over the C2 channel.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Timeline</span>Two weeks, compressed</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Offset</th><th>Event</th><th>Observed at the time?</th></tr></thead>
+      <tbody>
+        <tr><td>T0+0h</td><td>Phishing mail reaches 40 mailboxes; one user opens the attachment on WS-OPS-07.</td><td><span class="badge low">No</span> — mail gateway flagged it two days later</td></tr>
+        <tr><td>T0+1h</td><td>PowerShell loader runs on WS-OPS-07 and pulls the beacon.</td><td><span class="badge med">Partly</span> — process logged, no alert rule existed</td></tr>
+        <tr><td>T0+6h</td><td>Attacker moves to FS-APP-02 with stolen service credentials and installs the fake service.</td><td><span class="badge low">No</span> — service-install events not forwarded</td></tr>
+        <tr><td>T0+8h</td><td>FS-APP-02 opens its single HTTPS egress beacon to the C2 server.</td><td><span class="badge med">Partly</span> — one flow among thousands, no baseline</td></tr>
+        <tr><td>T0+1d</td><td>Beacon on FS-APP-02 starts the SMB named-pipe listener; WS-OPS-07 and WS-WHS-02 join it.</td><td><span class="badge low">No</span> — EID 17/18 not collected</td></tr>
+        <tr><td>T0+9d</td><td>Detection: new Sigma rule 6 fires — 17 distinct sources on one internal host and port; rule 2 confirms the pipe name.</td><td><span class="badge ok">Yes</span> — high-severity case opened</td></tr>
+        <tr><td>T0+9d</td><td>Containment: FS-APP-02 isolated; relay and both workstations lose their channel.</td><td><span class="badge ok">Yes</span> — 45 minutes to isolate</td></tr>
+        <tr><td>T0+10–12d</td><td>Eradication: service removed, hosts rebuilt, credentials rotated, pipe name hunted estate-wide.</td><td><span class="badge ok">Yes</span> — two more suspicious hosts found and cleaned</td></tr>
+        <tr><td>T0+14d</td><td>Recovery review; EID 17/18 and service installs now forwarded; agent silent mode fixed.</td><td><span class="badge ok">Yes</span> — coverage gaps closed</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Detection</span>Which rule and which log fired</h3>
+  <div class="card">
+    <p>The case opened from Sigma rule 6 (fan-in) in section 5.5, fed by Zeek conn.log. One host, FS-APP-02, received SMB sessions from 17 distinct sources in one day. Sigma rule 2 then confirmed a matching pipe event from the EDR pilot feed: a pipe named like a framework pipe, created by a service host. The analyst correlated three facts on one host: fan-in, pipe creation, and a single steady egress flow. That trio is the internal-proxy signature described in this guide.</p>
+  </div>
+
+  <div class="grid-3">
+    <div class="card">
+      <h4>Containment</h4>
+      <p>Isolate FS-APP-02 first. The mesh loses its meeting point and its exit at once. Then isolate WS-OPS-07 and WS-WHS-02. Block the C2 address at the firewall.</p>
+    </div>
+    <div class="card">
+      <h4>Eradication</h4>
+      <p>Remove the fake service, rebuild the three hosts from clean images, rotate every credential seen on them, and hunt the pipe name across the estate.</p>
+    </div>
+    <div class="card">
+      <h4>Recovery</h4>
+      <p>Restore hosts, fix the silent agent mode, forward EID 17/18 and service installs, and re-check the segmentation rules that made the fan-in possible.</p>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Impact and business consequences</h4>
+      <p><strong>Operational:</strong> three hosts offline for two days; the file app moved to a backup server with minor delays. <strong>Data:</strong> the attacker reached two share folders; SQL audit and flow volume analysis found no confirmed bulk exfiltration. <strong>Cost:</strong> roughly 180 staff hours of response, one external forensics engagement, and unplanned hardware for rebuilds.</p>
+      <p><strong>Business consequences:</strong> a customer audit asked for evidence of the response; the insurer asked for the detection timeline; and the team had to explain why one server held both trust roles. The case became the driver for the segmentation project.</p>
+    </div>
+    <div class="card">
+      <h4>Team response and tools</h4>
+      <p><strong>Roles:</strong> SOC T1 opened and triaged the case; SOC T2 did the correlation; the IR lead ran the bridge; the network engineer pulled Zeek and firewall data and blocked the C2 IP; the IT owner rebuilt hosts; management approved overtime; comms prepared a customer note that was not needed after all.</p>
+      <p><strong>Attacker tools:</strong> phishing kit, PowerShell loader, a Cobalt Strike-style beacon with SMB peer support, WinRM. <strong>Defender tools:</strong> Zeek, Sysmon, EDR, Splunk, the Sigma rules in 5.5, and a rebuild pipeline.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>Lessons learned</h4>
+    <ul class="tick">
+      <li><strong>Agent coverage is not the same as alert coverage.</strong> The agent was present but silent; only the SIEM pilot feed caught the pipe event.</li>
+      <li><strong>Fan-in is a cheap, strong signal.</strong> One aggregation query found the exit host that no single flow alert had flagged.</li>
+      <li><strong>Pipe auditing must be on before you need it.</strong> EID 17/18 was a checkbox item before the case; after it, a permanent rule.</li>
+      <li><strong>Contain the relay first.</strong> Isolating the exit host broke the channel for every victim at once.</li>
+      <li><strong>Hunt the indicator, not the host.</strong> Sweeping the pipe name estate-wide found two more suspicious hosts the alerts had missed.</li>
+      <li><strong>One host, two trust roles.</strong> A server that serves users and reaches the internet is a design defect; segmentation removes the reward.</li>
+    </ul>
+  </div>
+</section>
+<section class="sec" id="sec-7-mitigation" aria-labelledby="h2-7">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">7</span><h2 id="h2-7">Mitigation and Defense</h2></div>
+  <p class="sec-intro">MITRE lists one official mitigation for this technique: Network Intrusion Prevention (M1031). Beyond that official mitigation, practitioners rely on layered prevention and detection controls, listed below.</p>
+
+  <div class="callout note"><span class="callout-label">Official MITRE mitigation</span>
+    <p><strong>Network Intrusion Prevention (M1031).</strong> An IPS that inspects east-west traffic can spot relay behavior and known relay tools inside the network, not only at the edge. Place sensors between zones, not only at the perimeter.</p>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Layers</span>Prevention by layer</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Layer</th><th>Control</th><th>How it helps</th></tr></thead>
+      <tbody>
+        <tr><td>Network segmentation</td><td>Deny-by-default zones between workstations, servers, and management</td><td>Removes the paths a relay needs, so a compromised host cannot bridge two zones.</td></tr>
+        <tr><td>Egress filtering</td><td>Allow-list outbound flows per host role; default deny</td><td>Keeps the relay's exit flow from forming, and makes any new flow visible.</td></tr>
+        <tr><td>DNS filtering</td><td>Resolve internal names through monitored resolvers; block odd domains</td><td>Reveals C2 lookups before the channel forms and logs the first pivot step.</td></tr>
+        <tr><td>Web proxy and TLS inspection</td><td>Inspect outbound HTTPS from servers where law and policy allow</td><td>Shows the true content behind the relay's single egress flow.</td></tr>
+        <tr><td>Intrusion prevention (M1031)</td><td>IPS sensors on east-west links with C2 and tunnel signatures</td><td>The official mitigation: detects relay tools and beacon patterns between zones.</td></tr>
+        <tr><td>Block tunnel providers</td><td>Deny known Tor, VPN, and tunnel-provider ranges and bootstrap domains</td><td>Removes easy fallback exits when the relay's main route dies.</td></tr>
+        <tr><td>Harden network devices</td><td>Disable unused services, restrict management, log config changes</td><td>Stops routers, switches, and hypervisors from becoming silent relays.</td></tr>
+        <tr><td>Asset inventory</td><td>Keep roles and owners per host in the SIEM</td><td>Fan-in and egress rules can then tell a workstation from an update mirror.</td></tr>
+        <tr><td>Patch edge devices</td><td>Patch VPN gateways and firewalls on a fixed schedule</td><td>Removes the entry points that start the chain in the first place.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Detective controls</h4>
+      <ul class="tick">
+        <li><strong>Log pipeline.</strong> Ship Sysmon EID 1/3/13/17/18, service installs, Zeek or NetFlow, and firewall session logs to the SIEM.</li>
+        <li><strong>Sigma deployment.</strong> Run the six rules from 5.5; test each one with a lab event every quarter.</li>
+        <li><strong>Alert triage.</strong> Write a playbook for relay alerts: isolate, kill, trace both legs, sweep for the indicator.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Enterprise actions this quarter</h4>
+      <ul class="tick">
+        <li>Verify an agent in alerting mode on every server; publish the gap list with owners.</li>
+        <li>Remove any "any-any" rules between zones found in the last rule review.</li>
+        <li>Set IPS sensors on the two busiest east-west links first.</li>
+        <li>Add device and hypervisor management IPs to the monitoring scope.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Home</span>Home and remote workers</h3>
+  <div class="card">
+    <p>Home networks are flat. One infected laptop can reach every device, and a relay can form without any firewall to cross. Keep it simple:</p>
+    <ul class="tick">
+      <li>Update the router firmware and disable remote management from the internet.</li>
+      <li>Never set up port forwarding on the router for work devices; use a reputable VPN instead.</li>
+      <li>Run reputable antivirus and keep it on.</li>
+      <li>Turn on a DNS filter that blocks known bad domains.</li>
+      <li>Keep work devices on a separate network profile from smart home and guest devices.</li>
+      <li>If something odd happens — new pop-ups, unknown programs, slow unexplained traffic — report it to IT the same day, before unplugging anything.</li>
+    </ul>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Priorities</span>Prioritized actions</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Window</th><th>Action</th><th>Owner</th><th>Effort</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge ok">0–30 d</span></td><td>Forward Sysmon EID 17/18 and service installs to the SIEM; deploy the six Sigma rules.</td><td>Detection engineering</td><td>Low</td></tr>
+        <tr><td><span class="badge ok">0–30 d</span></td><td>Alert on any write under Services\PortProxy, estate-wide.</td><td>Detection engineering</td><td>Low</td></tr>
+        <tr><td><span class="badge ok">0–30 d</span></td><td>Publish a daily fan-in report: distinct internal sources per internal host.</td><td>SOC engineering</td><td>Low</td></tr>
+        <tr><td><span class="badge high">30–90 d</span></td><td>Verify alerting-mode agent coverage on all servers; close the top gaps.</td><td>Endpoint team</td><td>Medium</td></tr>
+        <tr><td><span class="badge high">30–90 d</span></td><td>Deny workstation-to-server flows except named exceptions; document each one.</td><td>Network team</td><td>Medium</td></tr>
+        <tr><td><span class="badge high">30–90 d</span></td><td>Place IPS sensors on the main east-west links (official M1031).</td><td>Network security</td><td>Medium</td></tr>
+        <tr><td><span class="badge med">90 d+</span></td><td>Bring network devices, ESXi, and hypervisors into log and alert scope.</td><td>Infrastructure team</td><td>High</td></tr>
+        <tr><td><span class="badge med">90 d+</span></td><td>Re-design zones so no server both serves users and reaches the internet.</td><td>Architecture board</td><td>High</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="sec" id="sec-8-mistakes" aria-labelledby="h2-8">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">8</span><h2 id="h2-8">Common Mistakes</h2></div>
+  <p class="sec-intro">Eleven mistakes that let internal proxies live undetected. Each row links the symptom to its cause and to a fix you can apply.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Watching only the perimeter for C2</td><td>The mesh runs for weeks without one alert</td><td>Sensors exist only at the internet edge</td><td>Extend collection to east-west links</td><td>Add internal coverage to the monitoring map, reviewed quarterly</td></tr>
+        <tr><td>2</td><td>No pipe auditing on Windows</td><td>EID 17/18 missing; pipe evidence absent</td><td>Sysmon config written before pipe events existed</td><td>Deploy a config that collects EID 17/18</td><td>Config-as-code with a quarterly rule review</td></tr>
+        <tr><td>3</td><td>Agents installed but silent</td><td>Host has an agent, yet no events arrive</td><td>Vendor installer set silent mode</td><td>Audit agent health by alerts, not by install count</td><td>Weekly agent-heartbeat report with owners</td></tr>
+        <tr><td>4</td><td>Treating SMB as noise</td><td>Fan-in sessions exist in logs, nobody looks</td><td>SMB volume feels too big to review</td><td>Aggregate instead of reading rows</td><td>Build the fan-in report once; let it run daily</td></tr>
+        <tr><td>5</td><td>No asset roles in the SIEM</td><td>Analyst cannot tell a mirror from a workstation</td><td>Inventory never joined to log data</td><td>Join CMDB or DHCP data to host names</td><td>Keep role and owner fields in every lookup</td></tr>
+        <tr><td>6</td><td>Single-event alerts only</td><td>Weak alerts fire, get closed as noise</td><td>Rules built on one event type</td><td>Correlate pipe + flow + process per host</td><td>Design detections as chains; measure their quality</td></tr>
+        <tr><td>7</td><td>EDR removed from servers for performance</td><td>The relay host has no process or pipe events</td><td>Performance fear without measurement</td><td>Measure impact; re-enable with tuned config</td><td>Capacity planning before exclusions</td></tr>
+        <tr><td>8</td><td>Firewall rules never recertified</td><td>Old any-any rules connect zones for years</td><td>No ownership or expiry on rules</td><td>Review the rule base; add owners and expiry</td><td>Quarterly recertification meetings with records</td></tr>
+        <tr><td>9</td><td>Devices outside monitoring scope</td><td>Relay on a switch or hypervisor invisible</td><td>Assumption that endpoint tools cover everything</td><td>Ship device syslog and flow data to the SIEM</td><td>Scope list includes devices, hypervisors, and IoT</td></tr>
+        <tr><td>10</td><td>Blocking only the egress IP</td><td>Channel returns from a new address next day</td><td>The internal mesh was never touched</td><td>Isolate the relay; sweep the pipe or port indicator</td><td>Response playbook: contain the pivot, then the exit</td></tr>
+        <tr><td>11</td><td>Baselines never built</td><td>Nobody can say what "unusual fan-in" means</td><td>Baselines postponed after deployment</td><td>Build 30-day per-zone baselines now</td><td>Re-baseline after each major network change</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Habits</span>Daily, weekly, monthly habits</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Daily</th><th>Weekly</th><th>Monthly</th></tr></thead>
+      <tbody>
+        <tr><td>Review pipe-creation and fan-in alerts from the past day.</td><td>Diff listener inventories and agent heartbeats per zone.</td><td>Run one purple-team test of the relay chain in a lab.</td></tr>
+        <tr><td>Check that the six Sigma rules produced data, not errors.</td><td>Read the blocked east-west log for probing patterns.</td><td>Re-tune rules with the month's false positives; record each change.</td></tr>
+        <tr><td>Confirm new internal hosts appear in the inventory feed.</td><td>Verify device and hypervisor syslog still arrives.</td><td>Recertify one slice of firewall rules and their owners.</td></tr>
+        <tr><td>Triage any new listener on an endpoint within the shift.</td><td>Review the top-10 fan-in hosts with the asset owners.</td><td>Update the intel list from ATT&amp;CK and one vendor report.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="sec" id="sec-9-cheat-sheet" aria-labelledby="h2-9">
+  <div class="sec-head"><span class="sec-num" aria-hidden="true">9</span><h2 id="h2-9">Cheat Sheet</h2></div>
+  <p class="sec-intro">The whole guide on one screen. Print this section for the SOC desk.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Key fact</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td>Technique</td><td>T1090.001 — Internal Proxy, sub-technique of T1090 (Proxy)</td></tr>
+        <tr><td>Tactic</td><td>Command and Control (only)</td></tr>
+        <tr><td>Platforms</td><td>ESXi · Linux · macOS · Network Devices · Windows</td></tr>
+        <tr><td>Official mitigation</td><td>Network Intrusion Prevention (M1031)</td></tr>
+        <tr><td>First checks</td><td>Sysmon EID 17/18 pipe events · PortProxy registry writes · fan-in per internal host · one-egress hosts</td></tr>
+        <tr><td>Strongest chain</td><td>New named pipe + many sources to one host + a single egress flow, on the same host</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="sub"><span class="hnum">Rules</span>Top detections (see section 5.5)</h3>
+  <ul class="tick">
+    <li><strong>Rule 1</strong> — netsh portproxy command line on any host (Critical, Sysmon EID 1).</li>
+    <li><strong>Rule 2</strong> — C2-style named pipe created by a service host (Critical, Sysmon EID 17).</li>
+    <li><strong>Rule 3</strong> — internal peer connection on a relay port (High, Sysmon EID 3).</li>
+    <li><strong>Rule 4</strong> — device or ESXi management IP reaching the internet (High, network logs).</li>
+    <li><strong>Rule 5</strong> — shell spawned by WinRM or WMI provider host (High, Sysmon EID 1).</li>
+    <li><strong>Rule 6</strong> — more than 15 internal sources converge on one host and port (Medium, flow aggregation).</li>
+  </ul>
+
+  <div class="grid-2">
+    <div class="card">
+      <h4>Response checklist</h4>
+      <ul class="tick">
+        <li>☐ Isolate the relay host — the mesh loses its meeting point.</li>
+        <li>☐ Capture the listener process, command line, and pipe name first.</li>
+        <li>☐ Kill the listener, pipe, or portproxy rule.</li>
+        <li>☐ Trace both legs in flow logs: inbound sources and outbound exit.</li>
+        <li>☐ Sweep the estate for the same pipe name, port, or service name.</li>
+        <li>☐ Isolate every host that answered the sweep.</li>
+        <li>☐ Block the C2 address and rotate exposed credentials.</li>
+        <li>☐ Close the segmentation path and file the detection gaps found.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>Related ATT&amp;CK links</h4>
+      <ul class="tick">
+        <li><a href="https://attack.mitre.org/techniques/T1090/" rel="noopener">T1090 — Proxy</a> — the parent technique this page details.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1090/002/" rel="noopener">T1090.002 — External Proxy</a> — the same trick, outside your network.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1090/003/" rel="noopener">T1090.003 — Multi-hop Proxy</a> — chains of external hops.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1090/004/" rel="noopener">T1090.004 — Domain Fronting</a> — hides C2 behind CDN routing.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1572/" rel="noopener">T1572 — Protocol Tunneling</a> — moves C2 inside allowed protocols.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1573/" rel="noopener">T1573 — Encrypted Channel</a> — encrypts what the relay carries.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1071/001/" rel="noopener">T1071.001 — Web Protocols</a> — the beacon style the relay exits with.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1583/005/" rel="noopener">T1583.005 — Botnet</a> — rented relay infrastructure.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1584/008/" rel="noopener">T1584.008 — Network Devices</a> — compromised devices as external hops.</li>
+        <li><a href="https://attack.mitre.org/techniques/T1098/" rel="noopener">T1098 — Account Manipulation</a> — keeps relay access alive between sessions.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout good"><span class="callout-label">If you only remember one thing</span>
+    <p>Count your hosts' conversations. A compromised internal proxy is one host that many hosts suddenly talk to, while it alone talks outside. Find that shape, confirm it with a pipe or portproxy event, and you have the whole mesh — not just one host.</p>
+  </div>
+</section>
+
+</main>
+</div>
+</div>
+
+<button type="button" class="toc-fab" id="tocFab" aria-controls="tocPanel" aria-expanded="false">☰ Contents</button>
+<div class="fab-stack">
+  <button type="button" class="fab" id="themeToggle" aria-label="Switch theme" title="Switch theme">☀</button>
+  <button type="button" class="fab" id="toTop" aria-label="Back to top" title="Back to top">↑</button>
+</div>
+<button type="button" class="toc-backdrop" id="tocBackdrop" tabindex="-1" aria-hidden="true"></button>
+<script>
+(function(){
+'use strict';
+var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- Theme ---------- */
+var themeBtn = document.getElementById('themeToggle');
+function applyThemeButton(){
+  var light = document.documentElement.getAttribute('data-theme') === 'light';
+  themeBtn.textContent = light ? '🌙' : '☀';
+  themeBtn.setAttribute('aria-label', light ? 'Switch to dark theme' : 'Switch to light theme');
+}
+function setTheme(mode, save){
+  document.documentElement.setAttribute('data-theme', mode);
+  if(save){ try{ localStorage.setItem('atk-theme', mode); }catch(e){} }
+  applyThemeButton();
+  if(window.__simRepaint) window.__simRepaint();
+}
+themeBtn.addEventListener('click', function(){
+  var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  setTheme(cur === 'light' ? 'dark' : 'light', true);
+});
+try{
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function(ev){
+    var saved = null; try{ saved = localStorage.getItem('atk-theme'); }catch(e){}
+    if(!saved) setTheme(ev.matches ? 'light' : 'dark', false);
+  });
+}catch(e){}
+applyThemeButton();
+
+/* ---------- Progress bar + back to top ---------- */
+var fill = document.getElementById('progressBar');
+var toTop = document.getElementById('toTop');
+var ticking = false;
+function onScroll(){
+  if(ticking) return; ticking = true;
+  requestAnimationFrame(function(){
+    var doc = document.documentElement;
+    var max = doc.scrollHeight - window.innerHeight;
+    var p = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+    fill.style.width = (p * 100).toFixed(2) + '%';
+    if(window.scrollY > 600) toTop.classList.add('show'); else toTop.classList.remove('show');
+    updateTocActive();
+    ticking = false;
+  });
+}
+window.addEventListener('scroll', onScroll, {passive:true});
+onScroll();
+toTop.addEventListener('click', function(){
+  window.scrollTo({top:0, behavior: reduced ? 'auto' : 'smooth'});
+});
+
+/* ---------- TOC rebuild from real headings ---------- */
+var tocList = document.getElementById('tocList');
+function buildToc(){
+  if(!tocList) return;
+  var frag = document.createDocumentFragment();
+  var secs = document.querySelectorAll('main section.sec');
+  Array.prototype.forEach.call(secs, function(sec){
+    var h2 = sec.querySelector('.sec-head h2');
+    var num = sec.querySelector('.sec-num');
+    var li = document.createElement('li');
+    var a = document.createElement('a');
+    a.href = '#' + sec.id;
+    var ns = document.createElement('span'); ns.className = 'n';
+    ns.textContent = num ? num.textContent : '';
+    a.appendChild(ns);
+    a.appendChild(document.createTextNode(h2 ? h2.textContent : sec.id));
+    li.appendChild(a); frag.appendChild(li);
+    Array.prototype.forEach.call(sec.querySelectorAll('h3.sub[id]'), function(h3){
+      var hn = h3.querySelector('.hnum');
+      var label = hn ? h3.textContent.replace(hn.textContent, '') : h3.textContent;
+      var li2 = document.createElement('li'); li2.className = 'sub';
+      var a2 = document.createElement('a'); a2.href = '#' + h3.id;
+      var n2 = document.createElement('span'); n2.className = 'n';
+      n2.textContent = hn ? hn.textContent : '';
+      a2.appendChild(n2);
+      a2.appendChild(document.createTextNode(label.trim()));
+      li2.appendChild(a2); frag.appendChild(li2);
+    });
+  });
+  tocList.innerHTML = '';
+  tocList.appendChild(frag);
+}
+buildToc();
+
+/* ---------- TOC active highlight ---------- */
+function updateTocActive(){
+  if(!tocList) return;
+  var links = tocList.querySelectorAll('a');
+  var ids = [];
+  Array.prototype.forEach.call(links, function(a){
+    ids.push(a.getAttribute('href').slice(1));
+  });
+  var current = ids.length ? ids[0] : null;
+  var probe = 96;
+  for(var i = 0; i < ids.length; i++){
+    var el = document.getElementById(ids[i]);
+    if(el && el.getBoundingClientRect().top <= probe) current = ids[i];
+  }
+  Array.prototype.forEach.call(links, function(a){
+    var on = a.getAttribute('href') === '#' + current;
+    a.classList.toggle('active', on);
+  });
+}
+
+/* ---------- Mobile overlay (dialog-like) ---------- */
+var tocPanel = document.getElementById('tocPanel');
+var tocFab = document.getElementById('tocFab');
+var tocBackdrop = document.getElementById('tocBackdrop');
+var tocClose = document.getElementById('tocClose');
+var lastFocus = null;
+function openToc(open){
+  document.body.classList.toggle('toc-open', open);
+  tocFab.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if(open){
+    lastFocus = document.activeElement;
+    tocPanel.setAttribute('role', 'dialog');
+    tocPanel.setAttribute('aria-modal', 'true');
+    tocClose.focus();
+  } else {
+    tocPanel.removeAttribute('role');
+    tocPanel.removeAttribute('aria-modal');
+    if(lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+}
+tocFab.addEventListener('click', function(){ openToc(!document.body.classList.contains('toc-open')); });
+tocClose.addEventListener('click', function(){ openToc(false); });
+tocBackdrop.addEventListener('click', function(){ openToc(false); });
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape' && document.body.classList.contains('toc-open')) openToc(false);
+});
+tocList.addEventListener('click', function(e){
+  if(e.target.closest('a') && window.innerWidth <= 1040) openToc(false);
+});
+
+/* ---------- Copy buttons ---------- */
+document.addEventListener('click', function(e){
+  var btn = e.target.closest('.copy-btn');
+  if(!btn) return;
+  var frame = btn.closest('.code-frame');
+  var pre = frame ? frame.querySelector('pre') : null;
+  if(!pre) return;
+  var text = pre.innerText;
+  function done(){
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(function(){ btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1600);
+  }
+  function fallback(){
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand('copy'); done(); }catch(err){}
+    document.body.removeChild(ta);
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, fallback);
+  } else { fallback(); }
+});
+
+/* ================================================================
+   SIMULATION — "One Exit for Many Hosts" (8 steps)
+   ================================================================ */
+var canvas = document.getElementById('simCanvas');
+var wrap = document.getElementById('simWrap');
+var tt = document.getElementById('simTooltip');
+if(canvas && wrap && canvas.getContext){
+  var ctx = canvas.getContext('2d');
+  var tokens = {};
+  function refreshTokens(){
+    var cs = getComputedStyle(document.documentElement);
+    ['--bg','--surface','--surface-2','--elevated','--text','--muted','--border','--border-strong',
+     '--accent','--accent-2','--violet','--success','--warning','--danger'].forEach(function(k){
+      tokens[k] = cs.getPropertyValue(k).trim();
+    });
+  }
+  refreshTokens();
+
+  var NODE_META = {
+    attacker:{r:24, name:'Attacker', sub:'internet side', desc:'The intruder, working from outside the network.'},
+    c2:{r:24, name:'C2 server', sub:'attacker infrastructure', desc:'The command and control server that the relay reaches from inside.'},
+    fw:{r:24, name:'Company firewall', sub:'perimeter and egress', desc:'Controls what leaves the network. It sees only one egress flow from the relay.'},
+    relay:{r:30, name:'Relay server R1', sub:'compromised host', desc:'The internal proxy. It beacons out once and serves other infected hosts inside.'},
+    wsa:{r:24, name:'Victim A', sub:'workstation', desc:'Infected workstation that beacons through the relay over SMB.'},
+    wsb:{r:24, name:'Victim B', sub:'workstation', desc:'Second infected workstation. It never talks to the internet itself.'}
+  };
+  var HORIZ = { W:1000, H:600, vertical:false,
+    nodes:{attacker:[100,200], c2:[100,470], fw:[400,380], relay:[660,380], wsa:[890,180], wsb:[890,560]},
+    soc:[556,36,414,132], boundary:[255,120,255,580,'company perimeter'],
+    zones:[['INTERNET',100,590],['COMPANY NETWORK',660,590]]
+  };
+  var VERT = { W:560, H:940, vertical:true,
+    nodes:{attacker:[280,60], c2:[280,180], fw:[280,300], relay:[280,430], wsa:[140,565], wsb:[420,565]},
+    soc:[36,650,488,170], boundary:[40,240,520,240,'company perimeter'],
+    zones:[['INTERNET',280,222],['COMPANY NETWORK',280,610]]
+  };
+  var LINKS = [['attacker','c2'],['c2','fw'],['fw','relay'],['relay','wsa'],['relay','wsb']];
+  var CHIPS = ['Beachhead','Quiet exit','Inside channel','Victim A','Victim B','One exit','Detection','Respond'];
+  var STEPS = [
+    { title:'Beachhead',
+      caption:'The attacker exploits an internet-facing service on server R1 and plants an implant. R1 sits in a zone that many hosts can reach and that is allowed to send traffic out.',
+      defender:'No endpoint agent on R1, so the foothold is invisible. Only ordinary web traffic appears in the logs.',
+      soc:['CAN — normal web sessions on the perimeter','CANNOT — the implant on R1, no agent there'],
+      routes:[{path:['attacker','c2','fw','relay'], col:'--danger', label:'exploit + implant'}],
+      links:{'attacker-c2':'solid','c2-fw':'dashed','fw-relay':'dashed','relay-wsa':'dashed','relay-wsb':'dashed','relay-soc':'dashed'}, dur:3.0 },
+    { title:'Quiet exit',
+      caption:'The implant on R1 opens one outbound link through the firewall to the C2 server. From outside, everything looks like a single host talking HTTPS.',
+      defender:'One new egress flow from a server. Without TLS inspection the content stays unknown.',
+      soc:['CAN — one new egress flow: R1 to C2','CANNOT — the traffic content, no TLS inspection'],
+      routes:[{path:['relay','fw','c2'], col:'--accent', label:'one egress beacon'}],
+      links:{'attacker-c2':'solid','c2-fw':'solid','fw-relay':'solid','relay-wsa':'dashed','relay-wsb':'dashed','relay-soc':'dashed'}, dur:2.8 },
+    { title:'Inside channel',
+      caption:'On R1, the implant starts an SMB named-pipe listener. Other infected hosts inside the network will use this pipe to reach R1.',
+      defender:'Pipe creation is a local event. Without Sysmon 17/18 or an EDR pipe event it never reaches the SIEM.',
+      soc:['CAN — nothing new yet','CANNOT — the pipe listener, not logged'],
+      routes:[{path:['relay'], col:'--violet', label:'SMB pipe listener'}],
+      links:{'attacker-c2':'solid','c2-fw':'solid','fw-relay':'solid','relay-wsa':'dashed','relay-wsb':'dashed','relay-soc':'dashed'}, dur:2.6 },
+    { title:'Victim A',
+      caption:'Workstation A was infected earlier and cannot reach the internet. Its beacon finds the pipe on R1 and sends its C2 traffic through it.',
+      defender:'The SOC sees plain east-west SMB from A to R1, which happens all day in a Windows network.',
+      soc:['CAN — east-west SMB: A to R1','CANNOT — the C2 inside the pipe'],
+      routes:[{path:['wsa','relay'], col:'--accent-2', label:'SMB pipe'}],
+      links:{'attacker-c2':'solid','c2-fw':'solid','fw-relay':'solid','relay-wsa':'solid','relay-wsb':'dashed','relay-soc':'dashed'}, dur:2.8 },
+    { title:'Victim B',
+      caption:'A second workstation joins the same pipe. Two victims are now controlled through R1, but the firewall still shows only the one egress flow from step 2.',
+      defender:'The egress count stays flat while the number of victims grows. That gap is the heart of this technique.',
+      soc:['CAN — more east-west SMB towards R1','CANNOT — still only one egress flow exists'],
+      routes:[{path:['wsa','relay'], col:'--accent-2', label:''},{path:['wsb','relay'], col:'--accent-2', label:'SMB pipe'}],
+      links:{'attacker-c2':'solid','c2-fw':'solid','fw-relay':'solid','relay-wsa':'solid','relay-wsb':'solid','relay-soc':'dashed'}, dur:3.0 },
+    { title:'One exit',
+      caption:'The attacker now commands three hosts through one external connection. If that link dies, the inside channel on R1 stays alive and can reconnect later.',
+      defender:'Blocking one IP does not close the attack. The mesh lives inside the network.',
+      soc:['CAN — exactly one egress flow from R1','CANNOT — how many hosts hide behind it'],
+      routes:[{path:['relay','fw','c2'], col:'--warning', label:'still 1 flow'}],
+      links:{'attacker-c2':'solid','c2-fw':'solid','fw-relay':'solid','relay-wsa':'solid','relay-wsb':'solid','relay-soc':'dashed'}, dur:2.8 },
+    { title:'Detection',
+      caption:'The EDR reports a new named pipe on R1, created by a service host. Flow logs show fan-in: many hosts opening sessions to one server. The correlation rule joins pipe, fan-in, and the single egress flow into one high-severity alert.',
+      defender:'Sigma rules 2 and 6 from section 5.5 fire together. The chain, not one event, exposes the mesh.',
+      soc:['CAN — CHAIN: new pipe + fan-in + 1 egress','CANNOT — nothing stays hidden now'],
+      routes:[{path:['wsa','relay'], col:'--success', label:''},{path:['wsb','relay'], col:'--success', label:''},{path:['relay','fw','c2'], col:'--success', label:''}],
+      links:{'attacker-c2':'solid','c2-fw':'solid','fw-relay':'solid','relay-wsa':'solid','relay-wsb':'solid','relay-soc':'solid'}, socFlash:true, dur:3.2 },
+    { title:'Respond',
+      caption:'The SOC isolates R1 and kills the pipe listener. The firewall team blocks the C2 address, and the team sweeps every host for the pipe name to find victims A and B.',
+      defender:'Contain the relay first, then sweep the mesh. One isolation breaks the channel for every victim.',
+      soc:['CAN — R1 isolated, C2 blocked, sweep running','CANNOT — the attacker has no route left'],
+      routes:[{path:['relay'], col:'--danger', label:''}],
+      links:{'attacker-c2':'solid','c2-fw':'solid','fw-relay':'solid','relay-wsa':'solid','relay-wsb':'solid','relay-soc':'solid'}, isolated:true, dur:2.8 }
+  ];
+
+  var layout = HORIZ, cssW = 0, scale = 1, dpr = 1;
+  var step = 0, prog = 1, playing = false, speed = 1, lastTs = 0;
+
+  function chooseLayout(){
+    cssW = Math.max(280, wrap.clientWidth || wrap.getBoundingClientRect().width);
+    layout = cssW < 700 ? VERT : HORIZ;
+    dpr = Math.min(2.5, window.devicePixelRatio || 1);
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssW * (layout.H / layout.W) * dpr);
+    scale = cssW / layout.W;
+  }
+
+  function segPoint(path, p){
+    if(path.length === 1){
+      var n0 = layout.nodes[path[0]];
+      var ang = Math.max(0, Math.min(1, p)) * Math.PI * 2;
+      return [n0[0] + Math.cos(ang) * 42, n0[1] + Math.sin(ang) * 42];
+    }
+    var pts = path.map(function(k){ return layout.nodes[k]; });
+    var lens = [], total = 0;
+    for(var i = 0; i < pts.length - 1; i++){
+      var dx = pts[i+1][0] - pts[i][0], dy = pts[i+1][1] - pts[i][1];
+      var L = Math.sqrt(dx*dx + dy*dy); lens.push(L); total += L;
+    }
+    var target = Math.max(0, Math.min(1, p)) * total, acc = 0;
+    for(var j = 0; j < lens.length; j++){
+      if(target <= acc + lens[j] || j === lens.length - 1){
+        var t = lens[j] > 0 ? (target - acc) / lens[j] : 0;
+        return [pts[j][0] + (pts[j+1][0] - pts[j][0]) * t, pts[j][1] + (pts[j+1][1] - pts[j][1]) * t];
+      }
+      acc += lens[j];
+    }
+    return pts[pts.length - 1];
+  }
+  function edgePoint(a, b, fromR, toR, t){
+    var ax = a[0], ay = a[1], bx = b[0], by = b[1];
+    var dx = bx - ax, dy = by - ay, L = Math.sqrt(dx*dx + dy*dy) || 1;
+    var sx = ax + dx / L * fromR, sy = ay + dy / L * fromR;
+    var ex = bx - dx / L * toR, ey = by - dy / L * toR;
+    return [sx + (ex - sx) * t, sy + (ey - sy) * t, sx, sy, ex, ey];
+  }
+
+  function draw(){
+    var S = STEPS[step];
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+    ctx.clearRect(0, 0, layout.W, layout.H);
+    ctx.fillStyle = tokens['--bg'];
+    ctx.fillRect(0, 0, layout.W, layout.H);
+
+    /* perimeter boundary */
+    var b = layout.boundary;
+    ctx.save();
+    ctx.strokeStyle = tokens['--border-strong'];
+    ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]);
+    ctx.beginPath(); ctx.moveTo(b[0], b[1]); ctx.lineTo(b[2], b[3]); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = tokens['--muted'];
+    ctx.font = '600 12px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    if(layout.vertical){ ctx.fillText(b[4], (b[0] + b[2]) / 2, b[1] - 8); }
+    else { ctx.translate(b[0] + 14, (b[1] + b[3]) / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(b[4], 0, 0); }
+    ctx.restore();
+
+    /* zone labels */
+    ctx.fillStyle = tokens['--muted'];
+    ctx.font = '700 12px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    layout.zones.forEach(function(z){ ctx.fillText(z[0], z[1], z[2]); });
+
+    /* links */
+    LINKS.forEach(function(lk){
+      var key = lk[0] + '-' + lk[1];
+      var st = S.links[key] || 'solid';
+      if(st === 'hide') return;
+      var a = layout.nodes[lk[0]], c = layout.nodes[lk[1]];
+      var ra = NODE_META[lk[0]].r, rc = NODE_META[lk[1]].r;
+      var ep = edgePoint(a, c, ra + 3, rc + 3, 1);
+      ctx.save();
+      ctx.strokeStyle = tokens['--border-strong'];
+      ctx.lineWidth = 1.6;
+      if(st === 'dashed') ctx.setLineDash([5, 6]);
+      ctx.beginPath(); ctx.moveTo(ep[2], ep[3]); ctx.lineTo(ep[4], ep[5]); ctx.stroke();
+      ctx.restore();
+    });
+    /* relay to SOC conceptual link */
+    var relayN = layout.nodes.relay, soc = layout.soc;
+    var socC = [soc[0] + soc[2] / 2, soc[1] + soc[3] / 2];
+    var socStyle = S.links['relay-soc'] || 'dashed';
+    ctx.save();
+    ctx.strokeStyle = (S.socFlash && prog > 0.35) ? tokens['--success'] : tokens['--border-strong'];
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash(socStyle === 'solid' ? [] : [3, 5]);
+    var epRS = edgePoint(relayN, socC, NODE_META.relay.r + 3, 6, 1);
+    ctx.beginPath(); ctx.moveTo(epRS[2], epRS[3]); ctx.lineTo(epRS[4], epRS[5]); ctx.stroke();
+    ctx.restore();
+
+    /* egress counter near the firewall (from step 2 on) */
+    if(step >= 1 && !(S.isolated)){
+      var fc = layout.nodes.fw, cc = layout.nodes.c2;
+      var mid = [(fc[0] + cc[0]) / 2, (fc[1] + cc[1]) / 2];
+      ctx.save();
+      ctx.fillStyle = tokens['--warning'];
+      ctx.font = '800 12px ui-monospace, Menlo, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('egress flows: 1', mid[0] + (layout.vertical ? 78 : 0), mid[1] + (layout.vertical ? 0 : -12));
+      ctx.restore();
+    }
+
+    /* SOC panel */
+    ctx.save();
+    var flash = S.socFlash && prog > 0.35;
+    ctx.fillStyle = tokens['--elevated'];
+    ctx.strokeStyle = flash ? tokens['--success'] : tokens['--border-strong'];
+    ctx.lineWidth = flash ? 2.2 : 1.4;
+    roundRect(soc[0], soc[1], soc[2], soc[3], 12); ctx.fill(); ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = tokens['--violet'];
+    ctx.font = '800 13px system-ui, sans-serif';
+    ctx.fillText('SOC ANALYST PANEL', soc[0] + 16, soc[1] + 24);
+    S.soc.forEach(function(line, i){
+      var col = line.indexOf('CANNOT') === 0 ? tokens['--warning'] : tokens['--success'];
+      ctx.fillStyle = col;
+      ctx.font = '600 12.5px system-ui, sans-serif';
+      ctx.fillText(line, soc[0] + 16, soc[1] + 48 + i * 20);
+    });
+    ctx.restore();
+
+    /* nodes */
+    Object.keys(layout.nodes).forEach(function(k){
+      var p = layout.nodes[k], m = NODE_META[k];
+      var active = false;
+      S.routes.forEach(function(r){ if(r.path.indexOf(k) >= 0) active = true; });
+      if(S.isolated && k === 'relay') active = true;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], m.r, 0, Math.PI * 2);
+      ctx.fillStyle = (S.isolated && k === 'relay') ? tokens['--surface'] : tokens['--elevated'];
+      ctx.fill();
+      ctx.lineWidth = active ? 2.4 : 1.5;
+      ctx.strokeStyle = (S.isolated && k === 'relay') ? tokens['--danger']
+        : active ? tokens['--accent'] : tokens['--border-strong'];
+      ctx.stroke();
+      ctx.fillStyle = tokens['--text'];
+      ctx.font = '700 ' + (m.r >= 30 ? 15 : 13) + 'px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(iconFor(k), p[0], p[1] + (m.r >= 30 ? 5.5 : 4.5));
+      var tx = layout.vertical ? p[0] + m.r + 12 : p[0];
+      var ty = layout.vertical ? p[1] + 4 : p[1] + m.r + 18;
+      ctx.textAlign = layout.vertical ? 'left' : 'center';
+      ctx.fillStyle = tokens['--text'];
+      ctx.font = '700 13px system-ui, sans-serif';
+      ctx.fillText(m.name, tx, ty);
+      ctx.fillStyle = tokens['--muted'];
+      ctx.font = '600 11px ui-monospace, Menlo, monospace';
+      ctx.fillText(m.sub, tx, ty + 16);
+      ctx.restore();
+    });
+
+    /* route packets + labels */
+    S.routes.forEach(function(r, ri){
+      var rp = clamp01(prog * S.routes.length - ri * 0.25);
+      if(rp <= 0) return;
+      var pos = segPoint(r.path, rp);
+      drawPacket(pos[0], pos[1], tokens[r.col]);
+      if(r.label && rp > 0.15){
+        var lp = segPoint(r.path, Math.min(1, rp));
+        ctx.save();
+        ctx.fillStyle = tokens[r.col];
+        ctx.font = '700 12px ui-monospace, Menlo, monospace';
+        ctx.textAlign = 'center';
+        var ly = layout.vertical ? lp[1] - 16 : lp[1] - 14;
+        ctx.fillText(r.label, lp[0] + (layout.vertical ? 80 : 0), ly);
+        ctx.restore();
+      }
+    });
+
+    /* fixed check on respond step */
+    if(S.isolated && prog > 0.5){
+      var fp = layout.nodes.fw;
+      ctx.save();
+      ctx.strokeStyle = tokens['--success'];
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(fp[0] - 9, fp[1]); ctx.lineTo(fp[0] - 2, fp[1] + 8); ctx.lineTo(fp[0] + 11, fp[1] - 9);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    /* step title */
+    ctx.save();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = tokens['--text'];
+    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.fillText('Step ' + (step + 1) + '/8 — ' + S.title, 14, layout.vertical ? 24 : 20);
+    ctx.restore();
+  }
+
+  function iconFor(k){
+    return {attacker:'👤', c2:'☁', fw:'🛡', relay:'🖥', wsa:'💻', wsb:'💻'}[k] || '●';
+  }
+  function drawPacket(x, y, col){
+    ctx.save();
+    ctx.shadowColor = col; ctx.shadowBlur = 9;
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  function roundRect(x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function clamp01(v){ return Math.max(0, Math.min(1, v)); }
+
+  /* tooltips on nodes and SOC panel */
+  function pointerToLogical(e){
+    var rect = canvas.getBoundingClientRect();
+    return [(e.clientX - rect.left) / scale, (e.clientY - rect.top) / scale];
+  }
+  function hitNode(x, y){
+    for(var k in layout.nodes){
+      var p = layout.nodes[k];
+      var dx = x - p[0], dy = y - p[1];
+      if(Math.sqrt(dx*dx + dy*dy) <= NODE_META[k].r + 6) return k;
+    }
+    var s = layout.soc;
+    if(x >= s[0] && x <= s[0] + s[2] && y >= s[1] && y <= s[1] + s[3]) return 'soc';
+    return null;
+  }
+  var SOC_META = {name:'SOC analyst panel', desc:'Shows what defenders CAN and CANNOT see at this step.'};
+  canvas.addEventListener('pointermove', function(e){
+    var pt = pointerToLogical(e);
+    var k = hitNode(pt[0], pt[1]);
+    if(!k){ tt.style.display = 'none'; return; }
+    var m = k === 'soc' ? SOC_META : NODE_META[k];
+    tt.querySelector('.tt-title').textContent = m.name;
+    tt.querySelector('.tt-desc').textContent = m.desc;
+    tt.style.display = 'block';
+    var wr = wrap.getBoundingClientRect();
+    var lx = e.clientX - wr.left + 14, ly = e.clientY - wr.top + 14;
+    if(lx + 260 > wr.width) lx = e.clientX - wr.left - 264;
+    if(ly + 90 > wr.height) ly = e.clientY - wr.top - 90;
+    tt.style.left = Math.max(4, lx) + 'px';
+    tt.style.top = Math.max(4, ly) + 'px';
+  });
+  canvas.addEventListener('pointerleave', function(){ tt.style.display = 'none'; });
+
+  /* caption + chips */
+  var capStep = document.getElementById('simCapStep');
+  var capTitle = document.getElementById('simCapTitle');
+  var capText = document.getElementById('simCapText');
+  var capDef = document.getElementById('simDefender');
+  var chipsBox = document.getElementById('simChips');
+  var chipEls = [];
+  CHIPS.forEach(function(name, i){
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sim-chip';
+    b.setAttribute('role', 'tab');
+    b.textContent = (i + 1) + ' ' + name;
+    b.addEventListener('click', function(){ goStep(i); });
+    chipsBox.appendChild(b);
+    chipEls.push(b);
+  });
+  function refreshCaption(){
+    var S = STEPS[step];
+    capStep.textContent = 'Step ' + (step + 1) + ' of 8';
+    capTitle.textContent = S.title;
+    capText.textContent = S.caption;
+    capDef.innerHTML = '';
+    var strong = document.createElement('strong');
+    strong.textContent = 'Defender view: ';
+    capDef.appendChild(strong);
+    capDef.appendChild(document.createTextNode(S.defender));
+    chipEls.forEach(function(c, i){
+      c.classList.toggle('active', i === step);
+      c.classList.toggle('done', i < step);
+      c.setAttribute('aria-selected', i === step ? 'true' : 'false');
+    });
+  }
+
+  /* controls + loop */
+  var playBtn = document.getElementById('simPlay');
+  var speedSel = document.getElementById('simSpeed');
+  function setPlayBtn(){
+    playBtn.textContent = playing ? '⏸ Pause' : '▶ Play';
+    playBtn.setAttribute('aria-label', playing ? 'Pause animation' : 'Play animation');
+  }
+  function loop(ts){
+    if(!playing) return;
+    if(!lastTs) lastTs = ts;
+    var dt = (ts - lastTs) / 1000; lastTs = ts;
+    prog += (dt * speed) / STEPS[step].dur;
+    if(prog >= 1){
+      if(step < STEPS.length - 1){ step++; prog = 0; refreshCaption(); }
+      else { prog = 1; playing = false; setPlayBtn(); draw(); return; }
+    }
+    draw();
+    requestAnimationFrame(loop);
+  }
+  function startPlay(){
+    if(reduced) return;
+    if(step === STEPS.length - 1 && prog >= 1){ step = 0; refreshCaption(); }
+    if(prog >= 1){ prog = 0; }
+    playing = true; lastTs = 0; setPlayBtn();
+    requestAnimationFrame(loop);
+  }
+  playBtn.addEventListener('click', function(){
+    if(reduced) return;
+    if(playing){ playing = false; setPlayBtn(); }
+    else startPlay();
+  });
+  document.getElementById('simRestart').addEventListener('click', function(){
+    playing = false; step = 0; prog = reduced ? 1 : 0; lastTs = 0;
+    setPlayBtn(); refreshCaption(); draw();
+  });
+  document.getElementById('simPrev').addEventListener('click', function(){ goStep(Math.max(0, step - 1)); });
+  document.getElementById('simNext').addEventListener('click', function(){ goStep(Math.min(STEPS.length - 1, step + 1)); });
+  speedSel.addEventListener('change', function(){ speed = parseFloat(speedSel.value) || 1; });
+  function goStep(i){
+    playing = false; setPlayBtn();
+    step = i; prog = 1;
+    refreshCaption(); draw();
+  }
+  if(reduced){
+    playBtn.disabled = true;
+    playBtn.title = 'Autoplay is off because reduced motion is preferred. Use Prev, Next, and the step chips.';
+    prog = 1;
+  }
+  refreshCaption();
+  chooseLayout(); draw();
+
+  if(window.ResizeObserver){
+    var ro = new ResizeObserver(function(){
+      chooseLayout(); draw();
+    });
+    ro.observe(wrap);
+  } else {
+    window.addEventListener('resize', function(){ chooseLayout(); draw(); });
+  }
+  window.__simRepaint = function(){ refreshTokens(); draw(); };
+}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,2246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>T1573.002 Asymmetric Cryptography — Detection Guide</title>
+<meta name="description" content="Beginner-friendly detection guide for MITRE ATT&amp;CK T1573.002 (Asymmetric Cryptography): how public-key command and control works and how to catch it with certificate logs, JA3S fingerprints and Zeek.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1573-Encrypted-Channel/002-Asymmetric-Cryptography.html">
+<script>
+/* Apply theme BEFORE first paint (no flash). Do not modify. */
+(function(){try{var t=localStorage.getItem('atk-theme');if(!t){t=window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+</script>
+<style>
+/* ============================================================
+   ATT&CK Detection Guide — shared design system (embed verbatim)
+   Dark default + light override + no-JS prefers-color-scheme
+   ============================================================ */
+:root{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542;
+  --text:#e7edf8; --muted:#9aa8c0; --border:#24314e; --border-strong:#2f4066;
+  --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa; --success:#34d399;
+  --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono","Courier New",monospace;
+  --shadow:0 10px 30px rgba(3,8,20,.35);
+  --radius:14px; --radius-sm:9px;
+  --sidebar-w:256px;
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+  --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+  --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+  --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 10px 26px rgba(24,34,56,.10);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: light){
+  html:not([data-theme]){
+    --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa;
+    --text:#182238; --muted:#5a6a85; --border:#d9e2f2; --border-strong:#c2d0ea;
+    --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0; --success:#0d9e6e;
+    --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+    --shadow:0 10px 26px rgba(24,34,56,.10);
+    color-scheme:light;
+  }
+}
+
+/* ---------- base ---------- */
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:16.5px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; overflow-wrap:break-word;
+}
+img,canvas{max-width:100%}
+h1,h2,h3,h4{line-height:1.2; margin:0 0 .5em; font-weight:700; letter-spacing:-.01em}
+h2{font-size:1.7rem}
+h3{font-size:1.22rem}
+h4{font-size:1.05rem}
+p{margin:0 0 1em}
+a{color:var(--accent); text-decoration:none}
+a:hover{text-decoration:underline}
+ul,ol{padding-left:1.35rem; margin:0 0 1em}
+li{margin:.3em 0}
+code,kbd,samp{font-family:var(--mono); font-size:.86em; background:var(--surface-2);
+  border:1px solid var(--border); border-radius:6px; padding:.1em .35em}
+strong{font-weight:650}
+hr{border:0; border-top:1px solid var(--border); margin:2rem 0}
+::selection{background:color-mix(in srgb,var(--accent) 35%, transparent)}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.small{font-size:.85rem}
+.sr-only{position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden;
+  clip:rect(0 0 0 0); white-space:nowrap; border:0}
+.wrap{max-width:1280px; margin:0 auto; padding:0 24px}
+section[id]{scroll-margin-top:84px}
+main > section{padding:52px 0; border-top:1px solid var(--border)}
+main > section:first-child{border-top:0}
+
+/* ---------- progress bar ---------- */
+.progress-bar{position:fixed; top:0; left:0; right:0; height:3px; z-index:120;
+  background:transparent; pointer-events:none}
+.progress-fill{display:block; height:100%; width:0;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2))}
+
+/* ---------- theme toggle ---------- */
+.theme-toggle{display:inline-flex; align-items:center; gap:.45em; font:inherit; font-size:.85rem;
+  color:var(--muted); background:var(--surface); border:1px solid var(--border);
+  border-radius:999px; padding:.35em .85em; cursor:pointer}
+.theme-toggle:hover{color:var(--text); border-color:var(--border-strong)}
+.theme-toggle .sun,.theme-toggle .moon{display:none}
+html[data-theme="dark"] .theme-toggle .sun{display:inline}
+html[data-theme="light"] .theme-toggle .moon{display:inline}
+@media (prefers-color-scheme: light){ html:not([data-theme]) .theme-toggle .moon{display:inline} }
+.theme-toggle .dot-ico{width:.6em; height:.6em; border-radius:50%; background:currentColor}
+
+/* ---------- hero ---------- */
+.hero{padding:44px 0 34px;
+  background:
+    radial-gradient(1000px 380px at 85% -10%, color-mix(in srgb,var(--accent) 16%, transparent), transparent 65%),
+    radial-gradient(700px 300px at 0% 0%, color-mix(in srgb,var(--violet) 12%, transparent), transparent 60%);
+  border-bottom:1px solid var(--border)}
+.hero-top{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px}
+.kicker{font-family:var(--mono); font-size:.78rem; font-weight:600; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--accent-2)}
+.page-title{font-size:clamp(1.9rem,4.5vw,2.9rem); margin:.1em 0 .35em; max-width:24ch}
+.page-title .tid{font-family:var(--mono); font-size:.62em; font-weight:700; vertical-align:.12em;
+  color:var(--accent); background:color-mix(in srgb,var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 45%, transparent);
+  border-radius:10px; padding:.08em .4em; white-space:nowrap}
+.lede{max-width:68ch; color:var(--muted); font-size:1.06rem; margin-bottom:1.2rem}
+.chips{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:1.4rem}
+.chip{font-family:var(--mono); font-size:.75rem; color:var(--text);
+  background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:.28em .8em}
+.chip.accent{color:var(--accent); border-color:color-mix(in srgb,var(--accent) 45%, transparent)}
+.facts{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
+.fact{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:14px 16px; box-shadow:var(--shadow)}
+.fact::before{content:""; display:block; width:34px; height:3px; border-radius:2px;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2)); margin-bottom:10px}
+.fact-k{font-family:var(--mono); font-size:.72rem; text-transform:uppercase; letter-spacing:.1em;
+  color:var(--muted); margin-bottom:2px}
+.fact-v{font-size:.95rem; font-weight:600}
+
+/* ---------- two-column layout ---------- */
+.layout{display:grid; grid-template-columns:var(--sidebar-w) minmax(0,1fr); gap:36px;
+  align-items:start; padding:8px 0 64px}
+.sidebar{position:sticky; top:24px}
+.toc{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px 16px; box-shadow:var(--shadow); max-height:calc(100vh - 48px); overflow:auto}
+.toc-title{font-family:var(--mono); font-size:.75rem; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--muted); margin:0 0 10px}
+.toc-list{list-style:none; margin:0; padding:0; font-size:.9rem}
+.toc-list li{margin:2px 0}
+.toc-list a{display:block; color:var(--muted); border-left:2px solid transparent;
+  border-radius:0 8px 8px 0; padding:6px 10px}
+.toc-list a:hover{color:var(--text); text-decoration:none; background:var(--surface-2)}
+.toc-list a.active{color:var(--accent); background:color-mix(in srgb,var(--accent) 10%, transparent);
+  border-left-color:var(--accent); font-weight:600}
+.toc-list a .n{font-family:var(--mono); font-size:.75rem; color:var(--muted); margin-right:.5em}
+.toc-list a.active .n{color:var(--accent)}
+.toc-sub{margin-left:14px; border-left:1px dashed var(--border); padding-left:0}
+.toc-sub a{font-size:.83rem; padding:4px 10px}
+
+/* ---------- section headers ---------- */
+.sec-head{display:flex; align-items:center; gap:14px; margin-bottom:10px}
+.sec-num{flex:0 0 auto; display:inline-flex; align-items:center; justify-content:center;
+  min-width:40px; height:40px; padding:0 8px; border-radius:12px; font-family:var(--mono);
+  font-weight:700; font-size:1.02rem; color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 14%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 40%, transparent)}
+.sec-title{margin:0}
+.sec-intro{color:var(--muted); max-width:70ch; margin-bottom:1.6rem}
+h3[id]{scroll-margin-top:84px}
+h3[id]::before{content:"§"; color:var(--accent-2); font-weight:600; margin-right:.45em; font-size:.9em}
+/* ---------- cards & grids ---------- */
+.card{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:20px 22px; box-shadow:var(--shadow); margin-bottom:16px}
+.card>:last-child{margin-bottom:0}
+.card h3,.card h4{margin-top:0}
+.card.accent-edge{border-left:3px solid var(--accent)}
+.grid{display:grid; gap:16px; margin-bottom:16px}
+.grid>*{min-width:0}
+.facts>*{min-width:0}
+.grid-2{grid-template-columns:repeat(2,1fr)}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+.grid .card{margin-bottom:0}
+.grid>.card>:last-child{margin-bottom:0}
+
+/* ---------- callouts ---------- */
+.callout{background:var(--surface-2); border:1px solid var(--border); border-left-width:4px;
+  border-radius:var(--radius-sm); padding:14px 18px; margin:0 0 16px}
+.callout .callout-label{display:block; font-family:var(--mono); font-size:.72rem; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.35em}
+.callout.note{border-left-color:var(--accent)}
+.callout.note .callout-label{color:var(--accent)}
+.callout.good{border-left-color:var(--success)}
+.callout.good .callout-label{color:var(--success)}
+.callout.warn{border-left-color:var(--warning)}
+.callout.warn .callout-label{color:var(--warning)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.danger .callout-label{color:var(--danger)}
+.callout>:last-child{margin-bottom:0}
+
+/* ---------- tables ---------- */
+.table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius);
+  background:var(--surface); box-shadow:var(--shadow); margin-bottom:16px}
+table{border-collapse:collapse; width:100%; min-width:620px; font-size:.92rem}
+caption{caption-side:top; text-align:left; font-family:var(--mono); font-size:.75rem;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--muted); padding:12px 16px 4px}
+th,td{text-align:left; padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:top}
+thead th{font-family:var(--mono); font-size:.75rem; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--muted); background:var(--surface-2); white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:color-mix(in srgb,var(--accent) 5%, transparent)}
+td code,th code{white-space:nowrap}
+
+/* ---------- code blocks ---------- */
+.code{background:#0d1424; border:1px solid var(--border); border-radius:var(--radius);
+  overflow:hidden; margin:0 0 16px; box-shadow:var(--shadow)}
+html[data-theme="light"] .code{background:#101a30}
+@media (prefers-color-scheme: light){ html:not([data-theme]) .code{background:#101a30} }
+.code-head{display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:8px 12px; background:var(--surface-2); border-bottom:1px solid var(--border)}
+.code-lang{font-family:var(--mono); font-size:.72rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--muted)}
+.copy-btn{font:inherit; font-size:.78rem; font-family:var(--mono); color:var(--text); cursor:pointer;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:.3em .8em}
+.copy-btn:hover{border-color:var(--border-strong)}
+.copy-btn.ok{color:var(--success); border-color:var(--success)}
+.code pre.code-body{margin:0; padding:14px 16px; overflow-x:auto; font-family:var(--mono);
+  font-size:.82rem; line-height:1.55; color:#dbe6f8; background:transparent; border:0; border-radius:0}
+.code pre.code-body code{background:transparent; border:0; padding:0; font-size:inherit;
+  color:inherit; white-space:pre}
+pre.code-body{overflow-x:auto}
+
+/* ---------- badges ---------- */
+.badge{display:inline-block; font-family:var(--mono); font-size:.72rem; font-weight:700;
+  letter-spacing:.06em; border-radius:999px; padding:.22em .7em; border:1px solid transparent;
+  vertical-align:middle}
+.sev-crit{color:var(--danger); background:color-mix(in srgb,var(--danger) 13%, transparent);
+  border-color:color-mix(in srgb,var(--danger) 45%, transparent)}
+.sev-high{color:var(--high); background:color-mix(in srgb,var(--high) 13%, transparent);
+  border-color:color-mix(in srgb,var(--high) 45%, transparent)}
+.sev-med{color:var(--warning); background:color-mix(in srgb,var(--warning) 13%, transparent);
+  border-color:color-mix(in srgb,var(--warning) 45%, transparent)}
+.sev-low{color:var(--low); background:color-mix(in srgb,var(--low) 13%, transparent);
+  border-color:color-mix(in srgb,var(--low) 45%, transparent)}
+.cat{color:var(--violet); background:color-mix(in srgb,var(--violet) 12%, transparent);
+  border-color:color-mix(in srgb,var(--violet) 40%, transparent)}
+.cat-net{color:var(--accent-2); background:color-mix(in srgb,var(--accent-2) 12%, transparent);
+  border-color:color-mix(in srgb,var(--accent-2) 40%, transparent)}
+.badge.plain{color:var(--muted); background:var(--surface-2); border-color:var(--border)}
+
+/* ---------- key/value list ---------- */
+.kv{display:grid; grid-template-columns:minmax(120px,max-content) 1fr; gap:6px 18px; margin:0}
+.kv dt{font-family:var(--mono); font-size:.78rem; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); padding-top:2px}
+.kv dd{margin:0}
+.kv dd ul{margin:0; padding-left:1.1rem}
+
+/* ---------- timeline ---------- */
+.timeline{list-style:none; position:relative; margin:0 0 16px; padding:0 0 0 26px}
+.timeline::before{content:""; position:absolute; left:8px; top:6px; bottom:6px; width:2px;
+  background:linear-gradient(var(--accent),var(--violet))}
+.timeline>li{position:relative; margin:0 0 18px; padding:12px 16px; background:var(--surface);
+  border:1px solid var(--border); border-radius:var(--radius-sm)}
+.timeline>li::before{content:""; position:absolute; left:-24px; top:18px; width:10px; height:10px;
+  border-radius:50%; background:var(--accent); border:2px solid var(--bg); box-shadow:0 0 0 2px var(--accent)}
+.tl-date{font-family:var(--mono); font-size:.75rem; color:var(--accent-2); display:block; margin-bottom:2px}
+
+/* ---------- static diagram ---------- */
+.diagram{display:flex; flex-wrap:wrap; align-items:stretch; gap:10px; margin:0 0 16px}
+.dnode{flex:1 1 150px; min-width:130px; background:var(--surface-2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:10px 12px; text-align:center}
+.dnode .dn-t{font-weight:700; font-size:.9rem}
+.dnode .dn-s{font-size:.78rem; color:var(--muted)}
+.dnode.attacker{border-top:3px solid var(--danger)}
+.dnode.victim{border-top:3px solid var(--accent)}
+.dnode.infra{border-top:3px solid var(--warning)}
+.dnode.defender{border-top:3px solid var(--success)}
+.darrow{align-self:center; color:var(--muted); font-family:var(--mono); font-size:1rem; flex:0 0 auto}
+
+/* ---------- simulation ---------- */
+.sim{background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  box-shadow:var(--shadow); overflow:hidden; margin-bottom:16px}
+.sim-stage{position:relative; background:
+  linear-gradient(color-mix(in srgb,var(--border) 45%, transparent) 1px, transparent 1px),
+  linear-gradient(90deg, color-mix(in srgb,var(--border) 45%, transparent) 1px, transparent 1px),
+  var(--bg);
+  background-size:34px 34px,34px 34px,auto}
+.sim-stage canvas{display:block; width:100%; height:auto; touch-action:pan-y}
+.sim-tip{position:absolute; z-index:20; max-width:260px; background:var(--elevated);
+  border:1px solid var(--border-strong); border-radius:var(--radius-sm); padding:8px 12px;
+  font-size:.8rem; color:var(--text); box-shadow:var(--shadow); pointer-events:none; display:none}
+.sim-tip .tt{font-weight:700; display:block; margin-bottom:2px}
+.sim-panel{border-top:1px solid var(--border); padding:16px 20px}
+.sim-step-title{font-weight:700; margin:0 0 .3em; font-size:1rem}
+.sim-step-title .n{font-family:var(--mono); color:var(--accent); margin-right:.5em}
+.sim-caption{color:var(--text); margin:0 0 .7em}
+.sim-hint{display:flex; gap:10px; align-items:flex-start; background:color-mix(in srgb,var(--success) 8%, transparent);
+  border:1px solid color-mix(in srgb,var(--success) 35%, transparent); border-radius:var(--radius-sm);
+  padding:10px 14px; font-size:.9rem; margin:0 0 .9em}
+.sim-hint .lbl{flex:0 0 auto; font-family:var(--mono); font-size:.7rem; font-weight:700;
+  letter-spacing:.1em; color:var(--success); text-transform:uppercase; padding-top:2px}
+.sim-evidence{display:flex; flex-wrap:wrap; gap:8px}
+.sim-evidence .ev{font-family:var(--mono); font-size:.72rem; color:var(--accent-2);
+  background:color-mix(in srgb,var(--accent-2) 10%, transparent);
+  border:1px solid color-mix(in srgb,var(--accent-2) 35%, transparent);
+  border-radius:6px; padding:.25em .6em}
+.sim-controls{display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:12px 20px;
+  border-top:1px solid var(--border); background:var(--surface-2)}
+.btn{font:inherit; font-size:.85rem; font-family:var(--mono); color:var(--text); cursor:pointer;
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:.4em .9em}
+.btn:hover{border-color:var(--border-strong)}
+.btn[disabled]{opacity:.45; cursor:not-allowed}
+.btn.primary{color:var(--bg); background:var(--accent); border-color:var(--accent); font-weight:700}
+.btn.primary:hover{filter:brightness(1.08)}
+.seg{display:inline-flex; border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden}
+.seg .seg-btn{font:inherit; font-family:var(--mono); font-size:.78rem; color:var(--muted);
+  background:var(--surface); border:0; border-right:1px solid var(--border); padding:.42em .7em; cursor:pointer}
+.seg .seg-btn:last-child{border-right:0}
+.seg .seg-btn[aria-pressed="true"]{color:var(--bg); background:var(--accent); font-weight:700}
+.step-chips{display:flex; flex-wrap:wrap; gap:6px; padding:10px 20px 14px; border-top:1px solid var(--border)}
+.step-chip{font-family:var(--mono); font-size:.72rem; color:var(--muted); cursor:pointer;
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px; padding:.3em .7em}
+.step-chip:hover{color:var(--text); border-color:var(--border-strong)}
+.step-chip[aria-current="true"]{color:var(--bg); background:var(--accent); border-color:var(--accent); font-weight:700}
+.sim-legend{display:flex; flex-wrap:wrap; gap:14px; padding:10px 20px; font-size:.75rem;
+  color:var(--muted); border-top:1px solid var(--border)}
+.legend-dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:0}
+.sim-progress{height:3px; background:var(--border)}
+.sim-progress .sp-fill{display:block; height:100%; width:0; background:var(--accent-2)}
+.sim-story{padding:18px 20px 20px; border-top:1px solid var(--border)}
+.sim-story h3{margin-top:0}
+.sim-story ol li{margin:.45em 0}
+.sim-story .st{font-weight:600; color:var(--text)}
+
+/* ---------- mobile nav / floating controls ---------- */
+.toc-fab,.to-top{position:fixed; z-index:110; border-radius:999px; box-shadow:var(--shadow);
+  border:1px solid var(--border-strong); background:var(--elevated); color:var(--text);
+  font:inherit; font-weight:600; cursor:pointer}
+.toc-fab{right:18px; bottom:18px; display:none; padding:.65em 1.15em; font-size:.9rem}
+.to-top{right:18px; bottom:74px; width:44px; height:44px; font-size:1.1rem; opacity:0;
+  pointer-events:none; transition:opacity .25s}
+.to-top.show{opacity:1; pointer-events:auto}
+.toc-overlay{position:fixed; inset:0; z-index:130; display:none}
+.toc-overlay.open{display:block}
+.toc-overlay-backdrop{position:absolute; inset:0; background:rgba(4,8,18,.62)}
+.toc-panel{position:absolute; top:0; right:0; bottom:0; width:min(320px,86vw);
+  background:var(--surface); border-left:1px solid var(--border); padding:18px 16px; overflow:auto;
+  box-shadow:var(--shadow)}
+.toc-panel-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+.toc-close{font:inherit; font-size:1rem; background:var(--surface-2); color:var(--text);
+  border:1px solid var(--border); border-radius:var(--radius-sm); width:34px; height:34px; cursor:pointer}
+
+/* ---------- responsive ---------- */
+@media (max-width:1040px){
+  .layout{display:block}
+  .sidebar{display:none}
+  .toc-fab{display:inline-block}
+  .facts{grid-template-columns:repeat(2,1fr)}
+  .grid-3{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  .wrap{padding:0 16px}
+  .hero{padding:30px 0 24px}
+  .facts{grid-template-columns:1fr}
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .page-title{font-size:1.7rem}
+  .card{padding:16px}
+  table{min-width:520px}
+  .sim-panel,.sim-controls,.step-chips,.sim-legend,.sim-story{padding-left:14px; padding-right:14px}
+  .btn{padding:.45em .8em}
+}
+@media (max-width:400px){
+  body{font-size:16px}
+  .chips{gap:6px}
+}
+/* ---------- motion ---------- */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    transition-duration:.01ms !important}
+}
+/* ---------- print ---------- */
+@media print{
+  :root{--bg:#ffffff; --surface:#ffffff; --surface-2:#f2f4f8; --elevated:#ffffff;
+    --text:#111827; --muted:#4b5563; --border:#d1d5db; --border-strong:#9ca3af;
+    --accent:#1d4ed8; --accent-2:#0e7490; --violet:#6d28d9; --success:#047857;
+    --warning:#b45309; --danger:#b91c1c; --high:#c2410c; --low:#15803d; --shadow:none;
+    color-scheme:light}
+  html{scroll-behavior:auto}
+  .progress-bar,.sidebar,.toc-fab,.to-top,.toc-overlay,.theme-toggle,.copy-btn,
+  .sim-controls,.step-chips,.sim-progress{display:none !important}
+  .layout{display:block; padding:0}
+  body{background:#fff; color:#111827; font-size:11.5pt}
+  .hero{border-bottom:1px solid #d1d5db; background:#fff}
+  main > section{border-top:1px solid #e5e7eb; padding:18pt 0; page-break-inside:auto}
+  .card,.callout,.table-wrap,.code,.sim,.fact,.timeline>li{box-shadow:none; page-break-inside:avoid}
+  .code pre.code-body{white-space:pre-wrap; overflow-wrap:anywhere}
+  .table-wrap{overflow:visible}
+  table{min-width:0}
+  .sim-stage canvas{max-height:420px}
+  a{color:#1d4ed8}
+  a[href^="http"]::after{content:" (" attr(href) ")"; font-size:8.5pt; color:#4b5563;
+    overflow-wrap:anywhere}
+}
+
+</style>
+</head>
+<body>
+<!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+<link rel="stylesheet" href="../../assets/css/platform.css">
+<div id="atk-header" data-technique="T1573.002"></div>
+<script src="../../assets/js/platform.js" defer></script>
+<!-- ==== /PLATFORM INTEGRATION ==== -->
+
+<div class="progress-bar" aria-hidden="true"><span class="progress-fill"></span></div>
+
+<header class="hero"> <!-- compact hero; NOT a site header/nav -->
+  <div class="wrap">
+    <div class="hero-top">
+      <p class="kicker">MITRE ATT&amp;CK · Detection Guide</p>
+      <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Toggle color theme">
+        <span class="dot-ico" aria-hidden="true"></span><span class="sun">Switch to light</span><span class="moon">Switch to dark</span>
+      </button>
+    </div>
+    <h1 class="page-title">Asymmetric Cryptography <span class="tid">T1573.002</span></h1>
+    <p class="lede">Public-key math lets attackers build trust with no shared secret. This page shows how asymmetric command and control works, and how to catch it through the certificates and handshake shapes it must expose.</p>
+    <div class="chips" aria-label="Page metadata">
+      <span class="chip accent">MITRE ATT&amp;CK Sub-technique</span>
+      <span class="chip">Tactic: Command and Control</span>
+      <span class="chip">Platforms: ESXi · Linux · Network Devices · Windows · macOS</span>
+      <span class="chip">Beginner friendly</span>
+      <span class="chip">Detection engineering</span>
+      <span class="chip">ATT&amp;CK page v1.3 · updated Sep 2026</span>
+      <span class="chip">Guide v2.0</span>
+    </div>
+    <div class="facts">
+      <div class="fact"><div class="fact-k">Tactic</div><div class="fact-v">Command and Control</div></div>
+      <div class="fact"><div class="fact-k">Parent</div><div class="fact-v">T1573 · Encrypted Channel</div></div>
+      <div class="fact"><div class="fact-k">Main evidence</div><div class="fact-v">Cert traits · mTLS client certs · JA3S</div></div>
+      <div class="fact"><div class="fact-k">Weak point</div><div class="fact-v">Cert reuse · static fingerprints</div></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <aside class="sidebar" aria-label="Table of contents">
+      <nav class="toc">
+        <p class="toc-title">Contents</p>
+        <ul class="toc-list" id="toc-list"><!-- generated by app.js from real headings --></ul>
+      </nav>
+    </aside>
+
+    <main>
+      <!-- ============================================================ -->
+      <!-- SECTION 1 · OVERVIEW                                          -->
+      <!-- ============================================================ -->
+      <section id="overview">
+        <div class="sec-head"><span class="sec-num">1</span><h2 class="sec-title">Overview</h2></div>
+        <p class="sec-intro">This section explains the technique in plain language. You will learn what asymmetric cryptography is, why attackers use it to run their command and control, and what traces it leaves behind for defenders.</p>
+
+        <div class="grid grid-2">
+          <div class="card accent-edge">
+            <h3>The idea in one minute</h3>
+            <p>Asymmetric cryptography (also called public-key cryptography) uses <strong>two linked keys</strong>. The <strong>public key</strong> can lock data or check a signature. The <strong>private key</strong> can unlock data or create a signature. You can hand the public key to anyone. The private key stays in one place.</p>
+            <p>A simple picture: the public key works like an open padlock. Anyone can snap it shut on a box. Only the person who owns the matching key can open it again. The math that links the two keys makes it impossible to build the private key from the public key with today's computers.</p>
+          </div>
+          <div class="card accent-edge">
+            <h3>From key pair to command and control</h3>
+            <p>Attackers use this idea to control malware. They put <strong>only the public key</strong> inside the implant (the malware agent on the victim machine). The private key stays on their server. Three things follow:</p>
+            <ul>
+              <li>Anyone who takes the implant apart finds no usable secret. The public key alone cannot decrypt anything.</li>
+              <li>The implant locks a fresh session key with the public key. Only the attacker's server can open it.</li>
+              <li>The attacker signs each task with the private key. The implant checks the signature before it runs anything, so a fake task fails.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Hybrid encryption: fast and strong together</h3>
+            <p>Public-key math is slow. Regular secret-key math (like <strong>AES</strong>, a fast block cipher) is quick but needs both sides to hold the same secret. Real systems combine both. This is called <strong>hybrid encryption</strong>:</p>
+            <ol>
+              <li>Asymmetric math (RSA or ECDH) carries one small, fresh secret across the network.</li>
+              <li>That secret becomes the key for fast symmetric encryption (AES) used for the rest of the session.</li>
+            </ol>
+            <p>Normal HTTPS works exactly this way. So does attacker C2. The pattern on the wire looks similar — which is why detection must focus on <em>certificate traits</em> and <em>handshake shapes</em>, not on the encryption itself.</p>
+          </div>
+          <div class="card">
+            <h3>The paradox that helps defenders</h3>
+            <p>Perfect encryption hides content. But before any content flows, the two sides must <strong>prove trust</strong>. Proof needs material on the wire: a certificate, a key exchange, a handshake answer. Attackers cannot skip this step, and attackers avoid new infrastructure because it costs time and money, so they reuse certificates, keys and listener settings — and reuse is what defenders detect.</p>
+            <p>In short: <strong>the crypto is invisible; the trust ceremony is not.</strong></p>
+          </div>
+        </div>
+
+        <h3>Where it sits in the attack chain</h3>
+        <p>ATT&amp;CK lists T1573.002 under the <strong>Command and Control</strong> tactic. It describes the phase after an implant is already running on a victim machine. The implant needs orders, so it opens an encrypted channel home.</p>
+        <div class="diagram">
+          <div class="dnode infra"><div class="dn-t">Delivery</div><div class="dn-s">phishing · loader</div></div>
+          <span class="darrow" aria-hidden="true">→</span>
+          <div class="dnode victim"><div class="dn-t">Implant runs</div><div class="dn-s">public key embedded</div></div>
+          <span class="darrow" aria-hidden="true">→</span>
+          <div class="dnode attacker"><div class="dn-t">C2 over TLS</div><div class="dn-s">T1573.002 · this page</div></div>
+          <span class="darrow" aria-hidden="true">→</span>
+          <div class="dnode infra"><div class="dn-t">Tasking</div><div class="dn-s">signed commands</div></div>
+          <span class="darrow" aria-hidden="true">→</span>
+          <div class="dnode defender"><div class="dn-t">Objectives</div><div class="dn-s">exfil · ransomware</div></div>
+        </div>
+
+        <h3>What you will learn on this page</h3>
+        <ul>
+          <li>How a key pair, a certificate and a wrapped session key work — with a safe lab demo.</li>
+          <li>Which network and endpoint artifacts asymmetric C2 must leave behind.</li>
+          <li>How researchers cluster attacker servers by reusing one certificate fingerprint.</li>
+          <li>Six ready-to-adapt Sigma rules and six matching Splunk SPL queries.</li>
+          <li>What to fix first: logging, tuning and the response playbook.</li>
+        </ul>
+
+        <div class="card">
+          <h4>Key facts at a glance</h4>
+          <dl class="kv">
+            <dt>ATT&amp;CK ID</dt><dd><a href="https://attack.mitre.org/techniques/T1573/002/">T1573.002 — Asymmetric Cryptography</a></dd>
+            <dt>Parent</dt><dd><a href="https://attack.mitre.org/techniques/T1573/">T1573 — Encrypted Channel</a>; sibling: <a href="https://attack.mitre.org/techniques/T1573/001/">T1573.001 — Symmetric Cryptography</a></dd>
+            <dt>Tactic</dt><dd>Command and Control</dd>
+            <dt>Platforms</dt><dd>ESXi, Linux, Network Devices, Windows, macOS</dd>
+            <dt>Data sources</dt><dd>Network Traffic: Network Traffic Content · Network Traffic: Network Traffic Flow</dd>
+            <dt>Typical crypto</dt><dd>RSA or ElGamal or ECC keys; RSA-wrapped session keys or ECDH; AES session ciphers; self-signed or attacker-issued certificates</dd>
+            <dt>Best evidence</dt><dd>Zeek <code>ssl.log</code> + <code>x509.log</code>, JA3S fingerprints, cert-fingerprint pivots across IPs</dd>
+            <dt>Detection idea</dt><dd>Weak, self-signed, long-lived or reused certificates; rare server handshake fingerprints (JA3S); odd SNI values</dd>
+          </dl>
+        </div>
+
+        <div class="callout note">
+          <span class="callout-label">Note</span>
+          <p>Terms used here: a <strong>certificate</strong> is a signed digital identity card that carries a public key. <strong>Self-signed</strong> means the issuer and the subject are the same party, so no outside authority vouches for it. <strong>mTLS</strong> (mutual TLS) means both sides present a certificate. <strong>JA3/JA3S</strong> are short hashes of the client and server TLS handshake settings. <strong>SNI</strong> (server name indication) is the hostname the client announces in the clear part of the handshake.</p>
+        </div>
+      </section>
+      <!-- ============================================================ -->
+      <!-- SECTION 2 · ANIMATED SIMULATION                               -->
+      <!-- ============================================================ -->
+      <section id="simulation">
+        <div class="sec-head"><span class="sec-num">2</span><h2 class="sec-title">Animated simulation</h2></div>
+        <p class="sec-intro">The animation shows one full asymmetric C2 life cycle: key setup, certificate presentation, key exchange, signed tasking, researcher clustering, intel sharing, SOC detection and blocking. Use <strong>Play/Pause</strong> to run or freeze it, <strong>Prev/Next</strong> to move one step, the speed buttons to slow it down, and the step chips to jump. Hover any node for details. A written version of the same story sits below the canvas, so nothing is lost without JavaScript.</p>
+
+        <div class="sim" id="sim">
+          <div class="sim-progress"><span class="sp-fill"></span></div>
+          <div class="sim-stage" tabindex="0" aria-label="Animation of an asymmetric cryptography command and control attack: certificate presented, session key wrapped, researcher clusters the certificate, SOC detects and blocks.">
+            <canvas id="sim-canvas" role="img" aria-label="Animation of an asymmetric cryptography command and control attack: certificate presented, session key wrapped, researcher clusters the certificate, SOC detects and blocks."></canvas>
+            <div class="sim-tip" id="sim-tip" role="status"></div>
+          </div>
+          <div class="sim-panel">
+            <p class="sim-step-title"></p>
+            <p class="sim-caption"></p>
+            <p class="sim-hint"><span class="lbl">Defender view</span><span class="sim-hint-text"></span></p>
+            <div class="sim-evidence" aria-label="Evidence left behind"></div>
+          </div>
+          <div class="sim-controls">
+            <button type="button" class="btn primary" id="sim-play">Pause</button>
+            <button type="button" class="btn" id="sim-restart">Restart</button>
+            <button type="button" class="btn" id="sim-prev">◀ Prev</button>
+            <button type="button" class="btn" id="sim-next">Next ▶</button>
+            <span class="seg" role="group" aria-label="Playback speed">
+              <button type="button" class="seg-btn" data-speed="0.5" aria-pressed="false">0.5×</button>
+              <button type="button" class="seg-btn" data-speed="1" aria-pressed="true">1×</button>
+              <button type="button" class="seg-btn" data-speed="2" aria-pressed="false">2×</button>
+            </span>
+          </div>
+          <div class="step-chips" aria-label="Jump to step"></div>
+          <div class="sim-legend" aria-hidden="true">
+            <span><span class="legend-dot" style="background:var(--danger)"></span>Attacker action / blocked flow</span>
+            <span><span class="legend-dot" style="background:var(--accent)"></span>Enterprise endpoint</span>
+            <span><span class="legend-dot" style="background:var(--warning)"></span>Attacker infra &amp; boundary</span>
+            <span><span class="legend-dot" style="background:var(--success)"></span>Defenders (SOC, CTI)</span>
+            <span><span class="legend-dot" style="background:var(--violet)"></span>Encrypted data / intel</span>
+          </div>
+          <div class="sim-story">
+            <h3>Written story (screen-reader and no-JS version)</h3>
+            <ol>
+              <li><span class="st">Step 1 — Build keys, embed the public half.</span> The attacker generates an RSA keypair on the C2 server. Only the public key is placed inside the implant binary, so no shared secret exists that a reverse engineer could copy. The private key never leaves the attacker's server.</li>
+              <li><span class="st">Step 2 — Implant calls home, server shows a certificate.</span> The implant starts a TLS session to the C2 server. The server presents a self-signed certificate with a weak 1024-bit RSA key and a ten-year validity window. The enterprise boundary records the handshake details even though the content stays encrypted.</li>
+              <li><span class="st">Step 3 — A session key is wrapped with the public key.</span> Inside the established TLS 1.3 tunnel, the implant creates its own AES session key for the application layer, wraps it with the server's RSA public key, and sends it across — the ATT&amp;CK-documented pattern (for example Sliver's mutual TLS plus RSA session-key exchange). Only the server's private key can unwrap it. Older TLS 1.2 channels can do this wrap at the protocol level instead. From this moment both sides talk with fast symmetric encryption.</li>
+              <li><span class="st">Step 4 — Signed, encrypted tasking.</span> The operator pushes tasks through the encrypted channel and signs each one with the private key. The implant verifies the signature before it runs a task, then returns results over the same session.</li>
+              <li><span class="st">Step 5 — Researcher clusters the certificate.</span> A threat-intel researcher scans large parts of the internet and finds the identical certificate fingerprint on six IP addresses in three autonomous systems (ASNs — the network operators that own blocks of addresses). One operator cluster becomes visible.</li>
+              <li><span class="st">Step 6 — Report and indicators shared.</span> The researcher publishes the findings and shares the certificate hash and JA3S fingerprints as indicators of compromise. The SOC ingests them into the SIEM as matchable fields.</li>
+              <li><span class="st">Step 7 — SOC detection fires.</span> The SIEM raises an alert because an internal workstation talks to a server that uses the hunted certificate hash and a rare JA3S value. The analyst confirms the beacon and pulls endpoint context for the host.</li>
+              <li><span class="st">Step 8 — Block and hunt back in time.</span> The SOC blocks the cluster IPs and the certificate hash at the boundary, isolates the workstation, and hunts the same fingerprint across 90 days of stored logs. The hunt uncovers two earlier, quieter sessions, so the team can measure the full scope.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Why the certificate matters most</h4>
+            <p>Steps 2 and 5 carry the whole detection idea. The attacker must show a certificate to earn trust, and certificates are unique, comparable and loggable. A certificate is like a face: changing servers is cheap, changing the face is annoying. So researchers track the face.</p>
+          </div>
+          <div class="card">
+            <h4>Why the SOC wins at step 8</h4>
+            <p>A certificate hash is a stable indicator. It keeps matching after the malware changes domains, ports or even code. Blocking one hash can break a whole cluster, and hunting it in old logs reveals how long the intruder was present.</p>
+          </div>
+        </div>
+      </section>
+      <!-- ============================================================ -->
+      <!-- SECTION 3 · RED TEAM                                          -->
+      <!-- ============================================================ -->
+      <section id="red-team">
+        <div class="sec-head"><span class="sec-num">3</span><h2 class="sec-title">Red team / hacker perspective</h2></div>
+        <p class="sec-intro">This section explains how attackers and authorized red teams use asymmetric cryptography for command and control. It stays conceptual and lab-only. Do not run anything here against systems you do not own. The goal is to understand the attacker's choices, because every choice leaves a trace.</p>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Why attackers choose asymmetric C2</h3>
+            <ul>
+              <li><strong>No shared secret in the binary.</strong> A symmetric-only implant must carry its AES key somewhere. Reverse engineers can extract that key and decrypt captured traffic. With asymmetric C2 they extract only a public key, which unlocks nothing.</li>
+              <li><strong>Forward secrecy.</strong> With an ECDH key exchange (a method where both sides compute one shared secret from partial public values), even a leaked server private key does not unlock yesterday's sessions. Each session used fresh key material.</li>
+              <li><strong>Signed tasks.</strong> A signature proves a command really came from the operator. This blocks take-over attempts by other groups or by researchers running fake servers.</li>
+              <li><strong>Bot authentication with mTLS.</strong> The implant also carries its own client certificate. The server demands it, so a scanner that pokes the listener sees nothing useful.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>How it is performed (conceptual flow)</h3>
+            <ol>
+              <li>Generate a key pair (RSA or ECC) on the operator's server.</li>
+              <li>Create a certificate for the listener, usually self-signed or from a cheap authority.</li>
+              <li>Embed the public key or certificate into the implant at build time.</li>
+              <li>Implant connects on TLS; server presents its certificate; client verifies it against the embedded copy (pinning).</li>
+              <li>Implant wraps a random AES session key with the public key, or runs ECDH. Both sides derive the same session key.</li>
+              <li>Operator sends signed tasks; implant verifies the signature, executes, returns results.</li>
+            </ol>
+            <p class="small muted">Public tool documentation describes this pattern for several open-source command and control frameworks, including TLS-encrypted listeners with certificate pinning and mTLS options.</p>
+          </div>
+          <div class="card">
+            <h3>Where it applies</h3>
+            <p>Any implant that speaks TLS can follow this pattern. Public reporting ties it to:</p>
+            <ul>
+              <li>Red-team and adversary-emulation frameworks with mTLS listeners (for example Sliver-style tooling, per vendor threat-spotlight reporting from 2022–2023).</li>
+              <li>PowerShell and .NET post-exploitation frameworks whose public documentation shows RSA-protected tasking.</li>
+              <li>Ransomware loaders that wrap session keys with an embedded RSA public key before a data-only attack.</li>
+              <li>SSH tunnels, where asymmetric host keys authenticate the tunnel endpoint.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Prerequisites an operator needs</h3>
+            <ul>
+              <li>A working key pair and a certificate for the listener.</li>
+              <li>A build step that bakes the public key into the implant.</li>
+              <li>Stable hosting for the listener (the private key lives here, so losing the server means losing the channel).</li>
+              <li>Key storage discipline; one leaked private key can expose the campaign.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout warn">
+          <span class="callout-label">Lab only</span>
+          <p>Run these commands only on an isolated lab machine that you own — a virtual machine with no access to company networks. They demonstrate the mechanics in a safe way: key generation, signing, verification, and a local TLS handshake. Never point them at real infrastructure, and never use techniques from this page on systems you do not have written permission to test.</p>
+        </div>
+
+        <p class="small muted">Demo 1 — build a key pair, sign a file, verify the signature. This is the exact math the implant and server perform, in four lines.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">Shell · openssl (lab)</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code># LAB ONLY - isolated VM, no production data, no internet needed
+# 1. Create a 2048-bit RSA private key (operator side)
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out c2lab.key
+
+# 2. Export the public key - the ONLY part an implant would embed
+openssl pkey -in c2lab.key -pubout -out c2lab_pub.pem
+
+# 3. Sign a task file with the private key (operator side)
+openssl dgst -sha256 -sign c2lab.key -out task.bin.sig task.bin
+
+# 4. Verify the signature with the public key (what the implant does)
+openssl dgst -sha256 -verify c2lab_pub.pem -signature task.bin.sig task.bin
+# Output "Verified OK" means the task really came from the key holder</code></pre></div>
+        <p class="small muted">Demo 1 shows why signatures matter: change one byte of <code>task.bin</code> and verification fails.</p>
+
+        <p class="small muted">Demo 2 — a self-signed certificate and a local TLS server with a client that reads the handshake. This mirrors simulation steps 2 and 3.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">Shell · openssl (lab)</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code># LAB ONLY - run both commands on the same isolated lab VM, two terminals
+# 1. Create a self-signed certificate, valid 10 years (attacker-style choice)
+openssl req -x509 -newkey rsa:2048 -keyout c2lab.key -out c2lab.crt -days 3650 -nodes -subj "/CN=cdn-node-7"
+
+# 2. Terminal 1 - start a local TLS server that presents the certificate
+openssl s_server -accept 8443 -cert c2lab.crt -key c2lab.key -www
+
+# 3. Terminal 2 - connect as a client and print what a monitor would see
+echo | openssl s_client -connect 127.0.0.1:8443 2>/dev/null | openssl x509 -noout -subject -issuer -dates -fingerprint</code></pre></div>
+        <p class="small muted">Demo 2 prints subject, issuer, validity dates and the fingerprint — the same fields Zeek writes into <code>ssl.log</code> and <code>x509.log</code>.</p>
+
+        <p class="small muted">Demo 3 — read a certificate like a detection engineer and find its pivot fields.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">Shell · openssl (lab)</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code># LAB ONLY - inspect any certificate file and read its tracking fields
+openssl x509 -in c2lab.crt -noout -text
+# Fields worth reading for detection work:
+#   Subject / Issuer - identical on self-signed certificates
+#   Validity         - long windows (3650 days) are rare for real services
+#   Public-Key       - a small bit size (1024) marks a weak key
+#   SHA1 Fingerprint - the pivot value researchers cluster on</code></pre></div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h3>Common variations</h3>
+            <ul>
+              <li><strong>mTLS with client certificates.</strong> Every implant gets a unique client cert; the listener rejects anything else. Looks like a normal service to a scanner.</li>
+              <li><strong>Pinned certificates.</strong> The implant compares the received certificate to a hard-coded copy, so swapping in a different valid certificate breaks the channel.</li>
+              <li><strong>ECDH instead of RSA wrapping.</strong> Both sides send partial keys and compute the session key separately; captured handshakes reveal no key even with the private key.</li>
+              <li><strong>SSH tunnels.</strong> The same public-key trust idea over port 22, used to hide other traffic inside.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Mistakes operators make (very useful for defenders)</h3>
+            <ul>
+              <li>Reusing one certificate across campaigns and servers — the single best tracking signal.</li>
+              <li>Choosing weak key sizes (1024-bit RSA) for quick throwaway listeners.</li>
+              <li>Issuing long validity windows (10 years) they never rotate.</li>
+              <li>Setting SNI to a bare IP address or leaving it empty.</li>
+              <li>Rebuilding listeners with the same framework defaults, so JA3S stays identical.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+      <!-- ============================================================ -->
+      <!-- SECTION 4 · BLUE TEAM / SOC                                   -->
+      <!-- ============================================================ -->
+      <section id="blue-team">
+        <div class="sec-head"><span class="sec-num">4</span><h2 class="sec-title">Blue team / SOC perspective</h2></div>
+        <p class="sec-intro">Defenders rarely see the encrypted commands. They see the <strong>trust ceremony</strong> around them: certificates, handshake fingerprints and connection rhythms. This section lists what to collect, where to look, and how to triage an asymmetric C2 alert from first ping to full block.</p>
+
+        <div class="grid grid-2">
+          <div class="card accent-edge">
+            <h3>How defenders experience this technique</h3>
+            <p>The implant and the C2 server do their math in secret. What crosses your network edge is plain to collect:</p>
+            <ul>
+              <li>The server's <strong>certificate</strong> (subject, issuer, key size, validity, fingerprint).</li>
+              <li>The <strong>validation result</strong> your sensor computes (self-signed, unknown issuer, ok).</li>
+              <li>The <strong>SNI</strong> value the client announced.</li>
+              <li><strong>JA3/JA3S</strong> hashes of the handshake, if your Zeek has the JA3 package.</li>
+              <li><strong>Flow records</strong>: who, when, how often, how many bytes.</li>
+            </ul>
+          </div>
+          <div class="card accent-edge">
+            <h3>Why it matters for the SOC</h3>
+            <p>C2 is the attacker's lifeline. Cut it and most hands-on-keyboard activity stops: no tasking, no staging, no exfiltration over that channel. A single certificate fingerprint can tie together servers that look unrelated, reveal how long an intruder was present, and turn one alert into a full scope. That is why certificate logging costs little and finds a lot.</p>
+          </div>
+        </div>
+
+        <h3>Artifacts to hunt</h3>
+        <div class="table-wrap">
+          <table>
+            <caption>Asymmetric C2 artifacts and where they appear</caption>
+            <thead><tr><th>Artifact</th><th>Where it shows up</th><th>Why it matters</th></tr></thead>
+            <tbody>
+              <tr><td>Self-signed or invalid server certificate</td><td>Zeek <code>ssl.log</code> (<code>validation_status</code>), proxy logs</td><td>Attacker-issued certs rarely pass validation; normal enterprise TLS almost always does.</td></tr>
+              <tr><td>Weak key length (1024-bit RSA)</td><td>Zeek <code>x509.log</code> (<code>certificate.key_length</code>)</td><td>Modern services use 2048-bit or more; throwaway C2 certs often do not.</td></tr>
+              <tr><td>Long validity window (years)</td><td>Zeek <code>x509.log</code> (validity fields)</td><td>Public authorities issue ~1-year certs; attacker certs often run 5–10 years.</td></tr>
+              <tr><td>Same cert fingerprint on many IPs</td><td><code>x509.log</code> plus external scan platforms</td><td>Reuse clusters attacker infrastructure across hosting providers.</td></tr>
+              <tr><td>Client-certificate requests (mTLS)</td><td>TLS handshake fields, server response codes</td><td>A server that demands a client cert before serving data is unusual for your user fleet.</td></tr>
+              <tr><td>Rare JA3S server fingerprint</td><td>Zeek <code>ssl.log</code> (<code>ja3s</code>, JA3 package)</td><td>Framework listeners answer handshakes in a fixed, unusual way.</td></tr>
+              <tr><td>SNI is empty or a bare IP</td><td>Zeek <code>ssl.log</code> (<code>server_name</code>)</td><td>Real services nearly always use a hostname; IP-literal SNI is a malware habit.</td></tr>
+              <tr><td>Fixed beacon rhythm per host</td><td><code>conn.log</code>, firewall flow logs</td><td>Implants poll on timers; humans do not click at exact 60-second intervals.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Where to look (log sources)</h3>
+        <ul>
+          <li><strong>Zeek <code>ssl.log</code></strong> — one line per TLS session: SNI, certificate subject/issuer, validation status, JA3/JA3S.</li>
+          <li><strong>Zeek <code>x509.log</code></strong> — one line per certificate seen: fingerprint, key type and length, validity window, serial.</li>
+          <li><strong>Firewall and proxy logs</strong> — destination IP and port; useful when Zeek is not at every edge.</li>
+          <li><strong>Endpoint logs (Sysmon EID 3)</strong> — which process made the connection, so a network finding gets a name and a file path.</li>
+          <li><strong>CTI scan platforms</strong> — internet-wide certificate data that lets you pivot a fingerprint outward before the beacon ever hits you.</li>
+          <li><strong>TLS inspection gateways</strong> — only where legal and policy-approved; most of the signals above need no decryption at all.</li>
+        </ul>
+
+        <h3>Attack-chain context for the SOC</h3>
+        <p>An asymmetric C2 finding rarely arrives alone. Put it in the chain: the host was already compromised (initial access), the implant is running (execution), and tasking is what comes next (lateral movement, collection, ransomware). Your triage decides whether you catch stage one or stage five.</p>
+
+        <h3>Triage flow (ordered)</h3>
+        <ol class="timeline">
+          <li><span class="tl-date">Triage 1 · Validate</span><p>Reproduce the alert. Confirm the cert hash, JA3S and validation status in raw <code>ssl.log</code>/<code>x509.log</code> lines. Rule out a known internal appliance.</p></li>
+          <li><span class="tl-date">Triage 2 · Follow the fingerprint</span><p>Search the certificate fingerprint in CTI platforms and your own historical logs. (A pivot means using one clue — here the fingerprint — to find related records everywhere else.) Count distinct destination IPs. Three or more servers with one fingerprint is a cluster.</p></li>
+          <li><span class="tl-date">Triage 3 · Name the process</span><p>Join the flow to Sysmon EID 3 (or EDR process events). Get image path, user, and parent process for the beaconing connection.</p></li>
+          <li><span class="tl-date">Triage 4 · Scope</span><p>Search every internal host for the same fingerprint, JA3S and destination set over the past 90 days. List all beacons, not just the loudest.</p></li>
+          <li><span class="tl-date">Triage 5 · Contain</span><p>Block the cluster IPs and the cert hash at the boundary. Isolate affected hosts. Keep the listener reachable in a sinkhole if your policy allows, to study handshakes.</p></li>
+          <li><span class="tl-date">Triage 6 · Report and improve</span><p>Record the cluster as an IOC set, share with your ISAC, and add the fingerprint to recurring hunts. Feed misses back into tuning.</p></li>
+        </ol>
+
+        <div class="callout good">
+          <span class="callout-label">Good practice</span>
+          <p>Store <code>x509.log</code> for at least 90 days (one year is better). A certificate fingerprint found today still matches the quiet beacons from three months ago — but only if those lines still exist.</p>
+        </div>
+      </section>
+      <!-- ============================================================ -->
+      <!-- SECTION 5 · DETECTION ENGINEERING DEEP DIVE                   -->
+      <!-- ============================================================ -->
+      <section id="detection-deep-dive">
+        <div class="sec-head"><span class="sec-num">5</span><h2 class="sec-title">Detection engineering deep dive</h2></div>
+        <p class="sec-intro">This is the working section for detection engineers. It maps the technique to compliance frameworks, lists where threat intelligence comes from (with confidence levels), ranks realistic threats by platform, shows the raw logs you should expect, and finishes with six complete Sigma rules and six matching Splunk SPL queries.</p>
+
+        <h3 id="detection-regulation">5.1 Regulation mapping</h3>
+        <p>Encrypted command and control touches several control families at once: cryptography policy, network monitoring, and incident response. Auditors increasingly ask for evidence that encrypted channels are monitored, not just encrypted. Use this table to plan that evidence.</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Framework controls mapped to asymmetric C2 detection</caption>
+            <thead><tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>GDPR</td><td>Art. 32 — security of processing; Art. 33 — breach notification</td>
+                <td>Art. 32 expects protection of personal data in transit, which includes knowing when an encrypted channel is hostile. Art. 33 expects a 72-hour breach report, which is impossible without detection and timestamps from logs.</td>
+                <td>TLS monitoring policy; Zeek or equivalent <code>ssl.log</code>/<code>x509.log</code> retention; documented C2 alerts with response times; breach-notice records.</td>
+              </tr>
+              <tr>
+                <td>HIPAA</td><td>164.312(e)(1) — transmission security</td>
+                <td>Covered entities must guard electronic protected health information during transmission. A hostile TLS channel to patient-data systems defeats that intent even though the bytes are encrypted.</td>
+                <td>Network monitoring records for systems handling ePHI; certificate anomaly alerts; access and flow reviews.</td>
+              </tr>
+              <tr>
+                <td>ISO 27001:2022</td><td>A.8.15 logging; A.8.16 monitoring activities; A.8.20 network security; A.8.24 use of cryptography</td>
+                <td>A.8.24 governs cryptographic controls (key management — the same keys attackers abuse). A.8.15/16 require logs and monitoring that can actually catch encrypted C2. A.8.20 covers protection of networks.</td>
+                <td>Logging standard that names TLS metadata sources; monitoring runbooks; crypto inventory; sample alert-to-closure records.</td>
+              </tr>
+              <tr>
+                <td>SOC 2</td><td>CC6.7 — data transmission controls; CC7.2 — anomaly monitoring; CC7.3 — incident evaluation</td>
+                <td>CC6.7 covers protection of data in movement; CC7.2 expects detection of unusual events (a self-signed cert beaconing out qualifies); CC7.3 expects timely assessment of those events.</td>
+                <td>Detection-rule inventory; alert triage tickets with timelines; quarterly rule-effectiveness reviews.</td>
+              </tr>
+              <tr>
+                <td>PCI DSS 4.0</td><td>4.2.1 — strong cryptography for PAN over open networks; 11.5.1 — intrusion detection/prevention</td>
+                <td>4.2.1 forces strong crypto on cardholder flows; 11.5.1 requires techniques that detect compromise — encrypted C2 is exactly the blind spot an assessor probes.</td>
+                <td>IDS/IPS or NDR coverage of cardholder network segments; TLS metadata detections; as-of-date evidence for rule updates.</td>
+              </tr>
+              <tr>
+                <td>NIST</td><td>CSF DE.CM-1 (network monitoring), PR.DS-2 (data in transit); SP 800-53 SI-4, SC-8, SC-12</td>
+                <td>DE.CM-1 and SI-4 require monitoring that surfaces hostile channels. SC-8 covers transmission security; SC-12 covers cryptographic key establishment — the same primitives the attacker imitates.</td>
+                <td>Monitored network diagram; detection engineering tickets; key-management records; SIEM use cases mapped to SI-4.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="detection-threat-intel">5.2 Threat intelligence</h3>
+        <p>Good detections start with sourced truth. For asymmetric C2, the strongest intel loop is unusual: much of it comes from <strong>outside-in scanning</strong> (researchers collect certificates from internet-facing servers) rather than from sandbox reports alone. Treat each source below with its confidence level, and keep the hedged wording when you copy it into reports.</p>
+
+        <h4>Documented use in MITRE ATT&amp;CK</h4>
+        <p>The official T1573.002 page (checked October 2026) lists many users of asymmetric crypto in C2. These rows come from the official page, so you can cite them with high confidence:</p>
+        <div class="table-wrap">
+          <table>
+            <caption>Official ATT&amp;CK procedure examples (T1573.002)</caption>
+            <thead><tr><th>Software / Actor</th><th>What ATT&amp;CK records</th></tr></thead>
+            <tbody>
+              <tr><td>Cobalt Strike (S0154)</td><td>Can use RSA asymmetric encryption with PKCS1 padding to encrypt data sent to the C2 server.</td></tr>
+              <tr><td>Cyclops Blink (S0687)</td><td>Encrypts C2 messages with AES-256-CBC sent underneath TLS; OpenSSL encrypts each message with a random key and IV that a hardcoded RSA public key then protects.</td></tr>
+              <tr><td>Dridex (S0384)</td><td>Has encrypted traffic with RSA.</td></tr>
+              <tr><td>GoldMax (S0588)</td><td>Has RSA-encrypted its communication with the C2 server.</td></tr>
+              <tr><td>Gazer (S0168)</td><td>Uses custom encryption for C2 that uses RSA.</td></tr>
+              <tr><td>ComRAT (S0126) · Carbon · ADVSTORESHELL · Attor · BADHATCH · Empire · Covenant · BRICKSTORM</td><td>RSA or TLS-protected C2 channels, per the official page.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <caption>Intel sources and confidence for T1573.002</caption>
+            <thead><tr><th>Source</th><th>What it gives you</th><th>Confidence</th><th>How to apply it</th></tr></thead>
+            <tbody>
+              <tr><td>MITRE ATT&amp;CK (technique page and parent T1573)</td><td>Definition, platforms, data sources</td><td>High</td><td>Anchor every rule and report to the technique ID.</td></tr>
+              <tr><td>Vendor threat-spotlight reporting on Sliver-style C2 frameworks, 2022–2023</td><td>mTLS listeners, per-implant client certs, default cert profiles</td><td>Medium–High</td><td>Justify mTLS and cert-pinning detections; tune to your own telemetry before enforcing.</td></tr>
+              <tr><td>Public tool documentation (Empire, Metasploit TLS payloads and similar frameworks)</td><td>How frameworks implement RSA-wrapped session keys and staging</td><td>High (that the tools use it); Medium (that a given intrusion did)</td><td>Build lab fingerprints; expect matching JA3S in real traffic.</td></tr>
+              <tr><td>OSINT internet-scan platforms (certificate harvesting at scale)</td><td>Cert fingerprints across millions of IPs; infrastructure clustering</td><td>High</td><td>Pivot internal cert hashes outward; watch for your own IOCs appearing on new IPs.</td></tr>
+              <tr><td>ISAC / ISAO sector sharing</td><td>Peer blocks and cert-hash watchlists</td><td>Medium</td><td>Ingest as watchlists; confirm against your own logs before blocking.</td></tr>
+              <tr><td>Commercial intel feeds</td><td>Cert-hash, JA3S and IP indicator sets with context</td><td>Medium–High</td><td>Score and deduplicate; measure how often feed hits turn into true positives.</td></tr>
+              <tr><td>Internal telemetry (your Zeek, EDR, firewall history)</td><td>Baseline of normal certs, JA3S, SNI and beacons</td><td>High (for your estate)</td><td>Every external rule needs this baseline to tune false positives.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Reported campaigns and tooling involving asymmetric C2 (hedged wording)</caption>
+            <thead><tr><th>Actor / tooling</th><th>Reported period</th><th>Asymmetric pattern</th><th>Confidence</th></tr></thead>
+            <tbody>
+              <tr><td>Sliver-style C2 frameworks in intrusions</td><td>2022–2023</td><td>mTLS listeners, per-implant certificates, pinned server certs — vendor threat-spotlight reporting indicates adoption by both red teams and criminal groups</td><td>Medium–High</td></tr>
+              <tr><td>Empire / PowerShell post-exploitation frameworks</td><td>Public documentation, ongoing</td><td>RSA-protected tasking and staging described in public tool docs</td><td>High (tooling), Medium (specific intrusions)</td></tr>
+              <tr><td>Metasploit TLS payloads</td><td>Public documentation, ongoing</td><td>TLS staging with certificate handling options</td><td>High (tooling)</td></tr>
+              <tr><td>Ransomware loaders wrapping session keys with embedded RSA public keys</td><td>Multiple public reports, recent years</td><td>Hybrid setup: RSA-locked symmetric channel before data-only attacks</td><td>Medium–High</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout note">
+          <span class="callout-label">Note</span>
+          <p>Confidence levels here follow a simple scale. <strong>High</strong>: the fact is verifiable in primary material (tool code, your own logs). <strong>Medium</strong>: consistent reporting from credible vendors or researchers, but not independently verified. <strong>Low</strong>: single-source or unverified claims. Keep the distinction when you write alerts — "cert-hash cluster matching Sliver-style framework defaults" is a claim you can defend; "APT used RSA" is not.</p>
+        </div>
+        <h3 id="detection-threat-ranking">5.3 Threats ranking and categorization</h3>
+        <p>Rank threats by realistic impact on an enterprise, then tag each by platform so the right team owns the detection. Severity badges show rank; platform badges show category. Each threat lists what must be true before it can hurt you (preconditions) and what the attacker gains.</p>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Ranked threats for T1573.002</caption>
+            <thead><tr><th>#</th><th>Threat</th><th>Severity</th><th>Platform</th><th>Preconditions</th><th>Impact</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>mTLS botnet C2 with per-implant client certificates</td><td><span class="badge sev-crit">Critical</span></td><td><span class="badge cat-net">Network</span></td><td>Implant deployed on fleet hosts; listener certificates issued per bot</td><td>Stable, scanner-proof channel for thousands of bots; slow to dismantle</td></tr>
+              <tr><td>2</td><td>Certificate-reused multi-campaign infrastructure</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat-net">Network</span></td><td>Operator reuses one cert across servers and campaigns</td><td>One fingerprint maps the whole cluster; blocking it disrupts several campaigns at once</td></tr>
+              <tr><td>3</td><td>Ransomware asymmetric session setup</td><td><span class="badge sev-crit">Critical</span></td><td><span class="badge cat">Windows</span></td><td>Loader with embedded RSA public key already executed</td><td>Encrypted tasking channel enables data-only ransomware with no visible plaintext stage</td></tr>
+              <tr><td>4</td><td>macOS implant with pinned certificate</td><td><span class="badge sev-med">Medium</span></td><td><span class="badge cat">macOS</span></td><td>Signed or notarized-looking implant installed on a Mac</td><td>Long-lived stealthy access on a platform many SOCs monitor less</td></tr>
+              <tr><td>5</td><td>Linux server backdoor with ECDH C2</td><td><span class="badge sev-high">High</span></td><td><span class="badge cat">Linux</span></td><td>Compromised server, backdoored service binary</td><td>Forward-secrecy channel on high-value servers; captured traffic stays locked</td></tr>
+              <tr><td>6</td><td>Abuse of the legitimate certificate ecosystem</td><td><span class="badge sev-low">Low</span></td><td><span class="badge plain">Cloud</span></td><td>Attacker obtains free valid certs for disposable domains</td><td>Cert validation is clean, so naive "bad cert only" rules go blind</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>1 · mTLS botnet C2 <span class="badge sev-crit">Critical</span> <span class="badge cat-net">Network</span></h4>
+            <p><strong>Description.</strong> A botnet where every implant holds a unique client certificate and the listener demands mTLS. Vendor threat-spotlight reporting indicates Sliver-style frameworks popularized this pattern in 2022–2023.</p>
+            <p><strong>Why this rank.</strong> mTLS blocks scanner-based takedowns and mass-reporting tricks: without a valid client cert, the server answers like an empty service. Botnets built this way survive for months.</p>
+            <p><strong>Detection angle.</strong> Look for outbound TLS where the server requests a client certificate, plus rare JA3S values and self-signed server certs. The channel setup itself is the tell.</p>
+          </div>
+          <div class="card">
+            <h4>2 · Cert-reused multi-campaign infrastructure <span class="badge sev-high">High</span> <span class="badge cat-net">Network</span></h4>
+            <p><strong>Description.</strong> One operator reuses the same self-signed certificate (identical fingerprint) across many servers, ports and campaigns — the pattern in simulation steps 5–8.</p>
+            <p><strong>Why this rank.</strong> Reuse is an operator habit that is hard to drop. It gives defenders a cluster-level block and a historical hunt that spans hosting providers and ASNs.</p>
+            <p><strong>Detection angle.</strong> Aggregate <code>x509.log</code> by fingerprint; alert when one fingerprint crosses three or more distinct destination IPs.</p>
+          </div>
+          <div class="card">
+            <h4>3 · Ransomware asymmetric session setup <span class="badge sev-crit">Critical</span> <span class="badge cat">Windows</span></h4>
+            <p><strong>Description.</strong> A loader wraps its C2 session key with an embedded RSA public key before any ransomware behavior. Public reporting on several ransomware families describes this hybrid setup.</p>
+            <p><strong>Why this rank.</strong> The channel is the precursor to encryption events. Catching the setup phase — odd cert, wrapped-key handshake shape — buys time before mass impact.</p>
+            <p><strong>Detection angle.</strong> Short-lived outbound TLS from server-bound service binaries to freshly seen IPs, joined with process context on Windows hosts.</p>
+          </div>
+          <div class="card">
+            <h4>4 · macOS implant with pinned certificate <span class="badge sev-med">Medium</span> <span class="badge cat">macOS</span></h4>
+            <p><strong>Description.</strong> A macOS implant pins its server certificate, so the channel only works with the attacker's exact cert. Many SOCs log macOS traffic less completely, which lowers detection odds.</p>
+            <p><strong>Why this rank.</strong> Slower to cause enterprise-wide harm than the network threats above, but stealthier on a platform with thinner telemetry.</p>
+            <p><strong>Detection angle.</strong> Extend Zeek coverage to Mac VLANs; alert on validation-status anomalies and rare JA3S from macOS client builds.</p>
+          </div>
+          <div class="card">
+            <h4>5 · Linux server backdoor with ECDH C2 <span class="badge sev-high">High</span> <span class="badge cat">Linux</span></h4>
+            <p><strong>Description.</strong> A backdoored service on a Linux server negotiates ECDH with the operator. Even a later private-key leak will not decrypt recorded sessions (forward secrecy).</p>
+            <p><strong>Why this rank.</strong> Servers store an organization's most valuable data, and they often have no endpoint agent; a network-only backdoor is durable and quiet.</p>
+            <p><strong>Detection angle.</strong> Unexpected outbound TLS from servers (which should mostly serve, not connect), unusual SNI, and cert traits that differ from the fleet baseline.</p>
+          </div>
+          <div class="card">
+            <h4>6 · Abuse of the legitimate certificate ecosystem <span class="badge sev-low">Low</span> <span class="badge plain">Cloud</span></h4>
+            <p><strong>Description.</strong> The attacker gets free, valid certificates (the same ones your users trust) for throwaway cloud domains, so no validation anomaly exists.</p>
+            <p><strong>Why this rank.</strong> Low as a standalone signal, high as a reason to layer detections: cert-only rules miss this, so add JA3S, SNI-newness and host reputation.</p>
+            <p><strong>Detection angle.</strong> New-domain certs with short age, weird registrable names, and clients that never visited the domain before the implant did.</p>
+          </div>
+        </div>
+        <h3 id="detection-logs">5.4 Logs and patterns</h3>
+        <p>Detection quality depends directly on log quality. This subsection shows which sources cover the ranked threats, what real events look like, and how normal differs from suspicious. All examples use documentation-only addresses (198.51.100.0/24 and 10.0.0.0/8 ranges) and invented hashes shaped like the real ones.</p>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Which logs cover which threat (coverage map)</caption>
+            <thead><tr><th>Threat</th><th>Primary log sources</th><th>Key fields</th><th>Gap to watch</th></tr></thead>
+            <tbody>
+              <tr><td>1 · mTLS botnet C2</td><td>Zeek <code>ssl.log</code>, firewall flow</td><td>server certificate request flag, <code>ja3s</code>, <code>validation_status</code></td><td>Zeek without the JA3 package has no <code>ja3s</code></td></tr>
+              <tr><td>2 · Cert-reused infra</td><td>Zeek <code>x509.log</code>, CTI scan data</td><td><code>certificate.fingerprint</code>, <code>id.resp_h</code></td><td>Needs 90-day retention for back-hunts</td></tr>
+              <tr><td>3 · Ransomware setup</td><td>Zeek <code>ssl.log</code> + Sysmon EID 3</td><td><code>server_name</code>, <code>id.resp_h</code>; <code>Image</code>, <code>DestinationIp</code></td><td>Joining network to process needs matching timestamps</td></tr>
+              <tr><td>4 · macOS pinned cert</td><td>Zeek <code>ssl.log</code> on Mac VLANs</td><td><code>validation_status</code>, <code>ja3</code></td><td>Many sites lack Zeek taps near Mac segments</td></tr>
+              <tr><td>5 · Linux ECDH backdoor</td><td>Zeek <code>ssl.log</code>, <code>conn.log</code></td><td><code>curve</code>, <code>version</code>, <code>id.orig_h</code> direction</td><td>Servers rarely initiate TLS; baseline this</td></tr>
+              <tr><td>6 · Legit-cert abuse</td><td>Zeek <code>x509.log</code>, CTI feeds</td><td><code>certificate.not_valid_before</code>, issuer, SNI</td><td>Cert is valid — age and reputation must carry the signal</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="small muted">Example 1 — one Zeek <code>ssl.log</code> record (JSON encoding) for the simulation's step 2 handshake. Note the self-signed validation status, IP-literal SNI and JA3S hash.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">JSON · Zeek ssl.log</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code>{"ts":1768876800.914,"uid":"CZ8fLx2abQpVvJc3k","id.orig_h":"10.22.7.41","id.orig_p":51822,
+ "id.resp_h":"198.51.100.23","id.resp_p":443,"proto":"tcp","version":"TLSv13",
+ "cipher":"TLS_AES_256_GCM_SHA384","curve":"x25519","server_name":"198.51.100.23",
+ "resumed":false,"established":true,"validation_status":"self signed",
+ "subject":"CN=cdn-node-7,OU=Infrastructure,O=Private Organization",
+ "issuer":"CN=cdn-node-7,OU=Infrastructure,O=Private Organization",
+ "serial":"0F3A9C41BE22","ja3":"a0e9f5b6c2d18f47b3910a6d5c8e2f41",
+ "ja3s":"6f7a2c9d81e4b3a5f0c2d1e8b9a4c7d3"}</code></pre></div>
+        <p class="small muted">The <code>ja3</code>/<code>ja3s</code> fields exist only if the Zeek JA3 package is installed; the <code>subject</code>/<code>issuer</code> pair being identical is the classic self-signed marker.</p>
+
+        <p class="small muted">Example 2 — the matching Zeek <code>x509.log</code> record. This is where key length, validity window and the fingerprint live.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">JSON · Zeek x509.log</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code>{"ts":1768876801.002,"uid":"CZ8fLx2abQpVvJc3k","id.orig_h":"10.22.7.41",
+ "id.resp_h":"198.51.100.23","certificate.version":3,"certificate.serial":"0F3A9C41BE22",
+ "certificate.subject":"CN=cdn-node-7,OU=Infrastructure,O=Private Organization",
+ "certificate.issuer":"CN=cdn-node-7,OU=Infrastructure,O=Private Organization",
+ "certificate.not_valid_before":1701388800,"certificate.not_valid_after":2016768000,
+ "certificate.key_alg":"rsaEncryption","certificate.sig_alg":"sha256WithRSAEncryption",
+ "certificate.key_type":"RSA","certificate.key_length":1024,"certificate.exponent":"65537",
+ "certificate.fingerprint":"3f:9a:c2:71:be:5d:0e:84:1a:66:f2:30:9c:47:d8:b5"}</code></pre></div>
+        <p class="small muted">Ten-year validity (3650 days between the two timestamps) and a 1024-bit key — both fire the detections in 5.5. Older Zeek versions store validity as one interval field, <code>certificate.valid</code>, instead of the two timestamps shown here.</p>
+
+        <p class="small muted">Example 3 — a Sysmon Event ID 3 record (network connection) from the Windows host, which names the process behind the flow.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">JSON · Sysmon EID 3</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body"><code>{"EventTime":"2026-01-18T02:14:55.312Z","Hostname":"WKS-ENG-2241","EventID":3,
+ "ProcessGuid":"{7a1c5e2b-9d41-4f0a-8b3c-2e6f1a9c5d70}","ProcessId":4812,
+ "Image":"C:\\Windows\\Temp\\svc_update.exe","User":"CORP\\j.whitfield","Protocol":"tcp",
+ "Initiated":"true","SourceIp":"10.22.7.41","SourcePort":51822,
+ "DestinationIp":"198.51.100.23","DestinationHostname":"198.51.100.23",
+ "DestinationPort":443}</code></pre></div>
+        <p class="small muted">An executable in a user-writable Temp directory making outbound 443 is suspicious on its own; joined with the cert fields above, it is a strong finding.</p>
+
+        <h4>Field explanations</h4>
+        <div class="table-wrap">
+          <table>
+            <caption>Field-by-field: what each value means for detection</caption>
+            <thead><tr><th>Field</th><th>Log</th><th>Meaning</th><th>Why it matters here</th></tr></thead>
+            <tbody>
+              <tr><td><code>validation_status</code></td><td><code>ssl.log</code></td><td>Result of certificate chain validation as seen by the sensor</td><td><code>self signed</code> or issuer errors on outbound sessions flag attacker PKI</td></tr>
+              <tr><td><code>server_name</code></td><td><code>ssl.log</code></td><td>SNI value the client sent in the clear</td><td>Empty or IP-literal SNI is rare for real services</td></tr>
+              <tr><td><code>ja3</code> / <code>ja3s</code></td><td><code>ssl.log</code></td><td>MD5 hashes of client / server TLS handshake settings</td><td>Stable per framework build; rare values stand out in a baseline</td></tr>
+              <tr><td><code>subject</code> / <code>issuer</code></td><td><code>ssl.log</code>, <code>x509.log</code></td><td>Certificate identity strings</td><td>Identical pair means self-signed; odd org names hint at throwaway PKI</td></tr>
+              <tr><td><code>certificate.key_length</code></td><td><code>x509.log</code></td><td>Size of the public key in bits</td><td>1024 or less is weak; most real services use 2048+ or ECC</td></tr>
+              <tr><td><code>certificate.not_valid_before/after</code></td><td><code>x509.log</code></td><td>Validity window as epoch timestamps</td><td>Windows of years point to attacker-issued certs</td></tr>
+              <tr><td><code>certificate.fingerprint</code></td><td><code>x509.log</code></td><td>Hash of the whole certificate (SHA-1 by default)</td><td>The cluster pivot: one value, many servers</td></tr>
+              <tr><td><code>Image</code>, <code>DestinationIp</code></td><td>Sysmon EID 3</td><td>Process path and connection target</td><td>Gives the network finding a name, user and parent process</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Normal versus suspicious</h4>
+        <div class="table-wrap">
+          <table>
+            <caption>Baseline behavior next to asymmetric C2 behavior</caption>
+            <thead><tr><th>Signal</th><th>Normal (typical enterprise)</th><th>Suspicious (asymmetric C2)</th></tr></thead>
+            <tbody>
+              <tr><td>Cert validation</td><td><code>ok</code> on nearly all outbound sessions</td><td><code>self signed</code>, <code>unable to get local issuer certificate</code></td></tr>
+              <tr><td>SNI</td><td>Real hostnames, matches DNS the host queried</td><td>Empty string or a bare IP literal</td></tr>
+              <tr><td>Key length</td><td>RSA 2048+, or ECC curves</td><td>RSA 1024 or smaller</td></tr>
+              <tr><td>Validity</td><td>About 90 days to 13 months</td><td>3 to 10 years, never rotated</td></tr>
+              <tr><td>JA3S</td><td>A short allowlist covers almost all sessions</td><td>Values outside the baseline, stable across days</td></tr>
+              <tr><td>Fingerprint reuse</td><td>One fingerprint = one service (CDNs excepted)</td><td>One fingerprint on 3+ unrelated IPs</td></tr>
+              <tr><td>Rhythm</td><td>Bursty, human-driven, varied timing</td><td>Fixed-interval beacons, similar byte counts per session</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warn">
+          <span class="callout-label">Tuning warning</span>
+          <p>No single field above is proof on its own. Self-signed certificates appear in labs, appliances and IoT gear; some monitoring agents send no SNI. Combine at least two signals (for example cert anomaly plus rare JA3S) or join with process context before you alert at high severity.</p>
+        </div>
+        <h3 id="detection-sigma-spl">5.5 Sigma rules and Splunk SPL</h3>
+        <p>Two format notes before the rules: some rules use numeric value modifiers (<code>|lte</code>, <code>|gte</code>) — pySigma-capable pipelines accept them, and if your converter rejects them the matching SPL shows the same filter; and the rules use Zeek's native field names (<code>subject</code>, <code>issuer</code>, top-level <code>fingerprint</code> in raw JSON), so verify one event per source before deploying.</p>
+        <p>Each threat gets one detection, written twice: a Sigma rule (portable YAML for any SIEM) and a matching Splunk SPL query. Every pair includes a mapping note, likely false positives, and tuning advice. Adapt field names to your pipeline before you deploy; the YAML is valid and parseable as written.</p>
+
+        <p class="small muted">Rule 1 · Threats 1, 2, 3 — self-signed server certificate on an outbound TLS session. This is the broadest asymmetric C2 signal and the base layer for the rest.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: Outbound TLS Session with Self-Signed Server Certificate
+id: 7f3c2a91-4b8e-4d2a-9c65-8e1f0a53b7d4
+status: stable
+description: Detects outbound TLS handshakes where the presented server certificate fails validation because it is self-signed. Attacker-run command and control servers often use their own public-key infrastructure, so a self-signed certificate on an internal client is a strong early signal for T1573.002.
+references:
+  - https://attack.mitre.org/techniques/T1573/002/
+  - https://attack.mitre.org/techniques/T1573/
+  - Zeek ssl.log field reference (Corelight documentation)
+author: Detection Engineering Team
+date: 2026-10-15
+logsource:
+  category: network_connection
+  product: zeek
+  service: ssl
+detection:
+  selection:
+    validation_status|contains: 'self signed'
+  filter_appliances:
+    id.orig_h|startswith:
+      - '10.99.'
+      - '10.98.'
+  condition: selection and not filter_appliances
+fields:
+  - id.orig_h
+  - id.resp_h
+  - id.resp_p
+  - server_name
+  - subject
+  - issuer
+  - validation_status
+falsepositives:
+  - Internal appliances, printers and lab devices with self-signed certificates
+  - Developer tools reaching local registries or test endpoints
+level: medium
+tags:
+  - attack.t1573.002
+  - attack.t1573
+  - attack.tactic.command_and_control</code></pre></div>
+        <p class="small muted">Mapping note — the <code>validation_status</code> filter matches Zeek's literal strings such as <code>self signed</code> and <code>self signed certificate in certificate chain</code>.</p>
+        <p class="small muted">False positives and tuning — most noise comes from known appliances. Keep the <code>filter_appliances</code> list current, join with an asset database, and raise severity only when the client is a workstation and the destination is newly seen.</p>
+
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:ssl validation_status="*self signed*"
+| stats count AS tls_sessions, dc(id.resp_h) AS unique_servers,
+        values(server_name) AS sni, max(_time) AS last_seen
+        BY id.orig_h, id.resp_h, subject
+| sort - tls_sessions</code></pre></div>
+        <p class="small muted">Assumes Zeek JSON lands in <code>index=network</code> with <code>sourcetype=zeek:ssl</code> and dotted field names preserved. The stats roll-up keeps one row per client-server pair so repeat beacons do not flood the queue.</p>
+
+        <p class="small muted">Rule 2 · Threats 1, 2 — weak certificate key length from Zeek <code>x509.log</code>. Throwaway attacker certificates often use small RSA keys.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: TLS Certificate with Weak Public Key Length
+id: 2e9b8d14-6a3f-4c71-b5e8-93d40fc6a2b1
+status: experimental
+description: Detects certificates whose RSA public key is 1024 bits or smaller in Zeek x509 records. Modern services use 2048-bit or larger RSA keys or elliptic-curve keys. Weak keys are cheap for attackers to generate and are a common trait of throwaway command and control certificates used with T1573.002.
+references:
+  - https://attack.mitre.org/techniques/T1573/002/
+  - https://attack.mitre.org/techniques/T1573/
+author: Detection Engineering Team
+date: 2026-10-15
+logsource:
+  category: network_connection
+  product: zeek
+  service: x509
+detection:
+  selection:
+    certificate.key_type: 'RSA'
+    certificate.key_length|lte: 1024
+  condition: selection
+fields:
+  - id.orig_h
+  - id.resp_h
+  - certificate.subject
+  - certificate.key_type
+  - certificate.key_length
+  - certificate.fingerprint
+falsepositives:
+  - Legacy embedded devices and vendor kit with old certificates
+  - Lab or OT equipment that was never upgraded
+level: medium
+tags:
+  - attack.t1573.002
+  - attack.tactic.command_and_control</code></pre></div>
+        <p class="small muted">Mapping note — the Sigma <code>lte</code> modifier mirrors the SPL comparison exactly; no transformation happens in between.</p>
+        <p class="small muted">False positives and tuning — inventory your legacy devices first and demote them by subnet or fingerprint. A weak key alone is medium; pair it with a self-signed validation status for high.</p>
+
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:x509 certificate.key_length=* certificate.key_type=RSA
+| where 'certificate.key_length' &lt;= 1024
+| stats count AS weak_certs, values(certificate.subject) AS subjects,
+        values(id.orig_h) AS internal_clients
+        BY certificate.fingerprint, id.resp_h, certificate.key_length
+| sort - weak_certs</code></pre></div>
+        <p class="small muted">Assumes the x509 analyzer writes <code>sourcetype=zeek:x509</code> with nested fields flattened as <code>certificate.key_length</code> — native Zeek JSON emits <code>fingerprint</code> as a top-level field, so confirm which shape your pipeline produces and adjust the two names. Grouping by fingerprint prepares the pivot to rule 4.</p>
+
+        <p class="small muted">Rule 3 · Threats 1, 4, 5 — certificate validity window longer than three years. Attacker-issued certs often run five or ten years. False-positive note: a normal certificate issued today for a multi-year plan could also match; pair the hit with the self-signed or weak-key signals before escalating.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: TLS Server Certificate with Unusually Long Validity
+id: a41c7e52-93d8-4b06-8f2a-c75d1e9b3460
+status: experimental
+description: Detects certificates whose not_valid_after timestamp lies beyond epoch 1900000000, which falls in March 2030. A recently issued public server certificate is rarely valid longer than about one year, so a validity end beyond 2030 implies a multi-year or ten-year window, a habit of attacker-issued certificates used for T1573.002 channels.
+references:
+  - https://attack.mitre.org/techniques/T1573/002/
+  - CA/Browser Forum ballot on certificate lifetimes (public record)
+author: Detection Engineering Team
+date: 2026-10-16
+logsource:
+  category: network_connection
+  product: zeek
+  service: x509
+detection:
+  selection:
+    certificate.not_valid_after|gte: 1900000000
+  condition: selection
+fields:
+  - id.orig_h
+  - id.resp_h
+  - certificate.subject
+  - certificate.issuer
+  - certificate.not_valid_before
+  - certificate.not_valid_after
+falsepositives:
+  - Internal root and intermediate CA certificates seen in passive logging
+  - Long-lived appliance certificates with a documented change ticket
+level: low
+tags:
+  - attack.t1573.002
+  - attack.tactic.command_and_control</code></pre></div>
+        <p class="small muted">Mapping note — a fixed epoch keeps the rule portable: Sigma cannot do date arithmetic, so the rule compares the raw timestamp instead of computing a duration. The SPL below also shows the exact day count for analysts.</p>
+        <p class="small muted">False positives and tuning — expect internal PKI and some appliances. Suppress by issuer, not by single IP, and document every suppression in the change system.</p>
+
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:x509 certificate.not_valid_after=*
+| where 'certificate.not_valid_after' &gt;= 1900000000
+| eval validity_days=round(('certificate.not_valid_after' - 'certificate.not_valid_before') / 86400, 0)
+| table _time id.orig_h id.resp_h certificate.subject certificate.issuer
+         certificate.key_type certificate.key_length validity_days certificate.fingerprint
+| sort - validity_days</code></pre></div>
+        <p class="small muted">Assumes the two validity timestamps exist as numeric epoch fields. Older Zeek versions expose one interval field instead; in that case compute the start and end by splitting the interval string before the eval.</p>
+        <p class="small muted">Rule 4 · Threat 2 — one certificate fingerprint seen on three or more distinct servers. This is the clustering rule from simulation steps 5–8.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: Identical Certificate Fingerprint Observed on Multiple Servers
+id: 58d2f0a6-1c47-4e93-a8b6-0f9e4c25d713
+status: stable
+description: Aggregates Zeek x509 records by certificate fingerprint and flags any fingerprint that appears on three or more distinct destination IP addresses. Operators who reuse one certificate across command and control servers expose an infrastructure cluster, so this rule turns a per-session anomaly into a campaign-level finding for T1573.002.
+references:
+  - https://attack.mitre.org/techniques/T1573/002/
+  - Zeek x509.log field reference (Corelight documentation)
+  - OSINT certificate-scan platform methodology (public documentation)
+author: Detection Engineering Team
+date: 2026-10-16
+logsource:
+  category: network_connection
+  product: zeek
+  service: x509
+detection:
+  selection:
+    certificate.fingerprint|exists: true
+  condition: selection | count(id.resp_h) by certificate.fingerprint &gt;= 3
+fields:
+  - certificate.fingerprint
+  - id.resp_h
+  - certificate.subject
+  - certificate.issuer
+falsepositives:
+  - Content delivery networks and shared hosting that reuse one certificate across many server IPs
+  - Load-balanced internal services
+level: high
+tags:
+  - attack.t1573.002
+  - attack.tactic.command_and_control</code></pre></div>
+        <p class="small muted">Mapping note — Sigma's aggregation approximates a distinct count; the SPL below uses a true <code>dc()</code>. The threshold of three servers keeps single-service noise out.</p>
+        <p class="small muted">False positives and tuning — exclude known CDN and load-balancer fingerprints from an allowlist. A hit here deserves a high severity because it names a cluster, not a session.</p>
+
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:x509 certificate.fingerprint=*
+| stats dc(id.resp_h) AS unique_servers, values(certificate.subject) AS subjects,
+        min(_time) AS first_seen, max(_time) AS last_seen
+        BY certificate.fingerprint
+| where unique_servers &gt;= 3
+| sort - unique_servers</code></pre></div>
+        <p class="small muted">Run this over a wide window (90 days if retention allows). The <code>first_seen</code> column feeds the historical hunt in the response playbook.</p>
+
+        <p class="small muted">Rule 5 · Threats 1, 4, 5 — rare JA3S server fingerprint. Custom implants answer handshakes in a fixed, unusual way.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: Rare TLS Server Fingerprint JA3S in Outbound Sessions
+id: b6e94a7d-2f31-4c58-9d07-ea63f81b52c9
+status: experimental
+description: Flags outbound TLS sessions whose JA3S server fingerprint is not on the environment allowlist. JA3S is a short hash of the server side of the TLS handshake. Custom implant listeners produce stable and unusual JA3S values, so a rare value on a new destination is worth review as possible T1573.002 channel setup.
+references:
+  - https://attack.mitre.org/techniques/T1573/002/
+  - JA3 and JA3S method description (public open-source project documentation)
+author: Detection Engineering Team
+date: 2026-10-17
+logsource:
+  category: network_connection
+  product: zeek
+  service: ssl
+detection:
+  selection:
+    id.resp_p: 443
+    ja3s|exists: true
+  filter_known:
+    ja3s:
+      - 'ae4edc6faf64d08308082d4fe1c2dc2e'
+      - 'd7c07524deef0eb69e15ff24609f104b'
+      - '8f1b3e9a2c6d47f0b5e8a1c3d90f24e7'
+  condition: selection and not filter_known
+fields:
+  - id.orig_h
+  - id.resp_h
+  - ja3
+  - ja3s
+  - server_name
+falsepositives:
+  - Legitimate services with uncommon TLS stacks (niche SaaS, IoT vendors)
+  - New internal deployments before the baseline was refreshed
+level: medium
+tags:
+  - attack.t1573.002
+  - attack.tactic.command_and_control</code></pre></div>
+        <p class="small muted">Mapping note — the sample hashes in <code>filter_known</code> stand in for your baseline. Replace them with values measured in your own estate; the SPL below uses a lookup table that must contain the same list.</p>
+        <p class="small muted">False positives and tuning — build the allowlist from 30 days of traffic, review it monthly, and route new JA3S values through a low-severity watch rule before raising severity.</p>
+
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:ssl ja3s=*
+| lookup ja3s_allowlist ja3s OUTPUT ja3s AS allowlisted
+| where isnull(allowlisted)
+| stats count AS sessions, dc(id.orig_h) AS clients, values(server_name) AS sni
+        BY id.resp_h, ja3s
+| sort - sessions</code></pre></div>
+        <p class="small muted">Requires a lookup definition named <code>ja3s_allowlist</code> (a CSV with one column <code>ja3s</code>) seeded from your baseline and refreshed monthly. The <code>ja3s</code> field itself exists only where the Zeek JA3 package is installed.</p>
+
+        <p class="small muted">Rule 6 · Threats 1, 3, 5 — SNI is empty or a bare IP while a certificate is still exchanged. A common malware habit that real services rarely show.</p>
+        <div class="code"><div class="code-head"><span class="code-lang">YAML · Sigma</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="sigma"><code>title: TLS Session with IP Literal or Empty SNI and Certificate Exchange
+id: 3c85d1f9-7e4a-46b2-b08a-91f6d2c0e475
+status: experimental
+description: Detects TLS sessions where the client sets no server name indication (SNI) or puts a bare IP address in the SNI field while a server certificate is still presented. Malware operators use this pattern to reach raw IP-hosted listeners with generic certificates, so it is a useful secondary signal for T1573.002.
+references:
+  - https://attack.mitre.org/techniques/T1573/002/
+  - Zeek ssl.log field reference (Corelight documentation)
+author: Detection Engineering Team
+date: 2026-10-18
+logsource:
+  category: network_connection
+  product: zeek
+  service: ssl
+detection:
+  selection_ip:
+    server_name|re: '^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$'
+  selection_empty:
+    server_name: ''
+  condition: 1 of selection_*
+fields:
+  - id.orig_h
+  - id.resp_h
+  - server_name
+  - subject
+  - issuer
+  - validation_status
+falsepositives:
+  - Some monitoring agents and appliance probes that omit SNI
+  - Legacy clients connecting to legacy services
+level: medium
+tags:
+  - attack.t1573.002
+  - attack.tactic.command_and_control</code></pre></div>
+        <p class="small muted">Mapping note — <code>1 of selection_*</code> fires on either branch (IP-literal or empty SNI), which mirrors the two-branch eval in the SPL below.</p>
+        <p class="small muted">False positives and tuning — baseline for one week before enabling, exempt known scanner and agent subnets, and combine with <code>validation_status</code> for a stronger compound rule.</p>
+
+        <div class="code"><div class="code-head"><span class="code-lang">Splunk SPL</span><button type="button" class="copy-btn">Copy</button></div>
+<pre class="code-body" data-kind="spl"><code>index=network sourcetype=zeek:ssl
+| eval sni_is_ip=if(match(server_name, "^([0-9]{1,3}\.){3}[0-9]{1,3}$"), 1, 0)
+| eval sni_empty=if(isnull(server_name) OR server_name="", 1, 0)
+| where sni_is_ip=1 OR sni_empty=1
+| stats count AS sessions, dc(id.orig_h) AS clients, values(id.resp_h) AS servers
+        BY sni_is_ip, sni_empty
+| sort - sessions</code></pre></div>
+        <p class="small muted">The regex runs in an eval so both branches stay in one search. If your Zeek omits <code>server_name</code> entirely when absent, the <code>isnull()</code> branch still catches those events.</p>
+
+        <h4>Environment assumptions for all six SPL queries</h4>
+        <ul>
+          <li><strong>Index and sourcetypes.</strong> Zeek JSON logs land in <code>index=network</code> as <code>sourcetype=zeek:ssl</code> and <code>sourcetype=zeek:x509</code>. Endpoint events land in <code>index=ep_sysmon</code> as <code>sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational</code> (EventCode 3 gives the process behind a flow).</li>
+          <li><strong>JA3 and JA3S.</strong> These fields exist only if the Zeek JA3 package (or a Corelight sensor with JA3 enabled) is installed. Without it, rule 5 has no data — check one <code>ssl.log</code> line before deploying.</li>
+          <li><strong>x509 fingerprints.</strong> <code>certificate.fingerprint</code> requires the x509 script enabled alongside the SSL analyzer. Older Zeek versions emit <code>certificate.valid</code> as one interval string instead of the two timestamps used in rule 3; adjust the eval accordingly.</li>
+          <li><strong>Field names.</strong> Dotted names are kept as-is (<code>id.orig_h</code>, <code>certificate.key_length</code>). If your pipeline renames fields, update the rules in one pass and note the mapping in your repo.</li>
+          <li><strong>Endpoint join.</strong> To add process context to any network hit, append <code>| join id.orig_h</code> against <code>index=ep_sysmon EventCode=3</code> on a matching <code>DestinationIp</code> and a tight time window.</li>
+        </ul>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 6 · CASE STUDY                                        -->
+      <!-- ============================================================ -->
+      <section id="case-study">
+        <div class="sec-head"><span class="sec-num">6</span><h2 class="sec-title">Real-world case study</h2></div>
+        <p class="sec-intro">Vendor threat-spotlight reporting from 2022–2023 describes intrusions that used Sliver-style command and control frameworks with mTLS listeners and per-implant certificates. The composite story below follows that reporting pattern. Names, dates and addresses are invented; the detection mechanics are the ones this page teaches.</p>
+
+        <div class="callout note">
+          <span class="callout-label">How to read this</span>
+          <p>Public reporting on specific intrusions is often partial and second-hand. Treat the timeline as a teaching model of the detection points, not as a verified record of one incident.</p>
+        </div>
+
+        <h3>Context</h3>
+        <p>A mid-size software company (about 900 staff) ran Zeek at two internet edges, kept 180 days of network logs, and ingested CTI feeds. It had no TLS inspection — and did not need one for what followed. An external researcher had been tracking a threat cluster that reused one self-signed certificate across listener servers, and the company subscribed to the report.</p>
+
+        <h3>Timeline</h3>
+        <ol class="timeline">
+          <li><span class="tl-date">Day 0 · 09:40</span><p>A finance team member opens a résumé-themed attachment. The loader drops <code>svc_update.exe</code> into a Temp directory. Nothing crashes; no user complaint follows.</p></li>
+          <li><span class="tl-date">Day 0 · 09:47</span><p>The implant beacons out on 443. Zeek logs a self-signed certificate with a 1024-bit RSA key, a ten-year validity window, and an IP-literal SNI. Five Sigma rules from section 5.5 produce hits during the investigation; at beacon time three of them alerted — the two combined-signal rules in enforcement, plus one in watch mode.</p></li>
+          <li><span class="tl-date">Day 0 · 10:15</span><p>The on-call analyst opens the low-severity watch hit, confirms the JA3S value is absent from the 30-day baseline, and starts triage per the section 4 flow.</p></li>
+          <li><span class="tl-date">Day 0 · 11:30</span><p>Pivot on the certificate fingerprint in the CTI platform shows the same hash on six IPs across three autonomous systems — matching the researcher cluster note the SOC had ingested two weeks earlier.</p></li>
+          <li><span class="tl-date">Day 0 · 13:00</span><p>The boundary blocks the six IPs and the cert hash. The host is isolated by EDR. The implant's tasking channel dies mid-session; the operator sees a dead bot.</p></li>
+          <li><span class="tl-date">Day 0 · 15:20</span><p>Historical hunt across 90 days of <code>x509.log</code> finds two earlier sessions to a different IP in the same cluster, eleven days apart — both also self-signed with the same fingerprint.</p></li>
+          <li><span class="tl-date">Day 1–3</span><p>Eradication: the loader and implant are removed, credentials reset, and the mTLS listener handshake attempts in the interim are logged for the report. Recovery: the host returns clean; monitoring on the user stays elevated for 30 days.</p></li>
+          <li><span class="tl-date">Day 4+</span><p>The team publishes an internal report, shares the fingerprint with the ISAC, and moves the remaining watch-mode rule to enforcement with tuned severity.</p></li>
+        </ol>
+
+        <div class="grid grid-2">
+          <div class="card accent-edge">
+            <h4>Detection point</h4>
+            <p>The detection came from <strong>certificate metadata</strong>, not decryption: self-signed validation status plus a rare JA3S, then the fingerprint pivot that tied one host to a tracked cluster. Total time from first beacon to block: under four hours.</p>
+          </div>
+          <div class="card accent-edge">
+            <h4>What could have gone wrong</h4>
+            <p>Had the rules not been deployed (even in watch mode), the next logical attacker step in this reporting pattern is staging and lateral movement through the trusted channel — often invisible without the cert hash hunt.</p>
+          </div>
+        </div>
+
+        <h3>Impact and consequences</h3>
+        <ul>
+          <li>No confirmed data loss; the channel lived about eleven days with sparse, low-volume sessions.</li>
+          <li>Costs: roughly two analyst days, one rebuilt workstation, and a credentials reset cycle.</li>
+          <li>Upside: a validated detection package (six rules) and a stronger CTI ingestion loop adopted afterward.</li>
+        </ul>
+
+        <h3>Team response and communication</h3>
+        <p>The SOC notified the security lead within the hour, the user's manager the same day, and leadership after containment with a plain summary: what happened, what data could be touched, what was done. The incident ticket linked raw <code>ssl.log</code> lines, the Sigma matches, and the CTI cluster note — one evidence chain from first alert to closure.</p>
+
+        <h3>Lessons learned</h3>
+        <ol>
+          <li><strong>Public-key infrastructure reuse is the strongest tracking signal.</strong> The attacker changed IPs freely but kept one certificate; that habit decided the case.</li>
+          <li><strong>Watch mode is useful.</strong> Running rules in low-severity watch mode surfaced the anomaly with zero fatigue before enforcement.</li>
+          <li><strong>90 days of x509 history is the minimum.</strong> The eleven-day-old session would have vanished under 30-day retention.</li>
+          <li><strong>Intel must land as data.</strong> The cluster note helped because the fingerprint was matchable in the SIEM, not locked in a PDF.</li>
+          <li><strong>mTLS worked both ways.</strong> The implant's client certificate proves the channel was framework-based — useful context for the report, useless as an excuse for slow response.</li>
+        </ol>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 7 · MITIGATION                                        -->
+      <!-- ============================================================ -->
+      <section id="mitigation">
+        <div class="sec-head"><span class="sec-num">7</span><h2 class="sec-title">Mitigation and defense</h2></div>
+        <p class="sec-intro">You cannot patch public-key math. Mitigation therefore aims at the surroundings: make implant setup hard, make its handshake visible, and make response fast. Each control below names the area, the action, and why it helps against asymmetric C2.</p>
+
+        <div class="grid grid-3">
+          <div class="card"><h4>Policy</h4><p>Write a cryptography standard that bans self-signed certificates in production services and requires key sizes of 2048 bits or more. Inventory exceptions — you cannot alert on anomalies you allowed silently.</p></div>
+          <div class="card"><h4>Identity</h4><p>Manage your own PKI strictly: short validity, rotation, and a registry of every internal certificate. A clean internal PKI makes external, attacker-issued certs stand out by contrast.</p></div>
+          <div class="card"><h4>Endpoint</h4><p>Deploy EDR everywhere, keep Sysmon EID 3 (or EDR network events) on, and block execution from user-writable directories. The Temp-directory beacon in the case study is a classic.</p></div>
+          <div class="card"><h4>Network</h4><p>Put Zeek (or a similar passive sensor) at every internet edge. Enable the SSL and x509 analyzers plus the JA3 package. Add egress allowlists for servers: servers should rarely call out.</p></div>
+          <div class="card"><h4>Cloud</h4><p>Log TLS metadata from cloud load balancers and flow logs, and constrain workload egress. Disposable cloud listeners are the attacker's favorite renting model.</p></div>
+          <div class="card"><h4>Logging</h4><p>Ship <code>ssl.log</code>, <code>x509.log</code> and <code>conn.log</code> to the SIEM. Keep at least 90 days searchable (a year is better). Fingerprints only hunt backward if history exists.</p></div>
+          <div class="card"><h4>Monitoring</h4><p>Run the six rules from section 5.5 — start in watch mode, tune for two weeks, then enforce. Feed CTI cert hashes into matchable lookup tables, not document folders.</p></div>
+          <div class="card"><h4>Backup</h4><p>Follow the 3-2-1 rule (three copies, two media, one offline). If C2 tasking leads to ransomware, backups decide whether the story ends in hours or weeks.</p></div>
+          <div class="card"><h4>Response</h4><p>Pre-build the playbook: isolate host, block cert hash plus IPs, hunt the fingerprint 90 days back, then reset credentials. Rehearse it once a quarter on paper.</p></div>
+        </div>
+
+        <h3>Home and small-office advice</h3>
+        <ul>
+          <li>Turn on automatic updates and your router's built-in malware filtering; most home implants die at the update step.</li>
+          <li>If your router supports it, enable DNS filtering — many implants resolve raw IPs only after failing on domains.</li>
+          <li>Keep one backup that is always offline, and test restoring one folder monthly.</li>
+          <li>Do not install software from pop-up warnings; the loader in most stories was one eager click.</li>
+        </ul>
+
+        <h3>Prioritized actions</h3>
+        <div class="table-wrap">
+          <table>
+            <caption>What to do first (highest risk reduction per effort)</caption>
+            <thead><tr><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr></thead>
+            <tbody>
+              <tr><td>Enable Zeek SSL + x509 logging with JA3, ship to SIEM, 90-day retention</td><td>Medium</td><td>Network / SecOps</td><td>High — enables five of the six rules</td></tr>
+              <tr><td>Deploy Sigma rules 1, 4, 6 in watch mode, then enforce after tuning</td><td>Low</td><td>Detection engineering</td><td>High — catches the case-study pattern</td></tr>
+              <tr><td>Build the JA3S allowlist lookup from 30 days of traffic</td><td>Low</td><td>Detection engineering</td><td>Medium — sharpens rule 5, cuts noise</td></tr>
+              <tr><td>Egress allowlists for server VLANs</td><td>Medium</td><td>Network</td><td>High — servers calling out is a top anomaly</td></tr>
+              <tr><td>Block execution from user-writable paths; alert on Temp-dir 443 flows</td><td>Low</td><td>Endpoint team</td><td>Medium — kills common loaders early</td></tr>
+              <tr><td>Ingest CTI cert-hash indicators as SIEM lookups; wire an ingestion owner</td><td>Low</td><td>CTI / SecOps</td><td>Medium — turns reports into blocks</td></tr>
+              <tr><td>Document the cert-hash block + hunt playbook and rehearse quarterly</td><td>Low</td><td>SOC lead</td><td>Medium — cuts response time in half</td></tr>
+              <tr><td>Quarterly review: rule hit rates, FP counts, retention checks</td><td>Low</td><td>Detection engineering</td><td>Ongoing — keeps the package honest</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <!-- ============================================================ -->
+      <!-- SECTION 8 · COMMON MISTAKES                                   -->
+      <!-- ============================================================ -->
+      <section id="mistakes">
+        <div class="sec-head"><span class="sec-num">8</span><h2 class="sec-title">Common mistakes and best practices</h2></div>
+        <p class="sec-intro">These are the ten failure modes detection teams hit most often with certificate-based C2 hunting. Each row gives the symptom you will notice, the root cause behind it, the fix, and the habit that prevents a repeat.</p>
+
+        <div class="table-wrap">
+          <table>
+            <caption>Ten blue-team mistakes around asymmetric C2 detection</caption>
+            <thead><tr><th>#</th><th>Mistake</th><th>Symptom</th><th>Root cause</th><th>Fix</th><th>Prevention</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Trusting valid certificates blindly</td><td>Missed C2 that used a real, valid cert</td><td>Assumption that "validation ok" means "safe"</td><td>Layer JA3S, SNI-age and destination reputation on top of validation</td><td>Design every rule assuming attackers pass validation (they get free certs too)</td></tr>
+              <tr><td>2</td><td>No x509 logging at all</td><td>Rules 2–4 return zero data</td><td>Only ssl.log was enabled; x509 script off</td><td>Enable the x509 analyzer; verify <code>certificate.fingerprint</code> appears</td><td>Log-source inventory reviewed quarterly against rule needs</td></tr>
+              <tr><td>3</td><td>Cert hashes not stored historically</td><td>Cannot answer "when did this start?"</td><td>Short retention on network logs</td><td>Extend retention to 90 days minimum; archive beyond that</td><td>Retention policy tied to incident-response needs, not storage budgets alone</td></tr>
+              <tr><td>4</td><td>Ignoring JA3S</td><td>Cert looks clean, channel persists</td><td>JA3 package unknown or uninstalled</td><td>Install the JA3 package; build the allowlist; deploy rule 5</td><td>Package checklist for every new sensor deployment</td></tr>
+              <tr><td>5</td><td>False-positive storms from cert-only alerts</td><td>Analysts mute the rule in a week</td><td>Single-field logic (self-signed alone)</td><td>Combine two signals or join process context before raising severity</td><td>Every rule ships with a documented FP profile and tuning step</td></tr>
+              <tr><td>6</td><td>No CTI ingestion loop</td><td>Cluster reports arrive but never match</td><td>Intel read as PDFs, not loaded as data</td><td>Load cert-hash and JA3S indicators as SIEM lookups with an owner</td><td>Monthly intel-to-lookup pipeline review</td></tr>
+              <tr><td>7</td><td>No historical pivot capability</td><td>Scope answers take days</td><td>Raw logs exist but are not searchable fast</td><td>Keep 90 days hot in the SIEM; pre-build the fingerprint hunt query</td><td>Saved hunts tested with synthetic data twice a year</td></tr>
+              <tr><td>8</td><td>Believing mTLS is "always safe"</td><td>mTLS flows excluded from monitoring</td><td>Assumption that mutual auth implies trust</td><td>Monitor mTLS handshakes like any TLS; the client cert is attacker-issued</td><td>Monitoring scope defined by data flow, not by protocol feature</td></tr>
+              <tr><td>9</td><td>Missing SSH-tunnel visibility</td><td>Backdoor channel unseen on port 22</td><td>Detection effort focused only on 443</td><td>Log SSH banner and key fingerprints; alert on server-to-server SSH</td><td>Cover the asymmetric-family cousins: SSH, TLS, and QUIC where possible</td></tr>
+              <tr><td>10</td><td>No process context joined to flows</td><td>Alert names an IP, not a program</td><td>Network and endpoint stacks never joined</td><td>Join Zeek hits to Sysmon EID 3 / EDR events on IP + time window</td><td>Every network rule has a documented enrichment query</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid grid-3">
+          <div class="card">
+            <h4>Daily habits</h4>
+            <ul>
+              <li>Review new high-severity cert-cluster and JA3S hits with raw log lines attached.</li>
+              <li>Check that Zeek <code>ssl.log</code> and <code>x509.log</code> actually arrived in the SIEM today.</li>
+              <li>Triage any watch-mode rule that fired more than its daily average.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Weekly habits</h4>
+            <ul>
+              <li>Count false positives per rule; investigate any rule above its FP budget.</li>
+              <li>Refresh the JA3S allowlist review ticket with the week's new values.</li>
+              <li>Pivot this week's new external cert hashes against your internal logs.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Monthly habits</h4>
+            <ul>
+              <li>Run the 90-day fingerprint hunt once and compare the hit list to last month.</li>
+              <li>Verify retention: can you still search a 92-day-old <code>x509.log</code> line?</li>
+              <li>Score intel feeds by true-positive rate; drop the ones that never match.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============================================================ -->
+      <!-- SECTION 9 · CHEAT SHEET                                       -->
+      <!-- ============================================================ -->
+      <section id="cheat-sheet">
+        <div class="sec-head"><span class="sec-num">9</span><h2 class="sec-title">Cheat sheet and quick reference</h2></div>
+        <p class="sec-intro">One screen to keep beside the console: the facts, the six detections, the response checklist, and the official links.</p>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h4>Key facts</h4>
+            <dl class="kv">
+              <dt>ID</dt><dd>T1573.002 · parent T1573 · sibling T1573.001</dd>
+              <dt>Tactic</dt><dd>Command and Control</dd>
+              <dt>Idea</dt><dd>Public key in implant, private key on server, wrapped AES session key, signed tasks, optional mTLS</dd>
+              <dt>Evidence</dt><dd>Cert subject/issuer, validation status, key length, validity, fingerprint, JA3S, SNI shape</dd>
+              <dt>Pivot</dt><dd>Certificate fingerprint across IPs and time</dd>
+              <dt>Weak point</dt><dd>Reuse: one cert, many servers, long life</dd>
+            </dl>
+          </div>
+          <div class="card">
+            <h4>Top detections (from 5.5)</h4>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Detection</th><th>Source</th><th>Level</th></tr></thead>
+                <tbody>
+                  <tr><td>Self-signed server cert on outbound TLS</td><td>Zeek <code>ssl.log</code></td><td>medium</td></tr>
+                  <tr><td>Key length 1024 bits or less</td><td>Zeek <code>x509.log</code></td><td>medium</td></tr>
+                  <tr><td>Validity ending beyond 2030</td><td>Zeek <code>x509.log</code></td><td>low</td></tr>
+                  <tr><td>One fingerprint on 3+ servers</td><td>Zeek <code>x509.log</code></td><td>high</td></tr>
+                  <tr><td>Rare JA3S (not in allowlist)</td><td>Zeek <code>ssl.log</code> + JA3 package</td><td>medium</td></tr>
+                  <tr><td>Empty or IP-literal SNI</td><td>Zeek <code>ssl.log</code></td><td>medium</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4>Response checklist</h4>
+          <ul>
+            <li>Validate the hit in raw <code>ssl.log</code>/<code>x509.log</code> lines (hash, JA3S, validation status).</li>
+            <li>Pivot the certificate fingerprint across internal logs (90 days) and CTI platforms.</li>
+            <li>Name the process: join the flow to Sysmon EID 3 or EDR events.</li>
+            <li>Scope: list every internal host that touched the cluster, any port, any time.</li>
+            <li>Block the fingerprint and cluster IPs at the boundary; isolate affected hosts.</li>
+            <li>Reset credentials for affected users; watch for re-registration of the implant.</li>
+            <li>Share the fingerprint cluster with your ISAC; add it to recurring hunts.</li>
+            <li>Write the timeline into the incident ticket with raw log evidence attached.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h4>Official links (MITRE ATT&amp;CK)</h4>
+          <ul>
+            <li><a href="https://attack.mitre.org/techniques/T1573/002/">T1573.002 — Asymmetric Cryptography (this technique)</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1573/">T1573 — Encrypted Channel (parent)</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1573/001/">T1573.001 — Symmetric Cryptography (sibling)</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1571/">T1571 — Non-Application Layer Protocol</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1071/">T1071 — Application Layer Protocol</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1095/">T1095 — Non-Application Layer Protocol (network)</a></li>
+            <li><a href="https://attack.mitre.org/techniques/T1588/004/">T1588.004 — Acquire Capabilities: Digital Certificates</a></li>
+          </ul>
+        </div>
+
+        <div class="callout good">
+          <span class="callout-label">Remember</span>
+          <p>Attackers must show a certificate to earn trust, and they must keep showing the same one to keep working. Log the handshake, hash the certificate, and the math that hides their traffic becomes the thing that betrays it.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<button type="button" class="toc-fab" id="toc-fab" aria-expanded="false" aria-controls="toc-overlay">☰ Contents</button>
+<button type="button" class="to-top" id="to-top" aria-label="Back to top">↑</button>
+<div class="toc-overlay" id="toc-overlay" role="dialog" aria-modal="true" aria-label="Contents">
+  <div class="toc-overlay-backdrop"></div>
+  <div class="toc-panel">
+    <div class="toc-panel-head">
+      <p class="toc-title" style="margin:0">Contents</p>
+      <button type="button" class="toc-close" id="toc-close" aria-label="Close contents">✕</button>
+    </div>
+    <ul class="toc-list" id="toc-overlay-list"><!-- generated --></ul>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ATT&CK Detection Guide — page framework (embed verbatim)
+   Theme, progress bar, TOC generation, overlay, back-to-top, copy
+   ============================================================ */
+(function () {
+  'use strict';
+  var doc = document, root = doc.documentElement;
+
+  /* ---------- theme ---------- */
+  function storedTheme() { try { return localStorage.getItem('atk-theme'); } catch (e) { return null; } }
+  function currentTheme() { return root.getAttribute('data-theme') || 'dark'; }
+  function applyTheme(t, persist) {
+    root.setAttribute('data-theme', t);
+    if (persist) { try { localStorage.setItem('atk-theme', t); } catch (e) {} }
+    try { doc.dispatchEvent(new CustomEvent('atk-theme-change', { detail: { theme: t } })); } catch (e) {}
+  }
+  var toggle = doc.getElementById('theme-toggle');
+  if (toggle) {
+    toggle.addEventListener('click', function () {
+      applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+    });
+    /* If a shared site shell already renders a theme control inside the platform
+       header, hide this page-level toggle to avoid a duplicate control. */
+    try {
+      var hdr = doc.getElementById('atk-header');
+      if (hdr) {
+        var shellCtl = hdr.querySelector('[data-theme-toggle],[aria-label*="theme" i],.theme-toggle,.atk-theme');
+        if (shellCtl) toggle.hidden = true;
+        hdr.addEventListener('click', function (ev) {
+          var el = ev.target.closest ? ev.target.closest('button,a') : null;
+          if (!el) return;
+          var lbl = (el.getAttribute('aria-label') || el.textContent || '').toLowerCase();
+          if (lbl.indexOf('theme') !== -1 || lbl.indexOf('dark') !== -1 || lbl.indexOf('light') !== -1) {
+            applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', true);
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  /* ---------- reading progress ---------- */
+  var fill = doc.querySelector('.progress-fill');
+  function onScroll() {
+    var h = doc.documentElement.scrollHeight - window.innerHeight;
+    var p = h > 0 ? Math.min(100, Math.max(0, (window.scrollY / h) * 100)) : 0;
+    if (fill) fill.style.width = p + '%';
+    if (toTop) {
+      if (window.scrollY > 600) toTop.classList.add('show');
+      else toTop.classList.remove('show');
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  /* ---------- back to top ---------- */
+  var toTop = doc.getElementById('to-top');
+  if (toTop) {
+    toTop.addEventListener('click', function () {
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+    });
+  }
+
+  /* ---------- TOC generation from real section headings ---------- */
+  var main = doc.querySelector('main');
+  var tocLists = [doc.getElementById('toc-list'), doc.getElementById('toc-overlay-list')];
+  var SECTION_TITLES = {
+    'overview': 'Overview', 'simulation': 'Animated simulation',
+    'red-team': 'Red team perspective', 'blue-team': 'Blue team / SOC perspective',
+    'detection-deep-dive': 'Detection engineering deep dive',
+    'detection-regulation': 'Regulation mapping', 'detection-threat-intel': 'Threat intelligence',
+    'detection-threat-ranking': 'Threats ranking', 'detection-logs': 'Logs and patterns',
+    'detection-sigma-spl': 'Sigma rules and Splunk SPL', 'case-study': 'Real-world case study',
+    'mitigation': 'Mitigation and defense', 'mistakes': 'Common mistakes and best practices',
+    'cheat-sheet': 'Cheat sheet and quick reference'
+  };
+  function shortTitle(section, fallback) {
+    var t = SECTION_TITLES[section.id];
+    if (!t) { var hh = section.querySelector('h2'); t = hh ? hh.textContent.replace(/^\s*\d+[.)]?\s*/, '').trim() : fallback; }
+    return t;
+  }
+  function buildTOC() {
+    if (!main || !tocLists.some(Boolean)) return;
+    var secs = [];
+    main.querySelectorAll(':scope > section[id]').forEach(function (s) { secs.push(s); });
+    if (!secs.length) return;
+    var frag = doc.createDocumentFragment();
+    var num = 0;
+    secs.forEach(function (s) {
+      num += 1;
+      var li = doc.createElement('li');
+      var a = doc.createElement('a');
+      a.href = '#' + s.id;
+      a.setAttribute('data-sec', s.id);
+      var n = doc.createElement('span'); n.className = 'n';
+      n.textContent = (num < 10 ? '0' : '') + num;
+      a.appendChild(n);
+      a.appendChild(doc.createTextNode(shortTitle(s, '')));
+      li.appendChild(a); frag.appendChild(li);
+      if (s.id === 'detection-deep-dive') {
+        var subUl = doc.createElement('ul');
+        subUl.className = 'toc-list toc-sub';
+        s.querySelectorAll('h3[id]').forEach(function (h3) {
+          var sli = doc.createElement('li');
+          var sa = doc.createElement('a');
+          sa.href = '#' + h3.id;
+          sa.setAttribute('data-sec', h3.id);
+          sa.textContent = (SECTION_TITLES[h3.id] || h3.textContent.trim());
+          sli.appendChild(sa); subUl.appendChild(sli);
+        });
+        var wrapLi = doc.createElement('li');
+        wrapLi.appendChild(subUl); frag.appendChild(wrapLi);
+      }
+    });
+    tocLists.forEach(function (ul) {
+      if (!ul) return;
+      ul.innerHTML = '';
+      ul.appendChild(frag.cloneNode(true));
+    });
+  }
+  buildTOC();
+
+  /* ---------- active section highlight ---------- */
+  var links = [];
+  function collectLinks() {
+    links = [];
+    doc.querySelectorAll('[data-sec]').forEach(function (a) { links.push(a); });
+  }
+  collectLinks();
+  function setActive(id) {
+    links.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('data-sec') === id);
+    });
+  }
+  if ('IntersectionObserver' in window) {
+    var visible = {};
+    var obs = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) visible[en.target.id] = en.intersectionRatio;
+        else delete visible[en.target.id];
+      });
+      var best = null, bestR = -1;
+      Object.keys(visible).forEach(function (k) {
+        if (visible[k] > bestR) { bestR = visible[k]; best = k; }
+      });
+      if (!best) {
+        var above = [];
+        main.querySelectorAll(':scope > section[id]').forEach(function (s) {
+          var r = s.getBoundingClientRect();
+          if (r.top < 140) above.push(s.id);
+        });
+        best = above.length ? above[above.length - 1] : 'overview';
+      }
+      setActive(best);
+    }, { rootMargin: '-70px 0px -45% 0px', threshold: [0, .05, .25, .5] });
+    main.querySelectorAll(':scope > section[id], #detection-deep-dive h3[id]').forEach(function (el) { obs.observe(el); });
+  }
+
+  /* ---------- smooth scroll for TOC links ---------- */
+  doc.addEventListener('click', function (ev) {
+    var a = ev.target.closest ? ev.target.closest('a[href^="#"]') : null;
+    if (!a) return;
+    var id = a.getAttribute('href').slice(1);
+    var target = doc.getElementById(id);
+    if (!target) return;
+    ev.preventDefault();
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var y = target.getBoundingClientRect().top + window.scrollY - 72;
+    window.scrollTo({ top: Math.max(0, y), behavior: reduce ? 'auto' : 'smooth' });
+    setActive(id);
+    if (overlay && overlay.classList.contains('open')) closeOverlay();
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
+  });
+
+  /* ---------- mobile contents overlay ---------- */
+  var fab = doc.getElementById('toc-fab');
+  var overlay = doc.getElementById('toc-overlay');
+  var closeBtn = doc.getElementById('toc-close');
+  var lastFocus = null;
+  function openOverlay() {
+    if (!overlay) return;
+    lastFocus = doc.activeElement;
+    overlay.classList.add('open');
+    if (fab) fab.setAttribute('aria-expanded', 'true');
+    var first = overlay.querySelector('a,button');
+    if (first) first.focus();
+  }
+  function closeOverlay() {
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    if (fab) fab.setAttribute('aria-expanded', 'false');
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  if (fab) fab.addEventListener('click', openOverlay);
+  if (closeBtn) closeBtn.addEventListener('click', closeOverlay);
+  if (overlay) overlay.addEventListener('click', function (ev) {
+    if (ev.target.classList && ev.target.classList.contains('toc-overlay-backdrop')) closeOverlay();
+  });
+  doc.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && overlay && overlay.classList.contains('open')) closeOverlay();
+  });
+
+  /* ---------- copy buttons ---------- */
+  doc.addEventListener('click', function (ev) {
+    var btn = ev.target.closest ? ev.target.closest('.copy-btn') : null;
+    if (!btn) return;
+    var block = btn.closest('.code');
+    var pre = block ? block.querySelector('pre.code-body') : null;
+    if (!pre) return;
+    var text = pre.innerText;
+    function done() {
+      btn.classList.add('ok');
+      var old = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(function () { btn.classList.remove('ok'); btn.textContent = old; }, 1600);
+    }
+    function fallback() {
+      try {
+        var ta = doc.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        doc.body.appendChild(ta); ta.select();
+        doc.execCommand('copy'); doc.body.removeChild(ta); done();
+      } catch (e) {}
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else fallback();
+  });
+
+  onScroll();
+})();
+
+</script>
+<script>
+/* ============================================================
+   ATT&CK Detection Guide — canvas simulation engine (embed verbatim)
+   Usage: const SIM_CONFIG = {...}; initSimulation(SIM_CONFIG);
+   Schema in page-template.html. Vanilla JS only. No external assets.
+   ============================================================ */
+function initSimulation(cfg) {
+  'use strict';
+  var stage = document.querySelector('.sim-stage');
+  var canvas = document.getElementById('sim-canvas');
+  var tip = document.getElementById('sim-tip');
+  if (!stage || !canvas || !cfg || !cfg.steps || !cfg.steps.length) return;
+  var ctx = canvas.getContext('2d');
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var LW = 1000, LH = 560;                 /* logical space */
+  var tokens = {};
+  function readTokens() {
+    var cs = getComputedStyle(document.documentElement);
+    function v(n) { return cs.getPropertyValue(n).trim() || '#888'; }
+    tokens = {
+      text: v('--text'), muted: v('--muted'), bg: v('--bg'), surface: v('--surface'),
+      accent: v('--accent'), accent2: v('--accent-2'), violet: v('--violet'),
+      success: v('--success'), warning: v('--warning'), danger: v('--danger'),
+      border: v('--border'), borderStrong: v('--border-strong')
+    };
+  }
+  function rgba(hex, a) {
+    hex = hex.replace('#', '');
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    var n = parseInt(hex, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+  var TYPE_COLOR = { attacker: 'danger', victim: 'accent', infra: 'warning', defender: 'success', service: 'violet' };
+  var KIND_COLOR = { query: 'accent2', response: 'success', data: 'violet', alert: 'warning', block: 'danger' };
+  var TONE_COLOR = { info: 'accent2', warn: 'warning', bad: 'danger', good: 'success' };
+
+  var nodes = {};
+  (cfg.nodes || []).forEach(function (n) { nodes[n.id] = n; });
+  var nodeById = function (id) { return nodes[id]; };
+
+  /* ---------- state ---------- */
+  var step = 0, playing = false, speed = 1, tStep = 0, lastTs = null, raf = null;
+  var packets = [], hover = null, pinTimer = null;
+  var DWELL = 1600;
+
+  function stepDuration(i) {
+    var s = cfg.steps[i], maxEnd = 2600;
+    (s.flows || []).forEach(function (f) {
+      var count = f.count || 1, gap = f.gap || 420, dur = f.dur || 1300, delay = f.delay || 0;
+      maxEnd = Math.max(maxEnd, delay + (count - 1) * gap + dur + 220);
+    });
+    return maxEnd + DWELL;
+  }
+
+  /* ---------- panel + chips ---------- */
+  var elTitle = document.querySelector('.sim-step-title');
+  var elCap = document.querySelector('.sim-caption');
+  var elHint = document.querySelector('.sim-hint-text');
+  var elEv = document.querySelector('.sim-evidence');
+  var elPlay = document.getElementById('sim-play');
+  var elFill = document.querySelector('.sim-progress .sp-fill');
+  var chipsBox = document.querySelector('.step-chips');
+
+  function fmtStepText(f) {
+    if (!f) return '';
+    var out = '';
+    if (f.label) out = f.label + ' ';
+    out = out || '';
+    return out;
+  }
+  function renderPanel() {
+    var s = cfg.steps[step];
+    if (elTitle) elTitle.innerHTML = '<span class="n">Step ' + (step + 1) + '/' + cfg.steps.length + '</span>' + esc(s.title || '');
+    if (elCap) elCap.textContent = s.caption || '';
+    if (elHint) elHint.textContent = s.hint || '';
+    if (elEv) {
+      elEv.innerHTML = '';
+      (s.evidence || []).forEach(function (e) {
+        var c = document.createElement('span');
+        c.className = 'ev'; c.textContent = e; elEv.appendChild(c);
+      });
+    }
+    if (chipsBox) {
+      Array.prototype.forEach.call(chipsBox.children, function (b, i) {
+        b.setAttribute('aria-current', i === step ? 'true' : 'false');
+      });
+    }
+    document.querySelectorAll('.sim-story ol > li').forEach(function (li, i) {
+      li.style.opacity = i <= step ? '1' : '';
+    });
+  }
+  function esc(t) { var d = document.createElement('span'); d.textContent = t; return d.innerHTML; }
+
+  function buildChips() {
+    if (!chipsBox) return;
+    chipsBox.innerHTML = '';
+    cfg.steps.forEach(function (s, i) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'step-chip';
+      b.textContent = (i + 1) + '. ' + (s.title || 'Step ' + (i + 1));
+      b.setAttribute('aria-label', 'Go to step ' + (i + 1) + ': ' + (s.title || ''));
+      b.addEventListener('click', function () { goStep(i); if (!reduceMotion) play(); });
+      chipsBox.appendChild(b);
+    });
+  }
+
+  /* ---------- flows -> packet instances ---------- */
+  function spawnFlows(i) {
+    packets = [];
+    (cfg.steps[i].flows || []).forEach(function (f) {
+      var a = nodeById(f.from), b = nodeById(f.to);
+      if (!a || !b) return;
+      var count = f.count || 1, gap = f.gap || 420, dur = f.dur || 1300, delay = f.delay || 0;
+      for (var k = 0; k < count; k++) {
+        packets.push({ a: a, b: b, start: delay + k * gap, dur: dur, color: KIND_COLOR[f.kind || 'query'] || 'accent2', label: f.label || '' });
+      }
+    });
+  }
+
+  /* ---------- controls ---------- */
+  function play() {
+    playing = true;
+    if (elPlay) elPlay.textContent = 'Pause';
+    lastTs = null;
+    if (!raf) raf = requestAnimationFrame(tick);
+  }
+  function pause() {
+    playing = false;
+    if (elPlay) elPlay.textContent = 'Play';
+  }
+  function goStep(i, auto) {
+    step = Math.max(0, Math.min(cfg.steps.length - 1, i));
+    tStep = 0; lastTs = null;
+    spawnFlows(step);
+    renderPanel();
+    if (reduceMotion && auto !== 'manual-play') { /* static frame */ }
+    draw(0);
+  }
+  function next() { if (step < cfg.steps.length - 1) goStep(step + 1); else pause(); }
+  function prev() { goStep(step - 1); }
+  function restart() { goStep(0); if (!reduceMotion) play(); }
+
+  if (elPlay) elPlay.addEventListener('click', function () { playing ? pause() : (play(), step >= cfg.steps.length - 1 && tStep >= stepDuration(step) && goStep(0)); });
+  var bNext = document.getElementById('sim-next');
+  var bPrev = document.getElementById('sim-prev');
+  var bRestart = document.getElementById('sim-restart');
+  if (bNext) bNext.addEventListener('click', function () { next(); });
+  if (bPrev) bPrev.addEventListener('click', function () { prev(); });
+  if (bRestart) bRestart.addEventListener('click', restart);
+  document.querySelectorAll('.seg .seg-btn[data-speed]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      speed = parseFloat(b.getAttribute('data-speed')) || 1;
+      document.querySelectorAll('.seg .seg-btn[data-speed]').forEach(function (x) {
+        x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+      });
+    });
+  });
+  stage.addEventListener('keydown', function (ev) {
+    if (ev.key === 'ArrowRight') { next(); ev.preventDefault(); }
+    if (ev.key === 'ArrowLeft') { prev(); ev.preventDefault(); }
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { if (playing) pause(); }
+  });
+
+  /* ---------- resize (DPR aware) ---------- */
+  function resize() {
+    var w = stage.clientWidth || 800;
+    var dpr = window.devicePixelRatio || 1;
+    var scale = w / LW;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(LH * scale * dpr);
+    canvas.style.height = Math.round(LH * scale) + 'px';
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+    draw(0);
+  }
+  if ('ResizeObserver' in window) new ResizeObserver(resize).observe(stage);
+  else window.addEventListener('resize', resize);
+
+  /* ---------- drawing ---------- */
+  function nodeXY(n) { return { x: n.x, y: n.y }; }
+  function drawLink(a, b, col) {
+    ctx.strokeStyle = rgba(col, .5); ctx.lineWidth = 1.4;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  function drawNode(n, focused, t) {
+    var c = tokens[TYPE_COLOR[n.type] || 'accent'];
+    var w = n.w || 148, h = n.h || 58;
+    var x = n.x - w / 2, y = n.y - h / 2;
+    if (focused) {
+      ctx.save();
+      var pulse = reduceMotion ? 1 : (1 + 0.05 * Math.sin(t / 240));
+      ctx.strokeStyle = rgba(c, .9); ctx.lineWidth = 2;
+      roundRect(x - 5 * pulse, y - 5 * pulse, w + 10 * pulse, h + 10 * pulse, 14); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = rgba(tokens.surface === v_bg() ? '#16203a' : '#16203a', .92);
+    if (document.documentElement.getAttribute('data-theme') === 'light') ctx.fillStyle = 'rgba(255,255,255,.94)';
+    roundRect(x, y, w, h, 12); ctx.fill();
+    ctx.strokeStyle = rgba(c, .95); ctx.lineWidth = 1.6;
+    roundRect(x, y, w, h, 12); ctx.stroke();
+    ctx.fillStyle = c;
+    roundRect(x, y, 4, h, 2); ctx.fill();
+    ctx.fillStyle = tokens.text;
+    ctx.font = '600 13.5px ' + 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(n.label, n.x, n.sub ? n.y - 8 : n.y, w - 18);
+    if (n.sub) {
+      ctx.fillStyle = tokens.muted;
+      ctx.font = '10.5px ui-monospace,Menlo,Consolas,monospace';
+      ctx.fillText(n.sub, n.x, n.y + 11, w - 16);
+    }
+  }
+  function v_bg() { return tokens.bg; }
+  function roundRect(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function drawFlag(f) {
+    var n = nodeById(f.node); if (!n) return;
+    var c = tokens[TONE_COLOR[f.tone || 'info'] || 'accent2'];
+    ctx.font = '700 10.5px ui-monospace,Menlo,Consolas,monospace';
+    var tw = ctx.measureText(f.text).width;
+    var w = tw + 16, h = 19, x = n.x - w / 2, y = n.y - (n.h || 58) / 2 - h - 7;
+    if (x < 6) x = 6;
+    if (x + w > LW - 6) x = LW - 6 - w;
+    ctx.fillStyle = rgba(c, .16);
+    roundRect(x, y, w, h, 9); ctx.fill();
+    ctx.strokeStyle = rgba(c, .8); ctx.lineWidth = 1; roundRect(x, y, w, h, 9); ctx.stroke();
+    ctx.fillStyle = c; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(f.text, x + w / 2, y + h / 2 + .5);
+  }
+  function easeInOut(p) { return p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2; }
+  function drawPacket(p, t) {
+    if (t < p.start) return;
+    var raw = (t - p.start) / p.dur;
+    if (raw > 1) return;
+    var pos = reduceMotion ? 1 : easeInOut(Math.min(1, raw));
+    var x = p.a.x + (p.b.x - p.a.x) * pos;
+    var y = p.a.y + (p.b.y - p.a.y) * pos;
+    var c = tokens[p.color];
+    ctx.fillStyle = rgba(c, .35);
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = c;
+    ctx.beginPath(); ctx.arc(x, y, 4.6, 0, Math.PI * 2); ctx.fill();
+    if (p.label) {
+      ctx.fillStyle = tokens.muted;
+      ctx.font = '10px ui-monospace,Menlo,Consolas,monospace';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+      ctx.fillText(p.label, x + 9, y - 6);
+    }
+  }
+
+  function draw(t) {
+    var s = cfg.steps[step];
+    ctx.clearRect(0, 0, LW, LH);
+    /* watermark title */
+    ctx.fillStyle = rgba(tokens.muted, .55);
+    ctx.font = '700 11px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText(cfg.watermark || 'ATTACK SIMULATION', LW - 16, 14);
+    /* static links used by this step's flows */
+    var seen = {};
+    (s.flows || []).forEach(function (f) {
+      var key = [f.from, f.to].sort().join('|');
+      if (seen[key]) return; seen[key] = 1;
+      var a = nodeById(f.from), b = nodeById(f.to);
+      if (a && b) drawLink(a, b, tokens.border);
+    });
+    /* focus rings */
+    (s.focus || []).forEach(function (id) { if (nodes[id]) nodes[id]._f = true; });
+    Object.keys(nodes).forEach(function (id) {
+      drawNode(nodes[id], !!nodes[id]._f, t);
+      nodes[id]._f = false;
+    });
+    (s.flags || []).forEach(drawFlag);
+    packets.forEach(function (p) { drawPacket(p, t); });
+    /* hint footer */
+    ctx.fillStyle = rgba(tokens.muted, .8);
+    ctx.font = '11px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('Hover a node for details. Written story below the canvas.', 16, LH - 12);
+  }
+
+  /* ---------- main loop ---------- */
+  function tick(ts) {
+    raf = null;
+    if (lastTs == null) lastTs = ts;
+    var dt = (ts - lastTs) * speed;
+    lastTs = ts;
+    if (playing) {
+      tStep += dt;
+      var d = stepDuration(step);
+      if (tStep >= d) {
+        if (step < cfg.steps.length - 1) { step += 1; tStep = 0; spawnFlows(step); renderPanel(); }
+        else { pause(); tStep = d; }
+      }
+    }
+    var d = stepDuration(step);
+    if (elFill) elFill.style.width = Math.min(100, (tStep / d) * 100) + '%';
+    draw(tStep);
+    if (playing) raf = requestAnimationFrame(tick);
+  }
+
+  /* ---------- tooltips ---------- */
+  function canvasPos(ev) {
+    var r = canvas.getBoundingClientRect();
+    var scale = r.width / LW;
+    return { x: (ev.clientX - r.left) / scale, y: (ev.clientY - r.top) / scale };
+  }
+  function hitNode(pt) {
+    var keys = Object.keys(nodes), best = null, bd = 1e9;
+    keys.forEach(function (k) {
+      var n = nodes[k];
+      var dx = pt.x - n.x, dy = pt.y - n.y;
+      var d = dx * dx + dy * dy;
+      if (d < bd && d < 60 * 60) { bd = d; best = n; }
+    });
+    return best;
+  }
+  function showTip(n, ev) {
+    if (!tip || !n) return;
+    tip.innerHTML = '<span class="tt">' + esc(n.label) + '</span>' + esc(n.tip || '');
+    tip.style.display = 'block';
+    var r = stage.getBoundingClientRect();
+    var scale = r.width / LW;
+    var x = (n.x * scale) + 14, y = (n.y * scale) - 10;
+    if (x + 270 > r.width) x = n.x * scale - 270;
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top = Math.max(8, y) + 'px';
+  }
+  canvas.addEventListener('pointermove', function (ev) {
+    var n = hitNode(canvasPos(ev));
+    hover = n;
+    if (n) showTip(n, ev); else if (tip) tip.style.display = 'none';
+  });
+  canvas.addEventListener('pointerleave', function () { hover = null; if (tip) tip.style.display = 'none'; });
+  canvas.addEventListener('click', function (ev) {
+    var n = hitNode(canvasPos(ev));
+    if (n) showTip(n, ev);
+  });
+
+  /* ---------- theme + boot ---------- */
+  document.addEventListener('atk-theme-change', function () { readTokens(); draw(0); });
+  readTokens();
+  buildChips();
+  resize();
+  goStep(0);
+  if (!reduceMotion) play();   /* reduced-motion users start paused on step 1 */
+}
+
+</script>
+<script>
+/* PAGE GLUE — T1573.002 Asymmetric Cryptography simulation.
+   Nodes live in a 1000x560 logical space; boxes are ~148x58.
+   kinds: query accent-2 · response success · data violet · alert tone warning · block danger */
+initSimulation({
+  watermark: 'T1573.002 · ASYMMETRIC C2 SIMULATION',
+  ariaLabel: 'Animation of an asymmetric cryptography command and control attack: a C2 server presents a weak certificate, the implant wraps a session key, a researcher clusters the certificate across servers, and the SOC detects and blocks.',
+  nodes: [
+    { id:'atk', x:820, y:140, label:'Attacker C2', sub:'RSA-2048 keypair', type:'attacker',
+      tip:'Who: threat-actor infrastructure. It holds the private key of the pair. The matching public key is baked into the implant, so no shared secret lives in the binary.' },
+    { id:'fw', x:470, y:240, label:'Enterprise boundary', sub:'TLS + firewall logs', type:'infra',
+      tip:'What: the proxy and firewall edge. It sees SNI, certificate details and JA3S on every TLS handshake, but never the encrypted content. It feeds the SIEM.' },
+    { id:'vic', x:470, y:440, label:'Victim PC', sub:'implant beacon', type:'victim',
+      tip:'Who: a corporate workstation running the implant. It wraps a random AES session key with the server public key and verifies task signatures before running anything.' },
+    { id:'soc', x:150, y:330, label:'SOC analyst', sub:'SIEM workbench', type:'defender',
+      tip:'Who: security operations. It matches cert-hash and JA3S indicators, blocks the cluster at the boundary, and hunts the same fingerprint over the past 90 days.' },
+    { id:'cti', x:820, y:430, label:'CTI researcher', sub:'internet scanner', type:'defender',
+      tip:'Who: threat-intel team. It mass-scans internet services, collects certificates, and clusters command and control servers that share one fingerprint.' }
+  ],
+  steps: [
+    { title:'Build keys, embed the public half',
+      caption:'The attacker generates an RSA keypair on the C2 server and embeds only the public key into the implant. The private key never leaves the server.',
+      hint:'Nothing is on your wire yet. Code-signing and build pipelines are the only early hope; this step is invisible to network monitoring.',
+      evidence:['openssl genpkey (lab)','pubkey baked into implant','no shared secret in binary'],
+      focus:['atk'],
+      flags:[{node:'atk', text:'pubkey embedded', tone:'bad'}],
+      flows:[] },
+    { title:'Implant calls home, server shows a certificate',
+      caption:'The implant starts a TLS session. The C2 server answers with its certificate: self-signed, 1024-bit RSA, valid for ten years.',
+      hint:'Your Zeek ssl.log already shows a self-signed certificate with a weak 1024-bit key and an IP-literal SNI. That is three anomalies in one handshake.',
+      evidence:['zeek ssl.log: validation_status','cert RSA-1024, 10-year','ja3s=6f7a2c9d...'],
+      focus:['vic','atk'],
+      flags:[{node:'fw', text:'weak cert', tone:'warn'}],
+      flows:[
+        {from:'vic', to:'atk', kind:'query', count:1, delay:100, dur:1300, label:'ClientHello'},
+        {from:'atk', to:'vic', kind:'response', count:1, delay:1000, dur:1300, label:'cert RSA-1024'} ] },
+    { title:'Key exchange wraps the session key',
+      caption:'The implant creates a random AES session key, wraps it with the server public key, and sends it. Only the server private key can unwrap it. Both sides now use fast symmetric encryption.',
+      hint:'The session is opaque from here, but the handshake shape (rare JA3S, odd SNI, weak cert) is already in your logs. This is the moment to alert.',
+      evidence:['RSA-OAEP wrapped AES key','AES-256-GCM session ready','ssl.log: established=true'],
+      focus:['vic','atk'],
+      flags:[{node:'atk', text:'session ready', tone:'info'}],
+      flows:[
+        {from:'vic', to:'atk', kind:'data', count:1, delay:100, dur:1300, label:'wrapped AES key'} ] },
+    { title:'Signed, encrypted tasking',
+      caption:'The operator sends a task through the encrypted session and signs it with the private key. The implant checks the signature before it runs anything, then posts results back.',
+      hint:'Flow records show periodic beacon sessions with matching byte patterns. TLS inspection is not needed to spot the rhythm and the endpoints.',
+      evidence:['task verified by signature','beacon interval 60s','conn.log: fixed byte counts'],
+      focus:['atk','vic'],
+      flags:[],
+      flows:[
+        {from:'atk', to:'vic', kind:'data', count:1, delay:100, dur:1300, label:'signed task'},
+        {from:'vic', to:'atk', kind:'data', count:1, delay:1000, dur:1300, label:'results'} ] },
+    { title:'Researcher clusters the certificate',
+      caption:'A CTI researcher mass-scans internet services. The same certificate fingerprint appears on six IPs across three autonomous systems, so one operator cluster emerges.',
+      hint:'External scan data is public. Ingest cert-fingerprint indicators early and you can block before the first beacon ever hits your edge.',
+      evidence:['cert sha1 3f9ac271...','6 IPs across 3 ASNs','all self-signed RSA-1024'],
+      focus:['cti'],
+      flags:[{node:'cti', text:'infra cluster', tone:'info'}],
+      flows:[
+        {from:'atk', to:'cti', kind:'data', count:3, delay:100, gap:600, dur:1300, label:'cert scan'} ] },
+    { title:'Report and indicators shared',
+      caption:'The researcher publishes a report with the certificate hash and JA3S values as indicators of compromise. Your CTI platform ingests them into the SIEM.',
+      hint:'Intel only helps if it lands in the SIEM as matchable fields. Push cert-hash and JA3S indicators into lookup tables, not PDF folders.',
+      evidence:['CTI report 2026-014','IOC: cert fingerprint','IOC: JA3S hash'],
+      focus:['cti','soc'],
+      flags:[],
+      flows:[
+        {from:'cti', to:'soc', kind:'data', count:1, delay:100, dur:1300, label:'IOCs'} ] },
+    { title:'SOC detection fires',
+      caption:'The SIEM matches an internal workstation beaconing to a server with the hunted certificate hash and a rare JA3S. The analyst starts triage.',
+      hint:'Alert quality comes from combining cert hash with JA3S and client context. Single-field cert alerts alone would drown you in false positives.',
+      evidence:['SIEM alert: cert-hash match','rare JA3S on 10.22.7.41','Sysmon EID 3: svc_update.exe'],
+      focus:['soc'],
+      flags:[{node:'fw', text:'cert match', tone:'bad'}],
+      flows:[
+        {from:'fw', to:'soc', kind:'alert', count:1, delay:100, dur:1300, label:'alert'} ] },
+    { title:'Block and hunt back in time',
+      caption:'The SOC blocks the certificate hash and the cluster IPs at the boundary, isolates the host, and hunts the same fingerprint across 90 days of stored logs.',
+      hint:'Historical hunting with the fingerprint shows two earlier, quieter sessions. Cert-hash indicators work on past logs too — that is why you store x509 data.',
+      evidence:['firewall deny: cluster IPs','90-day fingerprint hunt','host isolated, implant removed'],
+      focus:['soc','fw'],
+      flags:[{node:'vic', text:'isolated', tone:'good'}],
+      flows:[
+        {from:'soc', to:'fw', kind:'block', count:1, delay:100, dur:1300, label:'block list'} ] }
+  ]
+});
+</script>
+</body>
+</html>

