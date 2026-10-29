@@ -962,7 +962,7 @@
     if (document.querySelector('script[data-atk-sim-loader]')) return;
     window.__ATK_SIM_BASE__ = SITE_BASE;
     var js = document.createElement('script');
-    js.src = SITE_BASE + 'assets/js/simulation-loader.js';
+    js.src = SITE_BASE + 'assets/js/simulation-loader.js?v=20261029';
     js.defer = true;
     js.dataset.atkSimLoader = '1';
     document.head.appendChild(js);

@@ -87,8 +87,8 @@
       window.ATKSim.init();
       return;
     }
-    loadScript(BASE + "assets/sim/simulation-renderers.js")
-      .then(function () { return loadScript(BASE + "assets/sim/simulation-engine.js"); })
+    loadScript(BASE + "assets/sim/simulation-renderers.js?v=20261029")
+      .then(function () { return loadScript(BASE + "assets/sim/simulation-engine.js?v=20261029"); })
       .then(function () {
         if (window.ATKSim && window.ATKSim.init) window.ATKSim.init();
       })
@@ -102,7 +102,7 @@
     if (document.querySelector('link[data-atk-sim-engine]')) return;
     var link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = BASE + "assets/sim/simulation.css";
+    link.href = BASE + "assets/sim/simulation.css?v=20261029";
     link.dataset.atkSimEngine = "1";
     document.head.appendChild(link);
   }
@@ -113,7 +113,7 @@
     if (!section) return;
     var id = techniqueId();
     if (!/^T\d{4}(?:\.\d{3})?$/.test(id)) return;
-    var scenarioUrl = new URL("assets/sim/scenarios/" + id + ".json", BASE).href;
+    var scenarioUrl = new URL("assets/sim/scenarios/" + id + ".json?v=20261029", BASE).href;
     addCss();
     fetch(scenarioUrl, { credentials: "same-origin" })
       .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
